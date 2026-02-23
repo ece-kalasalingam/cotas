@@ -1,0 +1,118 @@
+# ==============================
+# PYTHON
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+*.pyd
+*.dll
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
+obsolete/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==============================
+# VIRTUAL ENVIRONMENTS
+# ==============================
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+conda-meta/
+
+# ==============================
+# CONDA
+# ==============================
+*.conda
+*.tar.bz2
+
+# ==============================
+# PYTEST / COVERAGE
+# ==============================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+tests/
+pytest.ini
+
+# ==============================
+# JUPYTER
+# ==============================
+.ipynb_checkpoints/
+
+# ==============================
+# IDE / EDITOR
+# ==============================
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+
+# ==============================
+# OS FILES
+# ==============================
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# ==============================
+# LOG FILES
+# ==============================
+*.log
+
+# ==============================
+# TEMP FILES
+# ==============================
+*.tmp
+*.temp
+*.bak
+~$*
+
+# ==============================
+# EXCEL GENERATED FILES
+# ==============================
+*.xlsx
+
+
+# ==============================
+# BUILD ARTIFACTS (PyInstaller)
+# ==============================
+build/
+dist/
+
+# ==============================
+# ENV FILES (CRITICAL)
+# ==============================
+.env
+.env.*

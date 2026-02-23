@@ -1,0 +1,4 @@
+pyinstaller ^--noconfirm ^--clean ^--windowed ^--onedir ^--name "COTAS" ^--icon assets\kare-logo.ico ^--version-file version.txt ^--add-data "assets;assets" ^--hidden-import PySide6.QtPdf ^--hidden-import PySide6.QtPdfWidgets ^--hidden-import PySide6.QtSvg ^main.py
+
+
+pytest -v > unit_test.log 2>&1

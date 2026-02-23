@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 24 24"
+     fill="none"
+     stroke="#16A085"
+     stroke-width="1.6"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- Back page -->
+  <path d="M4 6h9l5 5v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path>
+  <line x1="8" y1="2" x2="8" y2="6"></line>
+  
+  <polyline points="12 7 12 11 17 11"></polyline>
+  <polyline points="16 2 16 7 21 7"></polyline>
+
+
+  <!-- Front page -->
+  <path d="M8 2 h9l5 5v10a2 2 0 0 1-2 2H19 "></path>
+
+  <!-- Content lines (front only) -->
+  <line x1="5" y1="14" x2="12" y2="14"></line>
+  <line x1="5" y1="17" x2="12" y2="17"></line>
+  <line x1="5" y1="20" x2="9" y2="20"></line>
+
+
+</svg>

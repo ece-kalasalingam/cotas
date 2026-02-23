@@ -1,0 +1,321 @@
+import os
+import sys
+import qdarktheme
+from datetime import datetime
+from typing import Optional
+
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import (
+    QApplication, QFrame, QGroupBox, QMainWindow, QWidget,
+    QLabel, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout,
+    QPlainTextEdit, QSizePolicy,
+)
+
+# Core imports (assumed existing)
+from core.loader import SetupLoader
+from core.generator import MarksWorkbookGenerator
+from core.calculator import COCalculator
+from core.setup_validator import SetupValidator
+
+class MainWindow(QMainWindow):    
+    def __init__(self) -> None:
+        super().__init__()
+        
+        # 1. Path History Initialization (Production Standard)
+        if getattr(sys, 'frozen', False):
+            self.last_dir = os.path.dirname(sys.executable)
+        else:
+            self.last_dir = os.path.dirname(os.path.abspath(__file__))
+        self.last_dir = os.path.normpath(self.last_dir)
+
+        # 2. State
+        self.setup_path: Optional[str] = None
+        self.gen_marks_path: Optional[str] = None
+        self.filled_path: Optional[str] = None
+        self._setup_loader: Optional[SetupLoader] = None
+        self._course_default_prefix: str = "Course"
+        self._status_timer = QTimer(self)
+        self._status_timer.setSingleShot(True)
+        self._status_timer.timeout.connect(self._reset_status)
+
+
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        self.setWindowTitle("CO Attainment System")
+        self.resize(420, 720)
+        self.setMinimumSize(420, 720)
+
+        root = QWidget()
+        self.setCentralWidget(root)
+        outer_layout = QVBoxLayout(root)
+        outer_layout.setContentsMargins(20, 20, 20, 20)
+        outer_layout.setSpacing(12)
+
+        # Title Section
+        title = QLabel("CO Attainment System")
+        title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer_layout.addWidget(title)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        outer_layout.addWidget(line)
+
+        # --- Steps Sections ---
+        # Step 1: Upload
+        self.setup_group = QGroupBox("1. Upload Course Details")
+        setup_lay = QHBoxLayout(self.setup_group)
+        self.setup_label = QLabel("Missing: Course details file")
+        self.setup_label.setWordWrap(True)
+        self.setup_button = QPushButton("Browse")
+        setup_lay.addWidget(self.setup_label, 1) # Priority 1 stretch
+        setup_lay.addWidget(self.setup_button)
+        outer_layout.addWidget(self.setup_group)
+
+        # Step 2: Generate
+        self.gen_group = QGroupBox("2. Template Management")
+        gen_lay = QHBoxLayout(self.gen_group)
+        self.gen_label = QLabel("")
+        self.gen_label.setWordWrap(True)
+        self.gen_button = QPushButton("Generate")
+        gen_lay.addWidget(self.gen_label, 1)
+        gen_lay.addWidget(self.gen_button)
+        outer_layout.addWidget(self.gen_group)
+
+        # Step 3: Filled Marks
+        self.filled_group = QGroupBox("3. Upload Student Marks")
+        filled_lay = QHBoxLayout(self.filled_group)
+        self.filled_label = QLabel("Waiting for step 1...")
+        self.filled_label.setWordWrap(True)
+        self.filled_button = QPushButton("Browse")
+        filled_lay.addWidget(self.filled_label, 1)
+        filled_lay.addWidget(self.filled_button)
+        outer_layout.addWidget(self.filled_group)
+
+        # Action Button
+        self.submit_button = QPushButton("Compute CO Results")
+        self.submit_button.setStyleSheet("font-weight: bold; padding: 10px;")
+        self.submit_button.setEnabled(False)
+        outer_layout.addWidget(self.submit_button, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Status Label
+        self.status_label = QLabel("Status: Idle")
+        self.status_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
+        outer_layout.addWidget(self.status_label)
+
+        # Log Console
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setVisible(False)
+        self.log.setMaximumHeight(120)
+        outer_layout.addWidget(self.log)
+
+        # Styling & Stretch
+        for b in (self.setup_button, self.gen_button, self.filled_button, self.submit_button):
+                b.setMinimumWidth(120)
+                b.setMinimumHeight(40)
+                b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                b.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        outer_layout.addStretch(1)
+
+        # Signals
+        self.setup_button.clicked.connect(self.pick_setup_file)
+        self.gen_button.clicked.connect(self.generate_marks_template)
+        self.filled_button.clicked.connect(self.pick_filled_file)
+        self.submit_button.clicked.connect(self.compute_results)
+
+        self._refresh_actions()
+
+    # --- Logical Methods ---
+    def _reset_status(self) -> None:
+        self.status_label.setText("Status: Idle")
+        self.status_label.setStyleSheet("color: palette(text);")
+    
+    def _set_status(self, text: str, color: Optional[str] = None, delay: int = 10000) -> None:
+        self.status_label.setText(f"Status: {text}")
+
+        if color:
+            self.status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+        else:
+            self.status_label.setStyleSheet("color: palette(text);")
+
+        # Stop any previous timer
+        if self._status_timer.isActive():
+            self._status_timer.stop()
+
+        # Start fresh timer
+        self._status_timer.start(delay)
+
+    def _log(self, text: str, level: str = "INFO") -> None:
+        if not self.log.isVisible(): self.log.setVisible(True)
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log.appendPlainText(f"[{ts}] {level}: {text}")
+    
+    def _clear_log(self) -> None:
+        self.log.clear()
+        self.log.setVisible(False)
+
+    def _refresh_actions(self) -> None:
+        has_setup = bool(self.setup_path)
+        has_filled = bool(self.filled_path)
+        
+        self.gen_button.setEnabled(has_setup)
+        self.filled_button.setEnabled(has_setup)
+        self.submit_button.setEnabled(has_setup and has_filled)
+        self.setup_label.setEnabled(has_setup)
+        self.filled_label.setEnabled(has_filled)
+    
+    def _update_labels(self) -> None:
+        if self.setup_path:
+            self.setup_label.setText(self.setup_path)
+            if self.filled_path:
+                self.filled_label.setText(self.filled_path)
+            else:
+                self.filled_label.setText("Waiting for filled marks file...")
+        else:
+            self.setup_label.setText("Waiting for course details file...")
+        if self.gen_marks_path:
+            self.gen_label.setText(self.gen_marks_path)
+    
+    def is_file_writable(self, filepath: str) -> bool:
+        if not os.path.exists(filepath):
+            return True # File doesn't exist, so it's writable
+        try:
+            # Try to open the file in append mode to see if OS allows it
+            with open(filepath, 'a'):
+                pass
+            return True
+        except OSError:
+            return False
+
+    def pick_setup_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Course Details", self.last_dir, "Excel (*.xlsx)"
+        )
+        if path:
+            self.setup_path = path
+            self.last_dir = os.path.dirname(path)
+            self._log(f"Uploaded details file: {path}", "SYSTEM")
+            self._update_labels()
+            self.compute_default_prefix_from_setup()
+            self._set_status("Setup loaded", "#4CAF50")
+            self._refresh_actions()
+
+    def generate_marks_template(self) -> None:
+        if not self.setup_path:
+            self._log("Upload course details file first.", "ERROR")
+            self._set_status("Error", "red")
+            return
+        # Standard production save dialog
+        default_file = os.path.join(self.last_dir, f"{self._course_default_prefix}_Marks_Template.xlsx")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Template", default_file, "Excel (*.xlsx)")
+        
+        if path:
+            if not self.is_file_writable(path):
+                self._set_status("File is Open!", "#F44336")
+                self._log(f"Cannot save to {os.path.basename(path)}. Please close it in Excel first.", "WARNING")
+                return
+            try:
+                self.last_dir = os.path.dirname(path)
+                self._set_status("Generating...", "#2196F3")
+                
+                QApplication.processEvents() # Keep UI responsive
+                if self._setup_loader is None:
+                    return self._set_status("Error: Setup not loaded", "#F44336")
+                if self.setup_path is None:
+                    return self._set_status("Error: Setup path missing", "#F44336")
+                loader = self._setup_loader or SetupLoader(self.setup_path)
+                metadata = loader.load_metadata()
+                config = loader.load_config()
+                students = loader.load_students()
+                question_map = loader.load_question_map()
+
+                validator = SetupValidator(
+                    config=config,
+                    students=students,
+                    question_map=question_map,
+                    only_CA=False,
+                    metadata=metadata,  # Pass metadata to validator
+                )
+
+                validated_setup = validator.validate()
+
+                gen = MarksWorkbookGenerator(
+                    metadata=metadata,
+                    validated_setup=validated_setup
+                )
+                gen.generate(path, progress_callback=lambda m: self._set_status(m, "#2196F3"))
+                self.gen_marks_path = path
+                self._refresh_actions()
+                self._update_labels()
+                self._set_status("Marks Template Saved", "#4CAF50")
+                self._log(f"Marks template saved to: {self.gen_marks_path}", "SYSTEM")
+            except Exception as e:
+                self._log(str(e), "ERROR")
+                self._set_status("Generation Failed; Check the log below", "#F44336")
+
+    def pick_filled_file(self) -> None:
+        specific_filename = f"{self._course_default_prefix}_Marks_Template.xlsx"
+        filter_str = f"Specific File (*{specific_filename})"
+        path, _ = QFileDialog.getOpenFileName(self, "Select Filled Marks Excel", self.last_dir, filter_str)
+        if path:
+            self.filled_path = path
+            self.last_dir = os.path.dirname(path)
+            self._log(f"Uploaded filled marks file: {path}", "SYSTEM")
+            self._update_labels()
+            self._set_status("Marks loaded", "#4CAF50")
+            self._refresh_actions()
+
+    def compute_results(self) -> None:
+        default_out = os.path.join(self.last_dir, f"{self._course_default_prefix}_CO_Results.xlsx")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Results", default_out, "Excel (*.xlsx)")
+        
+        if path:
+            if not self.is_file_writable(path):
+                self._set_status("File is Open!", "#F44336")
+                self._log(f"Cannot save to {os.path.basename(path)}. Please close it in Excel first.", "WARNING")
+                return
+            try:
+                self.last_dir = os.path.dirname(path)
+                self._set_status("Computing...", "#2196F3")
+                QApplication.processEvents()
+                if self.setup_path is None or self.filled_path is None:
+                    return self._set_status("Error: Missing files", "#F44336") 
+                loader = self._setup_loader or SetupLoader(self.setup_path)
+                metadata = loader.load_metadata()
+                calc = COCalculator(metadata, self.setup_path, self.filled_path)
+                calc.compute(path)
+                
+                self._set_status("Results saved successfully", "#4CAF50")
+                self._clear_log()
+                self._log(f"CO results saved to: {path}", "SYSTEM")
+                self._refresh_actions()
+                self._update_labels()
+            except Exception as e:
+                self._log(str(e), "ERROR")
+                self._set_status("Computation Error. Check the log below", "#F44336")
+
+    def compute_default_prefix_from_setup(self) -> None:
+        try:
+            if not self.setup_path: return
+            self._setup_loader = SetupLoader(self.setup_path)
+            meta = self._setup_loader.load_metadata()
+            self._course_default_prefix = f"{meta.course_code}_{meta.section}_{meta.semester}_{meta.academic_year}"
+        except:
+            self._course_default_prefix = "Course"
+
+def main() -> int:
+    app = QApplication(sys.argv)
+    qdarktheme.setup_theme("auto")  # Apply dark theme
+    # Note: Ensure assets folder exists for the icon
+    app.setWindowIcon(QIcon("assets/kare-logo.ico")) 
+    w = MainWindow()
+    w.show()
+    return app.exec()
+
+if __name__ == "__main__":
+    raise SystemExit(main())
