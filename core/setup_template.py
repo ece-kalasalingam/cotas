@@ -1,126 +1,112 @@
-from __future__ import annotations
-
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from core.constants import MAX_CO_LIMIT
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-class SetupTemplateGenerator:
+class SetupTemplateBuilder:
     """
-    Generates a Setup Excel that is 100% compatible with:
-      - SetupLoader (Course_Metadata schema)
-      - SetupValidator (required columns + rules)
+    Builds the initial Course Setup Excel template.
+    Pure builder.
+    Does not save to disk.
     """
 
-    def __init__(self, output_path: str):
-        self.output_path = output_path
-
-    def generate(self) -> None:
+    def build(self) -> Workbook:
         wb = Workbook()
-        self._make_course_metadata(wb)
-        self._make_assessment_config(wb)
-        self._make_question_map(wb)
-        self._make_students(wb)
-        wb.save(self.output_path)
 
-    # -------------------------
-    # Course_Metadata (Loader contract)
-    # -------------------------
-    def _make_course_metadata(self, wb: Workbook) -> None:
-        ws = wb.active
-        if ws is None:
-            raise ValueError("Workbook must have an active sheet")
-        ws.title = "Course_Metadata"
-
-        ws["A1"] = "Field"
-        ws["B1"] = "Value"
-        ws["A1"].font = Font(bold=True)
-        ws["B1"].font = Font(bold=True)
+        # =====================================================
+        # COURSE METADATA SHEET
+        # =====================================================
+        default_sheet = wb.active
+        if default_sheet is not None:
+            wb.remove(default_sheet)
+        ws_meta = wb.create_sheet("Course_Metadata")
+        ws_meta.title = "Course_Metadata"
+        ws_meta.append(["Field", "Value"])
+        ws_meta["A1"].font = Font(bold=True)
+        ws_meta["B1"].font = Font(bold=True)
 
         rows = [
-            ("Course_Code", ""),
-            ("Course_Name", ""),
-            ("Section", ""),
-            ("Semester", ""),
-            ("Academic_Year", ""),
-            ("Faculty_Name", ""),
-            ("Total_Outcomes", 6),  # default; faculty edits
+            ("Course_Code", "ECE101"),
+            ("Course_Name", "SAMPLE COURSE"),
+            ("Section", "A, B"),
+            ("Semester", "III"),
+            ("Academic_Year", "2026-27"),
+            ("Faculty_Name", "ABCECE"),
+            ("Total_Outcomes", 5),
         ]
 
         r = 2
         for k, v in rows:
-            ws.cell(r, 1, k)
-            ws.cell(r, 2, v)
+            ws_meta.cell(r, 1, k)
+            ws_meta.cell(r, 2, v)
             r += 1
+        ws_meta.column_dimensions["A"].width = 22
+        ws_meta.column_dimensions["B"].width = 30
 
-        ws.column_dimensions["A"].width = 22
-        ws.column_dimensions["B"].width = 30
 
-    # -------------------------
-    # Assessment_Config (Validator contract)
-    # -------------------------
-    def _make_assessment_config(self, wb: Workbook) -> None:
-        ws = wb.create_sheet("Assessment_Config")
+        # =====================================================
+        # ASSESSMENT CONFIG SHEET
+        # =====================================================
+        ws_config = wb.create_sheet("Assessment_Config")
 
-        headers = ["Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"]
-        for c, h in enumerate(headers, start=1):
-            cell = ws.cell(1, c, h)
-            cell.font = Font(bold=True)
+        headers = [
+            "Component",
+            "Weight (%)",
+            "CIA",
+            "CO_Wise_Marks_Breakup",
+            "Direct",
+        ]
 
-        # A VALID default that passes validator immediately:
-        # - at least one Direct component
-        # - Direct weights sum to 100
-        ws.append(["S1", 100, "yes", "yes", "yes"])
+        ws_config.append(headers)
 
-        # Yes/No validation for the 3 flag columns
+        for col in range(1, len(headers) + 1):
+            ws_config.cell(row=1, column=col).font = Font(bold=True)
+
+        # Example rows (editable)
+        ws_config.append(["S1", "80", "yes", "yes", "yes"])
+        ws_config.append(["S2", "20", "yes", "yes", "yes"])
+        ws_config.append(["Survey", "100", "no", "no", "no"])
         dv_yesno = DataValidation(type="list", formula1='"yes,no"', allow_blank=False)
-        ws.add_data_validation(dv_yesno)
+        ws_config.add_data_validation(dv_yesno)
         dv_yesno.add("C2:C200")
         dv_yesno.add("D2:D200")
         dv_yesno.add("E2:E200")
 
-        ws.column_dimensions["A"].width = 18
-        ws.column_dimensions["B"].width = 12
-        ws.column_dimensions["C"].width = 8
-        ws.column_dimensions["D"].width = 22
-        ws.column_dimensions["E"].width = 10
 
-    # -------------------------
-    # Question_Map (Validator contract)
-    # -------------------------
-    def _make_question_map(self, wb: Workbook) -> None:
-        ws = wb.create_sheet("Question_Map")
+        # =====================================================
+        # STUDENTS SHEET
+        # =====================================================
+        ws_students = wb.create_sheet("Students")
 
-        headers = ["Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO"]
-        for c, h in enumerate(headers, start=1):
-            cell = ws.cell(1, c, h)
-            cell.font = Font(bold=True)
+        ws_students.append(["RegNo", "Student_Name"])
 
-        # Must cover CO1..CO6 (because Total_Outcomes default = 6)
-        # CO_Wise_Marks_Breakup = yes => exactly one CO per row.
-        ws.append(["S1", "Q1", 10, "1"])
-        ws.append(["S1", "Q2", 10, "2"])
-        ws.append(["S1", "Q3", 10, "3"])
-        ws.append(["S1", "Q4", 10, "4"])
-        ws.append(["S1", "Q5", 10, "5"])
-        ws.append(["S1", "Q6", 10, "6"])
+        ws_students["A1"].font = Font(bold=True)
+        ws_students["B1"].font = Font(bold=True)
 
-        ws.column_dimensions["A"].width = 18
-        ws.column_dimensions["B"].width = 22
-        ws.column_dimensions["C"].width = 12
-        ws.column_dimensions["D"].width = 12
+        # =====================================================
+        # QUESTION MAP SHEET
+        # =====================================================
+        ws_qmap = wb.create_sheet("Question_Map")
 
-    # -------------------------
-    # Students (Validator contract)
-    # -------------------------
-    def _make_students(self, wb: Workbook) -> None:
-        ws = wb.create_sheet("Students")
+        q_headers = [
+            "Component",
+            "Q_No/Rubric_Parameter",
+            "Max_Marks",
+            "CO",
+        ]
 
-        headers = ["RegNo", "Student_Name"]
-        for c, h in enumerate(headers, start=1):
-            cell = ws.cell(1, c, h)
-            cell.font = Font(bold=True)
+        ws_qmap.append(q_headers)
 
-        # IMPORTANT: no blank rows (avoid NaN -> "nan")
-        ws.column_dimensions["A"].width = 16
-        ws.column_dimensions["B"].width = 26
+        for col in range(1, len(q_headers) + 1):
+            ws_qmap.cell(row=1, column=col).font = Font(bold=True)
+
+        ws_qmap.append(["S1", "Q1", 20, "1"])
+        ws_qmap.append(["S1", "Q2", 20, "2"])
+        ws_qmap.append(["S1", "Q3", 20, "3"])
+        ws_qmap.append(["S1", "Q4", 20, "4"])
+        ws_qmap.append(["S2", "Q1", 10, "4"])
+        ws_qmap.append(["S2", "Q2", 10, "5"])
+        ws_qmap.append(["Survey", "R1", 100, "1,2,3,4,5"])
+
+        return wb

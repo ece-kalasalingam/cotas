@@ -1,13 +1,19 @@
+import os
 import sys
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 import qdarktheme
+from PySide6.QtCore import Qt
 
 from core.resources import resource_path
 from main_window import MainWindow
 
 
 def main() -> int:
+    os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = "1"
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
 
     # Theme

@@ -1,401 +1,343 @@
-# core/co_results_course_engine.py
+## core/co_results_course_engine.py
 
 from __future__ import annotations
-
 import re
-from typing import Dict, List, TypedDict, Optional
+from dataclasses import dataclass
+from typing import (
+    Dict, List, TypedDict, Optional, Any, 
+    Tuple, Set, Mapping, Sequence, Iterable, cast
+)
 
 import numpy as np
 import pandas as pd
-
 from core.exceptions import ValidationError
 from core.constants import (
-    DIRECT_RATIO,
-    INDIRECT_RATIO,
-    ABSENT_SYMBOL,
-    PASS_MARK,
-    THRESHOLD_MARK,
-    HIGH_BENCHMARK_MARK,
+   DIRECT_RATIO, INDIRECT_RATIO, ABSENT_SYMBOL
 )
+
+ABSENT_LEVEL = -1
+EPSILON = 1e-9
 
 class SectionResult(TypedDict):
     result_path: str
-
 
 _CO_DIRECT_RE = re.compile(r"^CO(\d+)_Direct$", re.IGNORECASE)
 _CO_INDIRECT_RE = re.compile(r"^CO(\d+)_Indirect$", re.IGNORECASE)
 _BRACKET_RE = re.compile(r"\((\d+(?:\.\d+)?)\)")
 
+@dataclass(frozen=True)
+class AttainmentPolicy:
+    pass_mark: float
+    threshold_mark: float
+    high_mark: float
+    target_percent: float
+
+    def __post_init__(self):
+        params = {"pass_mark": self.pass_mark, "threshold_mark": self.threshold_mark, 
+                  "high_mark": self.high_mark, "target_percent": self.target_percent}
+        for name, val in params.items():
+            if not isinstance(val, (int, float)) or not (0 <= val <= 100):
+                raise ValidationError(f"Policy Error: {name} must be numeric (0-100).")
+        if not (self.pass_mark < self.threshold_mark < self.high_mark):
+            raise ValidationError("Policy Logic Error: Order must be pass < threshold < high.")
+
+    def classify(self, series: pd.Series) -> pd.Series:
+        eps = 1e-9
+        p_series = series.round(4)
+        conds = [
+            p_series < self.pass_mark - eps,
+            (p_series >= self.pass_mark - eps) & (p_series < self.threshold_mark - eps),
+            (p_series >= self.threshold_mark - eps) & (p_series < self.high_mark - eps),
+            p_series >= self.high_mark - eps,
+        ]
+        return pd.Series(np.select(conds, [0, 1, 2, 3]), index=series.index)
+
+    def is_achieved(self, percentage: float) -> str:
+        return "Achieved" if percentage >= self.target_percent else "Not Achieved"
 
 class COResultsCourseEngine:
-
-    def __init__(self, section_results: List[SectionResult]) -> None:
+    def __init__(self, section_results: List[SectionResult], policy: AttainmentPolicy) -> None:
         if not section_results:
             raise ValidationError("No section result files provided.")
+        
+        # Ratio Sum Validation
+        if not np.isclose(DIRECT_RATIO + INDIRECT_RATIO, 1.0):
+            raise ValidationError(
+                f"Global Ratio Configuration Mismatch: {DIRECT_RATIO} + {INDIRECT_RATIO} != 1.0"
+            )
 
         self.section_results = section_results
+        self.policy = policy
+        
+        self._co_data_mut: Dict[int, List[pd.DataFrame]] = {}
+        self._co_student_sets_mut: Dict[int, Set[str]] = {}
+        
+        self.co_data: Mapping[int, Sequence[pd.DataFrame]] = {}
+        self.co_student_sets: Mapping[int, frozenset[str]] = {}
+        
         self.course_code: Optional[str] = None
-        self.total_cos: Optional[int] = None
         self.sections: List[str] = []
-        self.global_regnos: set[str] = set()
-        self.co_data: Dict[int, List[pd.DataFrame]] = {}
-
-    # =========================================================
-    # PUBLIC ENTRY
-    # =========================================================
+        self.global_student_map: Dict[str, str] = {}
+        self._expected_cos: Optional[Set[int]] = None
 
     def compute_and_export(self, output_path: str) -> None:
-
         for item in self.section_results:
             self._process_file(item["result_path"])
 
-        if not self.co_data:
-            raise ValidationError("No valid CO data found.")
+        if not self._co_data_mut:
+            raise ValidationError("No valid CO data processed.")
 
-        # Final student consistency across COs
-        expected_total: Optional[int] = None
-        for co, frames in self.co_data.items():
-            total = sum(len(f) for f in frames)
-            if expected_total is None:
-                expected_total = total
-            elif total != expected_total:
-                raise ValidationError("Total student count mismatch across COs.")
+        self.co_data = {k: tuple(v) for k, v in self._co_data_mut.items()}
+        self.co_student_sets = {k: frozenset(v) for k, v in self._co_student_sets_mut.items()}
+        
+        co_keys = sorted(self.co_data.keys())
+        ref_co = co_keys[0]
+        ref_set = self.co_student_sets[ref_co]
+
+        if not ref_set:
+            raise ValidationError(f"CO{ref_co} contains no student data.")
+
+        for co in co_keys:
+            current_set = self.co_student_sets[co]
+            if current_set != ref_set:
+                missing = sorted(list(ref_set - current_set))[:5]
+                extra = sorted(list(current_set - ref_set))[:5]
+                raise ValidationError(
+                    f"Global Student ID Mismatch at CO{co}.\n"
+                    f"Missing from CO{co}: {missing}\n"
+                    f"Extras in CO{co}: {extra}"
+                )
 
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-
-            summary_rows: List[Dict[str, object]] = []
-
-            for co in sorted(self.co_data.keys()):
-
+            summary_rows: List[Dict[str, Any]] = []
+            for co in co_keys:
+                #df = pd.concat(list(self.co_data[co]), ignore_index=True)
                 df = pd.concat(self.co_data[co], ignore_index=True)
                 df = df.sort_values("RegNo").reset_index(drop=True)
-
-                df["CO Attainment Level"] = self._compute_level(df["Total attainment"])
-
+                df["CO Attainment Level"] = self.policy.classify(df["RawTotal"])
+                df.loc[df["IsAbsent"], "CO Attainment Level"] = ABSENT_LEVEL
+                
                 sheet_name = f"CO{co}"
+                #df.drop(columns=["RawTotal"]).to_excel(writer, sheet_name=sheet_name, index=False)
+                display_df = df.copy()
+                display_df["CO Attainment Level"] = display_df["CO Attainment Level"].replace(ABSENT_LEVEL, "Absent")
+                display_df.drop(columns=["RawTotal", "IsAbsent"]).to_excel(writer, sheet_name=sheet_name, index=False)
 
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-                # ---- Add Level Summary Footer ----
-                counts = df["CO Attainment Level"].value_counts().to_dict()
                 total = len(df)
+                valid_df = df[df["CO Attainment Level"] != ABSENT_LEVEL]
+                #counts = df["CO Attainment Level"].value_counts().to_dict()
+                eligible_count = len(valid_df)
+                absent_count = total - eligible_count
 
-                l0 = counts.get(0, 0)
-                l1 = counts.get(1, 0)
-                l2 = counts.get(2, 0)
-                l3 = counts.get(3, 0)
+                counts = valid_df["CO Attainment Level"].value_counts().to_dict()
 
-                footer_start_row = len(df) + 2  # one empty row gap
+                l_stats = {f"Level {i}": counts.get(i, 0) for i in range(4)}
+                self._write_footer(writer.sheets[sheet_name], {**l_stats, "Absent": absent_count}, total)
+                #self._write_footer(writer.sheets[sheet_name], l_stats, total)
 
-                ws = writer.sheets[sheet_name]
-
-                ws.cell(row=footer_start_row, column=1, value="Summary")
-                ws.cell(row=footer_start_row + 1, column=1, value="Level 0")
-                ws.cell(row=footer_start_row + 1, column=2, value=l0)
-
-                ws.cell(row=footer_start_row + 2, column=1, value="Level 1")
-                ws.cell(row=footer_start_row + 2, column=2, value=l1)
-
-                ws.cell(row=footer_start_row + 3, column=1, value="Level 2")
-                ws.cell(row=footer_start_row + 3, column=2, value=l2)
-
-                ws.cell(row=footer_start_row + 4, column=1, value="Level 3")
-                ws.cell(row=footer_start_row + 4, column=2, value=l3)
-
-                ws.cell(row=footer_start_row + 5, column=1, value="Total Stud.")
-                ws.cell(row=footer_start_row + 5, column=2, value=total)
-
-                counts = df["CO Attainment Level"].value_counts().to_dict()
-                total = len(df)
-
-                l0 = counts.get(0, 0)
-                l1 = counts.get(1, 0)
-                l2 = counts.get(2, 0)
-                l3 = counts.get(3, 0)
-
-                co_pct = ((l2 + l3) / total) * 100 if total else 0
-
+                co_pct = ((l_stats["Level 2"] + l_stats["Level 3"]) / eligible_count * 100) if eligible_count > 0 else 0.0
                 summary_rows.append({
-                    "CO": f"CO{co}",
-                    "Level 0": l0,
-                    "Level 1": l1,
-                    "Level 2": l2,
-                    "Level 3": l3,
-                    "Total": total,
-                    "CO%": round(co_pct, 2),
-                    "Normalized(0-3)": round(co_pct * 3 / 100, 2),
-                    "Status": "Achieved" if co_pct >= THRESHOLD_MARK else "Not Achieved",
+                    "CO": f"CO{co}", **l_stats, "Absent": absent_count, "Eligible": eligible_count,
+                    "CO%": round(co_pct, 2), "Normalized(0-3)": round(co_pct * 3 / 100, 2),
+                    "Status": self.policy.is_achieved(co_pct),
                 })
-
-            pd.DataFrame(summary_rows).to_excel(
-                writer,
-                sheet_name="Overall_Summary",
-                index=False
-            )
-
-    # =========================================================
-    # FILE PROCESSING
-    # =========================================================
+                #summary_rows.append({
+                    #"CO": f"CO{co}", **l_stats, "Total": total, "CO%": round(co_pct, 2),
+                    #"Normalized(0-3)": round(co_pct * 3 / 100, 2),
+                    #"Status": self.policy.is_achieved(co_pct),
+                #})
+            pd.DataFrame(summary_rows).to_excel(writer, sheet_name="Overall_Summary", index=False)
 
     def _process_file(self, path: str) -> None:
-
         xl = pd.ExcelFile(path)
-        sheets = xl.sheet_names
+        d_map, i_map = self._map_sheets(
+            cast(Sequence[str], xl.sheet_names),
+            path
+        )
+        all_cos = sorted(d_map.keys())
 
-        direct_map: Dict[int, str] = {}
-        indirect_map: Dict[int, str] = {}
+        if all_cos != list(range(1, len(all_cos) + 1)):
+            raise ValidationError(f"{path}: Non-continuous CO sequence: {all_cos}")
 
-        for sheet in sheets:
-            name = str(sheet)
+        if self._expected_cos is None:
+            self._expected_cos = set(all_cos)
+        elif set(all_cos) != self._expected_cos:
+            raise ValidationError(f"{path}: CO count mismatch.")
 
-            m = _CO_DIRECT_RE.match(name)
-            if m:
-                direct_map[int(m.group(1))] = name
-                continue
-
-            m = _CO_INDIRECT_RE.match(name)
-            if m:
-                indirect_map[int(m.group(1))] = name
-
-        if not direct_map:
-            raise ValidationError(f"{path}: No CO sheets detected.")
-
-        all_cos = sorted(direct_map.keys())
-
-        for co in all_cos:
-            if co not in indirect_map:
-                raise ValidationError(f"{path}: CO{co} missing Indirect sheet.")
-
-        if self.total_cos is None:
-            self.total_cos = len(all_cos)
-        elif len(all_cos) != self.total_cos:
-            raise ValidationError(f"{path}: Total CO mismatch.")
-
-        # Metadata extraction by key
-        meta = pd.read_excel(path, sheet_name=direct_map[all_cos[0]], header=None, nrows=20)
-
-        course_code = ""
-        section = ""
-
-        for _, row in meta.iterrows():
-            key = str(row.iloc[0]).strip().lower()
-            val = str(row.iloc[1]).strip()
-
-            if key == "course code":
-                course_code = val
-            elif key == "section":
-                section = val
-
-        if not course_code:
-            raise ValidationError(f"{path}: Missing Course Code.")
-        if not section:
-            raise ValidationError(f"{path}: Missing Section.")
-
+        course_code, section = self._extract_metadata(xl, d_map[all_cos[0]], path)
+        
+        if section in self.sections:
+            raise ValidationError(f"Duplicate Section '{section}' in file: {path}")
+        
         if self.course_code is None:
             self.course_code = course_code
         elif self.course_code != course_code:
-            raise ValidationError(f"{path}: Course code mismatch.")
-
-        if section in self.sections:
-            raise ValidationError(f"{path}: Duplicate section '{section}'.")
+            raise ValidationError(f"{path}: Course Code mismatch (Found: {course_code}, Expected: {self.course_code})")
+        
         self.sections.append(section)
 
-        reference_students: Optional[List[str]] = None
-
         for co in all_cos:
+            d_df = self._read_direct(xl, d_map[co], path)
+            i_df = self._read_indirect(xl, i_map[co], path)
+            
+            d_set, i_set = set(d_df["RegNo"]), set(i_df["RegNo"])
+            if d_set != i_set:
+                missing = sorted(list(d_set - i_set))[:3]
+                raise ValidationError(f"{path}::CO{co}: Direct/Indirect ID mismatch. Missing: {missing}")
 
-            d_df = self._read_direct(path, direct_map[co])
-            i_df = self._read_indirect(path, indirect_map[co])
+            if len(d_df) != len(d_set):
+                dupes = d_df[d_df.duplicated("RegNo")]["RegNo"].tolist()
+                raise ValidationError(f"{path}::CO{co}: Duplicate IDs: {dupes}")
 
-            if not d_df["RegNo"].equals(i_df["RegNo"]):
-                raise ValidationError(f"{path}: CO{co} student mismatch between Direct and Indirect.")
+            current_names = dict(zip(d_df["RegNo"], d_df["Student Name"]))
+            for r, n in current_names.items():
+                if r in self.global_student_map and self.global_student_map[r] != n:
+                    raise ValidationError(f"Name Conflict for {r}: '{n}' vs '{self.global_student_map[r]}'")
+                self.global_student_map[r] = n
 
-            if reference_students is None:
-                reference_students = d_df["RegNo"].tolist()
-            elif d_df["RegNo"].tolist() != reference_students:
-                raise ValidationError(f"{path}: Student list mismatch across CO sheets.")
-
-            dup = set(d_df["RegNo"]).intersection(self.global_regnos)
-            if dup:
-                raise ValidationError(f"{path}: Duplicate RegNo across sections.")
-
+            is_absent = d_df["IsAbsent"] | i_df["IsAbsent"]
+            raw_total = (d_df["Score"] * DIRECT_RATIO) + (i_df["Score"] * INDIRECT_RATIO)
+            
             combined = pd.DataFrame({
-                "RegNo": d_df["RegNo"],
-                "Student Name": d_df["Student Name"],
-                "Direct 100%": d_df["Direct100"],
-                f"Direct {int(DIRECT_RATIO*100)}%": d_df["DirectRatio"],
-                "Indirect 100%": i_df["Indirect100"],
-                f"Indirect {int(INDIRECT_RATIO*100)}%": i_df["IndirectRatio"],
+                "RegNo": d_df["RegNo"], "Student Name": d_df["Student Name"],
+                "Direct 100%": d_df["Score"].round(2),
+                "Indirect 100%": i_df["Score"].round(2),
+                "Total attainment": raw_total.round(2),
+                "RawTotal": raw_total ,
+                 "IsAbsent": is_absent 
             })
+            self._co_data_mut.setdefault(co, []).append(combined)
+            self._co_student_sets_mut.setdefault(co, set()).update(d_set)
 
-            combined["Total attainment"] = (
-                combined[f"Direct {int(DIRECT_RATIO*100)}%"] +
-                combined[f"Indirect {int(INDIRECT_RATIO*100)}%"]
-            ).round(2)
+    def _read_direct(self, xl: pd.ExcelFile, sheet: str, path: str) -> pd.DataFrame:
+        header_row = self._find_header(xl, sheet, path)
+        df = xl.parse(sheet, header=header_row).dropna(how="all")
+        
+        raw_cols: List[str] = [str(c) for c in df.columns]
+        norm_cols: List[str] = [c.strip().replace(" ", "").lower() for c in raw_cols]
+        df.columns = norm_cols
 
-            self.co_data.setdefault(co, []).append(combined)
+        required = {"regno", "studentname", "100%"}
+        if not required.issubset(set(norm_cols)):
+            raise ValidationError(f"{path}::{sheet}: Missing required columns: {required - set(norm_cols)}")
 
-        if reference_students:
-            self.global_regnos.update(reference_students)
+        total_key = next((c for c in norm_cols if c.startswith("total")), None)
+        if not total_key:
+            raise ValidationError(f"{path}::{sheet}: Missing 'Total' column.")
 
-    # =========================================================
-    # DIRECT VALIDATION
-    # =========================================================
+        idx: int = norm_cols.index(total_key)
+        header_str = cast(str, raw_cols[idx]) 
+        total_max = self._extract_bracket(header_str)
+        
+        
+        num_total, abs_t = self._validate_numeric_with_mask(df[total_key], 0, total_max, f"{sheet} Total", df)
+        num_100, abs_100 = self._validate_numeric_with_mask(df["100%"], 0, 100, f"{sheet} 100%", df)
 
-    def _read_direct(self, path: str, sheet: str) -> pd.DataFrame:
-
-        header_row = self._find_header(path, sheet)
-        df = pd.read_excel(path, sheet_name=sheet, header=header_row).dropna(how="all")
-
-        df.columns = list(map(str, df.columns))
-
-        normalized_cols = {c.replace(" ", "").lower(): c for c in df.columns}
-
-        if "100%" not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing 100% column.")
-
-        percent_col = normalized_cols["100%"]
-
-        ratio_key = f"{int(DIRECT_RATIO*100)}%".replace(" ", "").lower()
-
-        if ratio_key not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing {ratio_key} column.")
-
-        ratio_col_name = normalized_cols[ratio_key]
-
-        reg = df["RegNo"].astype(str).str.strip()
-        name = df["Student Name"].astype(str).str.strip()
-
-        total_col = [c for c in df.columns if c.startswith("Total")]
-        if not total_col:
-            raise ValidationError(f"{path}::{sheet}: Missing Total column.")
-
-        total_col = total_col[0]
-        total_max = self._extract_bracket(total_col)
-
-        numeric_total = self._validate_numeric(df[total_col], 0, total_max)
-
-        direct100 = (numeric_total * 100 / total_max).round(2)
-        stored100 = self._validate_numeric(df[percent_col], 0, 100)
-
-        if not np.allclose(direct100, stored100, atol=0.1):
-            raise ValidationError(f"{path}::{sheet}: Direct 100% mismatch.")
-
-        ratio = (direct100 * DIRECT_RATIO).round(2)
-        stored_ratio = self._validate_numeric(df[ratio_col_name], 0, 100)
-
-        if not np.allclose(ratio, stored_ratio, atol=0.1):
-            raise ValidationError(f"{path}::{sheet}: Direct ratio mismatch.")
+        if not (abs_t == abs_100).all():
+            raise ValidationError(f"{sheet}: Inconsistent Absence marking between Total and 100% columns.")
+        
+        if not np.allclose(num_total * 100 / total_max, num_100, atol=0.1):
+            raise ValidationError(f"{sheet}: Calculation audit failed (Total/{total_max} vs 100% column).")
 
         return pd.DataFrame({
-            "RegNo": reg,
-            "Student Name": name,
-            "Direct100": direct100,
-            "DirectRatio": ratio
+            "RegNo": df["regno"].astype(str).str.strip().str.upper(),
+            "Student Name": df["studentname"].astype(str).str.strip(),
+            "Score": num_100, "IsAbsent": abs_100
         })
 
-    # =========================================================
-    # INDIRECT VALIDATION
-    # =========================================================
+    def _read_indirect(self, xl: pd.ExcelFile, sheet: str, path: str) -> pd.DataFrame:
+        header_row = self._find_header(xl, sheet, path)
+        df = xl.parse(sheet, header=header_row).dropna(how="all")
+        norm_cols = [str(c).strip().replace(" ", "").lower() for c in df.columns]
+        df.columns = norm_cols
 
-    def _read_indirect(self, path: str, sheet: str) -> pd.DataFrame:
+        required = {"regno", "studentname", "100%"}
+        if not required.issubset(set(norm_cols)):
+            raise ValidationError(f"{path}::{sheet}: Missing columns: {required - set(norm_cols)}")
 
-        header_row = self._find_header(path, sheet)
-        df = pd.read_excel(path, sheet_name=sheet, header=header_row).dropna(how="all")
-
-        df.columns = list(map(str, df.columns))
-
-        normalized_cols = {
-            c.replace(" ", "").lower(): c
-            for c in df.columns
-        }
-
-        # --- 100% column ---
-        if "100%" not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing 100% column.")
-
-        percent_col = normalized_cols["100%"]
-
-        # --- Ratio column ---
-        ratio_key = f"{int(INDIRECT_RATIO*100)}%".replace(" ", "").lower()
-
-        if ratio_key not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing {ratio_key} column.")
-
-        ratio_col_name = normalized_cols[ratio_key]
-
-        # --- Required base columns ---
-        if "regno" not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing RegNo column.")
-
-        if "studentname" not in normalized_cols and "student name" not in normalized_cols:
-            raise ValidationError(f"{path}::{sheet}: Missing Student Name column.")
-
-        reg_col = normalized_cols["regno"]
-        name_col = normalized_cols.get("studentname") or normalized_cols.get("student name")
-
-        reg = df[reg_col].astype(str).str.strip()
-        name = df[name_col].astype(str).str.strip()
-
-        # --- Numeric validation ---
-        indirect100 = self._validate_numeric(df[percent_col], 0, 100)
-        expected_ratio = (indirect100 * INDIRECT_RATIO).round(2)
-        stored_ratio = self._validate_numeric(df[ratio_col_name], 0, 100)
-
-        if not np.allclose(expected_ratio, stored_ratio, atol=0.1):
-            raise ValidationError(f"{path}::{sheet}: Indirect ratio mismatch.")
+        num_100, abs_100 = self._validate_numeric_with_mask(df["100%"], 0, 100, f"{sheet} Indirect", df)
 
         return pd.DataFrame({
-            "RegNo": reg,
-            "Student Name": name,
-            "Indirect100": indirect100,
-            "IndirectRatio": expected_ratio
+            "RegNo": df["regno"].astype(str).str.strip().str.upper(),
+            "Student Name": df["studentname"].astype(str).str.strip(),
+            "Score": num_100, "IsAbsent": abs_100
         })
-
-    # =========================================================
-    # UTILITIES
-    # =========================================================
-
-    @staticmethod
-    def _find_header(path: str, sheet: str) -> int:
-        preview = pd.read_excel(path, sheet_name=sheet, header=None, nrows=50)
-        for i in range(len(preview)):
-            row = preview.iloc[i].astype(str).str.lower().tolist()
-            if "regno" in row and "student name" in row:
-                return i
-        raise ValidationError(f"{path}::{sheet}: Header row not found.")
-
-    @staticmethod
-    def _extract_bracket(header: str) -> float:
-        m = _BRACKET_RE.search(str(header))
-        if not m:
-            raise ValidationError(f"Missing bracket value in '{header}'.")
-        return float(m.group(1))
-
-    @staticmethod
-    def _validate_numeric(series: pd.Series, min_v: float, max_v: float) -> pd.Series:
-
+    
+    def _validate_numeric_with_mask(self, series: pd.Series, min_v: float, max_v: float, ctx: str, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
         s = series.astype(str).str.strip()
+        absent_norm = ABSENT_SYMBOL.lower().strip()
+        
+        is_absent = s.str.lower().str.strip() == absent_norm
+        num = pd.to_numeric(s.mask(is_absent, "0"), errors="coerce")
+        
+        if num.isna().any():
+            bad_idx = num.index[num.isna()][0]
+            raise ValidationError(f"Non-numeric '{series.iloc[bad_idx]}' in {ctx} at RegNo: {df.iloc[bad_idx].get('regno')}")
+            
+        if not num.between(min_v, max_v + EPSILON).all():
+            out_ids = df.loc[~num.between(min_v, max_v + EPSILON), "regno"].tolist()
+            raise ValidationError(f"Range Error (0-{max_v}) in {ctx} for: {out_ids[:5]}")
+            
+        return num, is_absent
 
-        is_absent = s.str.lower() == ABSENT_SYMBOL.lower()
-        s = s.mask(is_absent, np.nan)
+    def _map_sheets(self, sheets: Iterable[str], path: str) -> Tuple[Dict[int, str], Dict[int, str]]:
+        d_map, i_map = {}, {}
+        for s in sheets:
+            s_str = str(s)
+            if m := _CO_DIRECT_RE.match(s_str):
+                co_index: int = int(str(m.group(1)))
+                d_map[co_index] = s_str
+            elif m := _CO_INDIRECT_RE.match(s_str):
+                co_index: int = int(str(m.group(1)))
+                i_map[co_index] = s_str
+        
+        if not d_map: raise ValidationError(f"{path}: No CO_Direct sheets.")
+        if set(d_map.keys()) != set(i_map.keys()):
+            raise ValidationError(f"{path}: CO Direct/Indirect sheet mismatch")
+        for co in d_map:
+            if co not in i_map: raise ValidationError(f"{path}: CO{co}_Indirect missing.")
+        return d_map, i_map
 
-        numeric = pd.to_numeric(s, errors="coerce")
+    def _find_header(self, xl: pd.ExcelFile, sheet: str, path: str) -> int:
+        preview = xl.parse(sheet, header=None, nrows=30)
 
-        if numeric.isna().any() and not is_absent.all():
-            raise ValidationError("Invalid numeric value detected.")
+        for idx in range(len(preview)):
+            row = preview.iloc[idx]
+            vals = [
+                str(v).lower().replace(" ", "").replace("_", "").replace("-", "")
+                for v in row.values
+            ]
+            if "regno" in vals and "studentname" in vals:
+                return idx
 
-        if numeric.dropna().between(min_v, max_v).all() is False:
-            raise ValidationError("Value out of allowed range.")
+        raise ValidationError(f"{path}::{sheet}: Core headers not found.")
 
-        return numeric.fillna(0.0)
+    def _extract_bracket(self, header: str) -> float:
+        if m := _BRACKET_RE.search(header): return float(m.group(1))
+        raise ValidationError(f"Max mark bracket missing: {header}")
 
-    @staticmethod
-    def _compute_level(series: pd.Series) -> pd.Series:
-        conditions = [
-            series < PASS_MARK,
-            (series >= PASS_MARK) & (series < THRESHOLD_MARK),
-            (series >= THRESHOLD_MARK) & (series < HIGH_BENCHMARK_MARK),
-            series >= HIGH_BENCHMARK_MARK,
-        ]
-        return pd.Series(np.select(conditions, [0, 1, 2, 3]), index=series.index)
+    def _extract_metadata(self, xl: pd.ExcelFile, sheet: str, path: str) -> Tuple[str, str]:
+        df = xl.parse(sheet, header=None, nrows=20)
+        course, sec = None, None
+        for _, row in df.iterrows():
+            row_raw = [str(v).strip() for v in row.values]
+            for i, val in enumerate(row_raw):
+                k = val.lower().replace("_", "").replace("-", "").replace(" ", "").rstrip(":.")
+                
+                # FIXED: Constrained lookahead (i+1 to i+3) to prevent over-scanning
+                if k in {"coursecode", "subjectcode"}:
+                    for c in row_raw[i+1 : i+3]:
+                        if c and c not in ":.-": course = c.upper(); break
+                if k in {"section", "class", "sec"}:
+                    for c in row_raw[i+1 : i+3]:
+                        if c and c not in ":.-": sec = c.upper(); break
+        
+        if not course or not sec: raise ValidationError(f"{path}: Course/Section metadata missing.")
+        return course, sec
+
+    def _write_footer(self, ws: Any, stats: Dict[str, int], total: int) -> None:
+        r = ws.max_row + 3
+        ws.cell(row=r, column=1, value="Summary Statistics")
+        for i, (k, v) in enumerate(stats.items(), 1):
+            ws.cell(row=r+i, column=1, value=k); ws.cell(row=r+i, column=2, value=v)
+        ws.cell(row=r+5, column=1, value="Total Registered Students"); ws.cell(row=r+5, column=2, value=total)

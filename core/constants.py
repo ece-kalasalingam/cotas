@@ -152,6 +152,10 @@ PASS_MARK: float = 40.0
 THRESHOLD_MARK: float = 60.0
 HIGH_BENCHMARK_MARK: float = 80.0
 
+STATUS_NORMAL = 0
+STATUS_A = 1
+STATUS_NA = 2
+
 # ==========================================================
 # END OF CONSTANTS
 # ==========================================================

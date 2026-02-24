@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar
+    QApplication, QLabel, QMainWindow, QScrollArea, QWidget, QHBoxLayout, QToolBar,
+    QVBoxLayout, QStatusBar, QGraphicsOpacityEffect
 )
+
 from PySide6.QtGui import QAction, QActionGroup
-from PySide6.QtCore import QSize, QTimer, Qt
+from PySide6.QtCore import QPoint, QPropertyAnimation, QSize, QTimer, Qt
 from qdarktheme._util import get_qdarktheme_root_path
 from PySide6.QtCore import QDir
 from PySide6.QtGui import QIcon, QAction
@@ -12,6 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
 # Import modules
+from modules.utils import ToastNotification
 from core.resources import resource_path
 from modules.co_module import COModule
 from modules.co_course_module import COCourseModule
@@ -26,17 +28,33 @@ class MainWindow(QMainWindow):
         # ----------------------------
         # Window Setup
         # ----------------------------
-        self.setWindowTitle("CO Attainment")
-        self.resize(1100, 700)
-        self.setMinimumSize(1000, 650)
+        self.setWindowTitle("COTAS - CO Attainment")
+        screen = QApplication.primaryScreen().geometry()
+        s_height = screen.height()
+
+        # 2. Target 80% of the screen height to be safe but look "Full"
+        target_h = min(int(s_height * 0.8), 900)
+        # 3. Maintain your aesthetic ratio (~1.57)
+        target_w = int(target_h * 1.33)
+
+        # 4. Apply
+        self.resize(target_w, target_h)
+        self.setMinimumSize(850, 640) # Minimum for HD screens
 
         # ----------------------------
         # Central Container
         # ----------------------------
-        central_container = QWidget()
-        self.setCentralWidget(central_container)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        central_layout = QVBoxLayout(container)
+        scroll.setWidget(container)
+        self.setCentralWidget(scroll)
 
-        central_layout = QVBoxLayout(central_container)
+        #central_container = QWidget()
+        #self.setCentralWidget(central_container)
+
+        #central_layout = QVBoxLayout(central_container)
         central_layout.setContentsMargins(0, 0, 0, 0)
 
         self.work_area = QWidget()

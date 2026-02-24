@@ -1,11 +1,6 @@
 import pandas as pd
-from typing import Any, Dict, Tuple
 from core.models import (
-    AssessmentConfig,
-    CourseMetadata,
     IndirectToolInfo,
-    StudentList,
-    QuestionMap,
     Question,
     ComponentInfo,
     Student,
@@ -15,16 +10,13 @@ from core.exceptions import ValidationError
 
 
 class SetupValidator:
+    """
+    Pure setup validator.
+    No Excel I/O.
+    Operates only on DataFrames.
+    """
 
-    def __init__(
-        self,
-        metadata: CourseMetadata,
-        config: AssessmentConfig,
-        students: StudentList,
-        question_map: QuestionMap,
-        only_CA: bool = False,
-    ):
-        
+    def __init__(self, metadata, config, students, question_map, only_CA=False):
         self.metadata = metadata
         self.config_df = config.dataframe.copy()
         self.students_df = students.dataframe.copy()
@@ -34,15 +26,12 @@ class SetupValidator:
     # =====================================================
     # PUBLIC ENTRY
     # =====================================================
+
     def validate(self) -> ValidatedSetup:
-        config_meta = self._validate_config()
-        components = self._validate_question_map(config_meta)
+        components_meta = self._validate_config()
+        components = self._validate_question_map(components_meta)
         students = self._validate_students()
-        indirect_tools = tuple(
-            IndirectToolInfo(name=comp, weight=meta.get("weight", 0.0))
-            for comp, meta in config_meta.items()
-            if not meta.get("direct", False)
-        )
+        indirect_tools = self._build_indirect_tools(components_meta)
 
         return ValidatedSetup(
             components=components,
@@ -50,34 +39,20 @@ class SetupValidator:
             indirect_tools=indirect_tools,
         )
 
-
     # =====================================================
     # CONFIG VALIDATION
     # =====================================================
-    def _validate_config(self) -> Dict[str, dict]:
-        required_cols = {
-            "Component",
-            "Weight (%)",
-            "CIA",
-            "CO_Wise_Marks_Breakup",
-            "Direct",
-        }
 
-        if not required_cols.issubset(self.config_df.columns):
-            missing = required_cols - set(self.config_df.columns)
-            raise ValidationError(
-                f"Assessment_Config missing required columns: {missing}"
-            )
+    def _validate_config(self):
+        required = {"Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"}
+        if not required.issubset(self.config_df.columns):
+            raise ValidationError(f"Assessment_Config missing columns: {required - set(self.config_df.columns)}")
 
-        self.config_df["Component"] = (
-            self.config_df["Component"]
-            .astype(str)
-            .str.strip()
-        )
+        df = self.config_df.copy()
+        df["Component"] = df["Component"].astype(str).str.strip()
 
-        if self.config_df["Component"].duplicated().any():
+        if df["Component"].duplicated().any():
             raise ValidationError("Duplicate components in Assessment_Config.")
-
         for col in ["CIA", "CO_Wise_Marks_Breakup", "Direct"]:
             self.config_df[col] = (
                 self.config_df[col]
@@ -100,26 +75,22 @@ class SetupValidator:
         else:
             active = self.config_df.copy()
 
-        try:
-            active["Weight (%)"] = active["Weight (%)"].astype(float)
-        except Exception:
-            raise ValidationError("Weight (%) must be numeric.")
+        active["Weight (%)"] = pd.to_numeric(active["Weight (%)"], errors="raise")
 
         if (active["Weight (%)"] < 0).any():
-            raise ValidationError("All weights must be >= 0.")
-
+            raise ValidationError("Weights must be >= 0.")
+        
         active["DirectFlag"] = active["Direct"].str.strip().str.lower()  == "yes"
         direct_rows = active[active["DirectFlag"]]
         if direct_rows.empty:
             raise ValidationError("At least one DIRECT component is required.")
-        
+
         if not self.only_CA:
             total_weight = direct_rows["Weight (%)"].sum()
             if abs(total_weight - 100) > 0.01:
                 raise ValidationError(
                     f"Total weight must equal 100. Currently: {total_weight}"
                 )
-        
         indirect_rows = active[~active["DirectFlag"]]
         if not indirect_rows.empty:
             indirect_weight = indirect_rows["Weight (%)"].sum()
@@ -129,156 +100,111 @@ class SetupValidator:
                     f"Total INDIRECT tool weight must equal 100. Currently: {indirect_weight}"
                 )
 
-        components: Dict[str, Dict[str, Any]] = {}
+        active["Direct"] = active["Direct"].astype(str).str.lower().str.strip()
+        active["CIA"] = active["CIA"].astype(str).str.lower().str.strip()
+        active["CO_Wise_Marks_Breakup"] = active["CO_Wise_Marks_Breakup"].astype(str).str.lower().str.strip()
+
+        components = {}
 
         for _, row in active.iterrows():
-            comp = row["Component"]
-
-            components[comp] = {
+            components[row["Component"]] = {
                 "weight": float(row["Weight (%)"]),
                 "cia": row["CIA"] == "yes",
                 "co_split": row["CO_Wise_Marks_Breakup"] == "yes",
                 "direct": row["Direct"] == "yes",
-                "questions": [],
             }
 
         return components
 
     # =====================================================
-    # QUESTION MAP VALIDATION + EXTRACTION
+    # QUESTION MAP VALIDATION
     # =====================================================
-    def _validate_question_map(
-        self,
-        config_meta: Dict[str, dict]
-    ) -> Dict[str, ComponentInfo]:
 
-        required_cols = {
-            "Component",
-            "Q_No/Rubric_Parameter",
-            "Max_Marks",
-            "CO",
-        }
+    def _validate_question_map(self, config_meta):
+        required = {"Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO"}
+        if not required.issubset(self.qmap_df.columns):
+            raise ValidationError(f"Question_Map missing columns: {required - set(self.qmap_df.columns)}")
+
         total_cos = self.metadata.total_cos
-        valid_co_set = {f"{i}" for i in range(1, total_cos + 1)}
+        valid_cos = {str(i) for i in range(1, total_cos + 1)}
         covered_cos = set()
 
-        if not required_cols.issubset(self.qmap_df.columns):
-            missing = required_cols - set(self.qmap_df.columns)
-            raise ValidationError(
-                f"Question_Map missing required columns: {missing}"
-            )
+        final_components = {}
 
-        self.qmap_df["Component"] = (
-            self.qmap_df["Component"]
-            .astype(str)
-            .str.strip()
-        )
+        for comp_name, meta in config_meta.items():
+            comp_q = self.qmap_df[self.qmap_df["Component"] == comp_name]
 
-        final_components: Dict[str, ComponentInfo] = {}
-
-        for comp, meta in config_meta.items():
-
-            comp_q = self.qmap_df[self.qmap_df["Component"] == comp]
-
-            if meta["direct"]:
-                if comp_q.empty:
-                    raise ValidationError(
-                        f"{comp}: Direct assessment must appear in Question_Map."
-                    )
-            else:
-                if not comp_q.empty:
-                    raise ValidationError(
-                        f"{comp}: Indirect assessment must NOT appear in Question_Map."
-                    )
-                final_components[comp] = ComponentInfo(
-                    weight=meta["weight"],
-                    cia=meta["cia"],
-                    co_split=meta["co_split"],
-                    direct=meta["direct"],
-                    questions=tuple(),
-                )
-                continue
+            if meta["direct"] and comp_q.empty:
+                raise ValidationError(f"{comp_name}: Direct component missing in Question_Map.")
+            if not meta["direct"] and not comp_q.empty:
+                raise ValidationError(f"{comp_name}: Indirect assessment must NOT appear in Question_Map.")
 
             if comp_q["Q_No/Rubric_Parameter"].duplicated().any():
-                raise ValidationError(
-                    f"{comp}: Duplicate question identifiers."
-                )
+                raise ValidationError( f"{comp_name}: Duplicate question identifiers.")
 
             questions = []
 
             for _, row in comp_q.iterrows():
-
                 try:
                     max_marks = float(row["Max_Marks"])
                 except Exception:
                     raise ValidationError(
-                        f"{comp}: Max_Marks must be numeric."
+                        f"{comp_name}: Max_Marks must be numeric."
                     )
-
                 if max_marks <= 0:
-                    raise ValidationError(
-                        f"{comp}: Max_Marks must be > 0."
-                    )
+                    raise ValidationError(f"{comp_name}: Max_Marks must be > 0.")
 
                 co_raw = str(row["CO"]).strip()
                 if not co_raw:
                     raise ValidationError(
-                        f"{comp}: CO cannot be empty."
+                        f"{comp_name}: CO cannot be empty."
                     )
 
                 co_list = tuple(
-                    x.strip().upper()
-                    for x in co_raw.replace(";", ",")
-                    .replace("|", ",")
-                    .split(",")
+                    x.strip()
+                    for x in co_raw.replace(";", ",").replace("|", ",").split(",")
                     if x.strip()
                 )
 
-                # --- Validate range ---
                 for co in co_list:
-                    if co not in valid_co_set:
-                        raise ValidationError(
-                            f"{comp}: Invalid CO '{co}'. "
-                            f"Must be between CO1 and CO{total_cos}."
-                        )
-
-                if meta["direct"]:
-                    covered_cos.update(co_list)
-                
+                    if co not in valid_cos:
+                        raise ValidationError(f"{comp_name}: Invalid CO {co}")
+                    covered_cos.add(co)
                 if meta["co_split"] and len(co_list) != 1:
                     raise ValidationError(
-                        f"{comp}: CO_Wise_Marks_Breakup = yes "
+                        f"{comp_name}: CO_Wise_Marks_Breakup = yes "
                         "requires exactly one CO per row."
                     )
                 if not meta["co_split"] and len(co_list) < 1:
                     raise ValidationError(
-                        f"{comp}: CO_Wise_Marks_Breakup = no "
+                        f"{comp_name}: CO_Wise_Marks_Breakup = no "
                         "requires at least one CO per row."
                     )
                 if not meta["co_split"] and len(comp_q) != 1:
                     raise ValidationError(
-                        f"{comp}: CO_Wise_Marks_Breakup = no "
+                        f"{comp_name}: CO_Wise_Marks_Breakup = no "
                         "cannot have multiple question rows."
                     )
 
                 questions.append(
                     Question(
+                        tool_name=comp_name,
                         identifier=str(row["Q_No/Rubric_Parameter"]).strip(),
-                        max_marks=float(row["Max_Marks"]),
+                        max_marks=max_marks,
                         co_list=co_list,
                     )
                 )
 
-            final_components[comp] = ComponentInfo(
+            final_components[comp_name] = ComponentInfo(
                 weight=meta["weight"],
                 cia=meta["cia"],
                 co_split=meta["co_split"],
                 direct=meta["direct"],
                 questions=tuple(questions),
             )
-        # --- Coverage Check ---
+
         if any(meta["direct"] for meta in config_meta.values()):
-            missing_cos = valid_co_set - covered_cos
+            missing_cos = valid_cos - covered_cos
 
             if missing_cos:
                 raise ValidationError(
@@ -286,39 +212,43 @@ class SetupValidator:
                     f"{sorted(missing_cos)}"
                 )
 
+
         return final_components
 
     # =====================================================
-    # STUDENT VALIDATION + EXTRACTION
+    # STUDENTS VALIDATION
     # =====================================================
-    def _validate_students(self) -> Tuple[Student, ...]:
 
-        required_cols = {"RegNo", "Student_Name"}
+    def _validate_students(self):
+        required = {"RegNo", "Student_Name"}
+        if not required.issubset(self.students_df.columns):
+            missing = required - set(self.students_df.columns)
+            raise ValidationError(f"Students sheet missing required columns: {sorted(missing)}")
 
-        if not required_cols.issubset(self.students_df.columns):
-            missing = required_cols - set(self.students_df.columns)
-            raise ValidationError(
-                f"Students sheet missing required columns: {missing}"
-            )
+        df = self.students_df.copy()
+        df["RegNo"] = df["RegNo"].astype(str).str.strip()
 
-        self.students_df["RegNo"] = (
-            self.students_df["RegNo"]
-            .astype(str)
-            .str.strip()
-        )
-
-        if self.students_df["RegNo"].duplicated().any():
-            raise ValidationError("Duplicate RegNo entries found.")
-
+        if df["RegNo"].duplicated().any():
+            raise ValidationError("Duplicate RegNo entries.")
         if self.students_df["RegNo"].eq("").any():
             raise ValidationError("Empty RegNo found.")
 
-        students = tuple(
-            Student(
-                reg_no=row["RegNo"],
-                name=str(row["Student_Name"]).strip(),
-            )
-            for _, row in self.students_df.iterrows()
+        return tuple(
+            Student(reg_no=row["RegNo"], name=str(row["Student_Name"]).strip())
+            for _, row in df.iterrows()
         )
 
-        return students
+    # =====================================================
+    # INDIRECT TOOL BUILD
+    # =====================================================
+
+    def _build_indirect_tools(self, config_meta):
+        tools = []
+
+        for name, meta in config_meta.items():
+            if not meta["direct"]:
+                tools.append(
+                    IndirectToolInfo(name=name, weight=meta["weight"])
+                )
+
+        return tuple(tools)

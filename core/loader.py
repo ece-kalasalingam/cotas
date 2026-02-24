@@ -8,16 +8,24 @@ from core.models import (
 
 
 class SetupLoader:
+    """
+    Excel setup reader.
+    I/O only. No validation logic.
+    """
 
     def __init__(self, filepath: str):
         self.filepath = filepath
         try:
-            self.excel = pd.ExcelFile(filepath)
+            self._excel = pd.ExcelFile(filepath)
         except Exception as e:
-            raise RuntimeError(f"Failed to load Excel file: {str(e)}")
+            raise RuntimeError(f"Failed to load Excel file: {e}")
+
+    # =====================================================
+    # LOADERS
+    # =====================================================
 
     def load_metadata(self) -> CourseMetadata:
-        df = pd.read_excel(self.excel, sheet_name="Course_Metadata")
+        df = pd.read_excel(self._excel, sheet_name="Course_Metadata")
 
         meta = dict(zip(df["Field"], df["Value"]))
 
@@ -32,13 +40,13 @@ class SetupLoader:
         )
 
     def load_config(self) -> AssessmentConfig:
-        df = pd.read_excel(self.excel, sheet_name="Assessment_Config")
+        df = pd.read_excel(self._excel, sheet_name="Assessment_Config")
         return AssessmentConfig(df)
 
     def load_students(self) -> StudentList:
-        df = pd.read_excel(self.excel, sheet_name="Students")
+        df = pd.read_excel(self._excel, sheet_name="Students")
         return StudentList(df)
 
     def load_question_map(self) -> QuestionMap:
-        df = pd.read_excel(self.excel, sheet_name="Question_Map")
+        df = pd.read_excel(self._excel, sheet_name="Question_Map")
         return QuestionMap(df)

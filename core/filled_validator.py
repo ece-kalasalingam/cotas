@@ -1,93 +1,72 @@
-import hashlib
 import pandas as pd
 from core.exceptions import ValidationError
-
+import hashlib
 
 class FilledMarksValidator:
+    """
+    Pure filled-sheet structure validator.
+    Accepts already-loaded sheets (dict of DataFrames).
+    No Excel I/O.
+    """
 
-    def __init__(self, validated_setup, filled_path: str):
+    def __init__(self, validated_setup, sheets: dict):
         self.validated = validated_setup
-        self.filled_path = filled_path
-        self.excel = pd.ExcelFile(filled_path)
+        self.sheets = sheets
 
     # =====================================================
     # PUBLIC ENTRY
     # =====================================================
 
     def validate(self):
-
-        self._validate_sheets()
-        self._validate_direct_sheets()
-        self._validate_indirect_sheets()
+        self._validate_sheet_names()
+        self._validate_direct_structure()
+        self._validate_indirect_structure()
         self._validate_checksum()
 
     # =====================================================
-    # SHEET VALIDATION
+    # SHEET NAME VALIDATION
     # =====================================================
 
-    def _validate_sheets(self):
-
+    def _validate_sheet_names(self):
         expected = {
-            comp_name
-            for comp_name, comp in self.validated.components.items()
+            name for name, comp in self.validated.components.items()
             if comp.direct
         }
 
-        # Add indirect sheets
         for tool in self.validated.indirect_tools:
-            # Must match the exact naming logic used during sheet creation
-            sheet_name = f"{tool.name}_INDIRECT"[:31]
-            expected.add(sheet_name)
+            expected.add(f"{tool.name}_INDIRECT")
 
-        # Allowed system sheets
-        allowed_system_sheets = {
-            "__SYSTEM_HASH__",
-            "Course_Info",
-        }
+        actual = set(self.sheets.keys())
 
-        actual = set(self.excel.sheet_names)
-
-        # Remove allowed system sheets before comparison
-        actual_filtered = actual - allowed_system_sheets
+        system_sheets = {"__SYSTEM_HASH__", "Course_Info"}
+        actual_filtered = actual - system_sheets
 
         if expected != actual_filtered:
             raise ValidationError(
-                f"Sheet mismatch. Expected {expected}, "
-                f"Found {actual_filtered}"
+                f"Sheet mismatch. Expected {expected}, Found {actual_filtered}"
             )
-
-        # Ensure system sheets exist
         if "__SYSTEM_HASH__" not in actual:
             raise ValidationError("Missing __SYSTEM_HASH__ sheet.")
 
         if "Course_Info" not in actual:
             raise ValidationError("Missing Course_Info sheet.")
 
+
     # =====================================================
     # DIRECT STRUCTURE VALIDATION
     # =====================================================
 
-    def _validate_direct_sheets(self):
-
+    def _validate_direct_structure(self):
         expected_regnos = [s.reg_no for s in self.validated.students]
 
         for comp_name, comp in self.validated.components.items():
-
             if not comp.direct:
                 continue
 
-            df = pd.read_excel(self.excel, sheet_name=comp_name, header=None)
+            if comp_name not in self.sheets:
+                raise ValidationError(f"Missing sheet: {comp_name}")
 
-            # ---- Header Validation ----
-            #header = df.iloc[0].tolist()
-
-            #expected_header = ["RegNo", "Student_Name"] + \
-                #[q.identifier for q in comp.questions] + ["Total"]
-
-            #if header[:len(expected_header)] != expected_header:
-                #raise ValidationError(
-                    #f"{comp_name}: Header tampered."
-                #)
+            df = self.sheets[comp_name]
             def _norm_cell(x) -> str:
                 if pd.isna(x):
                     return ""
@@ -196,26 +175,26 @@ class FilledMarksValidator:
 
 
             # ---- Student Order Validation (strict, whitespace-safe) ----
+            # Student list starts from row 3
             regnos = df.iloc[3:, 0].astype(str).str.strip().tolist()
-            expected_regnos = [str(x).strip() for x in expected_regnos]
 
             if regnos != expected_regnos:
                 raise ValidationError(
                     f"{comp_name}: Student list tampered or reordered."
                 )
 
-
     # =====================================================
-    # INDIRECT VALIDATION
+    # INDIRECT STRUCTURE VALIDATION
     # =====================================================
 
-    def _validate_indirect_sheets(self):
-
+    def _validate_indirect_structure(self):
         for tool in self.validated.indirect_tools:
+            sheet_name = f"{tool.name}_INDIRECT"
 
-            #sheet_name = f"{tool}_INDIRECT"
-            sheet_name = f"{tool.name}_INDIRECT"[:31]
-            df = pd.read_excel(self.excel, sheet_name=sheet_name)
+            if sheet_name not in self.sheets:
+                raise ValidationError(f"Missing sheet: {sheet_name}")
+
+            df = self.sheets[sheet_name]
             total_cos = len({
                             co
                             for comp in self.validated.components.values()
@@ -223,31 +202,35 @@ class FilledMarksValidator:
                             for q in comp.questions
                             for co in q.co_list
                         })
-
             expected_cols = ["RegNo", "Student_Name"] + \
                 [f"CO{i}" for i in range(1, total_cos + 1)]
 
             if not all(col in df.columns for col in expected_cols[:2]):
                 raise ValidationError(
                     f"{sheet_name}: Invalid header."
+                    f"Expected at least: {expected_cols[:2]}"   
+                    f"Found: {df.columns.tolist()}"
                 )
-
     # =====================================================
     # CHECKSUM VALIDATION
     # =====================================================
 
     def _validate_checksum(self):
+        sheet_name = "__SYSTEM_HASH__"
 
-        df_hash = pd.read_excel(
-            self.excel,
-            sheet_name="__SYSTEM_HASH__",
-            header=None
-        )
+        if sheet_name not in self.sheets:
+            raise ValidationError(f"Missing sheet: {sheet_name}")
 
-        if df_hash.shape[0] < 1 or df_hash.shape[1] < 1:
-            raise ValidationError("__SYSTEM_HASH__ sheet is empty or invalid.")
+        df_hash = self.sheets[sheet_name]
 
-        stored_hash = str(df_hash.iloc[0, 0]).strip()
+        # Must contain exactly one value
+        if df_hash.shape != (1, 1):
+            raise ValidationError(
+                f"__SYSTEM_HASH__ sheet must contain exactly one value. Found shape {df_hash.shape}"
+            )
+
+        stored_hash = str(df_hash.iat[0, 0]).strip()
+
         if not stored_hash:
             raise ValidationError("__SYSTEM_HASH__ stored hash is blank.")
 
@@ -255,7 +238,7 @@ class FilledMarksValidator:
 
         if stored_hash != computed_hash:
             raise ValidationError("Template structure tampered (checksum mismatch).")
-
+        
     # =====================================================
     # HASH GENERATION
     # =====================================================
@@ -277,3 +260,4 @@ class FilledMarksValidator:
             hasher.update(student.reg_no.encode())
 
         return hasher.hexdigest()
+

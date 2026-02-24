@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from typing import  Dict, Tuple
+from typing import Dict, Tuple
 import pandas as pd
 
 
 # =====================================================
-# Raw Sheet Models (IO Layer)
+# RAW SHEET MODELS (I/O LAYER)
 # =====================================================
 
 @dataclass
@@ -16,6 +16,7 @@ class CourseMetadata:
     academic_year: str
     faculty_name: str
     total_cos: int
+
 
 @dataclass
 class AssessmentConfig:
@@ -33,11 +34,12 @@ class QuestionMap:
 
 
 # =====================================================
-# Domain Models (Validated & Optimized Layer)
+# DOMAIN MODELS (VALIDATED LAYER)
 # =====================================================
 
 @dataclass(frozen=True)
 class Question:
+    tool_name: str
     identifier: str
     max_marks: float
     co_list: Tuple[str, ...]
@@ -57,10 +59,12 @@ class Student:
     reg_no: str
     name: str
 
+
 @dataclass(frozen=True)
 class IndirectToolInfo:
     name: str
-    weight: float  # e.g., 0.1 for 10%
+    weight: float
+
 
 @dataclass(frozen=True)
 class ValidatedSetup:

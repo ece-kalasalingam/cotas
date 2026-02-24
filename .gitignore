@@ -60,6 +60,7 @@ htmlcov/
 .nox/
 tests/
 pytest.ini
+debug*.py
 
 # ==============================
 # JUPYTER
@@ -100,9 +101,10 @@ Desktop.ini
 ~$*
 
 # ==============================
-# EXCEL GENERATED FILES
+# GENERATED FILES
 # ==============================
 *.xlsx
+*.zip
 
 
 # ==============================
