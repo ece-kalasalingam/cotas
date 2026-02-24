@@ -1,32 +1,44 @@
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from core.constants import MAX_CO_LIMIT
-from openpyxl.worksheet.datavalidation import DataValidation
-
-
+import xlsxwriter
+import xlsxwriter.exceptions
 class SetupTemplateBuilder:
     """
     Builds the initial Course Setup Excel template.
-    Pure builder.
-    Does not save to disk.
+    Designed for use in a Windows Desktop Environment.
     """
 
-    def build(self) -> Workbook:
-        wb = Workbook()
+    def __init__(self):
+        # Define reused styles here if needed
+        pass
+
+    def build(self, save_path: str):
+        """
+        Creates the workbook at the specified local path.
+        """
+        workbook = xlsxwriter.Workbook(save_path)
+
+        # --- Define Shared Formats ---
+        # Header: Bold, Grey Background, Centered, Thin Border
+        f_header = workbook.add_format({
+            'bold': True,
+            'bg_color': '#F2F2F2',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+        
+        f_bold = workbook.add_format({'bold': True})
+        
+        # Locked format for labels
+        f_locked = workbook.add_format({'locked': True})
 
         # =====================================================
-        # COURSE METADATA SHEET
+        # 1. COURSE METADATA SHEET
         # =====================================================
-        default_sheet = wb.active
-        if default_sheet is not None:
-            wb.remove(default_sheet)
-        ws_meta = wb.create_sheet("Course_Metadata")
-        ws_meta.title = "Course_Metadata"
-        ws_meta.append(["Field", "Value"])
-        ws_meta["A1"].font = Font(bold=True)
-        ws_meta["B1"].font = Font(bold=True)
+        ws_meta = workbook.add_worksheet("Course_Metadata")
+        ws_meta.write(0, 0, "Field", f_header)
+        ws_meta.write(0, 1, "Value", f_header)
 
-        rows = [
+        metadata_rows = [
             ("Course_Code", "ECE101"),
             ("Course_Name", "SAMPLE COURSE"),
             ("Section", "A, B"),
@@ -36,77 +48,78 @@ class SetupTemplateBuilder:
             ("Total_Outcomes", 5),
         ]
 
-        r = 2
-        for k, v in rows:
-            ws_meta.cell(r, 1, k)
-            ws_meta.cell(r, 2, v)
-            r += 1
-        ws_meta.column_dimensions["A"].width = 22
-        ws_meta.column_dimensions["B"].width = 30
+        for r_idx, (k, v) in enumerate(metadata_rows, start=1):
+            ws_meta.write(r_idx, 0, k, f_bold)
+            ws_meta.write(r_idx, 1, v)
 
+        ws_meta.set_column(0, 0, 22)
+        ws_meta.set_column(1, 1, 30)
 
         # =====================================================
-        # ASSESSMENT CONFIG SHEET
+        # 2. ASSESSMENT CONFIG SHEET
         # =====================================================
-        ws_config = wb.create_sheet("Assessment_Config")
+        ws_config = workbook.add_worksheet("Assessment_Config")
+        headers = ["Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"]
+        ws_config.write_row(0, 0, headers, f_header)
 
-        headers = [
-            "Component",
-            "Weight (%)",
-            "CIA",
-            "CO_Wise_Marks_Breakup",
-            "Direct",
+        config_data = [
+            ["S1", 30, "yes", "yes", "yes"],
+            ["S2", 20, "yes", "yes", "yes"],
+            ["ESE", 50, "no", "no", "yes"],
+            ["Survey", 100, "no", "no", "no"],
         ]
 
-        ws_config.append(headers)
+        for r_idx, row in enumerate(config_data, start=1):
+            ws_config.write_row(r_idx, 0, row)
 
-        for col in range(1, len(headers) + 1):
-            ws_config.cell(row=1, column=col).font = Font(bold=True)
-
-        # Example rows (editable)
-        ws_config.append(["S1", "80", "yes", "yes", "yes"])
-        ws_config.append(["S2", "20", "yes", "yes", "yes"])
-        ws_config.append(["Survey", "100", "no", "no", "no"])
-        dv_yesno = DataValidation(type="list", formula1='"yes,no"', allow_blank=False)
-        ws_config.add_data_validation(dv_yesno)
-        dv_yesno.add("C2:C200")
-        dv_yesno.add("D2:D200")
-        dv_yesno.add("E2:E200")
-
-
-        # =====================================================
-        # STUDENTS SHEET
-        # =====================================================
-        ws_students = wb.create_sheet("Students")
-
-        ws_students.append(["RegNo", "Student_Name"])
-
-        ws_students["A1"].font = Font(bold=True)
-        ws_students["B1"].font = Font(bold=True)
+        # Data Validation: Yes/No dropdown for columns C, D, and E
+        ws_config.data_validation(1, 2, 200, 4, {
+            'validate': 'list',
+            'source': ['yes', 'no'],
+            'ignore_blank': False,
+            'error_message': 'Please select "yes" or "no" from the list.',
+            "error_title": "Invalid Input",
+            "input_title": "Select Option",
+            "input_message": 'Choose "yes" or "no".'
+        })
+        
+        ws_config.set_column(0, 4, 20)
 
         # =====================================================
-        # QUESTION MAP SHEET
+        # 3. STUDENTS SHEET
         # =====================================================
-        ws_qmap = wb.create_sheet("Question_Map")
+        ws_students = workbook.add_worksheet("Students")
+        ws_students.write(0, 0, "RegNo", f_header)
+        ws_students.write(0, 1, "Student_Name", f_header)
+        ws_students.set_column(0, 1, 25)
 
-        q_headers = [
-            "Component",
-            "Q_No/Rubric_Parameter",
-            "Max_Marks",
-            "CO",
+        # =====================================================
+        # 4. QUESTION MAP SHEET
+        # =====================================================
+        ws_qmap = workbook.add_worksheet("Question_Map")
+        q_headers = ["Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO"]
+        ws_qmap.write_row(0, 0, q_headers, f_header)
+
+        qmap_data = [
+            ["S1", "Q1", 20, 1],
+            ["S1", "Q2", 20, 2],
+            ["S1", "Q3", 20, 3],
+            ["S1", "Q4", 20, 4],
+            ["S2", "Q1", 10, 4],
+            ["S2", "Q2", 10, 5],
+            ["ESE", "ALL QUESTIONS", 100, "1,2,3,4,5"],
         ]
 
-        ws_qmap.append(q_headers)
+        for r_idx, row in enumerate(qmap_data, start=1):
+            ws_qmap.write_row(r_idx, 0, row)
 
-        for col in range(1, len(q_headers) + 1):
-            ws_qmap.cell(row=1, column=col).font = Font(bold=True)
+        ws_qmap.set_column(0, 3, 22)
 
-        ws_qmap.append(["S1", "Q1", 20, "1"])
-        ws_qmap.append(["S1", "Q2", 20, "2"])
-        ws_qmap.append(["S1", "Q3", 20, "3"])
-        ws_qmap.append(["S1", "Q4", 20, "4"])
-        ws_qmap.append(["S2", "Q1", 10, "4"])
-        ws_qmap.append(["S2", "Q2", 10, "5"])
-        ws_qmap.append(["Survey", "R1", 100, "1,2,3,4,5"])
+        # Close is vital in an executable to free memory and unlock the file
+        try:
+            workbook.close()
+        except xlsxwriter.exceptions.FileCreateError:
+            # Now Pylance will recognize this attribute
+            raise PermissionError("The file is open in another program. Please close it.")
 
-        return wb
+        return save_path

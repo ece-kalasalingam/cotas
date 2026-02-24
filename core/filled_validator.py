@@ -34,7 +34,7 @@ class FilledMarksValidator:
         }
 
         for tool in self.validated.indirect_tools:
-            expected.add(f"{tool.name}_INDIRECT")
+            expected.add(f"{tool.name}_Indirect")
 
         actual = set(self.sheets.keys())
 
@@ -189,7 +189,7 @@ class FilledMarksValidator:
 
     def _validate_indirect_structure(self):
         for tool in self.validated.indirect_tools:
-            sheet_name = f"{tool.name}_INDIRECT"
+            sheet_name = f"{tool.name}_Indirect"
 
             if sheet_name not in self.sheets:
                 raise ValidationError(f"Missing sheet: {sheet_name}")
@@ -235,6 +235,8 @@ class FilledMarksValidator:
             raise ValidationError("__SYSTEM_HASH__ stored hash is blank.")
 
         computed_hash = self._compute_structure_hash()
+        print(f"DEBUG: Stored hash: {stored_hash}")
+        print(f"DEBUG: Computed hash: {computed_hash}") 
 
         if stored_hash != computed_hash:
             raise ValidationError("Template structure tampered (checksum mismatch).")
@@ -244,19 +246,21 @@ class FilledMarksValidator:
     # =====================================================
 
     def _compute_structure_hash(self):
-
         hasher = hashlib.sha256()
 
+        # Match the renderer's logic EXACTLY
         for comp_name, comp in sorted(self.validated.components.items()):
-
             hasher.update(comp_name.encode())
 
             for q in comp.questions:
                 hasher.update(q.identifier.encode())
-                hasher.update(str(q.max_marks).encode())
-                hasher.update(",".join(q.co_list).encode())
+                # Ensure the float conversion happens here too
+                hasher.update(str(float(q.max_marks)).encode())
+                # Match the CO sorting logic
+                co_str = ",".join(sorted([str(x).strip() for x in q.co_list]))
+                hasher.update(co_str.encode())
 
-        for student in self.validated.students:
+        for student in sorted(self.validated.students, key=lambda x: x.reg_no):
             hasher.update(student.reg_no.encode())
 
         return hasher.hexdigest()

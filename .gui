@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 # Core imports (assumed existing)
 from core.loader import SetupLoader
 from core.generator import MarksWorkbookGenerator
-from core.calculator import COCalculator
+from core.co_calculator import COCalculator
 from core.setup_validator import SetupValidator
 
 class MainWindow(QMainWindow):    

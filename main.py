@@ -1,9 +1,10 @@
 import os
 import sys
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 import qdarktheme
-from PySide6.QtCore import Qt
+
 
 from core.resources import resource_path
 from main_window import MainWindow

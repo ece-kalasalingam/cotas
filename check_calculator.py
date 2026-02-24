@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from core.calculator import COCalculator
+from core.co_calculator import COCalculator
 from core.models import (
     Question, ComponentInfo, Student, ValidatedSetup, IndirectToolInfo
 )

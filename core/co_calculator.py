@@ -32,7 +32,7 @@ class COCalculator:
         indirect_frags = self._collect_indirect()
 
         if direct_frags.empty and indirect_frags.empty:
-            raise ValueError("No assessment data available to process.")
+            raise ValidationError("No assessment data available to process.")
 
         # 2. Prepare Lookups
         # Convert indirect tools tuple to O(1) map

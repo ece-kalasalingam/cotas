@@ -12,7 +12,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Signal
 
 from core.loader import SetupLoader
-from core.calculator import COCalculator
+from core.co_calculator import COCalculator
 from core.setup_validator import SetupValidator
 from core.setup_template import SetupTemplateBuilder
 from core.marks_structure_builder import MarksTemplateStructureBuilder
@@ -21,6 +21,7 @@ from core.atomic_workbook_writer import AtomicWorkbookWriter
 from core.excel_adapter import ExcelAdapter
 from core.filled_validator import FilledMarksValidator
 from core.report_builder import ReportBuilder
+from modules.utils import ToastNotification
 
 
 class COModule(QWidget):
@@ -134,7 +135,7 @@ class COModule(QWidget):
         
         self.template_button.clicked.connect(self.generate_setup_template)
         self.setup_button.clicked.connect(self.pick_setup)
-        self.gen_button.clicked.connect(self.generate_template)
+        self.gen_button.clicked.connect(self.generate_marks_template)
         self.filled_button.clicked.connect(self.pick_filled)
         self.submit_button.clicked.connect(self.compute_results)
 
@@ -194,7 +195,7 @@ class COModule(QWidget):
             if not self.setup_path: return
             self._setup_loader = SetupLoader(self.setup_path)
             meta = self._setup_loader.load_metadata()
-            self._course_default_prefix = f"{meta.course_code}_{meta.section}_{meta.semester}_{meta.academic_year}"
+            self._course_default_prefix = f"{meta.course_code}_{meta.section}_{meta.semester}_{meta.academic_year}".strip().replace(" ", "_")
         except:
             self._course_default_prefix = "Course"
 
@@ -227,63 +228,66 @@ class COModule(QWidget):
             self._refresh_actions()
     
     def generate_setup_template(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Create Course Details Template",
-            os.path.join(self.last_dir, "Course_Setup_Input_Template.xlsx"),
-            "Excel (*.xlsx)"
-        )
-
-        if not path:
-            return
-
-        self.last_dir = os.path.dirname(path)
-
         try:
-            builder = SetupTemplateBuilder()
-            wb = builder.build()
-            wb.save(path)
+            # 1. Ask for the SAVE LOCATION
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Create Course Details Template",
+                os.path.join(self.last_dir, "Course_Setup_Input_Template.xlsx"),
+                "Excel (*.xlsx)"
+            )
 
+            if not path:
+                return
+
+            # 2. Check if the file is writable (Early Exit)
+            if not self.is_file_writable(path):
+                self._set_status("File is Open!")
+                msg = f"Cannot save to {os.path.basename(path)}. Close it in Excel first."
+                self.log_msg(msg, "WARNING")
+                ToastNotification(self.window(), msg, type="error")
+                return
+
+            # 3. UI Update - Signal that the heavy lifting is starting
+            self.last_dir = os.path.dirname(path)
+            self._set_status("Generating Template...")
+            QApplication.processEvents() # Important for UI responsiveness
+
+            # 4. Atomic Writing Process
+            from core.atomic_workbook_writer import AtomicWorkbookWriter
+            
+            # Create a safe temporary path in the same directory
+            temp_path = AtomicWorkbookWriter.create_temp_path(path)
+
+            # Build the workbook at the temporary path
+            builder = SetupTemplateBuilder()
+            builder.build(save_path=temp_path) 
+            
+            # Move the temp file to the final destination
+            AtomicWorkbookWriter.save_final_from_temp(temp_path, path)
+
+            # 5. Success Logic
             self.log_msg(f"Setup template created: {path}", "SYSTEM")
-            self._set_status("Template generated")
+            self._set_status("Template generated successfully")
+            ToastNotification(self.window(), "Template generated successfully!", type="success")
 
         except Exception as e:
-            self.log_msg(str(e), "ERROR")
+            self.log_msg(f"Setup Generation Error: {str(e)}", "ERROR")
             self._set_status("Error. See the log for details.")
+            ToastNotification(self.window(), "Error. See the log for details.", type="error")
 
-    def generate_template(self):
+    def generate_marks_template(self):
         if not self.setup_path:
             self.log_msg("Upload course details file first.", "ERROR")
             self._set_status("Error")
             return
 
-        default_file = os.path.join(
-            self.last_dir,
-            f"{self._course_default_prefix}_Marks_Template.xlsx"
-        )
-
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Template", default_file, "Excel (*.xlsx)"
-        )
-
-        if not path:
-            return
-
-        if not self.is_file_writable(path):
-            self._set_status("File is Open!")
-            self.log_msg(
-                f"Cannot save to {os.path.basename(path)}. Close it in Excel first.",
-                "WARNING"
-            )
-            return
-
         try:
-            self.last_dir = os.path.dirname(path)
-            self._set_status("Generating...")
+            # 1️⃣ DATA PREPARATION (Do this BEFORE asking where to save)
+            self._set_status("Processing Data...")
             QApplication.processEvents()
 
             loader = SetupLoader(self.setup_path)
-
             metadata = loader.load_metadata()
             config = loader.load_config()
             students = loader.load_students()
@@ -296,34 +300,57 @@ class COModule(QWidget):
                 question_map
             ).validate()
 
-            # 1️⃣ Structure
-            structure = MarksTemplateStructureBuilder(
-                metadata,
-                validated
-            ).build()
+            # Build the data structure in memory
+            structure = MarksTemplateStructureBuilder(metadata, validated).build()
 
-            # 2️⃣ Render
-            wb = MarksTemplateWorkbookRenderer(
-                metadata,
-                validated
-            ).render(structure)
-
-            # 3️⃣ Atomic Save
-            AtomicWorkbookWriter.save(wb, path)
-
-            self.gen_marks_path = path
-            self._refresh_actions()
-            self._update_labels()
-            self._set_status("Marks Template Saved")
-            self.log_msg(
-                f"Marks template saved to: {self.gen_marks_path}",
-                "SYSTEM"
+            # 2️⃣ FILE DIALOG (Now that we know the data is valid)
+            default_file = os.path.join(
+                self.last_dir,
+                f"{self._course_default_prefix}_Marks_Template.xlsx"
             )
 
-        except Exception as e:
-            self.log_msg(str(e), "ERROR")
-            self._set_status("Generation Failed")
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save Marks Template", default_file, "Excel (*.xlsx)"
+            )
 
+            if not path:
+                self._set_status("Cancelled")
+                return
+            if not self.is_file_writable(path):
+                self._set_status("File is Open!")
+                self.log_msg(
+                    f"Cannot save to {os.path.basename(path)}. Close it in Excel first.",
+                    "WARNING"
+                )
+                ToastNotification(self.window(), f"Cannot save to {os.path.basename(path)}. Close it in Excel first.", type="error")
+                return
+
+            # 3️⃣ GENERATION & SAVING
+            self.last_dir = os.path.dirname(path)
+            self._set_status("Generating File...")
+            QApplication.processEvents()
+
+            # Prepare Paths
+            temp_path = AtomicWorkbookWriter.create_temp_path(path)
+
+            # Render (using your standardized hash logic inside)
+            renderer = MarksTemplateWorkbookRenderer(metadata, validated)
+            renderer.render(structure, temp_path) 
+
+            # Atomic Save
+            AtomicWorkbookWriter.save_final_from_temp(temp_path, path)
+
+            # Success Logic
+            self.gen_marks_path = path
+            self._set_status("Marks Template Saved")
+            self.log_msg(f"Marks template generated: {path}", "SYSTEM")
+            ToastNotification(self.window(), "Marks template generated successfully!", type="success")
+
+        except Exception as e:
+            self.log_msg(f"Marks Template Generation Error: {str(e)}", "ERROR")
+            self._set_status("Error. See the log for details.")
+            ToastNotification(self.window(), "Error. See the log for details.", type="error")
+    
     def compute_results(self):
         if not self.setup_path or not self.filled_path:
             self.log_msg("Upload required files first.", "ERROR")

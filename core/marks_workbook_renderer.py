@@ -1,16 +1,6 @@
 import hashlib
-from openpyxl import Workbook
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import (
-    Border,
-    Protection,
-    Font,
-    Alignment,
-    PatternFill,
-    Side,
-)
-from openpyxl.worksheet.datavalidation import DataValidation
-
+import xlsxwriter
+from xlsxwriter.utility import xl_col_to_name
 from core.constants import (
     WORKBOOK_PASSWORD,
     LIKERT_MIN,
@@ -20,288 +10,200 @@ from core.constants import (
 )
 from core.models import ValidatedSetup, CourseMetadata
 
-
 class MarksTemplateWorkbookRenderer:
-    """
-    Excel behavior layer.
-    Applies styling, validation, formulas, protection.
-    No file I/O.
-    """
-
     def __init__(self, metadata: CourseMetadata, setup: ValidatedSetup):
         self.metadata = metadata
         self.setup = setup
+        # Dictionary to track column widths per sheet
+        self.column_widths = {}
 
-        self.bold = Font(bold=True)
-        self.center = Alignment(horizontal="center", vertical="center")
-        self.thin_border = Border(
-            left=Side(style="thin"),
-            right=Side(style="thin"),
-            top=Side(style="thin"),
-            bottom=Side(style="thin"),
+    def _update_max_width(self, sheet_name, col, value):
+        """Tracks the maximum character length for a column."""
+        if value is None:
+            return
+        
+        # Approximate width: length of string + a small buffer
+        width = len(str(value)) + 2
+        
+        if sheet_name not in self.column_widths:
+            self.column_widths[sheet_name] = {}
+        
+        self.column_widths[sheet_name][col] = max(
+            self.column_widths[sheet_name].get(col, 0), width
         )
-        self.grey = PatternFill(
-            start_color="F2F2F2",
-            end_color="F2F2F2",
-            fill_type="solid",
-        )
 
-    # --------------------------------------------------
+    def _apply_autofit(self, ws):
+        """Applies the tracked widths to the worksheet."""
+        sheet_name = ws.name
+        if sheet_name in self.column_widths:
+            for col, width in self.column_widths[sheet_name].items():
+                # Constrain width between 10 and 50 for readability
+                final_width = min(max(width, 10), 50)
+                ws.set_column(col, col, final_width)
 
-    def render(self, structure: dict) -> Workbook:
-        wb = Workbook()
+    def render(self, structure: dict, output_path: str):
+        workbook = xlsxwriter.Workbook(output_path)
+        
+        # --- Shared Formats ---
+        self.f_header = workbook.add_format({
+            'bold': True, 'bg_color': '#F2F2F2', 'border': 1,
+            'align': 'center', 'valign': 'vcenter'
+        })
+        self.f_locked_grey = workbook.add_format({
+            'bg_color': '#F2F2F2', 'border': 1, 'locked': True
+        })
+        self.f_unlocked = workbook.add_format({
+            'border': 1, 'align': 'center', 'valign': 'vcenter',
+            'locked': False, 'num_format': DEFAULT_NUMBER_FORMAT
+        })
+        self.f_formula = workbook.add_format({
+            'bg_color': '#F2F2F2', 'border': 1, 'align': 'center',
+            'valign': 'vcenter', 'locked': True, 'num_format': DEFAULT_NUMBER_FORMAT
+        })
 
-        default = wb.active
-        if default is not None:
-            wb.remove(default)
+        self._render_course_info(workbook, structure["course_info"])
+        self._render_components(workbook, structure["components"])
+        self._render_indirect(workbook, structure["indirect"])
+        self._embed_system_hash(workbook)
 
-        self._render_course_info(wb, structure["course_info"])
-        self._render_components(wb, structure["components"])
-        self._render_indirect(wb, structure["indirect"])
-        self._embed_system_hash(wb)
-
-        return wb
+        workbook.close()
+        return output_path
 
     # --------------------------------------------------
 
     def _apply_layout(self, ws):
-        ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.set_paper(9)  # A4
+        ws.set_margins(0.25, 0.25, 0.5, 0.5)
+        ws.set_header(f'&LCourse: {self.metadata.course_code}&R{self.metadata.academic_year}')
+        ws.set_footer('&CPage &P of &N')
 
-        ws.page_margins.left = 0.25
-        ws.page_margins.right = 0.25
-        ws.page_margins.top = 0.5
-        ws.page_margins.bottom = 0.5
-        ws.page_margins.header = 0.2
-        ws.page_margins.footer = 0.2
-
-        ws.oddHeader.left.text = (
-            f"Course: {self.metadata.course_code} - "
-            f"Section: {self.metadata.section}"
-        )
-        ws.oddHeader.right.text = (
-            f"{self.metadata.semester} | "
-            f"{self.metadata.academic_year}"
-        )
-        ws.oddFooter.center.text = "Page &P of &N"
-
-    # --------------------------------------------------
-
-    def _autofit(self, ws):
-        for column_cells in ws.columns:
-            max_len = 0
-            col_index = column_cells[0].column
-            for cell in column_cells:
-                if cell.value:
-                    max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[
-                get_column_letter(col_index)
-            ].width = max_len + 2
-
-    # --------------------------------------------------
-
-    def _render_course_info(self, wb, data):
-        ws = wb.create_sheet("Course_Info")
+    def _render_course_info(self, workbook, data):
+        ws = workbook.add_worksheet("Course_Info")
         self._apply_layout(ws)
+        
+        # Headers
+        for c, h in enumerate(data["headers"]):
+            ws.write(0, c, h, self.f_header)
+            self._update_max_width(ws.name, c, h)
 
-        ws.append(data["headers"])
+        # Rows
+        for r, row_data in enumerate(data["rows"], 1):
+            for c, val in enumerate(row_data):
+                ws.write(r, c, val)
+                self._update_max_width(ws.name, c, val)
 
-        for row in data["rows"]:
-            ws.append(row)
+        ws.protect(WORKBOOK_PASSWORD)
+        self._apply_autofit(ws)
 
-        for cell in ws[1][:2]:
-            cell.font = self.bold
-            cell.fill = self.grey
-
-        ws.protection.set_password(WORKBOOK_PASSWORD)
-        ws.protection.sheet = True
-        ws.protection.enable()
-
-        self._autofit(ws)
-
-    # --------------------------------------------------
-
-    def _render_components(self, wb, components):
+    def _render_components(self, workbook, components):
         for name, comp in components.items():
-
-            ws = wb.create_sheet(name)
+            ws = workbook.add_worksheet(name)
             self._apply_layout(ws)
+            ws.freeze_panes(3, 2)
 
-            ws.append(comp["headers"])
-            ws.append(comp["co_row"])
-            ws.append(comp["max_row"])
+            # Header Rows 1-3
+            for r_idx, key in enumerate(["headers", "co_row", "max_row"]):
+                for c_idx, val in enumerate(comp[key]):
+                    ws.write(r_idx, c_idx, val, self.f_header)
+                    self._update_max_width(ws.name, c_idx, val)
 
-            for row in comp["students"]:
-                ws.append(row)
+            questions = comp["questions"]
+            end_col = 2 + len(questions)
+            last_student_row_idx = 2 + len(comp["students"])
 
-            ws.freeze_panes = "C4"
+            # Student Rows
+            for r_idx, student in enumerate(comp["students"], 3):
+                # RegNo & Name
+                ws.write(r_idx, 0, student[0], self.f_locked_grey)
+                ws.write(r_idx, 1, student[1], self.f_locked_grey)
+                self._update_max_width(ws.name, 0, student[0])
+                self._update_max_width(ws.name, 1, student[1])
 
-            self._style_component_sheet(ws, comp)
+                # Marks Input
+                for c_idx in range(2, end_col):
+                    val = student[c_idx] if c_idx < len(student) else None
+                    ws.write(r_idx, c_idx, val, self.f_unlocked)
 
-            ws.protection.set_password(WORKBOOK_PASSWORD)
-            ws.protection.sheet = True
-            ws.protection.enable()
+                # Total Formula
+                col_start = xl_col_to_name(2)
+                col_end = xl_col_to_name(end_col - 1)
+                ws.write_formula(r_idx, end_col, f"=SUM({col_start}{r_idx+1}:{col_end}{r_idx+1})", self.f_formula)
 
-            self._autofit(ws)
+            # Validation
+            for c_idx in range(2, end_col):
+                max_mark = questions[c_idx-2].max_marks
+                col_let = xl_col_to_name(c_idx)
+                ws.data_validation(3, c_idx, last_student_row_idx, c_idx, {
+                    'validate': 'custom',
+                    'value': f'=OR(AND(ISNUMBER({col_let}4),{col_let}4>=0,{col_let}4<={max_mark}),UPPER({col_let}4)="A")',
+                    "input_title": "Marks entry rules",
+                    "input_message": f" between 0 and {max_mark}, or 'A' for Absent.",
+                    "error_title": "Invalid Marks",
+                    "error_message": f"Please enter a number between 0 and {max_mark}, or 'A' for Absent."
+                })
 
-    # --------------------------------------------------
+            ws.protect(WORKBOOK_PASSWORD)
+            self._apply_autofit(ws)
 
-    def _style_component_sheet(self, ws, comp):
-        questions = comp["questions"]
-        max_row = ws.max_row
-        max_col = ws.max_column
-        end_col = 2 + len(questions)
-
-        # Header rows
-        for row in ws.iter_rows(min_row=1, max_row=3, max_col=max_col):
-            for cell in row:
-                cell.font = self.bold
-                cell.fill = self.grey
-                cell.alignment = self.center
-                cell.border = self.thin_border
-                cell.protection = Protection(locked=True)
-
-        # Lock RegNo & Name
-        for row in ws.iter_rows(
-            min_row=4, max_row=max_row, min_col=1, max_col=2
-        ):
-            for cell in row:
-                cell.fill = self.grey
-                cell.border = self.thin_border
-                cell.protection = Protection(locked=True)
-
-        # Data validation
-        validators = {}
-
-        for col_idx in range(3, end_col + 1):
-            q_index = col_idx - 3
-            max_mark = questions[q_index].max_marks
-            col_letter = get_column_letter(col_idx)
-
-            dv = DataValidation(
-                type="custom",
-                formula1=(
-                    f'=OR(AND(ISNUMBER({col_letter}4),'
-                    f'{col_letter}4>=0,'
-                    f'{col_letter}4<={max_mark}),'
-                    f'UPPER({col_letter}4)="A")'
-                ),
-                allow_blank=True,
-            )
-
-            ws.add_data_validation(dv)
-            validators[col_idx] = dv
-
-        # Unlock marks
-        for row in ws.iter_rows(
-            min_row=4, max_row=max_row,
-            min_col=3, max_col=end_col
-        ):
-            for cell in row:
-                cell.protection = Protection(locked=False)
-                cell.alignment = self.center
-                cell.border = self.thin_border
-                cell.number_format = DEFAULT_NUMBER_FORMAT
-                validators[cell.column].add(cell)
-
-        # Totals
-        total_col = get_column_letter(max_col)
-        first_q = get_column_letter(3)
-        last_q = get_column_letter(end_col)
-
-        for r in range(3, max_row + 1):
-            ws[f"{total_col}{r}"] = (
-                f"=SUM({first_q}{r}:{last_q}{r})"
-            )
-            ws[f"{total_col}{r}"].alignment = self.center
-            ws[f"{total_col}{r}"].border = self.thin_border
-            ws[f"{total_col}{r}"].number_format = DEFAULT_NUMBER_FORMAT
-            ws[f"{total_col}{r}"].fill = self.grey
-
-    # --------------------------------------------------
-
-    def _render_indirect(self, wb, indirect):
+    def _render_indirect(self, workbook, indirect):
         for tool_name, data in indirect.items():
-
-            ws = wb.create_sheet(f"{tool_name}_INDIRECT"[:31])
+            ws = workbook.add_worksheet(f"{tool_name}_Indirect"[:31])
             self._apply_layout(ws)
+            ws.freeze_panes(1, 2)
 
-            ws.append(data["headers"])
+            # Headers
+            for c, h in enumerate(data["headers"]):
+                ws.write(0, c, h, self.f_header)
+                self._update_max_width(ws.name, c, h)
 
-            for row in data["students"]:
-                ws.append(row)
+            # Rows
+            for r_idx, student in enumerate(data["students"], 1):
+                ws.write(r_idx, 0, student[0], self.f_locked_grey)
+                ws.write(r_idx, 1, student[1], self.f_locked_grey)
+                
+                for c_idx in range(2, len(data["headers"])):
+                    val = student[c_idx] if c_idx < len(student) else None
+                    ws.write(r_idx, c_idx, val, self.f_unlocked)
 
-            ws.freeze_panes = "C2"
+            # Validation (Likert)
+            for c_idx in range(2, len(data["headers"])):
+                col_let = xl_col_to_name(c_idx)
+                ws.data_validation(1, c_idx, len(data["students"]), c_idx, {
+                    'validate': 'custom',
+                    'value': f'=OR(AND(ISNUMBER({col_let}2),{col_let}2>={LIKERT_MIN},{col_let}2<={LIKERT_MAX}),UPPER({col_let}2)="{ABSENT_SYMBOL}")',
+                    "input_title": "Likert Scale Entry Rules",
+                    "input_message": f"Enter a number between {LIKERT_MIN} and {LIKERT_MAX}, or '{ABSENT_SYMBOL}' for Absent.",
+                    "error_title": "Invalid Entry",
+                    "error_message": f"Please enter a number between {LIKERT_MIN} and {LIKERT_MAX}, or '{ABSENT_SYMBOL}' for Absent."
+                })
 
-            max_row = ws.max_row
-            max_col = ws.max_column
-            end_col = max_col
+            ws.protect(WORKBOOK_PASSWORD)
+            self._apply_autofit(ws)
 
-            for cell in ws[1][:max_col]:
-                cell.font = self.bold
-                cell.fill = self.grey
-                cell.alignment = self.center
-                cell.border = self.thin_border
-                cell.protection = Protection(locked=True)
-
-            for row in ws.iter_rows(
-                min_row=2, max_row=max_row,
-                min_col=1, max_col=2
-            ):
-                for cell in row:
-                    cell.fill = self.grey
-                    cell.border = self.thin_border
-                    cell.protection = Protection(locked=True)
-
-            for col_idx in range(3, end_col + 1):
-                col_letter = get_column_letter(col_idx)
-
-                dv = DataValidation(
-                    type="custom",
-                    formula1=(
-                        f'=OR(AND(ISNUMBER({col_letter}2),'
-                        f'{col_letter}2>={LIKERT_MIN},'
-                        f'{col_letter}2<={LIKERT_MAX}),'
-                        f'UPPER({col_letter}2)="{ABSENT_SYMBOL}")'
-                    ),
-                    allow_blank=True,
-                )
-
-                ws.add_data_validation(dv)
-                dv.add(f"{col_letter}2:{col_letter}{max_row}")
-
-                for row in ws.iter_rows(
-                    min_row=2, max_row=max_row,
-                    min_col=col_idx, max_col=col_idx
-                ):
-                    for cell in row:
-                        cell.protection = Protection(locked=False)
-                        cell.alignment = self.center
-                        cell.border = self.thin_border
-
-            ws.protection.set_password(WORKBOOK_PASSWORD)
-            ws.protection.sheet = True
-            ws.protection.enable()
-
-            self._autofit(ws)
-
-    # --------------------------------------------------
-
-    def _embed_system_hash(self, wb):
+    def _embed_system_hash(self, workbook):
         hasher = hashlib.sha256()
 
+        # 1. Components - Sort by name
         for comp_name, comp in sorted(self.setup.components.items()):
             hasher.update(comp_name.encode())
+
+            # 2. Questions
             for q in comp.questions:
                 hasher.update(q.identifier.encode())
-                hasher.update(str(q.max_marks).encode())
-                hasher.update(",".join(q.co_list).encode())
+                
+                # FORCE Consistency: convert to float then string (prevents 20 vs 20.0)
+                hasher.update(str(float(q.max_marks)).encode())
+                
+                # Sort COs so "1,2" and "2,1" produce the same hash
+                co_str = ",".join(sorted([str(x).strip() for x in q.co_list]))
+                hasher.update(co_str.encode())
 
-        for student in self.setup.students:
+        # 3. Students - Sort by RegNo
+        for student in sorted(self.setup.students, key=lambda x: x.reg_no):
             hasher.update(student.reg_no.encode())
 
         fingerprint = hasher.hexdigest()
-
-        sheet = wb.create_sheet("__SYSTEM_HASH__")
-        sheet.sheet_state = "hidden"
-        sheet.append([fingerprint])
+        
+        sheet = workbook.add_worksheet("__SYSTEM_HASH__")
+        sheet.write(0, 0, fingerprint)
+        sheet.hide()

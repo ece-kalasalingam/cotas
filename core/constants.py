@@ -1,5 +1,4 @@
 import pandas as pd
-from openpyxl.styles import Alignment, Border, PatternFill, Font, Side
 """
 ============================================================
 CO Attainment System - Global Policy & System Constants
@@ -51,26 +50,7 @@ ALLOW_SELECT_UNLOCKED: bool = False
 
 HEADER_PATTERNFILL_COLOR = "F2F2F2"
 HEADER_PATTERNFILL_TYPE = "solid"
-def header_fill():
-    return PatternFill(
-        start_color=HEADER_PATTERNFILL_COLOR,
-        end_color=HEADER_PATTERNFILL_COLOR,
-        fill_type=HEADER_PATTERNFILL_TYPE
-    )
 
-def table_border():
-    return Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
-            )
-
-def table_center_alignment():
-    return Alignment(
-            horizontal="center",
-            vertical="center"
-        )
 
 # ==========================================================
 # MARK ENTRY RULES
@@ -114,15 +94,6 @@ MARGIN_FOOTER: float = 0.2
 
 SYSTEM_HASH_SHEET = "__SYSTEM_HASH__"
 COURSE_INFO_SHEET = "Course_Info"
-
-
-# ==========================================================
-# VALIDATION BEHAVIOR FLAGS
-# ==========================================================
-
-STRICT_HEADER_VALIDATION = True
-STRICT_CO_VALIDATION = True
-STRICT_CHECKSUM_VALIDATION = True
 
 
 # ==========================================================

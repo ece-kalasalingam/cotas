@@ -2,7 +2,7 @@ from core.loader import SetupLoader
 from core.setup_validator import SetupValidator
 from core.excel_adapter import ExcelAdapter
 from core.filled_validator import FilledMarksValidator
-from core.calculator import COCalculator
+from core.co_calculator import COCalculator
 
 
 class COPipeline:

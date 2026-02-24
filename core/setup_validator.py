@@ -228,6 +228,9 @@ class SetupValidator:
         df = self.students_df.copy()
         df["RegNo"] = df["RegNo"].astype(str).str.strip()
 
+        if len(df) < 1:
+            raise ValidationError("Students sheet must contain at least one student.")
+
         if df["RegNo"].duplicated().any():
             raise ValidationError("Duplicate RegNo entries.")
         if self.students_df["RegNo"].eq("").any():
