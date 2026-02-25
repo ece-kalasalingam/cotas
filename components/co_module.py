@@ -1,28 +1,18 @@
+import json
 import os
 import sys
-from typing import Optional
 from datetime import datetime
-from wsgiref.validate import validator
+from typing import Optional
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QSizePolicy, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QGroupBox, QHBoxLayout, QFileDialog,
-    QPlainTextEdit
+    QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QPlainTextEdit
+    , QGroupBox, QHBoxLayout, QSizePolicy, QFrame, QApplication
 )
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
-from PySide6.QtCore import Qt, Signal
-
-from core.loader import SetupLoader
-from core.co_calculator import COCalculator
-from core.setup_validator import SetupValidator
-from core.setup_template import SetupTemplateBuilder
-from core.marks_structure_builder import MarksTemplateStructureBuilder
-from core.marks_workbook_renderer import MarksTemplateWorkbookRenderer
-from scripts.atomic_workbook_writer import AtomicWorkbookWriter
-from core.excel_adapter import ExcelAdapter
-from core.filled_validator import FilledMarksValidator
-from core.report_builder import ReportBuilder
-from modules.utils import ToastNotification
-from scripts.utils import calculate_visual_width, get_range_coordinates, generate_system_fingerprint
+from scripts.loader import SetupLoader
+from scripts.utils import ToastNotification, resource_path
+from scripts.workbook_renderer import UniversalWorkbookRenderer
+from scripts.blueprints import COURSE_SETUP_BP # Ensure this exists
 
 
 class COModule(QWidget):
@@ -230,7 +220,24 @@ class COModule(QWidget):
     
     def generate_setup_template(self):
         try:
-            # 1. Ask for Save Location
+            # 1. Locate the JSON in the assets folder using resource path
+            json_path = resource_path(os.path.join("assets", "sample_setup_data.json"))
+        
+            if not os.path.exists(json_path):
+                raise FileNotFoundError(f"Missing asset: {json_path}")
+
+            # 2. Load the JSON data
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+            
+            # 3. Prepare data payload
+            data_payload = {
+            "Course_Metadata": data.get("Course_Metadata", []),
+            "Assessment_Config": data.get("Assessment_Config", []),
+            "Question_Map": data.get("Question_Map", []),
+            "Students": data.get("Students", [])
+            }
+            # 4. Ask for Save Location
             path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Create Course Details Template",
@@ -239,23 +246,17 @@ class COModule(QWidget):
             )
             if not path: return
 
-            # 2. UI Update
+            # 5. UI Update
             self.last_dir = os.path.dirname(path)
             self._set_status("Generating Template...")
             QApplication.processEvents()
 
-            # 3. Import requirements (Universal logic)
-            from scripts.workbook_renderer import UniversalWorkbookRenderer
-            from scripts.blueprints import COURSE_SETUP_BP # Ensure this exists
-
             # 4. Render
-            # Since it's a blank template, data_map is empty. 
-            # Weightages aren't known yet, so we don't pass them.
-            renderer = UniversalWorkbookRenderer(setup=self.setup_path, metadata=self.setup_path)
+            renderer = UniversalWorkbookRenderer()
             renderer.render(
                 blueprint=COURSE_SETUP_BP,
                 output_path=path,
-                data_map={} 
+                data_map=data_payload 
             )
 
             # 5. Success
@@ -285,58 +286,7 @@ class COModule(QWidget):
             students = loader.load_students()
             question_map = loader.load_question_map()
 
-            validated = SetupValidator(
-                metadata,
-                config,
-                students,
-                question_map
-            ).validate()
-
-            # Build the data structure in memory
-            structure = MarksTemplateStructureBuilder(metadata, validated).build()
-
-            # 2️⃣ FILE DIALOG (Now that we know the data is valid)
-            default_file = os.path.join(
-                self.last_dir,
-                f"{self._course_default_prefix}_Marks_Template.xlsx"
-            )
-
-            path, _ = QFileDialog.getSaveFileName(
-                self, "Save Marks Template", default_file, "Excel (*.xlsx)"
-            )
-
-            if not path:
-                self._set_status("Cancelled")
-                return
-            if not self.is_file_writable(path):
-                self._set_status("File is Open!")
-                self.log_msg(
-                    f"Cannot save to {os.path.basename(path)}. Close it in Excel first.",
-                    "WARNING"
-                )
-                ToastNotification(self.window(), f"Cannot save to {os.path.basename(path)}. Close it in Excel first.", type="error")
-                return
-
-            # 3️⃣ GENERATION & SAVING
-            self.last_dir = os.path.dirname(path)
-            self._set_status("Generating File...")
-            QApplication.processEvents()
-
-            # Prepare Paths
-            temp_path = AtomicWorkbookWriter.create_temp_path(path)
-
-            # Render (using your standardized hash logic inside)
-            renderer = MarksTemplateWorkbookRenderer(metadata, validated)
-            renderer.render(structure, temp_path) 
-
-            # Atomic Save
-            #AtomicWorkbookWriter.finalize_from_temp(temp_path, path)
-
-            # Success Logic
-            self.gen_marks_path = path
-            self._set_status("Marks Template Saved")
-            self.log_msg(f"Marks template generated: {path}", "SYSTEM")
-            ToastNotification(self.window(), "Marks template generated successfully!", type="success")
+            print("to do: validate setup before generating template")
 
         except Exception as e:
             self.log_msg(f"Marks Template Generation Error: {str(e)}", "ERROR")
@@ -381,54 +331,7 @@ class COModule(QWidget):
             students = loader.load_students()
             question_map = loader.load_question_map()
 
-            validated = SetupValidator(
-                metadata,
-                config,
-                students,
-                question_map
-            ).validate()
-
-            # 2️⃣ Load filled sheets
-            
-
-            adapter = ExcelAdapter(self.filled_path)
-            all_sheets = adapter.load_all()
-
-            direct_sheets = {
-                name: all_sheets[name]
-                for name, comp in validated.components.items()
-                if comp.direct
-            }
-
-            indirect_sheets = {
-                tool.name: all_sheets[f"{tool.name}_INDIRECT"]
-                for tool in validated.indirect_tools
-            }
-
-            FilledMarksValidator(validated, all_sheets).validate()
-
-            # 3️⃣ Compute
-            calculator = COCalculator(
-                validated,
-                direct_sheets,
-                indirect_sheets
-            )
-
-            result = calculator.run()
-
-            # 4️⃣ Build Report
-
-            ReportBuilder(result).build(path)
-
-            self._set_status("CO Scores calculated successfully")
-            self.clear_log()
-            self.log_msg(
-                f"CO scores calculated and result file saved to: {path}",
-                "SYSTEM"
-            )
-
-            self._refresh_actions()
-            self._update_labels()
+            print("to do: validate setup before computing results")
 
         except Exception as e:
             self.log_msg(str(e), "ERROR")

@@ -1,6 +1,14 @@
 from PySide6.QtWidgets import QLabel, QGraphicsOpacityEffect, QWidget
 from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint
 
+# Helper to normalize strings: lowercase and remove all internal/external whitespace
+def normalize(s) -> str:
+    return "".join(str(s).split()).lower()
+def safe_int(z):
+    try:
+        return (0, int(z))
+    except:
+        return (1, z)
 class ToastNotification(QLabel):
     def __init__(self, parent, message, type="info", duration=6000):
         super().__init__(parent)

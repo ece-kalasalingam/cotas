@@ -6,7 +6,7 @@ from PySide6.QtGui import QIcon
 import qdarktheme
 
 
-from core.resources import resource_path
+from scripts.utils import resource_path
 from main_window import MainWindow
 
 

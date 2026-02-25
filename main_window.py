@@ -1,21 +1,19 @@
 from PySide6.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QScrollArea, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QGraphicsOpacityEffect
+    QApplication, QMainWindow, QScrollArea, QWidget, QHBoxLayout, QToolBar,
+    QVBoxLayout, QStatusBar
 )
 
 from PySide6.QtGui import QAction, QActionGroup
-from PySide6.QtCore import QPoint, QPropertyAnimation, QSize, QTimer, Qt
+from PySide6.QtCore import QSize, QTimer, Qt
 from qdarktheme._util import get_qdarktheme_root_path
-from PySide6.QtCore import QDir
 from PySide6.QtGui import QIcon, QAction
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
 # Import modules
-from modules.utils import ToastNotification
-from core.resources import resource_path
-from modules.co_module import COModule
+from scripts.utils import resource_path
+from components.co_module import COModule
 from modules.co_course_module import COCourseModule
 from modules.help_module import HelpModule
 from modules.about_module import AboutModule
