@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Mapping, Any, Optional, Literal, TypedDict
+from typing import List, Mapping, Any, Optional, Literal, Set, TypedDict
 from core.exceptions import SystemError
 
 class StyleDefinition(TypedDict, total=False):
@@ -26,6 +26,7 @@ class ValidationOptions(TypedDict, total=False):
     show_input: bool
     show_error: bool
     dropdown: bool
+    _set_cache: Set[str]
 
 @dataclass(frozen=True)
 class ValidationRule:

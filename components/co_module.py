@@ -9,10 +9,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
-from scripts.loader import SetupLoader
+from scripts.data_providers import UniversalDataProvider
 from scripts.utils import ToastNotification, resource_path
 from scripts.workbook_renderer import UniversalWorkbookRenderer
 from scripts.blueprints import COURSE_SETUP_BP # Ensure this exists
+from scripts.engine import UniversalEngine
+from scripts.validators import validate_course_setup_logic
 
 
 class COModule(QWidget):
@@ -30,7 +32,6 @@ class COModule(QWidget):
         self.setup_path: Optional[str] = None
         self.gen_marks_path: Optional[str] = None
         self.filled_path: Optional[str] = None
-        self._setup_loader: Optional[SetupLoader] = None
         self._course_default_prefix: str = "Course"
 
         self._build_ui()
@@ -182,13 +183,40 @@ class COModule(QWidget):
             return False
         
     def compute_default_prefix_from_setup(self) -> None:
+        """
+        Uses the UniversalEngine to extract metadata and generate a 
+        standardized file prefix (e.g., ECE000_A_III_2025-26).
+        """
         try:
-            if not self.setup_path: return
-            self._setup_loader = SetupLoader(self.setup_path)
-            meta = self._setup_loader.load_metadata()
-            self._course_default_prefix = f"{meta.course_code}_{meta.section}_{meta.semester}_{meta.academic_year}".strip().replace(" ", "_")
-        except:
+            if not self.setup_path:
+                return
+
+            # 1. Initialize the Engine with the Blueprint
+            from scripts.engine import UniversalEngine
+            from scripts.blueprints import COURSE_SETUP_BP
+            
+            engine = UniversalEngine(COURSE_SETUP_BP)
+
+            # 2. Extract data (Technical Unit)
+            if engine.load_from_file(self.setup_path):
+                # 3. Use the helper to get metadata as a clean dictionary
+                # This assumes your Course_Metadata sheet is index-based
+                meta_dict = engine.get_sheet_as_dict("Course_Metadata")
+                
+                # 4. Build the prefix using the values from your sample data logic
+                code = meta_dict.get("course_code", "Course")
+                sec = meta_dict.get("section", "X")
+                sem = meta_dict.get("semester", "Sem")
+                year = meta_dict.get("academic_year", "Year")
+
+                self._course_default_prefix = f"{code}_{sec}_{sem}_{year}".strip().replace(" ", "_")
+            else:
+                self._course_default_prefix = "Course"
+
+        except Exception as e:
+            # Fallback to a safe default if extraction fails
             self._course_default_prefix = "Course"
+            self.log_msg(f"Prefix Computation Error: {str(e)}", "Error")
 
     def pick_setup(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -220,24 +248,9 @@ class COModule(QWidget):
     
     def generate_setup_template(self):
         try:
-            # 1. Locate the JSON in the assets folder using resource path
-            json_path = resource_path(os.path.join("assets", "sample_setup_data.json"))
-        
-            if not os.path.exists(json_path):
-                raise FileNotFoundError(f"Missing asset: {json_path}")
-
-            # 2. Load the JSON data
-            with open(json_path, 'r') as f:
-                data = json.load(f)
-            
-            # 3. Prepare data payload
-            data_payload = {
-            "Course_Metadata": data.get("Course_Metadata", []),
-            "Assessment_Config": data.get("Assessment_Config", []),
-            "Question_Map": data.get("Question_Map", []),
-            "Students": data.get("Students", [])
-            }
-            # 4. Ask for Save Location
+            # 1. Get pre-filled data
+            data = UniversalDataProvider.get_data_for_template("COURSE_SETUP_V1")
+            # 2. Ask for Save Location
             path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Create Course Details Template",
@@ -246,7 +259,7 @@ class COModule(QWidget):
             )
             if not path: return
 
-            # 5. UI Update
+            # 3. UI Update
             self.last_dir = os.path.dirname(path)
             self._set_status("Generating Template...")
             QApplication.processEvents()
@@ -256,7 +269,7 @@ class COModule(QWidget):
             renderer.render(
                 blueprint=COURSE_SETUP_BP,
                 output_path=path,
-                data_map=data_payload 
+                data_map=data
             )
 
             # 5. Success
@@ -279,14 +292,14 @@ class COModule(QWidget):
             # 1️⃣ DATA PREPARATION (Do this BEFORE asking where to save)
             self._set_status("Processing Data...")
             QApplication.processEvents()
-
-            loader = SetupLoader(self.setup_path)
-            metadata = loader.load_metadata()
-            config = loader.load_config()
-            students = loader.load_students()
-            question_map = loader.load_question_map()
-
-            print("to do: validate setup before generating template")
+            engine = UniversalEngine(COURSE_SETUP_BP)
+            if engine.load_from_file(self.setup_path):
+                # Run structural and business logic checks
+                from scripts.validators import validate_course_setup_logic
+                if engine.run_validation(logic_chain=validate_course_setup_logic):
+                    print("Success: File is valid and ready for processing!")
+                else:
+                    print("Validation Errors:", engine.errors)
 
         except Exception as e:
             self.log_msg(f"Marks Template Generation Error: {str(e)}", "ERROR")
@@ -318,21 +331,4 @@ class COModule(QWidget):
             )
             return
 
-        try:
-            self.last_dir = os.path.dirname(path)
-            self._set_status("Computing...")
-            QApplication.processEvents()
-
-            # 1️⃣ Load setup
-            loader = SetupLoader(self.setup_path)
-
-            metadata = loader.load_metadata()
-            config = loader.load_config()
-            students = loader.load_students()
-            question_map = loader.load_question_map()
-
-            print("to do: validate setup before computing results")
-
-        except Exception as e:
-            self.log_msg(str(e), "ERROR")
-            self._set_status("Computation Error")
+        print(f"to do: compute results and save to {path}")
