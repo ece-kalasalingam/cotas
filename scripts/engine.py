@@ -75,8 +75,10 @@ class UniversalEngine:
             type_id=file_type_id,
             metadata=meta,
             sheet_names=wb.sheetnames, # Pass all sheet names for structural check
-            content_stream=content
+            headers=content
         )
+        print(f"type_id={file_type_id}, sheet_names={wb.sheetnames}, metadata={meta}, headers={content}")
+        print(f"Debug: Calculated Hash: {calculated_hash}, Embedded Hash: {embedded_hash}")
 
         if calculated_hash != embedded_hash:
             self.errors.append("Security Alert: Course info or sheet headers have been altered.")

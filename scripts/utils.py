@@ -1,4 +1,4 @@
-from typing import Any, Tuple, List, Dict
+from typing import Any, Optional, Tuple, List, Dict
 from scripts.constants import DEFAULT_MAX_COL_WIDTH, DEFAULT_MIN_COL_WIDTH, WIDTH_PADDING
 import hashlib
 import xlsxwriter.utility as xl_util
@@ -41,7 +41,7 @@ def generate_system_fingerprint(
     type_id: str,
     metadata: Dict[str, Any],
     sheet_names: List[str],
-    content_stream: List[Any]
+    headers: Optional[List[str]] = None
 ) -> str:
     """
     Unified SHA-256 fingerprint for identity and tamper detection.
@@ -50,22 +50,22 @@ def generate_system_fingerprint(
     hasher = hashlib.sha256()
     
     # 1. Identity (Version Control)
-    hasher.update(canonicalize(type_id).encode())
+    hasher.update(canonicalize(type_id).encode('utf-8'))
 
     # 2. Metadata (Sorted keys for determinism)
     for key in sorted(metadata.keys()):
         k_norm = normalize(key)
         v_can = canonicalize(metadata[key])
-        hasher.update(f"{k_norm}:{v_can}".encode())
+        hasher.update(f"{k_norm}:{v_can}".encode('utf-8'))
 
     # 3. Structural Integrity (Sheet Names)
     # We sort them so the order in the list doesn't break the hash
     for name in sorted(sheet_names):
-        hasher.update(canonicalize(name).encode())
+        hasher.update(canonicalize(name).encode('utf-8'))
 
     # 4. Content Lock (Headers, Students, etc.)
-    for item in content_stream:
-        hasher.update(canonicalize(item).encode())
+    for item in headers or []:
+        hasher.update(canonicalize(item).encode('utf-8'))
 
     return hasher.hexdigest()
 

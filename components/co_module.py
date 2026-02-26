@@ -12,9 +12,9 @@ from PySide6.QtGui import QFont
 from scripts.data_providers import UniversalDataProvider
 from scripts.utils import ToastNotification, resource_path
 from scripts.workbook_renderer import UniversalWorkbookRenderer
-from scripts.blueprints import COURSE_SETUP_BP # Ensure this exists
 from scripts.engine import UniversalEngine
-from scripts.validators import validate_course_setup_logic
+from scripts import blueprints
+from scripts import constants
 
 
 class COModule(QWidget):
@@ -33,6 +33,9 @@ class COModule(QWidget):
         self.gen_marks_path: Optional[str] = None
         self.filled_path: Optional[str] = None
         self._course_default_prefix: str = "Course"
+
+        self.engine = UniversalEngine(blueprints.BLUEPRINT_REGISTRY)
+        self.renderer = UniversalWorkbookRenderer()
 
         self._build_ui()
 
@@ -182,55 +185,28 @@ class COModule(QWidget):
         except OSError:
             return False
         
-    def compute_default_prefix_from_setup(self) -> None:
-        """
-        Uses the UniversalEngine to extract metadata and generate a 
-        standardized file prefix (e.g., ECE000_A_III_2025-26).
-        """
-        try:
-            if not self.setup_path:
-                return
-
-            # 1. Initialize the Engine with the Blueprint
-            from scripts.engine import UniversalEngine
-            from scripts.blueprints import COURSE_SETUP_BP
-            
-            engine = UniversalEngine(COURSE_SETUP_BP)
-
-            # 2. Extract data (Technical Unit)
-            if engine.load_from_file(self.setup_path):
-                # 3. Use the helper to get metadata as a clean dictionary
-                # This assumes your Course_Metadata sheet is index-based
-                meta_dict = engine.get_sheet_as_dict("Course_Metadata")
-                
-                # 4. Build the prefix using the values from your sample data logic
-                code = meta_dict.get("course_code", "Course")
-                sec = meta_dict.get("section", "X")
-                sem = meta_dict.get("semester", "Sem")
-                year = meta_dict.get("academic_year", "Year")
-
-                self._course_default_prefix = f"{code}_{sec}_{sem}_{year}".strip().replace(" ", "_")
-            else:
-                self._course_default_prefix = "Course"
-
-        except Exception as e:
-            # Fallback to a safe default if extraction fails
-            self._course_default_prefix = "Course"
-            self.log_msg(f"Prefix Computation Error: {str(e)}", "Error")
 
     def pick_setup(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Select Course Details", self.last_dir, "Excel (*.xlsx)"
         )
-        if path:
-            self.setup_path = path
-            self.setup_label.setText(os.path.basename(path))
-            self.last_dir = os.path.dirname(path)
+        if not path: return
+
+        self.setup_path = path
+        self.setup_label.setText(os.path.basename(path))
+        self.last_dir = os.path.dirname(path)
+        self.log_msg(f"Analyzing {os.path.basename(path)}...", "SYSTEM")
+        success = self.engine.load_from_file(path)
+        if success:
             self.log_msg(f"Uploaded details file: {path}", "SYSTEM")
             self._update_labels()
-            self.compute_default_prefix_from_setup()
+            #self.compute_default_prefix_from_setup()
             self._set_status("Setup loaded")
             self._refresh_actions()
+        else:
+            self.log_msg(f"Errors loading file: {self.engine.errors}", "ERROR")
+            self._set_status("Error loading setup. See log for details.")
+            ToastNotification(self.window(), "Error loading setup. See log for details.", type="error")
 
 
     def pick_filled(self):
@@ -248,6 +224,10 @@ class COModule(QWidget):
     
     def generate_setup_template(self):
         try:
+            tid = constants.ID_COURSE_SETUP
+            bp = blueprints.BLUEPRINT_REGISTRY.get(tid)
+            if not bp:
+                raise SystemError(f"Blueprint {tid} not found in registry.")
             # 1. Get pre-filled data
             data = UniversalDataProvider.get_data_for_template("COURSE_SETUP_V1")
             # 2. Ask for Save Location
@@ -265,12 +245,7 @@ class COModule(QWidget):
             QApplication.processEvents()
 
             # 4. Render
-            renderer = UniversalWorkbookRenderer()
-            renderer.render(
-                blueprint=COURSE_SETUP_BP,
-                output_path=path,
-                data_map=data
-            )
+            self.renderer.render(bp, path, data, fingerprint_context={"type_id": tid})
 
             # 5. Success
             self.log_msg(f"Setup template created: {path}", "SYSTEM")
@@ -292,14 +267,7 @@ class COModule(QWidget):
             # 1️⃣ DATA PREPARATION (Do this BEFORE asking where to save)
             self._set_status("Processing Data...")
             QApplication.processEvents()
-            engine = UniversalEngine(COURSE_SETUP_BP)
-            if engine.load_from_file(self.setup_path):
-                # Run structural and business logic checks
-                from scripts.validators import validate_course_setup_logic
-                if engine.run_validation(logic_chain=validate_course_setup_logic):
-                    print("Success: File is valid and ready for processing!")
-                else:
-                    print("Validation Errors:", engine.errors)
+
 
         except Exception as e:
             self.log_msg(f"Marks Template Generation Error: {str(e)}", "ERROR")

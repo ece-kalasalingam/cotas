@@ -11,14 +11,14 @@ from scripts import utils
 class UniversalWorkbookRenderer:
     """
     Unit: Technical Rendering
-    Universal engine that follows Blueprints to create styled Excel files.
+    A uniform engine that uses Blueprints to generate secure, styled Excel files.
     """
     def __init__(self):
         self.column_widths: Dict[str, Dict[int, int]] = {}
-        # Used for the system hash fingerprint
         self.header_accumulator: List[str] = []
 
     def _track_width(self, sheet_name: str, col: int, val: Any):
+        """Standardizes visual width tracking for auto-fit."""
         visual_width = utils.calculate_visual_width(val)
         self.column_widths.setdefault(sheet_name, {})[col] = max(
             self.column_widths[sheet_name].get(col, 0), visual_width
@@ -31,12 +31,14 @@ class UniversalWorkbookRenderer:
                fingerprint_context: Optional[Dict[str, Any]] = None) -> str:
         
         blueprint.validate_structure()
+        self.header_accumulator = [] # Reset for this specific run
+        
         temp_path = AtomicWorkbookWriter.create_temp_path(output_path)
         
         try:
             workbook = xlsxwriter.Workbook(temp_path)
             
-            # 1. Register Styles from Blueprint Registry
+            # 1. Uniform Style Registration
             formats = {
                 key: workbook.add_format(props) 
                 for key, props in blueprint.style_registry.items()
@@ -46,7 +48,7 @@ class UniversalWorkbookRenderer:
                 ws = workbook.add_worksheet(sheet_schema.name)
                 self.column_widths[sheet_schema.name] = {}
 
-                # 2. Write Headers
+                # 2. Uniform Header Processing
                 h_style = formats.get(sheet_schema.header_style_key)
                 for r_idx, row_data in enumerate(sheet_schema.header_matrix):
                     ws.write_row(r_idx, 0, row_data, h_style)
@@ -54,7 +56,7 @@ class UniversalWorkbookRenderer:
                         self._track_width(sheet_schema.name, c_idx, val)
                         self.header_accumulator.append(str(val))
 
-                # 3. Write Data (Content from Data Map)
+                # 3. Uniform Data Injection
                 start_row = len(sheet_schema.header_matrix)
                 rows = data_map.get(sheet_schema.name, [])
                 d_style = formats.get(sheet_schema.data_style_key)
@@ -64,9 +66,9 @@ class UniversalWorkbookRenderer:
                         ws.write(r_idx, c_idx, val, d_style)
                         self._track_width(sheet_schema.name, c_idx, val)
 
-                # 4. Apply Validations (Filter out internal cache keys)
+                # 4. Uniform Cell Validation
                 for rule in sheet_schema.validations:
-                    # IMPORTANT: Remove '_set_cache' because XlsxWriter doesn't allow it
+                    # Clean internal keys like '_set_cache'
                     clean_options = {k: v for k, v in rule.options.items() if not k.startswith('_')}
                     ws.data_validation(
                         rule.first_row, rule.first_col, 
@@ -74,20 +76,20 @@ class UniversalWorkbookRenderer:
                         clean_options
                     )
 
-                # 5. Sheet Configuration
+                # 5. Uniform Protection & Formatting
                 if sheet_schema.freeze_panes:
                     ws.freeze_panes(*sheet_schema.freeze_panes)
                 
                 if sheet_schema.is_protected:
                     ws.protect(WORKBOOK_PASSWORD, {'select_unlocked_cells': True})
                 
-                # Auto-fit columns
                 for col, width in self.column_widths[sheet_schema.name].items():
                     ws.set_column(col, col, min(width, DEFAULT_MAX_COL_WIDTH))
 
-            # 6. Optional System Hash (Fingerprinting)
+            # 6. Uniform Identity & Integrity Fingerprinting
             if fingerprint_context:
-                self._embed_system_hash(workbook, fingerprint_context)
+                # We pass 'blueprint' explicitly now to maintain uniformity
+                self._embed_system_hash(workbook, fingerprint_context, blueprint)
 
             AtomicWorkbookWriter.finalize(workbook, output_path)
             return output_path
@@ -99,17 +101,27 @@ class UniversalWorkbookRenderer:
                 raise ValidationError(f"File {output_path} is locked. Close it and retry.")
             raise SystemError(f"Rendering Failed: {str(e)}")
 
-    def _embed_system_hash(self, workbook: xlsxwriter.Workbook, context: Dict[str, Any]):
-        """Generates a hidden integrity fingerprint."""
+    def _embed_system_hash(self, workbook: xlsxwriter.Workbook, context: Dict[str, Any], blueprint: WorkbookBlueprint):
+        """Generates a hidden identity and integrity fingerprint."""
         try:
             hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET_NAME)
+            
+            # Row 0: Identity (From Blueprint or Context)
+            type_id = context.get('type_id', blueprint.type_id)
+            hash_ws.write(0, 0, type_id)
+
+            # Row 1: Integrity (Includes Sheet Names + Headers)
+            sheet_names = [s.name for s in blueprint.sheets]
+            
             fingerprint = utils.generate_system_fingerprint(
-                setup=context.get('setup'), 
-                metadata=context.get('metadata'), 
-                headers=self.header_accumulator,
-                weightages=context.get('weightages', {})
+                type_id=type_id,
+                sheet_names=sheet_names,
+                metadata=context.get('metadata') or {}, 
+                headers=self.header_accumulator
             )
-            hash_ws.write(0, 0, fingerprint)
+            print(f"type_id={type_id}, sheet_names={sheet_names}, metadata={context.get('metadata') or {}}, headers={self.header_accumulator}")
+            hash_ws.write(1, 0, fingerprint)
             hash_ws.hide()
-        except Exception:
-            raise SystemError("Integrity hash embedding failed.")
+            
+        except Exception as e:
+            raise SystemError(f"Integrity hash embedding failed: {str(e)}")
