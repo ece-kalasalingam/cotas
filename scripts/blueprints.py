@@ -1,6 +1,8 @@
 from scripts.sheet_schema import StyleDefinition, WorkbookBlueprint, SheetSchema, ValidationRule
 from scripts.constants import ABSENT_SYMBOL
 from typing import Dict
+from scripts.rules import BusinessRule
+from scripts.logic_library import check_column_sum
 
 # Define a shared style registry for the Setup phase
 SETUP_STYLE_REGISTRY: Dict[str, StyleDefinition] = {
@@ -17,10 +19,27 @@ SETUP_STYLE_REGISTRY: Dict[str, StyleDefinition] = {
     }
 }
 
+# Define the Rule
+SUM_WEIGHT_RULE = BusinessRule(
+    rule_id="sum_100",
+    scope="INTRA",
+    logic_fn=check_column_sum,
+    versioned_params={
+        "COURSE_SETUP_V1": {"sheet_key": "assess", "col_key": "w", "target": 100}
+    }
+)
+
 # Updated to match the uploaded CSV structures exactly
 COURSE_SETUP_BP = WorkbookBlueprint(
     type_id="COURSE_SETUP_V1",
     style_registry=SETUP_STYLE_REGISTRY,
+    business_rules=[SUM_WEIGHT_RULE],
+    key_map={
+        "assess": "Assessment_Config",
+        "assess.w": "Weight (%)",
+        "students": "Students",
+        "students.id": "Reg_No"
+    },
     sheets=[
         # --- Sheet 1: Metadata ---
         SheetSchema(
@@ -75,3 +94,5 @@ COURSE_SETUP_BP = WorkbookBlueprint(
         )
     ]
 )
+
+BLUEPRINT_REGISTRY = {"COURSE_SETUP_V1": COURSE_SETUP_BP}

@@ -1,18 +1,90 @@
 from typing import Any, Tuple, List, Dict
 from scripts.constants import DEFAULT_MAX_COL_WIDTH, DEFAULT_MIN_COL_WIDTH, WIDTH_PADDING
 import hashlib
-import json
+import xlsxwriter.utility as xl_util
+import sys
+import os
+from PySide6.QtWidgets import QLabel, QGraphicsOpacityEffect, QWidget
+from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint
 
-def calculate_visual_width(value: Any) -> int:
+# --- 1. THE CANONICALIZATION LAYER ---
+
+def normalize(s: Any) -> str:
+    """Lowercase and remove all internal/external whitespace."""
+    if s is None: return "empty"
+    return "".join(str(s).split()).lower()
+
+def canonicalize(value: Any) -> str:
     """
-    Determines the Excel column width based on string length.
-    Constrained by constants to prevent ultra-wide or invisible columns.
+    Standardizes data for the Hash:
+    1. Normalizes (Lower + Strip).
+    2. If numeric, forces to 'f.4f' string to avoid 10 vs 10.0 confusion.
     """
     if value is None:
-        return DEFAULT_MIN_COL_WIDTH
-        
+        return "empty"
+
+    # Step 1: Normalize (Lower + Whitespace removal)
+    val_norm = normalize(value)
+    if val_norm == "" or val_norm == "none":
+        return "empty"
+
+    # Step 2: Numeric Lock (Value -> Float -> String)
+    try:
+        # normalize() already cleaned spaces/commas, so float() is safe
+        float_val = float(val_norm)
+        return f"{float_val:.4f}"
+    except (ValueError, TypeError):
+        # Step 3: Text Lock (Already normalized)
+        return val_norm
+
+def generate_system_fingerprint(
+    type_id: str,
+    metadata: Dict[str, Any],
+    sheet_names: List[str],
+    content_stream: List[Any]
+) -> str:
+    """
+    Unified SHA-256 fingerprint for identity and tamper detection.
+    Now correctly incorporates sheet names into the hash.
+    """
+    hasher = hashlib.sha256()
+    
+    # 1. Identity (Version Control)
+    hasher.update(canonicalize(type_id).encode())
+
+    # 2. Metadata (Sorted keys for determinism)
+    for key in sorted(metadata.keys()):
+        k_norm = normalize(key)
+        v_can = canonicalize(metadata[key])
+        hasher.update(f"{k_norm}:{v_can}".encode())
+
+    # 3. Structural Integrity (Sheet Names)
+    # We sort them so the order in the list doesn't break the hash
+    for name in sorted(sheet_names):
+        hasher.update(canonicalize(name).encode())
+
+    # 4. Content Lock (Headers, Students, etc.)
+    for item in content_stream:
+        hasher.update(canonicalize(item).encode())
+
+    return hasher.hexdigest()
+
+# --- 2. PATH & CALCULATION UTILS ---
+
+def resource_path(relative_path: str) -> str:
+    """Absolute path to bundled resource (Works for Dev and PyInstaller)."""
+    if getattr(sys, "frozen", False):
+        base_path = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    else:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.normpath(os.path.join(base_path, relative_path))
+
+def calculate_visual_width(value: Any) -> int:
+    if value is None: return DEFAULT_MIN_COL_WIDTH
     text_len = len(str(value)) + WIDTH_PADDING
     return min(max(text_len, DEFAULT_MIN_COL_WIDTH), DEFAULT_MAX_COL_WIDTH)
+
+# --- 3. GUI NOTIFICATIONS ---
 
 def get_range_coordinates(range_str: str) -> Tuple[int, int, int, int]:
     """
@@ -20,72 +92,14 @@ def get_range_coordinates(range_str: str) -> Tuple[int, int, int, int]:
     Useful if you want to allow humans to write strings in the blueprint 
     but need integers for Pylance/XlsxWriter.
     """
-    import xlsxwriter.utility as xl_util
     # This splits 'A1:C10' into ['A1', 'C10']
     start, end = range_str.split(':')
     row_start, col_start = xl_util.xl_cell_to_rowcol(start)
     row_end, col_end = xl_util.xl_cell_to_rowcol(end)
     return row_start, col_start, row_end, col_end
 
-def generate_system_fingerprint(
-    setup: Any, 
-    metadata: Any, 
-    headers: List[str], 
-    weightages: Dict[str, Any]
-) -> str:
-    # 1. Basic Identity
-    anchor_data = {
-        "course_code": getattr(metadata, "course_code", "N/A"),
-        "semester": getattr(metadata, "semester", "N/A"),
-        "instructor": getattr(setup, "instructor_id", "N/A"),
-        "header_checksum": hashlib.md5("".join(headers).encode()).hexdigest(),
-    }
 
-    # 2. Only add weightages to the hash if they are actually present
-    if weightages:
-        anchor_data["weight_config"] = dict(sorted(weightages.items()))
     
-    # 3. Add the secret salt
-    anchor_data["secret"] = "YOUR_INTERNAL_SECRET"
-    
-    data_string = json.dumps(anchor_data, sort_keys=True)
-    return hashlib.sha256(data_string.encode()).hexdigest()
-from PySide6.QtWidgets import QLabel, QGraphicsOpacityEffect, QWidget
-from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint
-
-# Helper to normalize strings: lowercase and remove all internal/external whitespace
-def normalize(s) -> str:
-    return "".join(str(s).split()).lower()
-def safe_int(z):
-    try:
-        return (0, int(z))
-    except:
-        return (1, z)
-    
-import os
-import sys
-
-
-def resource_path(relative_path: str) -> str:
-    """
-    Returns absolute path to bundled resource.
-
-    Works for:
-    - Development mode
-    - PyInstaller --onedir
-    - PyInstaller --onefile
-    """
-
-    if getattr(sys, "frozen", False):
-        # PyInstaller
-        base_path = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-    else:
-        # Development
-        base_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..")
-        )
-
-    return os.path.normpath(os.path.join(base_path, relative_path))
 class ToastNotification(QLabel):
     def __init__(self, parent, message, type="info", duration=6000):
         super().__init__(parent)
@@ -151,3 +165,10 @@ class ToastNotification(QLabel):
         self.anim.setEndValue(0)
         self.anim.finished.connect(self.deleteLater)
         self.anim.start()
+
+## --- 4. ENGINE INTERFACE ---
+def safe_int(z):
+    try:
+        return (0, int(z))
+    except:
+        return (1, z)

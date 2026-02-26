@@ -1,134 +1,106 @@
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Any, Optional, Callable
-from scripts.sheet_schema import WorkbookBlueprint, ValidationRule
-from scripts.utils import normalize
-from scripts.exceptions import ValidationError
+import openpyxl
+from typing import Dict, List, Any
+from scripts import utils
+from scripts.constants import SYSTEM_HASH_SHEET_NAME, METADATA_SHEET_NAME
 
 class UniversalEngine:
-    """
-    ONE CLASS FOR ALL:
-    1. Extraction Unit: Converts Excel files into native Python List-of-Lists.
-    2. Structural Unit: Performs O(1) cell validation using pre-indexed hash-maps.
-    3. Logic Unit: Triggers the Ease-Chain for workbook-specific business rules.
-    """
-    def __init__(self, blueprint: WorkbookBlueprint):
-        self.bp = blueprint
-        self.errors: List[str] = []
-        # Native Python data store (Fastest access for O(1) logic)
+    def __init__(self, registry: Dict[str, Any]):
+        self.registry = registry
+        self.bp = None
+        self.errors = []
         self.data_store: Dict[str, List[List[Any]]] = {}
+        self._col_cache: Dict[str, Dict[str, int]] = {}
 
     def load_from_file(self, filepath: str) -> bool:
-        """Technical Unit: Reads Excel into memory. Separated for modularity."""
         self.errors = []
         try:
-            with pd.ExcelFile(filepath) as xls:
-                for sheet_schema in self.bp.sheets:
-                    if sheet_schema.name not in xls.sheet_names:
-                        self.errors.append(f"Missing required sheet: {sheet_schema.name}")
-                        continue
-                    
-                    # Convert to List-of-Lists (O(N) extraction)
-                    # We replace NaN with None to keep the O(1) logic unit clean
-                    df = pd.read_excel(xls, sheet_name=sheet_schema.name, header=None)
-                    self.data_store[sheet_schema.name] = df.replace({np.nan: None}).values.tolist()
+            wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
             
+            # THE GATEKEEPER
+            if not self._verify_integrity(wb):
+                wb.close()
+                return False
+            if not self.bp:
+                self.errors.append("System Error: Blueprint not initialized.")
+                wb.close()
+                return False
+            
+            # Load sheets based on the BP identified during verification
+            for sheet_schema in self.bp.sheets:
+                if sheet_schema.name not in wb.sheetnames:
+                    self.errors.append(f"Missing required sheet: {sheet_schema.name}")
+                    continue
+                
+                ws = wb[sheet_schema.name]
+                all_rows = [list(row) for row in ws.values]
+                
+                header_height = len(sheet_schema.header_matrix)
+                blueprint_headers = sheet_schema.header_matrix[-1]
+                self._col_cache[sheet_schema.name] = {
+                    utils.normalize(h): idx for idx, h in enumerate(blueprint_headers)
+                }
+                self.data_store[sheet_schema.name] = all_rows[header_height:]
+
+            wb.close()
+
+            for rule in self.bp.business_rules:
+                self.errors.extend(rule.run(self, ext_engine=None))
+
             return len(self.errors) == 0
         except Exception as e:
-            self.errors.append(f"File Access Error: {str(e)}")
+            self.errors.append(f"Load Error: {str(e)}")
             return False
 
-    def load_from_mock(self, mock_data: Dict[str, List[List[Any]]]):
-        """Testing Unit: Allows O(1) validation testing without a physical file."""
-        self.data_store = mock_data
-
-    def run_validation(self, logic_chain: Optional[Callable[[Dict], List[str]]] = None) -> bool:
-        """
-        The Ease-Chain Entry Point:
-        1. Validates structural rules defined in the blueprint (O(1)).
-        2. Validates business logic rules defined in the logic_chain.
-        """
-        # 1. Structural Pass (Cell level)
-        if not self._validate_structure():
+    def _verify_integrity(self, wb: openpyxl.Workbook) -> bool:
+        """Extracts and verifies the fingerprint."""
+        if SYSTEM_HASH_SHEET_NAME not in wb.sheetnames:
+            self.errors.append("Security Error: Invalid template (No Signature).")
             return False
 
-        # 2. Business Pass (Cross-sheet / Logic level)
-        if logic_chain:
-            business_errors = logic_chain(self.data_store)
-            if business_errors:
-                self.errors.extend(business_errors)
-                return False
+        h_ws = wb[SYSTEM_HASH_SHEET_NAME]
+        file_type_id = str(h_ws.cell(1, 1).value).strip()
+        embedded_hash = str(h_ws.cell(2, 1).value).strip()
 
+        # Step 1: Resolve Blueprint version
+        self.bp = self.registry.get(file_type_id)
+        if not self.bp:
+            self.errors.append(f"Unknown Version: {file_type_id}")
+            return False
+
+        # Step 2: Recalculate Hash
+        meta = self._extract_metadata(wb)
+        content = self._extract_structure_stream(wb)
+        
+        calculated_hash = utils.generate_system_fingerprint(
+            type_id=file_type_id,
+            metadata=meta,
+            sheet_names=wb.sheetnames, # Pass all sheet names for structural check
+            content_stream=content
+        )
+
+        if calculated_hash != embedded_hash:
+            self.errors.append("Security Alert: Course info or sheet headers have been altered.")
+            return False
+        
         return True
 
-    def _validate_structure(self) -> bool:
-        """
-        Core O(1) logic. Pre-indexes rules so that checking a cell 
-        is a constant-time dictionary lookup.
-        """
-        for sheet_schema in self.bp.sheets:
-            rows = self.data_store.get(sheet_schema.name, [])
-            if not rows: continue
+    def _extract_metadata(self, wb) -> Dict[str, Any]:
+        meta = {}
+        if METADATA_SHEET_NAME in wb.sheetnames:
+            ws = wb[METADATA_SHEET_NAME]
+            for row in ws.iter_rows(values_only=True):
+                if row[0]: meta[str(row[0])] = row[1]
+        return meta
 
-            # --- PRE-COMPILE RULE MAP (O1 Step) ---
-            # Dictionary: Column_Index -> List[ValidationRule]
-            col_rule_map: Dict[int, List[ValidationRule]] = {}
-            for rule in sheet_schema.validations:
-                # Cache list sources as sets for O(1) 'in' checks
-                if 'source' in rule.options and isinstance(rule.options['source'], list):
-                    rule.options['_set_cache'] = {normalize(x) for x in rule.options['source']}
-                
-                for col in range(rule.first_col, rule.last_col + 1):
-                    col_rule_map.setdefault(col, []).append(rule)
+    def _extract_structure_stream(self, wb) -> List[Any]:
+        stream = []
+        for name in wb.sheetnames:
+            if name == SYSTEM_HASH_SHEET_NAME: continue
+            ws = wb[name]
+            # Capture headers to detect column tampering
+            for row in ws.iter_rows(max_row=2, values_only=True):
+                stream.extend([c for c in row if c is not None])
+        return stream
 
-            # --- VALIDATION LOOP ---
-            # Height depends on the blueprint header matrix
-            header_height = len(sheet_schema.header_matrix)
-            
-            for r_idx, row in enumerate(rows[header_height:], start=header_height + 1):
-                for col_idx, rules in col_rule_map.items():
-                    if col_idx >= len(row): continue
-                    
-                    cell_val = row[col_idx]
-                    norm_val = normalize(cell_val)
-                    
-                    for rule in rules:
-                        if not self._execute_rule(norm_val, rule):
-                            self.errors.append(
-                                f"[{sheet_schema.name}] Row {r_idx}, Col {col_idx+1}: "
-                                f"'{cell_val}' fails {rule.options.get('validate')} validation."
-                            )
-        
-        return len(self.errors) == 0
-
-    def _execute_rule(self, norm_val: str, rule: ValidationRule) -> bool:
-        """Actual logic check. Every branch here is O(1)."""
-        opts = rule.options
-        v_type = opts.get('validate')
-
-        if v_type == 'list':
-            return norm_val in opts.get('_set_cache', set())
-        
-        if v_type in ('decimal', 'whole'):
-            if not norm_val: return True # Handle empty based on blueprint
-            try:
-                num = float(norm_val)
-                criteria = opts.get('criteria')
-                limit = float(opts.get('value', 0))
-                
-                if criteria == 'greater than': return num > limit
-                if criteria == 'between':
-                    return float(opts.get('min', 0)) <= num <= float(opts.get('max', 100))
-            except (ValueError, TypeError):
-                return False
-                
-        return True
-
-    def get_data_store(self) -> Dict[str, List[List[Any]]]:
-        """Provides the Ease-Chain with raw data for business logic."""
-        return self.data_store
-    def get_sheet_as_dict(self, sheet_name: str) -> Dict[str, Any]:
-        """Converts a two-column sheet (Key, Value) into a dictionary."""
-        rows = self.data_store.get(sheet_name, [])
-        # We normalize keys so 'Course Code' becomes 'course_code'
-        return {normalize(str(r[0])): r[1] for r in rows if len(r) >= 2}
+    def get_col_idx(self, sheet_name: str, col_name: str) -> int:
+        return self._col_cache.get(sheet_name, {}).get(utils.normalize(col_name), -1)

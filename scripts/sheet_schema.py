@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Mapping, Any, Optional, Literal, Set, TypedDict
+from typing import Callable, Dict, List, Mapping, Any, Optional, Literal, Set, TypedDict
 from core.exceptions import SystemError
 
 class StyleDefinition(TypedDict, total=False):
@@ -51,6 +51,8 @@ class WorkbookBlueprint:
     type_id: str
     style_registry: Mapping[str, StyleDefinition]
     sheets: List[SheetSchema]
+    key_map: Dict[str, str] = field(default_factory=dict)
+    business_rules: List[Any] = field(default_factory=list)
 
     def validate_structure(self):
         if not self.sheets:
