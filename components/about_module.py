@@ -1,4 +1,4 @@
-# modules/about_module.py
+# components/about_module.py
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,

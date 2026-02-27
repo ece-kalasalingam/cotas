@@ -20,9 +20,10 @@ class UniversalWorkbookRenderer:
     def _track_width(self, sheet_name: str, col: int, val: Any):
         """Standardizes visual width tracking for auto-fit."""
         visual_width = utils.calculate_visual_width(val)
-        self.column_widths.setdefault(sheet_name, {})[col] = max(
-            self.column_widths[sheet_name].get(col, 0), visual_width
-        )
+        current_max = self.column_widths.setdefault(sheet_name, {}).get(col, 0)        
+        if visual_width > current_max:
+            # Only update if the new value is wider
+            self.column_widths[sheet_name][col] = visual_width
 
     def render(self, 
                blueprint: WorkbookBlueprint, 
@@ -109,18 +110,6 @@ class UniversalWorkbookRenderer:
             # Row 0: Identity (From Blueprint or Context)
             type_id = context.get('type_id', blueprint.type_id)
             hash_ws.write(0, 0, type_id)
-
-            # Row 1: Integrity (Includes Sheet Names + Headers)
-            sheet_names = [s.name for s in blueprint.sheets]
-            
-            fingerprint = utils.generate_system_fingerprint(
-                type_id=type_id,
-                sheet_names=sheet_names,
-                metadata=context.get('metadata') or {}, 
-                headers=self.header_accumulator
-            )
-            print(f"type_id={type_id}, sheet_names={sheet_names}, metadata={context.get('metadata') or {}}, headers={self.header_accumulator}")
-            hash_ws.write(1, 0, fingerprint)
             hash_ws.hide()
             
         except Exception as e:

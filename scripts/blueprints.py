@@ -1,5 +1,4 @@
 from scripts.sheet_schema import StyleDefinition, WorkbookBlueprint, SheetSchema, ValidationRule
-from scripts.constants import ABSENT_SYMBOL
 from typing import Dict
 from scripts.rules import BusinessRule
 from scripts.logic_library import check_column_sum
@@ -95,4 +94,4 @@ COURSE_SETUP_BP = WorkbookBlueprint(
     ]
 )
 
-BLUEPRINT_REGISTRY = {"COURSE_SETUP_V1": COURSE_SETUP_BP}
+BLUEPRINT_REGISTRY = {"COURSE_SETUP_V1": COURSE_SETUP_BP, "MARKS_ENTRY_V1": None}

@@ -2,7 +2,7 @@ import os
 import tempfile
 import xlsxwriter
 from typing import cast
-from core.exceptions import ValidationError
+from scripts.exceptions import ValidationError
 
 class AtomicWorkbookWriter:
     """
@@ -27,30 +27,19 @@ class AtomicWorkbookWriter:
 
     @staticmethod
     def finalize(workbook: xlsxwriter.Workbook, final_path: str) -> None:
-        """
-        Closes the workbook and performs the atomic swap to the final destination.
-        This is the 'Point of No Return'.
-        """
-        # 1. Retrieve the temp path used during initialization
         temp_path = cast(str, workbook.filename)
-
         try:
-            # 2. Close handles and flush data to the temp file
             workbook.close()
 
-            # 3. Windows Lock Check: Try to rename the file to itself
+            # Improved Atomic Swap with Retry Logic
             if os.path.exists(final_path):
+                # Attempting a direct replacement; Windows will raise PermissionError if locked
                 try:
-                    os.rename(final_path, final_path)
-                except OSError:
-                    raise ValidationError(
-                        f"File '{os.path.basename(final_path)}' is open in Excel. Please close it."
-                    )
-                # Remove the old version to make room for os.replace
-                os.remove(final_path)
-
-            # 4. Perform the final atomic swap
-            os.replace(temp_path, final_path)
+                    os.replace(temp_path, final_path)
+                except PermissionError:
+                    raise ValidationError(f"File '{os.path.basename(final_path)}' is open. Please close it.")
+            else:
+                os.replace(temp_path, final_path)
 
         except Exception as e:
             # Clean up the temp file if the final swap or close failed

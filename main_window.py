@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QScrollArea, QWidget, QHBoxLayout, QToolBar,
+    QApplication, QMainWindow, QScrollArea, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
     QVBoxLayout, QStatusBar
 )
 
@@ -14,9 +14,8 @@ from PySide6.QtGui import QIcon
 # Import modules
 from scripts.utils import resource_path
 from components.co_module import COModule
-from modules.co_course_module import COCourseModule
-from modules.help_module import HelpModule
-from modules.about_module import AboutModule
+from components.help_module import HelpModule
+from components.about_module import AboutModule
 
 
 class MainWindow(QMainWindow):
@@ -57,6 +56,11 @@ class MainWindow(QMainWindow):
 
         self.work_area = QWidget()
         self.work_layout = QHBoxLayout(self.work_area)
+        self.stack = QStackedWidget()
+        self.work_layout.addWidget(self.stack)
+        
+        # Dictionary to keep track of initialized modules
+        self.modules = {}
         #self.work_layout.setContentsMargins(30, 30, 30, 30)
 
         central_layout.addWidget(self.work_area)
@@ -64,18 +68,18 @@ class MainWindow(QMainWindow):
         self.current_module = None
 
         # ----------------------------
-        # Left Activity Bar
+        # Activity Bar
         # ----------------------------
         self.activitybar = QToolBar("Navigation")
         self.activitybar.setMovable(False)
         self.activitybar.setIconSize(QSize(30, 30))
-        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
+        #self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.activitybar)
         self.activitybar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        self.activitybar.setStyleSheet("QToolBar { spacing: 10px; padding: 5px; }")
         self.activitybar.setStyleSheet("""
             QToolBar {
                 spacing: 0px; /* Removes gaps between buttons */
+                padding: 5px; 
             }
             QToolButton {
                 min-width: 80px;  /* Adjust this based on your preferred width */
@@ -115,12 +119,6 @@ class MainWindow(QMainWindow):
         )
         self.action_po.setCheckable(True)
 
-        self.action_downloads = QAction(
-            QIcon(resource_path("assets/download.svg")),
-            "Downloads",
-            self
-        )
-        self.action_downloads.setCheckable(True)
         self.action_help = QAction(
             QIcon(resource_path("assets/help.svg")),
             "Help",
@@ -164,7 +162,7 @@ class MainWindow(QMainWindow):
             lambda: self.load_module(COModule)
         )
         self.action_co_course.triggered.connect(
-            lambda: self.load_module(COCourseModule)
+            lambda: self.load_module(QWidget)
         )
         self.action_po.triggered.connect(
             lambda: self.load_module(QWidget)
@@ -184,20 +182,23 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------
 
     def load_module(self, module_class):
-        if self.current_module:
-            self.work_layout.removeWidget(self.current_module)
-            self.current_module.deleteLater()
-            self.current_module = None
+        # Use class name as a unique key
+        module_key = module_class.__name__
+        
+        if module_key not in self.modules:
+            # Initialize once and add to stack
+            new_module = module_class()
+            self.modules[module_key] = new_module
+            self.stack.addWidget(new_module)
+            
+            # Connect signals if they exist
+            signal = getattr(new_module, "status_changed", None)
+            if signal:
+                signal.connect(lambda msg: self.flash_status(msg))
 
-        self.current_module = module_class()
-        self.work_layout.addWidget(self.current_module)
-
-        # Reset status to default
+        # Switch the visible widget
+        self.stack.setCurrentWidget(self.modules[module_key])
         self.statusBar().showMessage("Ready")
-        # Optional: Connect custom signals if they exist
-        signal = getattr(self.current_module, "status_changed", None)
-        if signal:
-            signal.connect(lambda msg: self.flash_status(msg))
     
     def flash_status(self, message: str, timeout: int = 3000):
         self.statusBar().showMessage(message)

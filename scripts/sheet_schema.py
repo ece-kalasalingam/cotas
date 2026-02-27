@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Mapping, Any, Optional, Literal, Set, TypedDict
-from core.exceptions import SystemError
+from scripts.exceptions import SystemError
 
 class StyleDefinition(TypedDict, total=False):
     bold: bool

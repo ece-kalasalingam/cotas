@@ -1,6 +1,9 @@
-# modules/help_module.py
+# components/help_module.py
 
 import shutil
+import os
+import sys
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFileDialog, QMenu
 )
@@ -72,5 +75,9 @@ class HelpModule(QWidget):
     # -----------------------------------------------------
 
     def open_external(self):
-        import os
-        os.startfile(self.pdf_path)
+        if sys.platform == 'win32':
+            os.startfile(self.pdf_path)
+        elif sys.platform == 'darwin': # macOS
+            os.system(f'open "{self.pdf_path}"')
+        else: # linux
+            os.system(f'xdg-open "{self.pdf_path}"')

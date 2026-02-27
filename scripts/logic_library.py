@@ -1,41 +1,56 @@
+# scripts/logic_library.py
 from typing import Any, Dict, List
 
 def check_column_sum(engine: Any, p: Dict) -> List[str]:
-    """Sums a column and checks against a target (e.g., Weightages = 100)."""
-    # 1. Resolve physical names from the blueprint
+    """Logic-only: Checks if a column total matches a target."""
     sheet_name = engine.bp.key_map.get(p['sheet_key'])
     col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{p['col_key']}")
-    
     idx = engine.get_col_idx(sheet_name, col_name)
-    if idx == -1: return [f"Error: {col_name} missing."]
 
-    total = 0.0
-    for row in engine.data_store.get(sheet_name, []):
-        try:
-            if row[idx] is not None: total += float(row[idx])
-        except: continue
+    if idx == -1: return [f"Column {col_name} not found."]
 
-    if abs(total - p['target']) > 0.01:
-        return [f"{sheet_name}: Total {p['col_key']} must be {p['target']}, found {total}"]
+    # Use the lightweight engine's pre-calculated cache
+    actual_sum = engine._col_cache.get(sheet_name, {}).get(f"SUM_{idx}", 0.0)
+    
+    if abs(actual_sum - p['target']) > 0.01:
+        return [f"{sheet_name}: {p['col_key']} sum is {actual_sum}, expected {p['target']}"]
     return []
-
 def check_cross_workbook_sync(engine: Any, p: Dict) -> List[str]:
     """Syncs current file against an external one (e.g., Student IDs)."""
     ext_engine = p.get('external_engine')
-    if not ext_engine: return ["Sync Error: Master reference file missing."]
+    if not ext_engine: 
+        return ["Sync Error: Master reference file missing."]
 
-    # Current Workbook Resolve
-    c_sheet = engine.bp.key_map[p['curr_sheet']]
-    c_col = engine.bp.key_map[f"{p['curr_sheet']}.{p['curr_col']}"]
+    # 1. Resolve Current Workbook Details
+    c_sheet = engine.bp.key_map.get(p['curr_sheet'])
+    c_col = engine.bp.key_map.get(f"{p['curr_sheet']}.{p['curr_col']}")
     c_idx = engine.get_col_idx(c_sheet, c_col)
 
-    # External Workbook Resolve
-    e_sheet = ext_engine.bp.key_map[p['ext_sheet']]
-    e_col = ext_engine.bp.key_map[f"{p['ext_sheet']}.{p['ext_col']}"]
+    # 2. Resolve External Workbook Details
+    e_sheet = ext_engine.bp.key_map.get(p['ext_sheet'])
+    e_col = ext_engine.bp.key_map.get(f"{p['ext_sheet']}.{p['ext_col']}")
     e_idx = ext_engine.get_col_idx(e_sheet, e_col)
 
-    curr_ids = {str(r[c_idx]) for r in engine.data_store[c_sheet] if r[c_idx]}
-    ext_ids = {str(r[e_idx]) for r in ext_engine.data_store[e_sheet] if r[e_idx]}
+    # Safety Check: Ensure columns were found
+    if c_idx == -1 or e_idx == -1:
+        return [f"Sync Error: Mapping failed for {c_col} or {e_col}."]
 
+    # 3. Extract IDs with cleaning (Handles None and leading/trailing spaces)
+    def get_clean_ids(target_engine, sheet, col_idx):
+        data = target_engine.data_store.get(sheet, [])
+        ids = set()
+        for row in data:
+            if col_idx < len(row) and row[col_idx] is not None:
+                val = str(row[col_idx]).strip()
+                if val: ids.add(val)
+        return ids
+
+    curr_ids = get_clean_ids(engine, c_sheet, c_idx)
+    ext_ids = get_clean_ids(ext_engine, e_sheet, e_idx)
+
+    # 4. Find Mismatches
     diff = curr_ids - ext_ids
-    return [f"Unknown IDs in upload: {diff}"] if diff else []
+    if diff:
+        return [f"ID Mismatch: {len(diff)} entries in current file (e.g., {list(diff)[:3]}) not found in Master."]
+    
+    return []

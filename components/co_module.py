@@ -1,3 +1,4 @@
+# components/co_module.py
 import json
 import os
 import sys
@@ -7,7 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QPlainTextEdit
     , QGroupBox, QHBoxLayout, QSizePolicy, QFrame, QApplication
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QThread
 from PySide6.QtGui import QFont
 from scripts.data_providers import UniversalDataProvider
 from scripts.utils import ToastNotification, resource_path
@@ -16,6 +17,42 @@ from scripts.engine import UniversalEngine
 from scripts import blueprints
 from scripts import constants
 
+class EngineWorker(QThread):
+    finished = Signal(bool, str)
+    status_update = Signal(str)
+    
+    def __init__(self, engine, renderer, action_type, **kwargs):
+        super().__init__()
+        self.engine = engine
+        self.renderer = renderer
+        self.action_type = action_type
+        self.kwargs = kwargs
+    def run(self):
+        try:
+            # 1. GENERATE SETUP (Step 1)
+            if self.action_type == "GENERATE_SETUP":
+                self.status_update.emit("Generating Course Setup Template...")
+                data = UniversalDataProvider.get_data_for_template(constants.ID_COURSE_SETUP)
+                context = {"type_id": constants.ID_COURSE_SETUP}
+                self.renderer.render(blueprints.COURSE_SETUP_BP, self.kwargs['path'], data, fingerprint_context=context)
+                self.finished.emit(True, "Setup Template Generated.")
+
+            # 2. UPLOAD/VALIDATE SETUP (Step 2)
+            elif self.action_type == "LOAD_SETUP":
+                self.status_update.emit("Validating Setup File structure...")
+                success = self.engine.load_from_file(self.kwargs['path'])
+                msg = "Ready" if success else "\n".join(self.engine.errors)
+                self.finished.emit(success, msg)
+
+            # 3. GENERATE MARKS (Step 3)
+            elif self.action_type == "GENERATE_MARKS":
+                self.status_update.emit("Preparing Marks Entry Template...")
+                # Logic to generate marks template based on loaded setup engine
+                # self.renderer.render(...) 
+                self.finished.emit(True, "Marks Template Generated.")
+
+        except Exception as e:
+            self.finished.emit(False, f"Error: {str(e)}")
 
 class COModule(QWidget):
     status_changed = Signal(str)
@@ -128,17 +165,89 @@ class COModule(QWidget):
 
         # Connect signals
         
-        self.template_button.clicked.connect(self.generate_setup_template)
-        self.setup_button.clicked.connect(self.pick_setup)
-        self.gen_button.clicked.connect(self.generate_marks_template)
-        self.filled_button.clicked.connect(self.pick_filled)
-        self.submit_button.clicked.connect(self.compute_results)
+        #self.template_button.clicked.connect(self.generate_setup_template)
+        #self.setup_button.clicked.connect(self.pick_setup)
+        #self.gen_button.clicked.connect(self.generate_marks_template)
+        #self.filled_button.clicked.connect(self.pick_filled)
+        #self.submit_button.clicked.connect(self.compute_results)
+        self.template_button.clicked.connect(self.step_1_generate_setup)
+        self.setup_button.clicked.connect(self.step_2_upload_setup)
+        self.gen_button.clicked.connect(self.step_3_generate_marks)
+        self.filled_button.clicked.connect(self.step_4_upload_marks)
+        self.submit_button.clicked.connect(self.step_5_compute_attainment)
 
         self._refresh_actions()
 
     # -----------------------------
     # Actions
     # -----------------------------
+
+    def step_1_generate_setup(self):
+        path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Create Course Details Template",
+                os.path.join(self.last_dir, "Course_Setup_Input_Template.xlsx"),
+                "Excel (*.xlsx)"
+            )
+        if path: self._run_worker("GENERATE_SETUP", path=path)
+
+    def step_2_upload_setup(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select Filled Course Details", self.last_dir, "Excel (*.xlsx)")
+        if path: self._run_worker("LOAD_SETUP", path=path)
+
+    def step_3_generate_marks(self):
+        if not self.setup_path:
+            self.log_msg("Error: Validate Setup File (Step 2) first.", "ERROR")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save Marks Template", self.last_dir, "Excel (*.xlsx)")
+        if path: self._run_worker("GENERATE_MARKS", path=path)
+
+    def step_4_upload_marks(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select Filled Marks File", self.last_dir, "Excel (*.xlsx)")
+        if path: 
+            self.marks_path = path
+            self.log_msg(f"Marks file selected: {os.path.basename(path)}")
+
+    def step_5_compute_attainment(self):
+        if not self.setup_path or not self.marks_path:
+            self.log_msg("Error: Ensure both Setup and Marks files are uploaded/validated.", "ERROR")
+            return
+        self.log_msg("Computing CO Totals...")
+        # Add thread call for heavy computation here
+
+    # -----------------------------------------------------
+    # Core Threading & Utility
+    # -----------------------------------------------------
+
+    def _run_worker(self, action, **kwargs):
+        self.set_ui_enabled(False)
+        self.worker = EngineWorker(self.engine, self.renderer, action, **kwargs)
+        self.worker.status_update.connect(self._set_status)
+        self.worker.finished.connect(lambda s, m: self.on_task_finished(s, m, action, kwargs.get('path')))
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.start()
+
+    def on_task_finished(self, success, message, action, path):
+        self.set_ui_enabled(True)
+        if success:
+            if action == "LOAD_SETUP": self.setup_path = path
+            elif action == "GENERATE_SETUP": 
+                self.last_dir = os.path.dirname(path)
+                self.log_msg(f"Setup template created: {path}", "SYSTEM")
+                ToastNotification(self.window(), "Template generated successfully!", type="success")
+            else:
+                self.log_msg(message, "SUCCESS")
+                ToastNotification(self.window(), "Task Complete", type="success")
+        else:
+            self.log_msg(message, "ERROR")
+            ToastNotification(self.window(), "Task Failed", type="error")
+        self._set_status("Ready" if success else "Error")
+
+    def set_ui_enabled(self, enabled):
+        for btn in [self.template_button, self.setup_button, 
+                    self.gen_button, self.filled_button, self.submit_button]:
+            btn.setEnabled(enabled)
+
 
     def log_msg(self, text: str, level: str = "INFO") -> None:
         if not self.log.isVisible(): self.log.setVisible(True)
