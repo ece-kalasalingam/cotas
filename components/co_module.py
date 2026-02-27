@@ -23,6 +23,10 @@ from scripts.workbook_renderer import UniversalWorkbookRenderer
 from scripts.engine import UniversalEngine
 from scripts import blueprints, constants
 from scripts.exceptions import ValidationError, SystemError
+from core.loader import SetupLoader
+from core.setup_validator import SetupValidator
+from core.marks_structure_builder import MarksTemplateStructureBuilder
+from core.marks_workbook_renderer import MarksTemplateWorkbookRenderer
 
 
 # =========================================================
@@ -64,9 +68,39 @@ class EngineWorker(QThread):
                 msg = "Ready" if success else "\n".join(self.engine.errors)
                 self.finished.emit(success, msg)
 
+            elif self.action_type == "LOAD_MARKS":
+                self.status_update.emit("Validating Marks File with Setup context...")
+                success = self.engine.load_with_external(
+                    self.kwargs['path'],
+                    self.kwargs['external_path']
+                )
+                msg = "Ready" if success else "\n".join(self.engine.errors)
+                self.finished.emit(success, msg)
+
             elif self.action_type == "GENERATE_MARKS":
-                self.status_update.emit("Preparing Marks Entry Template...")
-                # TODO: Implement marks template generation
+                self.status_update.emit("Validating Setup File structure...")
+                success = self.engine.load_from_file(self.kwargs["setup_path"])
+                if not success:
+                    self.finished.emit(False, "\n".join(self.engine.errors))
+                    return
+
+                self.status_update.emit("Building Marks Entry Template...")
+                loader = SetupLoader(self.kwargs["setup_path"])
+                metadata = loader.load_metadata()
+                config = loader.load_config()
+                students = loader.load_students()
+                question_map = loader.load_question_map()
+
+                validated = SetupValidator(
+                    metadata,
+                    config,
+                    students,
+                    question_map
+                ).validate()
+
+                structure = MarksTemplateStructureBuilder(metadata, validated).build()
+                renderer = MarksTemplateWorkbookRenderer(metadata, validated)
+                renderer.render(structure, self.kwargs["path"])
                 self.finished.emit(True, "Marks Template Generated.")
 
         except ValidationError as e:
@@ -189,6 +223,7 @@ class COModule(QWidget):
         self.log.setReadOnly(True)
         self.log.setVisible(False)
         self.log.setMaximumHeight(150)
+        self.log.setStyleSheet("font-family: Courier New; border: none; font-size: 14px;")
         layout.addWidget(self.log)
 
         for b in (
@@ -239,19 +274,57 @@ class COModule(QWidget):
 
     def step_3_generate_marks(self):
         if not self.setup_path:
-            self.log_msg("Validate Setup File first.", "ERROR")
+            self.log_msg("Please load Setup File first.", "ERROR")
             return
+
+        self._set_status("Validating Setup File structure...")
+        if not self.engine.load_from_file(self.setup_path):
+            self.log_msg("\n".join(self.engine.errors), "ERROR")
+            ToastNotification(self.window(), "Invalid setup file.", type="error")
+            self._set_status("Error")
+            return
+
+        try:
+            loader = SetupLoader(self.setup_path)
+            metadata = loader.load_metadata()
+            config = loader.load_config()
+            students = loader.load_students()
+            question_map = loader.load_question_map()
+
+            SetupValidator(
+                metadata,
+                config,
+                students,
+                question_map
+            ).validate()
+        except Exception as e:
+            self.log_msg(f"Setup validation failed: {e}", "ERROR")
+            ToastNotification(self.window(), "Setup validation failed.", type="error")
+            self._set_status("Error")
+            return
+
+        default_prefix = self._build_marks_prefix(
+            metadata.course_code,
+            metadata.semester,
+            metadata.section,
+            metadata.faculty_name,
+            metadata.academic_year
+        )
 
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Marks Template",
-            self.last_dir,
+            os.path.join(self.last_dir, f"{default_prefix}_Marks_Template.xlsx"),
             "Excel (*.xlsx)"
         )
         if path:
-            self._run_worker("GENERATE_MARKS", path=path)
+            self._run_worker("GENERATE_MARKS", path=path, setup_path=self.setup_path)
 
     def step_4_upload_marks(self):
+        if not self.setup_path:
+            self.log_msg("Please load Setup File first.", "ERROR")
+            return
+
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Filled Marks File",
@@ -259,10 +332,7 @@ class COModule(QWidget):
             "Excel (*.xlsx)"
         )
         if path:
-            self.filled_path = path
-            self._update_working_dir(path)
-            self._update_labels()
-            self._refresh_actions()
+            self._run_worker("LOAD_MARKS", path=path, external_path=self.setup_path)
 
     def step_5_compute_attainment(self):
         if not self.setup_path or not self.filled_path:
@@ -289,18 +359,30 @@ class COModule(QWidget):
         if success:
             if action == "LOAD_SETUP":
                 self.setup_path = path
+                self.filled_path = None
                 self._update_working_dir(path)
                 self.log_msg(f"Uploaded details file: {path}", "SYSTEM")
+
+            elif action == "LOAD_MARKS":
+                self.filled_path = path
+                self._update_working_dir(path)
+                self.log_msg(f"Uploaded marks file: {path}", "SYSTEM")
 
             elif action == "GENERATE_SETUP":
                 self._update_working_dir(path)
                 ToastNotification(self.window(), "Template generated!", type="success")
                 self.log_msg(f"Setup template created: {path}", "SYSTEM")
+            
+            elif action == "GENERATE_MARKS":
+                self.gen_marks_path = path
+                self._update_working_dir(path)
+                ToastNotification(self.window(), "Marks template generated!", type="success")
+                self.log_msg(f"Marks template created: {path}", "SYSTEM")
 
             self._update_labels()
             self._refresh_actions()
         else:
-            ToastNotification(self.window(), message, type="error")
+            ToastNotification(self.window(), "Failed to process action.", type="error")
             self.log_msg(message, "ERROR")
 
         self._set_status("Ready" if success else "Error")
@@ -342,9 +424,37 @@ class COModule(QWidget):
     def _set_status(self, text: str):
         self.status_changed.emit(text)
 
+    def _safe_name_part(self, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return "NA"
+        invalid_chars = '<>:"/\\|?*'
+        cleaned = "".join("_" if ch in invalid_chars else ch for ch in text)
+        return "_".join(cleaned.split())
+
+    def _build_marks_prefix(
+        self,
+        course_code: str,
+        semester: str,
+        section: str,
+        faculty_name: str,
+        academic_year: str
+    ) -> str:
+        parts = [
+            self._safe_name_part(course_code),
+            self._safe_name_part(semester),
+            self._safe_name_part(section),
+            self._safe_name_part(faculty_name),
+            self._safe_name_part(academic_year),
+        ]
+        return "_".join(parts)
+
     def _update_labels(self):
         self.setup_label.setText(
             self.setup_path if self.setup_path else "Waiting for course details file..."
+        )
+        self.gen_label.setText(
+            self.gen_marks_path if self.gen_marks_path else "Waiting for generated marks template..."
         )
         self.filled_label.setText(
             self.filled_path if self.filled_path else "Waiting for filled marks file..."

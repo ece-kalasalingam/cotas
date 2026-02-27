@@ -1,7 +1,11 @@
 from scripts.sheet_schema import StyleDefinition, WorkbookBlueprint, SheetSchema, ValidationRule
 from typing import Dict
 from scripts.rules import BusinessRule
-from scripts.logic_library import check_column_sum, check_conditional_weight_sum
+from scripts.logic_library import (
+    check_conditional_weight_sum,
+    check_cross_workbook_sync,
+    check_multiple_columns_empty
+)
 
 # Define a shared style registry for the Setup phase
 SETUP_STYLE_REGISTRY: Dict[str, StyleDefinition] = {
@@ -35,17 +39,43 @@ INDIRECT_TOOLS_SUM_WEIGHT_RULE = BusinessRule(
         "COURSE_SETUP_V1": {"sheet_key": "assess", "weight_col_key": "w", "direct_col_key": "direct", "condition_val": "NO", "target": 100}
     }
 )
+CHECK_SETUP_STUDENTS_EMPTY_RULE = BusinessRule(
+    rule_id="check_students_empty",
+    scope="INTRA",
+    logic_fn=check_multiple_columns_empty,
+    versioned_params={
+        "COURSE_SETUP_V1": {"sheet_key": "students", "col_keys": ["id", "name"]}
+    }
+)
+
+# CROSS rule metadata scaffold for marks-template validation.
+# Keep this detached until MARKS_ENTRY_V1 blueprint is implemented and wired.
+MARKS_STUDENT_ID_SYNC_RULE = BusinessRule(
+    rule_id="marks_student_id_sync",
+    scope="CROSS",
+    logic_fn=check_cross_workbook_sync,
+    versioned_params={
+        "MARKS_ENTRY_V1": {
+            "target_type_id": "COURSE_SETUP_V1",
+            "curr_sheet": "students",
+            "curr_col": "id",
+            "ext_sheet": "students",
+            "ext_col": "id",
+        }
+    }
+)
 
 # Updated to match the uploaded CSV structures exactly
 COURSE_SETUP_BP = WorkbookBlueprint(
     type_id="COURSE_SETUP_V1",
     style_registry=SETUP_STYLE_REGISTRY,
-    business_rules=[DIRECT_TOOLS_SUM_WEIGHT_RULE, INDIRECT_TOOLS_SUM_WEIGHT_RULE],
+    business_rules=[DIRECT_TOOLS_SUM_WEIGHT_RULE, INDIRECT_TOOLS_SUM_WEIGHT_RULE, CHECK_SETUP_STUDENTS_EMPTY_RULE],
     key_map={
         "assess": "Assessment_Config",
         "assess.w": "Weight (%)",
         "students": "Students",
         "students.id": "Reg_No",
+        "students.name": "Student_Name",
         "assess.direct": "Direct"
     },
     sheets=[

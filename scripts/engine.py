@@ -22,10 +22,39 @@ class UniversalEngine:
     # =====================================================
 
     def load_from_file(self, filepath: str) -> bool:
+        self._reset_state()
+        if not self._load_workbook_data(filepath):
+            return False
+
+        self._run_business_rules(external_engine=None)
+        return len(self.errors) == 0
+
+    def load_with_external(self, primary_path: str, external_path: str) -> bool:
+        """
+        Loads primary workbook into this engine and validates CROSS rules
+        against an ephemeral secondary engine for low memory footprint.
+        """
+        self._reset_state()
+        if not self._load_workbook_data(primary_path):
+            return False
+
+        external_engine = UniversalEngine(self.registry)
+        if not external_engine._load_workbook_data(external_path):
+            self.errors.extend(
+                [f"External file error: {err}" for err in external_engine.errors]
+            )
+            return False
+
+        self._run_business_rules(external_engine=external_engine)
+        return len(self.errors) == 0
+
+    def _reset_state(self) -> None:
         self.errors = []
         self.data_store = {}
         self._col_cache = {}
+        self.bp = None
 
+    def _load_workbook_data(self, filepath: str) -> bool:
         try:
             wb = openpyxl.load_workbook(
                 filepath,
@@ -75,16 +104,17 @@ class UniversalEngine:
                 ]
 
             wb.close()
-
-            # ---------------- BUSINESS RULES ----------------
-            for rule in self.bp.business_rules:
-                self.errors.extend(rule.run(self, external_engine=None))
-
-            return len(self.errors) == 0
+            return True
 
         except Exception as e:
             self.errors.append(f"Load Error: {str(e)}")
             return False
+
+    def _run_business_rules(self, external_engine: Optional[Any] = None) -> None:
+        if not self.bp:
+            return
+        for rule in self.bp.business_rules:
+            self.errors.extend(rule.run(self, external_engine=external_engine))
 
     # =====================================================
     # INTEGRITY VERIFICATION

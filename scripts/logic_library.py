@@ -48,7 +48,28 @@ def check_conditional_weight_sum(engine: Any, p: Dict) -> List[str]:
         ]
 
     return []
+def check_multiple_columns_empty(engine: Any, p: Dict) -> List[str]:
+    """Checks if multiple specified columns are empty."""
+    sheet_name = engine.bp.key_map.get(p['sheet_key'])
+    col_keys = p['col_keys']
+    col_indices = []
+    print(f"Checking multiple columns for emptiness: {col_keys} in sheet {sheet_name}")
 
+    # Resolve column indices
+    for col_key in col_keys:
+        col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{col_key}")
+        idx = engine.get_col_idx(sheet_name, col_name)
+        if idx == -1:
+            return [f"Column {col_name} not found in {sheet_name}."]
+        col_indices.append(idx)
+
+    # Check each row for emptiness in specified columns
+    rows = engine.data_store.get(sheet_name, [])
+    for i, row in enumerate(rows):
+        if any((idx >= len(row) or row[idx] is None or str(row[idx]).strip() == '') for idx in col_indices):
+            return [f"{sheet_name}: Row {i+1} has at least one specified column empty."]
+
+    return []   
 def check_column_sum(engine: Any, p: Dict) -> List[str]:
     """Logic-only: Checks if a column total matches a target."""
     sheet_name = engine.bp.key_map.get(p['sheet_key'])
@@ -72,16 +93,20 @@ def check_cross_workbook_sync(engine: Any, p: Dict) -> List[str]:
     # 1. Resolve Current Workbook Details
     c_sheet = engine.bp.key_map.get(p['curr_sheet'])
     c_col = engine.bp.key_map.get(f"{p['curr_sheet']}.{p['curr_col']}")
+    if not c_sheet or not c_col:
+        return [f"Sync Error: Current workbook mapping missing for {p['curr_sheet']}.{p['curr_col']}"]
     c_idx = engine.get_col_idx(c_sheet, c_col)
 
     # 2. Resolve External Workbook Details
     e_sheet = ext_engine.bp.key_map.get(p['ext_sheet'])
     e_col = ext_engine.bp.key_map.get(f"{p['ext_sheet']}.{p['ext_col']}")
+    if not e_sheet or not e_col:
+        return [f"Sync Error: External workbook mapping missing for {p['ext_sheet']}.{p['ext_col']}"]
     e_idx = ext_engine.get_col_idx(e_sheet, e_col)
 
     # Safety Check: Ensure columns were found
     if c_idx == -1 or e_idx == -1:
-        return [f"Sync Error: Mapping failed for {c_col} or {e_col}."]
+        return [f"Sync Error: Column resolution failed for {c_col} or {e_col}."]
 
     # 3. Extract IDs with cleaning (Handles None and leading/trailing spaces)
     def get_clean_ids(target_engine, sheet, col_idx):
