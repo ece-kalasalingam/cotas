@@ -16,6 +16,8 @@ def main() -> int:
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
+    app.setOrganizationName("COTAS")
+    app.setApplicationName("COTAS")
 
     # Theme
     qdarktheme.setup_theme("auto")

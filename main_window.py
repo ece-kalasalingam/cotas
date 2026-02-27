@@ -8,9 +8,6 @@ from PySide6.QtCore import QSize, QTimer, Qt
 from qdarktheme._util import get_qdarktheme_root_path
 from PySide6.QtGui import QIcon, QAction
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
-
 # Import modules
 from scripts.utils import resource_path
 from components.co_module import COModule
@@ -73,8 +70,8 @@ class MainWindow(QMainWindow):
         self.activitybar = QToolBar("Navigation")
         self.activitybar.setMovable(False)
         self.activitybar.setIconSize(QSize(30, 30))
-        #self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.activitybar)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
+        #self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.activitybar)
         self.activitybar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         self.activitybar.setStyleSheet("""
             QToolBar {
@@ -147,6 +144,10 @@ class MainWindow(QMainWindow):
             self.nav_group.addAction(action)
             self.activitybar.addAction(action)
 
+        for action in self.activitybar.actions():
+            btn = self.activitybar.widgetForAction(action)
+            if btn:
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.action_co_section.setChecked(True)
 
         # ----------------------------

@@ -1,7 +1,7 @@
 from scripts.sheet_schema import StyleDefinition, WorkbookBlueprint, SheetSchema, ValidationRule
 from typing import Dict
 from scripts.rules import BusinessRule
-from scripts.logic_library import check_column_sum
+from scripts.logic_library import check_column_sum, check_conditional_weight_sum
 
 # Define a shared style registry for the Setup phase
 SETUP_STYLE_REGISTRY: Dict[str, StyleDefinition] = {
@@ -19,12 +19,20 @@ SETUP_STYLE_REGISTRY: Dict[str, StyleDefinition] = {
 }
 
 # Define the Rule
-SUM_WEIGHT_RULE = BusinessRule(
-    rule_id="sum_100",
+DIRECT_TOOLS_SUM_WEIGHT_RULE = BusinessRule(
+    rule_id="direct_sum_100",
     scope="INTRA",
-    logic_fn=check_column_sum,
+    logic_fn=check_conditional_weight_sum,
     versioned_params={
-        "COURSE_SETUP_V1": {"sheet_key": "assess", "col_key": "w", "target": 100}
+        "COURSE_SETUP_V1": {"sheet_key": "assess", "weight_col_key": "w", "direct_col_key": "direct", "condition_val": "YES", "target": 100}
+    }
+)
+INDIRECT_TOOLS_SUM_WEIGHT_RULE = BusinessRule(
+    rule_id="indirect_sum_100",
+    scope="INTRA",
+    logic_fn=check_conditional_weight_sum,
+    versioned_params={
+        "COURSE_SETUP_V1": {"sheet_key": "assess", "weight_col_key": "w", "direct_col_key": "direct", "condition_val": "NO", "target": 100}
     }
 )
 
@@ -32,12 +40,13 @@ SUM_WEIGHT_RULE = BusinessRule(
 COURSE_SETUP_BP = WorkbookBlueprint(
     type_id="COURSE_SETUP_V1",
     style_registry=SETUP_STYLE_REGISTRY,
-    business_rules=[SUM_WEIGHT_RULE],
+    business_rules=[DIRECT_TOOLS_SUM_WEIGHT_RULE, INDIRECT_TOOLS_SUM_WEIGHT_RULE],
     key_map={
         "assess": "Assessment_Config",
         "assess.w": "Weight (%)",
         "students": "Students",
-        "students.id": "Reg_No"
+        "students.id": "Reg_No",
+        "assess.direct": "Direct"
     },
     sheets=[
         # --- Sheet 1: Metadata ---

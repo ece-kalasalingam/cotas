@@ -5,7 +5,8 @@ import xlsxwriter.utility as xl_util
 import sys
 import os
 from PySide6.QtWidgets import QLabel, QGraphicsOpacityEffect, QWidget
-from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint
+from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint, QStandardPaths
+import json
 
 # --- 1. THE CANONICALIZATION LAYER ---
 
@@ -98,7 +99,68 @@ def get_range_coordinates(range_str: str) -> Tuple[int, int, int, int]:
     row_end, col_end = xl_util.xl_cell_to_rowcol(end)
     return row_start, col_start, row_end, col_end
 
+def get_run_dir() -> str:
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(sys.argv[0]))
 
+
+def get_config_path() -> str:
+    config_dir = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation
+    )
+
+    app_dir = os.path.join(config_dir, "COTAS")
+    os.makedirs(app_dir, exist_ok=True)
+
+    return os.path.join(app_dir, "config.json")
+
+
+def load_last_dir() -> str | None:
+    config_path = get_config_path()
+
+    if not os.path.exists(config_path):
+        return None
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        directory = data.get("last_dir")
+        if directory and os.path.isdir(directory):
+            return directory
+
+    except Exception as e:
+        raise SystemError(f"Failed to load config file: {e}")
+
+    return None
+
+
+def save_last_dir(directory: str) -> None:
+    if not directory:
+        return
+
+    config_path = get_config_path()
+    data = {}
+
+    try:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+
+        data["last_dir"] = directory
+
+        tmp_path = config_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        os.replace(tmp_path, config_path)
+
+    except Exception as e:
+        raise SystemError(f"Failed to save config file: {e}")
     
 class ToastNotification(QLabel):
     def __init__(self, parent, message, type="info", duration=6000):
