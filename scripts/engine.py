@@ -1,296 +1,233 @@
-import openpyxl
-from typing import Dict, List, Any, Optional
+﻿from __future__ import annotations
 
-from scripts import utils
-from scripts.constants import SYSTEM_HASH_SHEET_NAME, METADATA_SHEET_NAME
+from collections import defaultdict
+from typing import Any, Dict, List
+
+import openpyxl
+
+from scripts.constants import ID_COURSE_SETUP, SYSTEM_HASH_SHEET_NAME
 
 
 class UniversalEngine:
-    def __init__(self, registry: Dict[str, Any]):
-        # Canonicalize registry keys once
-        self.registry = {
-            utils.canonicalize(k): v for k, v in registry.items()
-        }
-
-        self.bp: Optional[Any] = None
-        self.errors: List[str] = []
+    def __init__(self, bp_registry: Dict[str, Any]):
+        self.bp_registry = bp_registry
+        self.bp = None
         self.data_store: Dict[str, List[List[Any]]] = {}
-        self._col_cache: Dict[str, Dict[str, int]] = {}
-
-    # =====================================================
-    # PUBLIC ENTRY
-    # =====================================================
+        self._headers: Dict[str, List[str]] = {}
+        self.errors: List[str] = []
 
     def load_from_file(self, filepath: str) -> bool:
-        self._reset_state()
-        if not self._load_workbook_data(filepath):
+        self.errors = []
+        try:
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+        except Exception as exc:
+            self.errors.append(f"Failed to open workbook: {exc}")
             return False
 
-        self._run_business_rules(external_engine=None)
-        return len(self.errors) == 0
+        try:
+            type_id = self._detect_type_from_workbook(wb) or ID_COURSE_SETUP
+
+            self.bp = self.bp_registry.get(type_id)
+            if not self.bp:
+                self.errors.append(f"Unsupported workbook type: {type_id}")
+                return False
+
+            if type_id == ID_COURSE_SETUP:
+                ok = self._load_setup_workbook(wb)
+                if not ok:
+                    return False
+                return self._run_business_rules()
+
+            self.errors.append(f"No loader implemented for workbook type: {type_id}")
+            return False
+        finally:
+            wb.close()
 
     def load_with_external(self, primary_path: str, external_path: str) -> bool:
-        """
-        Loads primary workbook into this engine and validates CROSS rules
-        against an ephemeral secondary engine for low memory footprint.
-        """
-        self._reset_state()
-        if not self._load_workbook_data(primary_path):
+        ext = UniversalEngine(self.bp_registry)
+        if not ext.load_from_file(external_path):
+            self.errors = ext.errors.copy()
             return False
+        return self.load_with_external_engine(primary_path, ext)
 
-        external_engine = UniversalEngine(self.registry)
-        if not external_engine._load_workbook_data(external_path):
-            self.errors.extend(
-                [f"External file error: {err}" for err in external_engine.errors]
-            )
-            return False
-
-        self._run_business_rules(external_engine=external_engine)
-        return len(self.errors) == 0
-
-    def _reset_state(self) -> None:
+    def load_with_external_engine(self, primary_path: str, external_engine: "UniversalEngine") -> bool:
         self.errors = []
-        self.data_store = {}
-        self._col_cache = {}
-        self.bp = None
-
-    def _load_workbook_data(self, filepath: str) -> bool:
         try:
-            wb = openpyxl.load_workbook(
-                filepath,
-                data_only=True,
-                read_only=True
-            )
+            wb = openpyxl.load_workbook(primary_path, read_only=True, data_only=True)
+        except Exception as exc:
+            self.errors.append(f"Failed to read marks workbook: {exc}")
+            return False
 
-            # ---------------- GATEKEEPER ----------------
-            if not self._verify_integrity(wb):
-                wb.close()
+        try:
+            if not external_engine.data_store:
+                self.errors.append("Setup context is empty. Load setup first.")
                 return False
 
-            assert self.bp is not None
+            setup = external_engine.data_store
+            expected = self._derive_expected_marks_layout(setup)
 
-            # ---------------- LOAD DATA ----------------
-            for sheet_schema in self.bp.sheets:
-                if sheet_schema.name not in wb.sheetnames:
-                    self.errors.append(
-                        f"Missing required sheet: {sheet_schema.name}"
-                    )
-                    continue
+            actual_name_map = {str(name).strip().lower(): name for name in wb.sheetnames}
 
-                ws = wb[sheet_schema.name]
-                all_rows_iter = ws.values
+            missing = [name for name in expected["required"] if name.lower() not in actual_name_map]
+            if missing:
+                self.errors.append("Missing required marks sheet(s): " + ", ".join(missing))
+                return False
 
-                header_height = len(sheet_schema.header_matrix)
+            self.bp = type("DynamicBP", (), {"type_id": "MARKS_ENTRY_V1"})()
 
-                # Column cache from blueprint last header row
-                blueprint_headers = (
-                    sheet_schema.header_matrix[-1]
-                    if header_height > 0 else []
-                )
+            for comp_name in expected["direct_components"]:
+                ws_name = actual_name_map.get(comp_name.lower())
+                if not ws_name:
+                    self.errors.append(f"Missing direct sheet: {comp_name}")
+                    return False
 
-                self._col_cache[sheet_schema.name] = {
-                    utils.normalize(h): idx
-                    for idx, h in enumerate(blueprint_headers)
-                    if h is not None
-                }
+                ws = wb[ws_name]
+                q_headers = expected["questions_by_component"].get(comp_name, [])
+                expected_header = ["RegNo", "Student_Name"] + q_headers + ["Total"]
+                actual_header = self._read_header(ws, len(expected_header))
 
-                # Skip header rows
-                for _ in range(header_height):
-                    next(all_rows_iter, None)
+                if actual_header != expected_header:
+                    self.errors.append(f"{comp_name}: header mismatch.")
+                    return False
 
-                # Store remaining rows
-                self.data_store[sheet_schema.name] = [
-                    list(row) for row in all_rows_iter
-                ]
+            for tool_name in expected["indirect_tools"]:
+                expected_sheet = f"{tool_name}_Indirect"
+                ws_name = actual_name_map.get(expected_sheet.lower())
+                if not ws_name:
+                    self.errors.append(f"Missing indirect sheet: {expected_sheet}")
+                    return False
 
-            wb.close()
+                ws = wb[ws_name]
+                expected_header = ["RegNo", "Student_Name"] + [f"CO{i}" for i in expected["co_numbers"]]
+                actual_header = self._read_header(ws, len(expected_header))
+
+                if actual_header != expected_header:
+                    self.errors.append(f"{expected_sheet}: header mismatch.")
+                    return False
+
             return True
+        finally:
+            wb.close()
 
-        except Exception as e:
-            self.errors.append(f"Load Error: {str(e)}")
-            return False
+    def get_col_idx(self, sheet_name: str, col_name: str) -> int:
+        headers = self._headers.get(sheet_name, [])
+        target = "" if col_name is None else str(col_name).strip().lower()
+        for i, val in enumerate(headers):
+            if str(val).strip().lower() == target:
+                return i
+        return -1
 
-    def _run_business_rules(self, external_engine: Optional[Any] = None) -> None:
-        if not self.bp:
-            return
-        for rule in self.bp.business_rules:
-            self.errors.extend(rule.run(self, external_engine=external_engine))
+    def _detect_type(self, filepath: str) -> str | None:
+        try:
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            try:
+                return self._detect_type_from_workbook(wb)
+            finally:
+                wb.close()
+        except Exception:
+            return None
 
-    # =====================================================
-    # INTEGRITY VERIFICATION
-    # =====================================================
+    def _detect_type_from_workbook(self, wb) -> str | None:
+        if SYSTEM_HASH_SHEET_NAME in wb.sheetnames:
+            ws = wb[SYSTEM_HASH_SHEET_NAME]
+            val = ws.cell(row=1, column=1).value
+            if val:
+                return str(val).strip()
+        return None
 
-    def _verify_integrity(self, wb: openpyxl.Workbook) -> bool:
-        """Performs strict structural validation against Blueprint."""
+    def _load_setup_workbook(self, wb) -> bool:
+        self.data_store = {}
+        self._headers = {}
 
-        # ---- 1. System Sheet Exists ----
-        if SYSTEM_HASH_SHEET_NAME not in wb.sheetnames:
-            self.errors.append("Invalid File: Not the standard template.")
-            return False
-
-        # ---- 2. Identity Check ----
-        raw_type_id = wb[SYSTEM_HASH_SHEET_NAME]["A1"].value
-        type_id = utils.canonicalize(raw_type_id)
-
-        if type_id not in self.registry:
-            self.errors.append(f"Unknown Template ID: {raw_type_id}")
-            return False
-
-        self.bp = self.registry[type_id]
-        if not self.bp:
-            self.errors.append(
-                f"Registry Error: No blueprint found for ID {raw_type_id}"
-            )
-            return False
-
-        # ---- 3. Unexpected Sheet Detection ----
-        expected_sheets = {s.name for s in self.bp.sheets}
-        actual_sheets = set(wb.sheetnames)
-
-        allowed_extras = {SYSTEM_HASH_SHEET_NAME, METADATA_SHEET_NAME}
-
-        unexpected = actual_sheets - expected_sheets - allowed_extras
-        if unexpected:
-            self.errors.append(
-                f"Unexpected sheet(s) found: {', '.join(unexpected)}"
-            )
-            return False
-
-        # ---- 4. Header Structural Match ----
-        for sheet_bp in self.bp.sheets:
-            if sheet_bp.name not in wb.sheetnames:
-                self.errors.append(f"Missing sheet: {sheet_bp.name}")
+        for sheet_schema in self.bp.sheets:
+            if sheet_schema.name not in wb.sheetnames:
+                self.errors.append(f"Missing required sheet: {sheet_schema.name}")
                 return False
 
-            ws = wb[sheet_bp.name]
-            header_height = len(sheet_bp.header_matrix)
+            ws = wb[sheet_schema.name]
+            expected_header = [str(v).strip() for v in sheet_schema.header_matrix[-1]]
+            actual_header = self._read_header(ws, len(expected_header))
 
-            if header_height <= 0:
-                continue
-
-            # Determine expected width
-            max_cols = max(
-                (len(row) for row in sheet_bp.header_matrix if row),
-                default=0
-            )
-
-            # Read header block
-            actual_rows = list(ws.iter_rows(
-                min_row=1,
-                max_row=header_height,
-                min_col=1,
-                max_col=max_cols,
-                values_only=True
-            ))
-
-            # Compare cell-by-cell using canonicalization
-            for r_idx in range(header_height):
-                expected_row = sheet_bp.header_matrix[r_idx]
-                actual_row = (
-                    actual_rows[r_idx]
-                    if r_idx < len(actual_rows) else ()
+            if actual_header != expected_header:
+                self.errors.append(
+                    f"Header mismatch in '{sheet_schema.name}'. Expected {expected_header}, found {actual_header}"
                 )
+                return False
 
-                for c_idx in range(max_cols):
-                    expected_val = (
-                        expected_row[c_idx]
-                        if c_idx < len(expected_row) else None
-                    )
-                    actual_val = (
-                        actual_row[c_idx]
-                        if c_idx < len(actual_row) else None
-                    )
+            self._headers[sheet_schema.name] = expected_header
 
-                    if (
-                        utils.canonicalize(expected_val)
-                        != utils.canonicalize(actual_val)
-                    ):
-                        self.errors.append(
-                            f"Header mismatch in '{sheet_bp.name}' "
-                            f"at row {r_idx+1}, column {c_idx+1}"
-                        )
-                        return False
-
-            # ---- Strict Extra Column Detection ----
-            if ws.max_column > max_cols:
-                for r in range(1, header_height + 1):
-                    for c in range(max_cols + 1, ws.max_column + 1):
-                        val = ws.cell(row=r, column=c).value
-                        if utils.canonicalize(val) != "empty":
-                            self.errors.append(
-                                f"Unexpected extra header column "
-                                f"in '{sheet_bp.name}' "
-                                f"at row {r}, column {c}"
-                            )
-                            return False
+            rows: List[List[Any]] = []
+            for r in ws.iter_rows(min_row=2, max_col=len(expected_header), values_only=True):
+                if all(v is None or str(v).strip() == "" for v in r):
+                    continue
+                rows.append(list(r))
+            self.data_store[sheet_schema.name] = rows
 
         return True
 
-    # =====================================================
-    # METADATA + HEADER EXTRACTION
-    # =====================================================
+    def _read_header(self, ws, width: int) -> List[str]:
+        values = [ws.cell(row=1, column=c).value for c in range(1, width + 1)]
+        return ["" if v is None else str(v).strip() for v in values]
 
-    def _extract_metadata(
-        self, wb: openpyxl.Workbook
-    ) -> Dict[str, Any]:
+    def _run_business_rules(self) -> bool:
+        problems = []
+        for rule in self.bp.business_rules:
+            errs = rule.run(self)
+            problems.extend([f"Rule {rule.rule_id}: {e}" for e in errs])
 
-        meta: Dict[str, Any] = {}
+        if problems:
+            self.errors.extend(problems)
+            return False
+        return True
 
-        if METADATA_SHEET_NAME in wb.sheetnames:
-            ws = wb[METADATA_SHEET_NAME]
-            for row in ws.iter_rows(values_only=True):
-                if row and row[0]:
-                    meta[str(row[0])] = row[1]
+    def _derive_expected_marks_layout(self, setup_store: Dict[str, List[List[Any]]]) -> Dict[str, Any]:
+        assess_rows = setup_store.get("Assessment_Config", [])
+        qmap_rows = setup_store.get("Question_Map", [])
 
-        return meta
-
-    def _get_all_headers(
-        self, wb: openpyxl.Workbook
-    ) -> List[Any]:
-        """
-        Extract headers in deterministic blueprint order.
-        Canonicalized to align with validation.
-        """
-
-        headers: List[Any] = []
-
-        if not self.bp:
-            return headers
-
-        for sheet_schema in self.bp.sheets:
-            name = sheet_schema.name
-            if name not in wb.sheetnames:
+        direct_components: List[str] = []
+        indirect_tools: List[str] = []
+        for row in assess_rows:
+            if len(row) < 5:
                 continue
-
-            ws = wb[name]
-            header_height = len(sheet_schema.header_matrix)
-
-            if header_height <= 0:
+            name = "" if row[0] is None else str(row[0]).strip()
+            direct_flag = "" if row[4] is None else str(row[4]).strip().upper()
+            if not name:
                 continue
+            if direct_flag == "YES":
+                direct_components.append(name)
+            elif direct_flag == "NO":
+                indirect_tools.append(name)
 
-            max_cols = max(
-                (len(row) for row in sheet_schema.header_matrix if row),
-                default=0
-            )
+        q_by_comp: Dict[str, List[str]] = defaultdict(list)
+        co_numbers = set()
 
-            for row in ws.iter_rows(
-                min_row=1,
-                max_row=header_height,
-                min_col=1,
-                max_col=max_cols,
-                values_only=True,
-            ):
-                for cell in row:
-                    headers.append(utils.canonicalize(cell))
+        for row in qmap_rows:
+            if len(row) < 4:
+                continue
+            comp = "" if row[0] is None else str(row[0]).strip()
+            qid = "" if row[1] is None else str(row[1]).strip()
+            co_raw = "" if row[3] is None else str(row[3]).strip()
 
-        return headers
+            if comp and qid:
+                q_by_comp[comp].append(qid)
 
-    # =====================================================
-    # COLUMN LOOKUP
-    # =====================================================
+            for token in co_raw.replace("CO", "").replace(" ", "").replace(";", ",").split(","):
+                if not token:
+                    continue
+                try:
+                    co_numbers.add(int(float(token)))
+                except Exception:
+                    continue
 
-    def get_col_idx(self, sheet_name: str, col_name: str) -> int:
-        return self._col_cache.get(
-            sheet_name,
-            {}
-        ).get(utils.normalize(col_name), -1)
+        if not co_numbers:
+            co_numbers = {1}
+
+        required = list(direct_components) + [f"{name}_Indirect" for name in indirect_tools]
+
+        return {
+            "required": required,
+            "direct_components": direct_components,
+            "indirect_tools": indirect_tools,
+            "questions_by_component": dict(q_by_comp),
+            "co_numbers": sorted(co_numbers),
+        }

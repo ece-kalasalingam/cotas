@@ -1,116 +1,105 @@
-import os
+﻿from typing import Any, Dict
+
 import xlsxwriter
-import xlsxwriter.exceptions
-from typing import List, Dict, Any, Optional
-from scripts.atomic_workbook_writer import AtomicWorkbookWriter
-from scripts.sheet_schema import WorkbookBlueprint
+
+from scripts.constants import (
+    DEFAULT_MAX_COL_WIDTH,
+    DEFAULT_MIN_COL_WIDTH,
+    SYSTEM_HASH_SHEET_NAME,
+    WIDTH_PADDING,
+    WORKBOOK_PASSWORD,
+)
 from scripts.exceptions import ValidationError, SystemError
-from scripts.constants import WORKBOOK_PASSWORD, DEFAULT_MAX_COL_WIDTH, SYSTEM_HASH_SHEET_NAME
-from scripts import utils
+from scripts.sheet_schema import WorkbookBlueprint
+from scripts.utils import calculate_visual_width
+
 
 class UniversalWorkbookRenderer:
-    """
-    Unit: Technical Rendering
-    A uniform engine that uses Blueprints to generate secure, styled Excel files.
-    """
     def __init__(self):
-        self.column_widths: Dict[str, Dict[int, int]] = {}
-        self.header_accumulator: List[str] = []
+        # Retained for compatibility with any external introspection.
+        self.column_widths: dict[str, dict[int, int]] = {}
 
-    def _track_width(self, sheet_name: str, col: int, val: Any):
-        """Standardizes visual width tracking for auto-fit."""
-        visual_width = utils.calculate_visual_width(val)
-        current_max = self.column_widths.setdefault(sheet_name, {}).get(col, 0)        
-        if visual_width > current_max:
-            # Only update if the new value is wider
-            self.column_widths[sheet_name][col] = visual_width
+    @staticmethod
+    def _calc_width(val: Any) -> int:
+        return calculate_visual_width(val) + WIDTH_PADDING
 
-    def render(self, 
-               blueprint: WorkbookBlueprint, 
-               output_path: str, 
-               data_map: Dict[str, List[List[Any]]],
-               fingerprint_context: Optional[Dict[str, Any]] = None) -> str:
-        
-        blueprint.validate_structure()
-        self.header_accumulator = [] # Reset for this specific run
-        
-        temp_path = AtomicWorkbookWriter.create_temp_path(output_path)
-        
+    def render(
+        self,
+        blueprint: WorkbookBlueprint,
+        output_path: str,
+        data_map: Dict[str, list],
+        fingerprint_context: Dict[str, Any] | None = None,
+    ) -> str:
+        if not blueprint:
+            raise SystemError("Blueprint is required.")
+
+        workbook = None
         try:
-            workbook = xlsxwriter.Workbook(temp_path)
-            
-            # 1. Uniform Style Registration
-            formats = {
-                key: workbook.add_format(props) 
-                for key, props in blueprint.style_registry.items()
-            }
+            workbook = xlsxwriter.Workbook(output_path)
+            formats = {k: workbook.add_format(v) for k, v in blueprint.style_registry.items()}
 
             for sheet_schema in blueprint.sheets:
                 ws = workbook.add_worksheet(sheet_schema.name)
-                self.column_widths[sheet_schema.name] = {}
+                col_widths: dict[int, int] = {}
+                self.column_widths[sheet_schema.name] = col_widths
 
-                # 2. Uniform Header Processing
                 h_style = formats.get(sheet_schema.header_style_key)
-                for r_idx, row_data in enumerate(sheet_schema.header_matrix):
-                    ws.write_row(r_idx, 0, row_data, h_style)
-                    for c_idx, val in enumerate(row_data):
-                        self._track_width(sheet_schema.name, c_idx, val)
-                        self.header_accumulator.append(str(val))
-
-                # 3. Uniform Data Injection
-                start_row = len(sheet_schema.header_matrix)
-                rows = data_map.get(sheet_schema.name, [])
                 d_style = formats.get(sheet_schema.data_style_key)
+                write = ws.write
 
-                for r_idx, row_data in enumerate(rows, start=start_row):
+                # Column-wise width scan from header rows
+                for r_idx, row_data in enumerate(sheet_schema.header_matrix):
                     for c_idx, val in enumerate(row_data):
-                        ws.write(r_idx, c_idx, val, d_style)
-                        self._track_width(sheet_schema.name, c_idx, val)
+                        write(r_idx, c_idx, val, h_style)
+                        w = self._calc_width(val)
+                        if w > col_widths.get(c_idx, 0):
+                            col_widths[c_idx] = w
 
-                # 4. Uniform Cell Validation
+                # Column-wise width scan from data rows
+                start_row = len(sheet_schema.header_matrix)
+                for r_off, row_data in enumerate(data_map.get(sheet_schema.name, [])):
+                    for c_idx, val in enumerate(row_data):
+                        write(start_row + r_off, c_idx, val, d_style)
+                        w = self._calc_width(val)
+                        if w > col_widths.get(c_idx, 0):
+                            col_widths[c_idx] = w
+
                 for rule in sheet_schema.validations:
-                    # Clean internal keys like '_set_cache'
-                    clean_options = {k: v for k, v in rule.options.items() if not k.startswith('_')}
                     ws.data_validation(
-                        rule.first_row, rule.first_col, 
-                        rule.last_row, rule.last_col, 
-                        clean_options
+                        rule.first_row,
+                        rule.first_col,
+                        rule.last_row,
+                        rule.last_col,
+                        rule.options,
                     )
 
-                # 5. Uniform Protection & Formatting
                 if sheet_schema.freeze_panes:
                     ws.freeze_panes(*sheet_schema.freeze_panes)
-                
+
                 if sheet_schema.is_protected:
-                    ws.protect(WORKBOOK_PASSWORD, {'select_unlocked_cells': True})
-                
-                for col, width in self.column_widths[sheet_schema.name].items():
-                    ws.set_column(col, col, min(width, DEFAULT_MAX_COL_WIDTH))
+                    ws.protect(WORKBOOK_PASSWORD)
 
-            # 6. Uniform Identity & Integrity Fingerprinting
-            if fingerprint_context:
-                # We pass 'blueprint' explicitly now to maintain uniformity
-                self._embed_system_hash(workbook, fingerprint_context, blueprint)
+                # Apply width per column (independent adjustment)
+                for col, width in col_widths.items():
+                    ws.set_column(
+                        col,
+                        col,
+                        min(max(width, DEFAULT_MIN_COL_WIDTH), DEFAULT_MAX_COL_WIDTH),
+                    )
 
-            AtomicWorkbookWriter.finalize(workbook, output_path)
+            self._embed_system_hash(workbook, blueprint.type_id, fingerprint_context or {})
+            workbook.close()
             return output_path
+        except Exception as exc:
+            if workbook is not None:
+                try:
+                    workbook.close()
+                except Exception:
+                    pass
+            raise ValidationError(f"Workbook render failed: {exc}") from exc
 
-        except Exception as e:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            if isinstance(e, xlsxwriter.exceptions.FileCreateError):
-                raise ValidationError(f"File {output_path} is locked. Close it and retry.")
-            raise SystemError(f"Rendering Failed: {str(e)}")
-
-    def _embed_system_hash(self, workbook: xlsxwriter.Workbook, context: Dict[str, Any], blueprint: WorkbookBlueprint):
-        """Generates a hidden identity and integrity fingerprint."""
-        try:
-            hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET_NAME)
-            
-            # Row 0: Identity (From Blueprint or Context)
-            type_id = context.get('type_id', blueprint.type_id)
-            hash_ws.write(0, 0, type_id)
-            hash_ws.hide()
-            
-        except Exception as e:
-            raise SystemError(f"Integrity hash embedding failed: {str(e)}")
+    def _embed_system_hash(self, workbook: xlsxwriter.Workbook, type_id: str, context: Dict[str, Any]):
+        ws = workbook.add_worksheet(SYSTEM_HASH_SHEET_NAME)
+        ws.write(0, 0, type_id)
+        ws.write(0, 1, str(context.get("type_id", type_id)))
+        ws.hide()

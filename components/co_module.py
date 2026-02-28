@@ -1,4 +1,4 @@
-# components/co_module.py
+﻿# components/co_module.py
 
 import os
 from datetime import datetime
@@ -23,6 +23,7 @@ from scripts.workbook_renderer import UniversalWorkbookRenderer
 from scripts.engine import UniversalEngine
 from scripts import blueprints, constants
 from scripts.exceptions import ValidationError, SystemError
+from scripts.marks_template_generator import generate_marks_template_from_setup
 
 
 # =========================================================
@@ -66,16 +67,28 @@ class EngineWorker(QThread):
 
             elif self.action_type == "LOAD_MARKS":
                 self.status_update.emit("Validating Marks File with Setup context...")
-                success = self.engine.load_with_external(
-                    self.kwargs['path'],
-                    self.kwargs['external_path']
-                )
+                external_engine = self.kwargs.get('external_engine')
+                if external_engine is not None:
+                    success = self.engine.load_with_external_engine(
+                        self.kwargs['path'],
+                        external_engine
+                    )
+                else:
+                    success = self.engine.load_with_external(
+                        self.kwargs['path'],
+                        self.kwargs['external_path']
+                    )
                 msg = "Ready" if success else "\n".join(self.engine.errors)
                 self.finished.emit(success, msg)
 
             elif self.action_type == "GENERATE_MARKS":
                 self.status_update.emit("Preparing Marks Entry Template...")
-                # TODO: Implement marks template generation
+                setup_store = self.engine.data_store if getattr(self.engine, "data_store", None) else {}
+                generate_marks_template_from_setup(
+                    setup_store=setup_store,
+                    output_path=self.kwargs["path"],
+                    course_details=self.kwargs.get("course_details") or {}
+                )
                 self.finished.emit(True, "Marks Template Generated.")
 
         except ValidationError as e:
@@ -112,8 +125,10 @@ class COModule(QWidget):
         self.setup_path: Optional[str] = None
         self.filled_path: Optional[str] = None
         self.gen_marks_path: Optional[str] = None
+        self.course_details: dict = {}
 
-        self.engine = UniversalEngine(blueprints.BLUEPRINT_REGISTRY)
+        self.setup_engine = UniversalEngine(blueprints.BLUEPRINT_REGISTRY)
+        self.marks_engine = UniversalEngine(blueprints.BLUEPRINT_REGISTRY)
         self.renderer = UniversalWorkbookRenderer()
 
         self._build_ui()
@@ -245,21 +260,26 @@ class COModule(QWidget):
             "Excel (*.xlsx)"
         )
         if path:
-            self._run_worker("LOAD_SETUP", path=path)
+            self._run_worker("LOAD_SETUP", path=path, engine=self.setup_engine)
 
     def step_3_generate_marks(self):
         if not self.setup_path:
             self.log_msg("Validate Setup File first.", "ERROR")
             return
 
+        default_name = self._build_marks_template_name()
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Marks Template",
-            self.last_dir,
+            os.path.join(self.last_dir, default_name),
             "Excel (*.xlsx)"
         )
         if path:
-            self._run_worker("GENERATE_MARKS", path=path)
+            self._run_worker(
+                "GENERATE_MARKS",
+                path=path,
+                course_details=self.course_details.copy()
+            )
 
     def step_4_upload_marks(self):
         if not self.setup_path:
@@ -273,7 +293,13 @@ class COModule(QWidget):
             "Excel (*.xlsx)"
         )
         if path:
-            self._run_worker("LOAD_MARKS", path=path, external_path=self.setup_path)
+            self._run_worker(
+                "LOAD_MARKS",
+                path=path,
+                external_path=self.setup_path,
+                external_engine=self.setup_engine,
+                engine=self.marks_engine
+            )
 
     def step_5_compute_attainment(self):
         if not self.setup_path or not self.filled_path:
@@ -287,7 +313,8 @@ class COModule(QWidget):
     # =====================================================
     def _run_worker(self, action, **kwargs):
         self.set_ui_enabled(False)
-        self.worker = EngineWorker(self.engine, self.renderer, action, **kwargs)
+        engine = kwargs.pop("engine", self.setup_engine)
+        self.worker = EngineWorker(engine, self.renderer, action, **kwargs)
         self.worker.status_update.connect(self._set_status)
         self.worker.finished.connect(lambda s, m: self.on_task_finished(s, m, action, kwargs.get('path')))
         self.worker.finished.connect(self.worker.deleteLater)
@@ -302,6 +329,16 @@ class COModule(QWidget):
                 self.setup_path = path
                 self._update_working_dir(path)
                 self.log_msg(f"Uploaded details file: {path}", "SYSTEM")
+                self.course_details = self._extract_course_details_from_engine(self.setup_engine)
+                if self.course_details:
+                    self.log_msg(
+                        "Course details extracted: "
+                        f"{self.course_details.get('Course_Code', '')} | "
+                        f"{self.course_details.get('Section', '')} | "
+                        f"{self.course_details.get('Semester', '')} | "
+                        f"{self.course_details.get('Academic_Year', '')}",
+                        "SYSTEM"
+                    )
 
             elif action == "LOAD_MARKS":
                 self.filled_path = path
@@ -312,6 +349,12 @@ class COModule(QWidget):
                 self._update_working_dir(path)
                 ToastNotification(self.window(), "Template generated!", type="success")
                 self.log_msg(f"Setup template created: {path}", "SYSTEM")
+
+            elif action == "GENERATE_MARKS":
+                self.gen_marks_path = path
+                self._update_working_dir(path)
+                ToastNotification(self.window(), "Marks template generated!", type="success")
+                self.log_msg(f"Marks template created: {path}", "SYSTEM")
 
             self._update_labels()
             self._refresh_actions()
@@ -358,6 +401,32 @@ class COModule(QWidget):
     def _set_status(self, text: str):
         self.status_changed.emit(text)
 
+    def _extract_course_details_from_engine(self, engine: UniversalEngine) -> dict:
+        details = {}
+        rows = engine.data_store.get("Course_Metadata", [])
+        for row in rows:
+            if not row or len(row) < 2:
+                continue
+            key = str(row[0]).strip() if row[0] is not None else ""
+            if not key:
+                continue
+            details[key] = row[1]
+        return details
+
+    def _build_marks_template_name(self) -> str:
+        if not self.course_details:
+            return "Marks_Template.xlsx"
+
+        parts = [
+            str(self.course_details.get("Course_Code", "")).strip(),
+            str(self.course_details.get("Section", "")).strip(),
+            str(self.course_details.get("Semester", "")).strip(),
+            str(self.course_details.get("Academic_Year", "")).strip(),
+            "Marks_Template"
+        ]
+        cleaned = [p.replace(" ", "_") for p in parts if p]
+        return f"{'_'.join(cleaned)}.xlsx" if cleaned else "Marks_Template.xlsx"
+
     def _update_labels(self):
         self.setup_label.setText(
             self.setup_path if self.setup_path else "Waiting for course details file..."
@@ -365,120 +434,16 @@ class COModule(QWidget):
         self.filled_label.setText(
             self.filled_path if self.filled_path else "Waiting for filled marks file..."
         )
-"""
-    def pick_setup(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Course Details", self.last_dir, "Excel (*.xlsx)"
-        )
-        if not path: return
-
-        self.setup_path = path
-        self.setup_label.setText(os.path.basename(path))
-        self.last_dir = os.path.dirname(path)
-        self.log_msg(f"Analyzing {os.path.basename(path)}...", "SYSTEM")
-        success = self.engine.load_from_file(path)
-        if success:
-            self.log_msg(f"Uploaded details file: {path}", "SYSTEM")
-            self._update_labels()
-            #self.compute_default_prefix_from_setup()
-            self._set_status("Setup loaded")
-            self._refresh_actions()
+        if self.gen_marks_path:
+            self.gen_label.setText(f"Generated: {os.path.basename(self.gen_marks_path)}")
+        elif self.course_details:
+            label = (
+                f"{self.course_details.get('Course_Code', '')} "
+                f"{self.course_details.get('Section', '')}"
+            ).strip()
+            self.gen_label.setText(f"Ready with: {label}" if label else "")
         else:
-            self.log_msg(f"Errors loading file: {self.engine.errors}", "ERROR")
-            self._set_status("Error loading setup. See log for details.")
-            ToastNotification(self.window(), "Error loading setup. See log for details.", type="error")
+            self.gen_label.setText("")
 
 
-    def pick_filled(self):
-        specific_filename = f"{self._course_default_prefix}_Marks_Template.xlsx"
-        filter_str = f"Specific File (*{specific_filename})"
-        path, _ = QFileDialog.getOpenFileName(self, "Select Filled Marks Excel", self.last_dir, filter_str)
 
-        if path:
-            self.filled_path = path
-            self.last_dir = os.path.dirname(path)
-            self.log_msg(f"Uploaded filled marks file: {path}", "SYSTEM")
-            self._update_labels()
-            self._set_status("Marks loaded")
-            self._refresh_actions()
-    
-    def generate_setup_template(self):
-        try:
-            tid = constants.ID_COURSE_SETUP
-            bp = blueprints.BLUEPRINT_REGISTRY.get(tid)
-            if not bp:
-                raise SystemError(f"Blueprint {tid} not found in registry.")
-            # 1. Get pre-filled data
-            data = UniversalDataProvider.get_data_for_template("COURSE_SETUP_V1")
-            # 2. Ask for Save Location
-            path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Create Course Details Template",
-                os.path.join(self.last_dir, "Course_Setup_Input_Template.xlsx"),
-                "Excel (*.xlsx)"
-            )
-            if not path: return
-
-            # 3. UI Update
-            self.last_dir = os.path.dirname(path)
-            self._set_status("Generating Template...")
-            QApplication.processEvents()
-
-            # 4. Render
-            self.renderer.render(bp, path, data, fingerprint_context={"type_id": tid})
-
-            # 5. Success
-            self.log_msg(f"Setup template created: {path}", "SYSTEM")
-            self._set_status("Template generated successfully")
-            ToastNotification(self.window(), "Template generated successfully!", type="success")
-
-        except Exception as e:
-            self.log_msg(f"Setup Generation Error: {str(e)}", "ERROR")
-            self._set_status("Error occurred.")
-            ToastNotification(self.window(), "Generation Failed", type="error")
-
-    def generate_marks_template(self):
-        if not self.setup_path:
-            self.log_msg("Upload course details file first.", "ERROR")
-            self._set_status("Error")
-            return
-
-        try:
-            # 1️⃣ DATA PREPARATION (Do this BEFORE asking where to save)
-            self._set_status("Processing Data...")
-            QApplication.processEvents()
-
-
-        except Exception as e:
-            self.log_msg(f"Marks Template Generation Error: {str(e)}", "ERROR")
-            self._set_status("Error. See the log for details.")
-            ToastNotification(self.window(), "Error. See the log for details.", type="error")
-    
-    def compute_results(self):
-        if not self.setup_path or not self.filled_path:
-            self.log_msg("Upload required files first.", "ERROR")
-            return
-
-        default_out = os.path.join(
-            self.last_dir,
-            f"{self._course_default_prefix}_CO_Results.xlsx"
-        )
-
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Results", default_out, "Excel (*.xlsx)"
-        )
-
-        if not path:
-            return
-
-        if not self.is_file_writable(path):
-            self._set_status("File is Open!")
-            self.log_msg(
-                f"Cannot save to {os.path.basename(path)}. Close it in Excel first.",
-                "WARNING"
-            )
-            return
-
-        print(f"to do: compute results and save to {path}")
-
-        """

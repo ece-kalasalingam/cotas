@@ -1,129 +1,114 @@
-# scripts/logic_library.py
-from typing import Any, Dict, List
+﻿from typing import Any, Dict, List
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    raw = raw.replace(",", "")
+    if raw.endswith("%"):
+        raw = raw[:-1].strip()
+
+    try:
+        return float(raw)
+    except Exception:
+        return None
+
+
+def _normalize_direct_flag(value: Any) -> str:
+    token = "" if value is None else str(value).strip().lower()
+    if not token:
+        return ""
+
+    yes_tokens = {"yes", "y", "true", "1", "direct", "d"}
+    no_tokens = {"no", "n", "false", "0", "indirect", "i"}
+
+    if token in yes_tokens:
+        return "YES"
+    if token in no_tokens:
+        return "NO"
+    return ""
+
 
 def check_conditional_weight_sum(engine: Any, p: Dict) -> List[str]:
-    """
-    Checks if the sum of 'Weight (%)' matches a target based on the 'Direct' column.
-    p = {
-        'sheet_key': 'Sheet1',
-        'weight_col_key': 'Weight (%)',
-        'direct_col_key': 'Direct',
-        'condition_val': 'YES',
-        'target': 100
-    }
-    """
-    # 1. Resolve Sheet and Column Names from Blueprint mapping
-    sheet_name = engine.bp.key_map.get(p['sheet_key'])
+    sheet_name = engine.bp.key_map.get(p["sheet_key"])
     weight_col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{p['weight_col_key']}")
     direct_col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{p['direct_col_key']}")
 
-    # 2. Get Column Indices
     w_idx = engine.get_col_idx(sheet_name, weight_col_name)
     d_idx = engine.get_col_idx(sheet_name, direct_col_name)
 
     if w_idx == -1 or d_idx == -1:
         return [f"Required columns not found in {sheet_name}"]
 
-    # 3. Iterate through data_store (Row Iteration)
     rows = engine.data_store.get(sheet_name, [])
     actual_sum = 0.0
-    target_condition = str(p['condition_val']).strip().upper()
+    target_condition = _normalize_direct_flag(p["condition_val"]) or str(p["condition_val"]).strip().upper()
+    unknown_flags: set[str] = set()
 
     for row in rows:
-        try:
-            # Check the 'Direct' column value
-            if str(row[d_idx]).strip().upper() == target_condition:
-                # Add the 'Weight (%)' value
-                val = row[w_idx]
-                if val is not None:
-                    actual_sum += float(val)
-        except (ValueError, TypeError):
-            continue # Skip non-numeric weights
+        if d_idx >= len(row):
+            continue
 
-    # 4. Validate against target (with float tolerance)
-    if abs(actual_sum - p['target']) > 0.01:
-        return [
-            f"{sheet_name}: The total weight for Direct='{p['condition_val']}' "
-            f"is {round(actual_sum, 2)}, but expected {p['target']}."
-        ]
+        normalized_flag = _normalize_direct_flag(row[d_idx])
+        raw_flag = "" if row[d_idx] is None else str(row[d_idx]).strip()
+
+        if not normalized_flag:
+            if raw_flag:
+                unknown_flags.add(raw_flag)
+            continue
+
+        if normalized_flag != target_condition:
+            continue
+
+        if w_idx >= len(row):
+            continue
+
+        parsed = _to_float(row[w_idx])
+        if parsed is None:
+            continue
+
+        actual_sum += parsed
+
+    if abs(actual_sum - float(p["target"])) > 0.01:
+        msg = (
+            f"{sheet_name}: total weight for Direct='{p['condition_val']}' "
+            f"is {round(actual_sum, 2)}, expected {p['target']}"
+        )
+        if unknown_flags:
+            samples = ", ".join(sorted(list(unknown_flags))[:5])
+            msg += f". Unrecognized Direct values found: {samples}"
+        return [msg]
 
     return []
-def check_multiple_columns_empty(engine: Any, p: Dict) -> List[str]:
-    """Checks if multiple specified columns are empty."""
-    sheet_name = engine.bp.key_map.get(p['sheet_key'])
-    col_keys = p['col_keys']
-    col_indices = []
-    print(f"Checking multiple columns for emptiness: {col_keys} in sheet {sheet_name}")
 
-    # Resolve column indices
-    for col_key in col_keys:
+
+def check_multiple_columns_empty(engine: Any, p: Dict) -> List[str]:
+    sheet_name = engine.bp.key_map.get(p["sheet_key"])
+    col_indices = []
+
+    for col_key in p["col_keys"]:
         col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{col_key}")
         idx = engine.get_col_idx(sheet_name, col_name)
         if idx == -1:
-            return [f"Column {col_name} not found in {sheet_name}."]
+            return [f"Column {col_name} not found in {sheet_name}"]
         col_indices.append(idx)
 
-    # Check each row for emptiness in specified columns
     rows = engine.data_store.get(sheet_name, [])
-    for i, row in enumerate(rows):
-        if any((idx >= len(row) or row[idx] is None or str(row[idx]).strip() == '') for idx in col_indices):
-            return [f"{sheet_name}: Row {i+1} has at least one specified column empty."]
+    for i, row in enumerate(rows, start=1):
+        if any(idx >= len(row) or row[idx] is None or str(row[idx]).strip() == "" for idx in col_indices):
+            return [f"{sheet_name}: row {i} has empty required column(s)"]
 
-    return []   
-def check_column_sum(engine: Any, p: Dict) -> List[str]:
-    """Logic-only: Checks if a column total matches a target."""
-    sheet_name = engine.bp.key_map.get(p['sheet_key'])
-    col_name = engine.bp.key_map.get(f"{p['sheet_key']}.{p['col_key']}")
-    idx = engine.get_col_idx(sheet_name, col_name)
-
-    if idx == -1: return [f"Column {col_name} not found."]
-
-    # Use the lightweight engine's pre-calculated cache
-    actual_sum = engine._col_cache.get(sheet_name, {}).get(f"SUM_{idx}", 0.0)
-    
-    if abs(actual_sum - p['target']) > 0.01:
-        return [f"{sheet_name}: {p['col_key']} sum is {actual_sum}, expected {p['target']}"]
     return []
+
+
 def check_cross_workbook_sync(engine: Any, p: Dict) -> List[str]:
-    """Syncs current file against an external one (e.g., Student IDs)."""
-    ext_engine = p.get('external_engine')
-    if not ext_engine: 
-        return ["Sync Error: Master reference file missing."]
-
-    # 1. Resolve Current Workbook Details
-    c_sheet = engine.bp.key_map.get(p['curr_sheet'])
-    c_col = engine.bp.key_map.get(f"{p['curr_sheet']}.{p['curr_col']}")
-    if not c_sheet or not c_col:
-        return [f"Sync Error: Current workbook mapping missing for {p['curr_sheet']}.{p['curr_col']}"]
-    c_idx = engine.get_col_idx(c_sheet, c_col)
-
-    # 2. Resolve External Workbook Details
-    e_sheet = ext_engine.bp.key_map.get(p['ext_sheet'])
-    e_col = ext_engine.bp.key_map.get(f"{p['ext_sheet']}.{p['ext_col']}")
-    if not e_sheet or not e_col:
-        return [f"Sync Error: External workbook mapping missing for {p['ext_sheet']}.{p['ext_col']}"]
-    e_idx = ext_engine.get_col_idx(e_sheet, e_col)
-
-    # Safety Check: Ensure columns were found
-    if c_idx == -1 or e_idx == -1:
-        return [f"Sync Error: Column resolution failed for {c_col} or {e_col}."]
-
-    # 3. Extract IDs with cleaning (Handles None and leading/trailing spaces)
-    def get_clean_ids(target_engine, sheet, col_idx):
-        data = target_engine.data_store.get(sheet, [])
-        ids = set()
-        for row in data:
-            if col_idx < len(row) and row[col_idx] is not None:
-                val = str(row[col_idx]).strip()
-                if val: ids.add(val)
-        return ids
-
-    curr_ids = get_clean_ids(engine, c_sheet, c_idx)
-    ext_ids = get_clean_ids(ext_engine, e_sheet, e_idx)
-
-    # 4. Find Mismatches
-    diff = curr_ids - ext_ids
-    if diff:
-        return [f"ID Mismatch: {len(diff)} entries in current file (e.g., {list(diff)[:3]}) not found in Master."]
-    
+    _ = engine
+    _ = p
     return []

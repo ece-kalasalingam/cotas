@@ -1,65 +1,51 @@
-from typing import Dict, List, Any, Optional
-from scripts.blueprints import COURSE_SETUP_BP #
+import json
+from pathlib import Path
+
+from scripts.constants import ID_COURSE_SETUP
+
 
 class UniversalDataProvider:
-    """
-    Unit: Content Generation.
-    Generates pre-filled data maps internally. 
-    Supports multiple template IDs to ensure the correct data structure is provided.
-    """
-
     @staticmethod
-    def get_data_for_template(template_id: str) -> Dict[str, List[List[Any]]]:
-        """
-        Orchestrator to fetch pre-filled data based on the Template ID.
-        """
-        if template_id == "COURSE_SETUP_V1":
-            return CourseSetupDataProvider.get_prefilled_data()
-        # Future-proofing for other templates
-        # elif template_id == "ATTAINMENT_V1":
-        #     return AttainmentDataProvider.get_prefilled_data()
-        
-        return {}
-
-class CourseSetupDataProvider:
-    """
-    Sub-Unit: Course Setup Data.
-    Contains the specific sample values you provided, structured for the Engine.
-    """
-
-    @staticmethod
-    def get_prefilled_data() -> Dict[str, List[List[Any]]]:
-        """
-        Generates the internal pre-filled data map using your sample values.
-        """
+    def _default_setup_data() -> dict:
         return {
             "Course_Metadata": [
-                ["Course_Code", "ECE000"],
-                ["Course_Name", "SAMPLE COURSE"],
-                ["Section", "A"],
-                ["Semester", "III"],
-                ["Academic_Year", "2025-26"],
-                ["Faculty_Name", "ABCCE"],
-                ["Total_Outcomes", 5]
+                ["Course_Code", ""],
+                ["Section", ""],
+                ["Semester", ""],
+                ["Academic_Year", ""],
+                ["Total_COs", ""],
             ],
-            "Assessment_Config": [
-                ["S1", 17.5, "YES", "YES", "YES"],
-                ["S2", 17.5, "YES", "YES", "YES"],
-                ["MSP", 10, "YES", "YES", "YES"],
-                ["RLP", 5, "YES", "YES", "YES"],
-                ["ESP", 20, "NO", "NO", "YES"],
-                ["ESE", 30, "NO", "NO", "YES"],
-                ["CSURVEY", 100, "NO", "YES", "NO"]
-            ],
-            "Question_Map": [
-                ["S1", 1, 2, 1],
-                ["S1", 2, 2, 1],
-                ["S1", 3, 2, 2],
-                ["S2", 6, 16, 3],
-                ["ESP", 1, 100, "1,2,3,4,5"]
-            ],
-            "Students": [
-                ["R101", "STUD1"],
-                ["R1032", "STUD2"]
-            ]
+            "Assessment_Config": [],
+            "Question_Map": [],
+            "Students": [],
         }
+
+    @staticmethod
+    def _load_setup_sample_from_assets() -> dict:
+        project_root = Path(__file__).resolve().parent.parent
+        sample_path = project_root / "assets" / "sample_setup_data.json"
+        if not sample_path.exists():
+            return UniversalDataProvider._default_setup_data()
+
+        try:
+            payload = json.loads(sample_path.read_text(encoding="utf-8"))
+        except Exception:
+            return UniversalDataProvider._default_setup_data()
+
+        if not isinstance(payload, dict):
+            return UniversalDataProvider._default_setup_data()
+
+        defaults = UniversalDataProvider._default_setup_data()
+        cleaned: dict = {}
+        for key in defaults.keys():
+            value = payload.get(key, defaults[key])
+            cleaned[key] = value if isinstance(value, list) else defaults[key]
+
+        return cleaned
+
+    @staticmethod
+    def get_data_for_template(type_id: str) -> dict:
+        if type_id != ID_COURSE_SETUP:
+            return {}
+        return UniversalDataProvider._load_setup_sample_from_assets()
+

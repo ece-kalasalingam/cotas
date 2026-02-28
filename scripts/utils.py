@@ -1,103 +1,21 @@
-from typing import Any, Optional, Tuple, List, Dict
-from scripts.constants import DEFAULT_MAX_COL_WIDTH, DEFAULT_MIN_COL_WIDTH, WIDTH_PADDING
-import hashlib
-import xlsxwriter.utility as xl_util
-import sys
-import os
-from PySide6.QtWidgets import QLabel, QGraphicsOpacityEffect, QWidget
-from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QPoint, QStandardPaths
+﻿import hashlib
 import json
+import os
+import sys
+from pathlib import Path
+from typing import Any, Iterable, Optional
 
-# --- 1. THE CANONICALIZATION LAYER ---
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QLabel
 
-def normalize(s: Any) -> str:
-    """Lowercase and remove all internal/external whitespace."""
-    if s is None: return "empty"
-    return "".join(str(s).split()).lower()
 
-def canonicalize(value: Any) -> str:
-    """
-    Standardizes data for the Hash:
-    1. Normalizes (Lower + Strip).
-    2. If numeric, forces to 'f.4f' string to avoid 10 vs 10.0 confusion.
-    """
-    if value is None:
-        return "empty"
+_LAST_DIR_FILE = Path.home() / ".cotas_last_dir.json"
 
-    # Step 1: Normalize (Lower + Whitespace removal)
-    val_norm = normalize(value)
-    if val_norm == "" or val_norm == "none":
-        return "empty"
-
-    # Step 2: Numeric Lock (Value -> Float -> String)
-    try:
-        # normalize() already cleaned spaces/commas, so float() is safe
-        float_val = float(val_norm)
-        return f"{float_val:.4f}"
-    except (ValueError, TypeError):
-        # Step 3: Text Lock (Already normalized)
-        return val_norm
-
-def generate_system_fingerprint(
-    type_id: str,
-    metadata: Dict[str, Any],
-    sheet_names: List[str],
-    headers: Optional[List[str]] = None
-) -> str:
-    """
-    Unified SHA-256 fingerprint for identity and tamper detection.
-    Now correctly incorporates sheet names into the hash.
-    """
-    hasher = hashlib.sha256()
-    
-    # 1. Identity (Version Control)
-    hasher.update(canonicalize(type_id).encode('utf-8'))
-
-    # 2. Metadata (Sorted keys for determinism)
-    for key in sorted(metadata.keys()):
-        k_norm = normalize(key)
-        v_can = canonicalize(metadata[key])
-        hasher.update(f"{k_norm}:{v_can}".encode('utf-8'))
-
-    # 3. Structural Integrity (Sheet Names)
-    # We sort them so the order in the list doesn't break the hash
-    for name in sorted(sheet_names):
-        hasher.update(canonicalize(name).encode('utf-8'))
-
-    # 4. Content Lock (Headers, Students, etc.)
-    for item in headers or []:
-        hasher.update(canonicalize(item).encode('utf-8'))
-
-    return hasher.hexdigest()
-
-# --- 2. PATH & CALCULATION UTILS ---
 
 def resource_path(relative_path: str) -> str:
-    """Absolute path to bundled resource (Works for Dev and PyInstaller)."""
-    if getattr(sys, "frozen", False):
-        base_path = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-    else:
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    return os.path.normpath(os.path.join(base_path, relative_path))
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, relative_path)
 
-def calculate_visual_width(value: Any) -> int:
-    if value is None: return DEFAULT_MIN_COL_WIDTH
-    text_len = len(str(value)) + WIDTH_PADDING
-    return min(max(text_len, DEFAULT_MIN_COL_WIDTH), DEFAULT_MAX_COL_WIDTH)
-
-# --- 3. GUI NOTIFICATIONS ---
-
-def get_range_coordinates(range_str: str) -> Tuple[int, int, int, int]:
-    """
-    Optional helper: Converts 'A1:C10' to (0, 0, 9, 2).
-    Useful if you want to allow humans to write strings in the blueprint 
-    but need integers for Pylance/XlsxWriter.
-    """
-    # This splits 'A1:C10' into ['A1', 'C10']
-    start, end = range_str.split(':')
-    row_start, col_start = xl_util.xl_cell_to_rowcol(start)
-    row_end, col_end = xl_util.xl_cell_to_rowcol(end)
-    return row_start, col_start, row_end, col_end
 
 def get_run_dir() -> str:
     if getattr(sys, "frozen", False):
@@ -105,132 +23,80 @@ def get_run_dir() -> str:
     return os.path.dirname(os.path.abspath(sys.argv[0]))
 
 
-def get_config_path() -> str:
-    config_dir = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.AppDataLocation
-    )
-
-    app_dir = os.path.join(config_dir, "COTAS")
-    os.makedirs(app_dir, exist_ok=True)
-
-    return os.path.join(app_dir, "config.json")
-
-
-def load_last_dir() -> str | None:
-    config_path = get_config_path()
-
-    if not os.path.exists(config_path):
+def load_last_dir() -> Optional[str]:
+    try:
+        if not _LAST_DIR_FILE.exists():
+            return None
+        payload = json.loads(_LAST_DIR_FILE.read_text(encoding="utf-8"))
+        return payload.get("last_dir")
+    except Exception:
         return None
 
+
+def save_last_dir(path: str) -> None:
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        directory = data.get("last_dir")
-        if directory and os.path.isdir(directory):
-            return directory
-
-    except Exception as e:
-        raise SystemError(f"Failed to load config file: {e}")
-
-    return None
+        _LAST_DIR_FILE.write_text(json.dumps({"last_dir": path}), encoding="utf-8")
+    except Exception:
+        pass
 
 
-def save_last_dir(directory: str) -> None:
-    if not directory:
-        return
+def normalize(value: Any) -> str:
+    return "" if value is None else str(value).strip().lower()
 
-    config_path = get_config_path()
-    data = {}
 
+def safe_int(value: Any, default: int = 0) -> int:
     try:
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
+        return int(float(value))
+    except Exception:
+        return default
 
-        data["last_dir"] = directory
 
-        tmp_path = config_path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+def calculate_visual_width(value: Any) -> int:
+    if value is None:
+        return 0
+    return len(str(value))
 
-        os.replace(tmp_path, config_path)
 
-    except Exception as e:
-        raise SystemError(f"Failed to save config file: {e}")
-    
-class ToastNotification(QLabel):
-    def __init__(self, parent, message, type="info", duration=6000):
-        super().__init__(parent)
-        
-        colors = {
-            "success": "#2ecc71",
-            "warning": "#f39c12",
-            "error": "#e74c3c",
-            "info": "#3498db"
-        }
-        
-        bg_color = colors.get(type, "#333333")
-        self.setText(message)
-        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.setFixedSize(380, 55) 
-        
-        # Sharp corners (no border-radius)
-        self.setStyleSheet(f"""
-            QLabel {{
-                background-color: {bg_color};
-                color: white;
-                border: none;
-                font-size: 11pt;
-                font-family: 'Segoe UI', sans-serif;
-                padding-left: 15px;
-                padding-right: 15px;
-            }}
-        """)
+def get_range_coordinates(first_row: int, first_col: int, last_row: int, last_col: int) -> tuple[int, int, int, int]:
+    return first_row, first_col, last_row, last_col
 
-        self.opacity_effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.opacity_effect)
-        
-        self.update_position()
-        self.fade_in()
-        QTimer.singleShot(duration, self.fade_out)
 
-    def update_position(self):
-        p = self.parent()
-        if isinstance(p, QWidget):
-            p_rect = p.rect()
-            margin = 20
-            
-            # X = Total Width - Toast Width - Margin
-            x = p_rect.width() - self.width() - margin
-            
-            # Y = Total Height - Toast Height - Margin
-            y = p_rect.height() - self.height() - margin
-            
-            self.move(QPoint(x, y))
+def generate_system_fingerprint(*parts: Iterable[Any]) -> str:
+    h = hashlib.sha256()
+    for p in parts:
+        h.update(str(p).encode("utf-8"))
+    return h.hexdigest()
 
-    def fade_in(self):
-        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.anim.setDuration(300)
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
-        self.anim.start()
-        self.show()
 
-    def fade_out(self):
-        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.anim.setDuration(800)
-        self.anim.setStartValue(1)
-        self.anim.setEndValue(0)
-        self.anim.finished.connect(self.deleteLater)
-        self.anim.start()
+def generate_workbook_fingerprint(type_id: str, sheet_names: list[str]) -> str:
+    h = hashlib.sha256()
+    h.update(type_id.encode("utf-8"))
+    for name in sorted(sheet_names):
+        h.update(name.strip().lower().encode("utf-8"))
+    return h.hexdigest()
 
-## --- 4. ENGINE INTERFACE ---
-def safe_int(z):
-    try:
-        return (0, int(z))
-    except:
-        return (1, z)
+
+class ToastNotification:
+    """Lightweight in-app toast fallback (non-blocking label)."""
+
+    def __init__(self, parent, message: str, type: str = "info", timeout_ms: int = 2200):
+        if parent is None:
+            return
+
+        label = QLabel(message, parent)
+        color = {
+            "success": "#1b8f3a",
+            "error": "#b3261e",
+            "warning": "#8a6d1d",
+            "info": "#2f2f2f",
+        }.get(type, "#2f2f2f")
+
+        label.setStyleSheet(
+            f"background:{color}; color:white; padding:8px 12px; border-radius:6px;"
+        )
+        label.adjustSize()
+        x = max(12, parent.width() - label.width() - 16)
+        y = 12
+        label.move(x, y)
+        label.show()
+        QTimer.singleShot(timeout_ms, label.deleteLater)
