@@ -66,18 +66,15 @@ class EngineWorker(QThread):
                 self.finished.emit(success, msg)
 
             elif self.action_type == "LOAD_MARKS":
-                self.status_update.emit("Validating Marks File with Setup context...")
+                self.status_update.emit("Validating Marks File structure...")
                 external_engine = self.kwargs.get('external_engine')
-                if external_engine is not None:
+                if external_engine is not None and getattr(external_engine, "data_store", None):
                     success = self.engine.load_with_external_engine(
                         self.kwargs['path'],
                         external_engine
                     )
                 else:
-                    success = self.engine.load_with_external(
-                        self.kwargs['path'],
-                        self.kwargs['external_path']
-                    )
+                    success = self.engine.load_marks_standalone(self.kwargs['path'])
                 msg = "Ready" if success else "\n".join(self.engine.errors)
                 self.finished.emit(success, msg)
 
@@ -282,10 +279,6 @@ class COModule(QWidget):
             )
 
     def step_4_upload_marks(self):
-        if not self.setup_path:
-            self.log_msg("Please load Setup File first.", "ERROR")
-            return
-
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Filled Marks File",
@@ -293,13 +286,13 @@ class COModule(QWidget):
             "Excel (*.xlsx)"
         )
         if path:
-            self._run_worker(
-                "LOAD_MARKS",
-                path=path,
-                external_path=self.setup_path,
-                external_engine=self.setup_engine,
-                engine=self.marks_engine
-            )
+            kwargs = {
+                "path": path,
+                "engine": self.marks_engine
+            }
+            if self.setup_path:
+                kwargs["external_engine"] = self.setup_engine
+            self._run_worker("LOAD_MARKS", **kwargs)
 
     def step_5_compute_attainment(self):
         if not self.setup_path or not self.filled_path:
@@ -395,7 +388,7 @@ class COModule(QWidget):
         has_filled = bool(self.filled_path)
 
         self.gen_button.setEnabled(has_setup)
-        self.filled_button.setEnabled(has_setup)
+        self.filled_button.setEnabled(True)
         self.submit_button.setEnabled(has_setup and has_filled)
 
     def _set_status(self, text: str):

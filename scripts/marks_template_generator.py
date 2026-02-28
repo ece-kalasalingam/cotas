@@ -92,6 +92,19 @@ def _build_metadata_rows(course_details: Dict[str, Any], setup_store: Dict[str, 
     return pairs
 
 
+def _build_assessment_rows(setup_store: Dict[str, List[List[Any]]]) -> List[List[Any]]:
+    rows = setup_store.get("Assessment_Config", [])
+    out: List[List[Any]] = []
+    for row in rows:
+        if not row:
+            continue
+        padded = list(row[:5]) + [""] * max(0, 5 - len(row))
+        if all(v is None or str(v).strip() == "" for v in padded):
+            continue
+        out.append(padded[:5])
+    return out
+
+
 def generate_marks_template_from_setup(
     setup_store: Dict[str, List[List[Any]]],
     output_path: str,
@@ -173,6 +186,23 @@ def generate_marks_template_from_setup(
         _track_width(info_widths, 1, value)
 
     _set_col_widths(ws_info, info_widths)
+
+    # Assessment_Config (copied from setup for reference)
+    ws_assess = workbook.add_worksheet("Assessment_Config")
+    assess_widths: Dict[int, int] = {}
+    assess_header = ["Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"]
+
+    for c_idx, val in enumerate(assess_header):
+        ws_assess.write(0, c_idx, val, f_header)
+        _track_width(assess_widths, c_idx, val)
+
+    copied_assess_rows = _build_assessment_rows(setup_store)
+    for r_idx, row in enumerate(copied_assess_rows, start=1):
+        for c_idx, val in enumerate(row):
+            ws_assess.write(r_idx, c_idx, val, f_locked)
+            _track_width(assess_widths, c_idx, val)
+
+    _set_col_widths(ws_assess, assess_widths)
 
     # Direct component sheets
     for comp_name in direct_components:
