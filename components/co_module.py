@@ -1,4 +1,4 @@
-﻿# components/co_module.py
+# components/co_module.py
 
 import os
 from datetime import datetime
