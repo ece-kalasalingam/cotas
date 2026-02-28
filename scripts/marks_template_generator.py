@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import re
@@ -61,6 +61,9 @@ def _check_sheet_name(name: str) -> None:
     if any(ch in _INVALID_SHEET_CHARS for ch in name):
         raise ValidationError(f"Sheet name has invalid character(s): {name}")
 
+
+def _sheet_name_for_component(component_name: Any) -> str:
+    return "" if component_name is None else str(component_name).strip()
 
 def _set_col_widths(ws, col_widths: Dict[int, int]) -> None:
     for col, width in col_widths.items():
@@ -206,12 +209,13 @@ def generate_marks_template_from_setup(
 
     # Direct component sheets
     for comp_name in direct_components:
-        _check_sheet_name(comp_name)
+        sheet_name = _sheet_name_for_component(comp_name)
+        _check_sheet_name(sheet_name)
         questions = q_by_comp.get(comp_name, [])
         if not questions:
             raise ValidationError(f"No question map entries found for direct component: {comp_name}")
 
-        ws = workbook.add_worksheet(comp_name)
+        ws = workbook.add_worksheet(sheet_name)
         widths: Dict[int, int] = {}
 
         q_ids = [q[0] for q in questions]
@@ -261,7 +265,7 @@ def generate_marks_template_from_setup(
     # Indirect sheets
     co_cols = [f"CO{n}" for n in sorted(all_cos)]
     for tool_name in indirect_tools:
-        sheet_name = f"{tool_name}_INDIRECT"
+        sheet_name = _sheet_name_for_component(tool_name)
         _check_sheet_name(sheet_name)
 
         ws = workbook.add_worksheet(sheet_name)
@@ -302,3 +306,4 @@ def generate_marks_template_from_setup(
 
     workbook.close()
     return output_path
+

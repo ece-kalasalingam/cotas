@@ -82,9 +82,10 @@ class UniversalEngine:
             self.bp = type("DynamicBP", (), {"type_id": "MARKS_ENTRY_V1"})()
 
             for comp_name in expected["direct_components"]:
-                ws_name = actual_name_map.get(comp_name.lower())
+                expected_sheet = self._sheet_name_for_component(comp_name)
+                ws_name = actual_name_map.get(expected_sheet.lower())
                 if not ws_name:
-                    self.errors.append(f"Missing direct sheet: {comp_name}")
+                    self.errors.append(f"Missing direct sheet: {expected_sheet}")
                     return False
 
                 ws = wb[ws_name]
@@ -111,7 +112,7 @@ class UniversalEngine:
                     return False
 
             for tool_name in expected["indirect_tools"]:
-                expected_sheet = f"{tool_name}_Indirect"
+                expected_sheet = self._sheet_name_for_component(tool_name)
                 ws_name = actual_name_map.get(expected_sheet.lower())
                 if not ws_name:
                     self.errors.append(f"Missing indirect sheet: {expected_sheet}")
@@ -158,9 +159,10 @@ class UniversalEngine:
             baseline_students: List[str] | None = None
 
             for comp_name in direct_components:
-                ws_name = actual_name_map.get(comp_name.lower())
+                expected_sheet = self._sheet_name_for_component(comp_name)
+                ws_name = actual_name_map.get(expected_sheet.lower())
                 if not ws_name:
-                    self.errors.append(f"Missing direct sheet: {comp_name}")
+                    self.errors.append(f"Missing direct sheet: {expected_sheet}")
                     return False
 
                 ws = wb[ws_name]
@@ -193,7 +195,7 @@ class UniversalEngine:
             expected_co_header = [f"CO{i}" for i in sorted(co_numbers)]
 
             for tool_name in indirect_tools:
-                expected_sheet = f"{tool_name}_Indirect"
+                expected_sheet = self._sheet_name_for_component(tool_name)
                 ws_name = actual_name_map.get(expected_sheet.lower())
                 if not ws_name:
                     self.errors.append(f"Missing indirect sheet: {expected_sheet}")
@@ -334,7 +336,7 @@ class UniversalEngine:
         if not co_numbers:
             co_numbers = {1}
 
-        required = list(direct_components) + [f"{name}_Indirect" for name in indirect_tools]
+        required = [self._sheet_name_for_component(name) for name in (list(direct_components) + list(indirect_tools))]
 
         return {
             "required": required,
@@ -497,6 +499,9 @@ class UniversalEngine:
                 return False
         return True
 
+    def _sheet_name_for_component(self, component_name: Any) -> str:
+        return "" if component_name is None else str(component_name).strip()
+
     def _normalize_direct_flag(self, value: Any) -> str:
         token = "" if value is None else str(value).strip().lower()
         if token in {"yes", "y", "true", "1", "direct", "d"}:
@@ -525,3 +530,4 @@ class UniversalEngine:
         if nums:
             return ",".join(str(x) for x in nums)
         return "" if raw is None else str(raw).strip()
+
