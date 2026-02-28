@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16A085" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+
+  <!-- Frame -->
+  <circle cx="12" cy="12" r="9"></circle>
+
+  <!-- Dot -->
+  <line x1="12" y1="8" x2="12" y2="8"></line>
+
+  <!-- Stem -->
+  <line x1="12" y1="11" x2="12" y2="15.5"></line>
+</svg>
