@@ -21,9 +21,19 @@ class _DummyModule:
         self.step1_path: str | None = None
         self.step1_done = False
         self.status_changed = _SignalRecorder()
+        self._toasts: list[tuple[str, str]] = []
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         instructor_ui.remember_dialog_dir(selected_path, app_name=instructor_ui.APP_NAME)
+
+    def _show_validation_error_toast(self, message: str) -> None:
+        self._toasts.append(("validation", message))
+
+    def _show_system_error_toast(self, step: int) -> None:
+        self._toasts.append(("system", str(step)))
+
+    def _show_step_success_toast(self, step: int) -> None:
+        self._toasts.append(("success", str(step)))
 
 
 def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,9 +143,8 @@ def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> No
     assert dummy.step1_path is None
     assert calls["remembered"] == 0
     assert dummy.status_changed.messages == []
-    assert len(calls["toast"]) == 1
-    assert calls["toast"][0][1] == "app.unexpected_error"
-    assert calls["toast"][0][2]["title"] == "instructor.msg.step_required_title"
+    assert calls["toast"] == []
+    assert dummy._toasts == [("system", "1")]
 
 
 def test_download_course_template_validation_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,8 +172,8 @@ def test_download_course_template_validation_error_message(monkeypatch: pytest.M
 
     assert dummy.step1_done is False
     assert dummy.step1_path is None
-    assert len(calls["toast"]) == 1
-    assert calls["toast"][0][1] == "bad template"
+    assert calls["toast"] == []
+    assert dummy._toasts == [("validation", "bad template")]
 
 
 def test_download_course_template_dialog_receives_expected_defaults(
