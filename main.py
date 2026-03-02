@@ -15,12 +15,17 @@ from common.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     MAIN_SPLASH_MS,
+    QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
+    SINGLE_INSTANCE_LOCK_TIMEOUT_MS,
     SPLASH_BG_COLOR,
     SPLASH_HEIGHT,
     SPLASH_STATUS_COLOR,
     SPLASH_TEXT_COLOR,
     SPLASH_TITLE_FONT_SIZE,
     SPLASH_WIDTH,
+    STARTUP_TOAST_DURATION_MS,
+    STARTUP_TOAST_QUIT_DELAY_MS,
+    THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
 )
@@ -61,7 +66,7 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
     lock = QLockFile(lock_path)
 
     # Immediate check; if already locked, another instance is running.
-    if not lock.tryLock(0):
+    if not lock.tryLock(SINGLE_INSTANCE_LOCK_TIMEOUT_MS):
         return None
 
     return lock
@@ -94,7 +99,7 @@ def _schedule_theme_refresh() -> None:
         _setup_theme()
 
     # Debounce palette bursts to avoid recursive signal storms.
-    QTimer.singleShot(120, _run)
+    QTimer.singleShot(THEME_REFRESH_DEBOUNCE_MS, _run)
 
 
 def _install_excepthook() -> None:
@@ -115,13 +120,13 @@ def _install_excepthook() -> None:
 
 
 def _notify_and_wait(app: QApplication, *, title: str, message: str, level: str) -> int:
-    show_toast(None, message, title=title, level=level, duration_ms=2200)
-    QTimer.singleShot(2300, app.quit)
+    show_toast(None, message, title=title, level=level, duration_ms=STARTUP_TOAST_DURATION_MS)
+    QTimer.singleShot(STARTUP_TOAST_QUIT_DELAY_MS, app.quit)
     return app.exec()
 
 
 def main() -> int:
-    os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = "1"
+    os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = QT_ADAPTIVE_STRUCTURE_SENSITIVITY
     configure_app_logging(APP_NAME)
     if UI_LANGUAGE.lower() in {"auto", "system", "os"}:
         set_language_from_system()

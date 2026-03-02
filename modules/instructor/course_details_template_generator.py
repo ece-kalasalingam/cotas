@@ -15,13 +15,37 @@ from common.constants import (
     ALLOW_SELECT_LOCKED,
     ALLOW_SELECT_UNLOCKED,
     ALLOW_SORT,
+    ASSESSMENT_CONFIG_HEADERS,
+    ASSESSMENT_CONFIG_SHEET,
+    ASSESSMENT_VALIDATION_YES_NO_OPTIONS,
+    COURSE_METADATA_HEADERS,
+    COURSE_METADATA_SHEET,
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     HEADER_PATTERNFILL_COLOR,
     ID_COURSE_SETUP,
     LIKERT_MAX,
     LIKERT_MIN,
+    MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
+    MARKS_ENTRY_CO_PREFIX,
+    MARKS_ENTRY_QUESTION_PREFIX,
+    MARKS_ENTRY_ROW_HEADERS,
+    MARKS_ENTRY_TOTAL_LABEL,
+    MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
+    MARKS_ENTRY_VALIDATION_ERROR_TITLE,
+    MARKS_ENTRY_VALIDATION_FORMULA,
     MAX_EXCEL_SHEETNAME_LENGTH,
     MIN_MARK_VALUE,
+    QUESTION_MAP_HEADERS,
+    QUESTION_MAP_SHEET,
+    STUDENTS_HEADERS,
+    STUDENTS_SHEET,
     SYSTEM_HASH_SHEET,
+    SYSTEM_HASH_TEMPLATE_HASH_HEADER,
+    SYSTEM_HASH_TEMPLATE_HASH_KEY,
+    SYSTEM_HASH_TEMPLATE_ID_HEADER,
+    SYSTEM_HASH_TEMPLATE_ID_KEY,
+    WEIGHT_TOTAL_EXPECTED,
+    WEIGHT_TOTAL_ROUND_DIGITS,
     WORKBOOK_PASSWORD,
 )
 from common.exceptions import AppSystemError, ValidationError
@@ -32,6 +56,8 @@ from common.texts import t
 from common.utils import coerce_excel_number, normalize
 
 _logger = logging.getLogger(__name__)
+_YES_NO_TOKENS = {normalize(option) for option in ASSESSMENT_VALIDATION_YES_NO_OPTIONS}
+_YES_TOKEN = normalize(ASSESSMENT_VALIDATION_YES_NO_OPTIONS[0])
 
 
 def generate_course_details_template(
@@ -188,10 +214,12 @@ def generate_marks_template_from_course_details(
 
 
 def _extract_marks_template_context(workbook: Any) -> dict[str, Any]:
-    metadata_rows = _iter_data_rows(workbook["Course_Metadata"], 2)
-    assessment_rows = _iter_data_rows(workbook["Assessment_Config"], 5)
-    question_rows = _iter_data_rows(workbook["Question_Map"], 4)
-    student_rows = _iter_data_rows(workbook["Students"], 2)
+    metadata_rows = _iter_data_rows(workbook[COURSE_METADATA_SHEET], len(COURSE_METADATA_HEADERS))
+    assessment_rows = _iter_data_rows(
+        workbook[ASSESSMENT_CONFIG_SHEET], len(ASSESSMENT_CONFIG_HEADERS)
+    )
+    question_rows = _iter_data_rows(workbook[QUESTION_MAP_SHEET], len(QUESTION_MAP_HEADERS))
+    student_rows = _iter_data_rows(workbook[STUDENTS_SHEET], len(STUDENTS_HEADERS))
 
     total_outcomes = _extract_total_outcomes(metadata_rows)
     students = _extract_students(student_rows)
@@ -247,8 +275,18 @@ def _extract_components(assessment_rows: Sequence[Sequence[Any]]) -> list[dict[s
             {
                 "key": component_key,
                 "display_name": component_name,
-                "co_wise_breakup": _parse_yes_no(row[3], "Assessment_Config", 0, "CO_Wise_Marks_Breakup"),
-                "is_direct": _parse_yes_no(row[4], "Assessment_Config", 0, "Direct"),
+                "co_wise_breakup": _parse_yes_no(
+                    row[3],
+                    ASSESSMENT_CONFIG_SHEET,
+                    0,
+                    ASSESSMENT_CONFIG_HEADERS[3],
+                ),
+                "is_direct": _parse_yes_no(
+                    row[4],
+                    ASSESSMENT_CONFIG_SHEET,
+                    0,
+                    ASSESSMENT_CONFIG_HEADERS[4],
+                ),
             }
         )
     if not components:
@@ -286,23 +324,23 @@ def _write_marks_template_workbook(workbook: Any, context: dict[str, Any]) -> No
 
     _write_two_column_copy_sheet(
         workbook=workbook,
-        title="Course_Metadata",
-        header=("Field", "Value"),
+        title=COURSE_METADATA_SHEET,
+        header=COURSE_METADATA_HEADERS,
         rows=context["metadata_rows"],
         header_fmt=header_fmt,
         body_fmt=body_fmt,
     )
     _write_multi_column_copy_sheet(
         workbook=workbook,
-        title="Assessment_Config",
-        header=["Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"],
+        title=ASSESSMENT_CONFIG_SHEET,
+        header=ASSESSMENT_CONFIG_HEADERS,
         rows=context["assessment_rows"],
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
     )
 
-    used_sheet_names = {"course_metadata", "assessment_config"}
+    used_sheet_names = {normalize(COURSE_METADATA_SHEET), normalize(ASSESSMENT_CONFIG_SHEET)}
     for component in context["components"]:
         component_name = component["display_name"]
         sheet_name = _safe_sheet_name(component_name, used_sheet_names)
@@ -402,15 +440,15 @@ def _write_direct_co_wise_sheet(
     ws = workbook.add_worksheet(sheet_name)
     question_count = len(questions)
     total_col = 3 + question_count
-    ws.write_row(0, 0, ["Sl. No.", "Reg. No.", "Student Name"], header_fmt)
+    ws.write_row(0, 0, list(MARKS_ENTRY_ROW_HEADERS), header_fmt)
     for idx in range(question_count):
-        ws.write(0, 3 + idx, f"Q{idx + 1}", header_fmt)
-    ws.write(0, total_col, "Total", header_fmt)
+        ws.write(0, 3 + idx, f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}", header_fmt)
+    ws.write(0, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
 
     ws.write_row(1, 0, ["", "", ""], header_fmt)
     for idx, question in enumerate(questions):
         co_number = question["co_values"][0]
-        ws.write(1, 3 + idx, f"CO{co_number}", header_fmt)
+        ws.write(1, 3 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
     ws.write(1, total_col, "", header_fmt)
 
     ws.write_row(2, 0, ["", "", ""], header_fmt)
@@ -439,7 +477,7 @@ def _write_direct_co_wise_sheet(
     if students and question_count > 0:
         first_row = 3
         last_row = 2 + len(students)
-        validation_formula = '=OR(D4="A",D4="a",AND(ISNUMBER(D4),D4>=0,D4<=D$3))'
+        validation_formula = MARKS_ENTRY_VALIDATION_FORMULA
         ws.data_validation(
             first_row,
             3,
@@ -448,8 +486,8 @@ def _write_direct_co_wise_sheet(
             {
                 "validate": "custom",
                 "value": validation_formula,
-                "error_title": "Invalid marks",
-                "error_message": "Enter A/a or a numeric mark within allowed maximum.",
+                "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
+                "error_message": MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
                 "ignore_blank": True,
             },
         )
@@ -473,13 +511,13 @@ def _write_direct_non_co_wise_sheet(
     total_max = sum(float(question["max_marks"]) for question in questions)
     per_co = total_max / co_count if co_count else total_max
 
-    ws.write_row(0, 0, ["Sl. No.", "Reg. No.", "Student Name", "Total"], header_fmt)
+    ws.write_row(0, 0, list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
     for idx, co_number in enumerate(covered_cos):
-        ws.write(0, 4 + idx, f"Marks for CO{co_number}", header_fmt)
+        ws.write(0, 4 + idx, f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co_number}", header_fmt)
 
     ws.write_row(1, 0, ["", "", "", "COs"], header_fmt)
     for idx, co_number in enumerate(covered_cos):
-        ws.write(1, 4 + idx, f"CO{co_number}", header_fmt)
+        ws.write(1, 4 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
 
     ws.write_row(2, 0, ["", "", "", ""], header_fmt)
     ws.write_number(2, 3, total_max, num_fmt)
@@ -508,7 +546,7 @@ def _write_direct_non_co_wise_sheet(
     if students:
         first_row = 3
         last_row = 2 + len(students)
-        validation_formula = '=OR(D4="A",D4="a",AND(ISNUMBER(D4),D4>=0,D4<=D$3))'
+        validation_formula = MARKS_ENTRY_VALIDATION_FORMULA
         ws.data_validation(
             first_row,
             3,
@@ -517,8 +555,8 @@ def _write_direct_non_co_wise_sheet(
             {
                 "validate": "custom",
                 "value": validation_formula,
-                "error_title": "Invalid marks",
-                "error_message": "Enter A/a or a numeric mark within allowed maximum.",
+                "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
+                "error_message": MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
                 "ignore_blank": True,
             },
         )
@@ -536,7 +574,9 @@ def _write_indirect_sheet(
     body_fmt: Any,
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
-    headers = ["Sl. No.", "Reg. No.", "Student Name"] + [f"CO{i}" for i in range(1, total_outcomes + 1)]
+    headers = list(MARKS_ENTRY_ROW_HEADERS) + [
+        f"{MARKS_ENTRY_CO_PREFIX}{i}" for i in range(1, total_outcomes + 1)
+    ]
     ws.write_row(0, 0, headers, header_fmt)
 
     for row_offset, (reg_no, student_name) in enumerate(students, start=1):
@@ -726,7 +766,11 @@ def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
     worksheet = workbook.add_worksheet(SYSTEM_HASH_SHEET)
     template_hash = _compute_template_hash(template_id)
 
-    worksheet.write_row(0, 0, ["Template_ID", "Template_Hash"])
+    worksheet.write_row(
+        0,
+        0,
+        [SYSTEM_HASH_TEMPLATE_ID_HEADER, SYSTEM_HASH_TEMPLATE_HASH_HEADER],
+    )
     worksheet.write_row(1, 0, [template_id, template_hash])
     worksheet.hide()
 
@@ -770,9 +814,9 @@ def _extract_and_validate_template_id(workbook: Any) -> str:
         )
 
     hash_sheet = workbook[SYSTEM_HASH_SHEET]
-    if normalize(hash_sheet["A1"].value) != "template_id":
+    if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_KEY):
         raise ValidationError(t("instructor.validation.system_hash_missing_template_id_header"))
-    if normalize(hash_sheet["B1"].value) != "template_hash":
+    if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_KEY):
         raise ValidationError(t("instructor.validation.system_hash_missing_template_hash_header"))
 
     template_id = str(hash_sheet["A2"].value).strip() if hash_sheet["A2"].value is not None else ""
@@ -858,10 +902,10 @@ def _validate_template_specific_rules(workbook: Any, template_id: str) -> None:
 
 
 def _validate_course_setup_v1(workbook: Any) -> None:
-    metadata_sheet = workbook["Course_Metadata"]
-    assessment_sheet = workbook["Assessment_Config"]
-    question_map_sheet = workbook["Question_Map"]
-    students_sheet = workbook["Students"]
+    metadata_sheet = workbook[COURSE_METADATA_SHEET]
+    assessment_sheet = workbook[ASSESSMENT_CONFIG_SHEET]
+    question_map_sheet = workbook[QUESTION_MAP_SHEET]
+    students_sheet = workbook[STUDENTS_SHEET]
 
     total_outcomes = _validate_course_metadata(metadata_sheet)
     component_config = _validate_assessment_config(assessment_sheet)
@@ -870,11 +914,11 @@ def _validate_course_setup_v1(workbook: Any) -> None:
 
 
 def _validate_course_metadata(worksheet: Any) -> int:
-    expected_headers = ["Field", "Value"]
+    expected_headers = list(COURSE_METADATA_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
-    expected_field_rows = SAMPLE_SETUP_DATA.get("Course_Metadata", [])
+    expected_field_rows = SAMPLE_SETUP_DATA.get(COURSE_METADATA_SHEET, [])
     expected_field_types: dict[str, type] = {}
     for field_name, sample_value in expected_field_rows:
         key = normalize(field_name)
@@ -938,7 +982,7 @@ def _validate_course_metadata(worksheet: Any) -> int:
                     )
                 )
 
-    total_outcomes = actual_values.get(normalize("Total_Outcomes"))
+    total_outcomes = actual_values.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY))
     if isinstance(total_outcomes, bool) or not isinstance(total_outcomes, int) or total_outcomes <= 0:
         raise ValidationError(t("instructor.validation.course_metadata_total_outcomes_invalid"))
     return total_outcomes
@@ -946,7 +990,7 @@ def _validate_course_metadata(worksheet: Any) -> int:
 
 def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str) -> bool:
     token = normalize(value)
-    if token not in {"yes", "no"}:
+    if token not in _YES_NO_TOKENS:
         raise ValidationError(
             t(
                 "instructor.validation.yes_no_required",
@@ -955,11 +999,11 @@ def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str)
                 field=field_name,
             )
         )
-    return token == "yes"
+    return token == _YES_TOKEN
 
 
 def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
-    expected_headers = ["Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct"]
+    expected_headers = list(ASSESSMENT_CONFIG_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
@@ -999,21 +1043,21 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
 
         is_direct = _parse_yes_no(
             row[header_map["direct"]],
-            "Assessment_Config",
+            ASSESSMENT_CONFIG_SHEET,
             row_number,
-            "Direct",
+            ASSESSMENT_CONFIG_HEADERS[4],
         )
         co_wise_breakup = _parse_yes_no(
             row[header_map["co_wise_marks_breakup"]],
-            "Assessment_Config",
+            ASSESSMENT_CONFIG_SHEET,
             row_number,
-            "CO_Wise_Marks_Breakup",
+            ASSESSMENT_CONFIG_HEADERS[3],
         )
         _parse_yes_no(
             row[header_map["cia"]],
-            "Assessment_Config",
+            ASSESSMENT_CONFIG_SHEET,
             row_number,
-            "CIA",
+            ASSESSMENT_CONFIG_HEADERS[2],
         )
 
         if is_direct:
@@ -1032,11 +1076,11 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
         raise ValidationError(t("instructor.validation.assessment_direct_missing"))
     if indirect_count == 0:
         raise ValidationError(t("instructor.validation.assessment_indirect_missing"))
-    if round(direct_weight_total, 6) != 100.0:
+    if round(direct_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
         raise ValidationError(
             t("instructor.validation.assessment_direct_total_invalid", found=direct_weight_total)
         )
-    if round(indirect_weight_total, 6) != 100.0:
+    if round(indirect_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
         raise ValidationError(
             t("instructor.validation.assessment_indirect_total_invalid", found=indirect_weight_total)
         )
@@ -1075,7 +1119,7 @@ def _validate_question_map(
     component_config: dict[str, dict[str, Any]],
     total_outcomes: int,
 ) -> None:
-    expected_headers = ["Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO"]
+    expected_headers = list(QUESTION_MAP_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
@@ -1150,7 +1194,7 @@ def _validate_question_map(
 
 
 def _validate_students(worksheet: Any) -> None:
-    expected_headers = ["Reg_No", "Student_Name"]
+    expected_headers = list(STUDENTS_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
     rows = _iter_data_rows(worksheet, len(expected_headers))
 

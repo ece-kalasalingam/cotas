@@ -24,8 +24,14 @@ from common.constants import (
     APP_NAME,
     ID_COURSE_SETUP,
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
+    INSTRUCTOR_CARD_MARGIN,
+    INSTRUCTOR_CARD_SPACING,
     INSTRUCTOR_PANEL_STYLESHEET,
+    INSTRUCTOR_RAIL_MAX_WIDTH,
     INSTRUCTOR_RAIL_TITLE_FONT_SIZE,
+    INSTRUCTOR_STEP2_ACTION_MARGIN,
+    INSTRUCTOR_STEP2_ACTION_SPACING,
+    INSTRUCTOR_STEP_LIST_SPACING,
     UI_FONT_FAMILY,
 )
 from common.exceptions import AppSystemError, ValidationError
@@ -145,20 +151,25 @@ class InstructorModule(QWidget):
         self.step_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.step_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.step_list.setCursor(Qt.CursorShape.ArrowCursor)
-        self.step_list.setSpacing(2)
+        self.step_list.setSpacing(INSTRUCTOR_STEP_LIST_SPACING)
         for step in self.WORKFLOW_STEPS:
             item = QListWidgetItem(self._step_list_text(step))
             self.step_list.addItem(item)
             self._step_items.append(item)
         self.step_list.currentRowChanged.connect(self._on_step_row_changed)
         left_layout.addWidget(self.step_list, 1)
-        left.setMaximumWidth(290)
+        left.setMaximumWidth(INSTRUCTOR_RAIL_MAX_WIDTH)
 
         right = QFrame()
         right.setObjectName("activeCard")
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(20, 20, 20, 20)
-        right_layout.setSpacing(14)
+        right_layout.setContentsMargins(
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+        )
+        right_layout.setSpacing(INSTRUCTOR_CARD_SPACING)
 
         self.active_title = QLabel()
         self.active_title.setFont(
@@ -184,10 +195,27 @@ class InstructorModule(QWidget):
         self.primary_action.clicked.connect(self._run_current_step_action)
         right_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        self.secondary_action = QPushButton()
-        self.secondary_action.setObjectName("secondaryAction")
-        self.secondary_action.clicked.connect(self._run_secondary_step_action)
-        right_layout.addWidget(self.secondary_action, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.step2_action_row = QWidget()
+        step2_action_layout = QHBoxLayout(self.step2_action_row)
+        step2_action_layout.setContentsMargins(
+            INSTRUCTOR_STEP2_ACTION_MARGIN,
+            INSTRUCTOR_STEP2_ACTION_MARGIN,
+            INSTRUCTOR_STEP2_ACTION_MARGIN,
+            INSTRUCTOR_STEP2_ACTION_MARGIN,
+        )
+        step2_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
+
+        self.step2_upload_action = QPushButton()
+        self.step2_upload_action.setObjectName("normalAction")
+        self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
+        step2_action_layout.addWidget(self.step2_upload_action)
+
+        self.step2_prepare_action = QPushButton()
+        self.step2_prepare_action.setObjectName("primaryAction")
+        self.step2_prepare_action.clicked.connect(self._on_step2_prepare_clicked)
+        step2_action_layout.addWidget(self.step2_prepare_action)
+        step2_action_layout.addStretch(1)
+        right_layout.addWidget(self.step2_action_row)
         right_layout.addStretch(1)
 
         root.addWidget(left)
@@ -282,19 +310,21 @@ class InstructorModule(QWidget):
         self.active_desc.setText(t(self.STEP_DESC_KEYS[self.current_step]))
         self.active_file.setText(self._file_text_for_step(self.current_step))
         if self.current_step == 2:
-            self.primary_action.setVisible(True)
-            self.primary_action.setText(t("instructor.action.step2.upload"))
-            self.secondary_action.setVisible(True)
-            self.secondary_action.setText(t("instructor.action.step2.prepare"))
-            self.secondary_action.setEnabled(self.step2_upload_ready)
+            self.primary_action.setVisible(False)
+            self.step2_action_row.setVisible(True)
+            self.step2_upload_action.setText(t("instructor.action.step2.upload"))
+            self.step2_prepare_action.setText(t("instructor.action.step2.prepare"))
+            self.step2_prepare_action.setEnabled(self.step2_upload_ready)
+            self.step2_upload_action.setDefault(not self.step2_upload_ready)
+            self.step2_prepare_action.setDefault(self.step2_upload_ready)
         else:
             self.primary_action.setVisible(True)
             self.primary_action.setText(self._action_text_for_step(self.current_step))
-            self.secondary_action.setVisible(False)
+            self.step2_action_row.setVisible(False)
 
         can_run, reason = self._can_run_step(self.current_step)
         if self.current_step == 2:
-            self.primary_action.setEnabled(True)
+            self.step2_upload_action.setEnabled(True)
         else:
             self.primary_action.setEnabled(can_run)
         if not can_run:
@@ -318,17 +348,23 @@ class InstructorModule(QWidget):
         action()
         self._refresh_ui()
 
-    def _run_secondary_step_action(self) -> None:
-        if self.current_step == 2:
-            self._prepare_marks_template()
-            self._refresh_ui()
+    def _on_step2_upload_clicked(self) -> None:
+        self._upload_course_details()
+        self._refresh_ui()
+
+    def _on_step2_prepare_clicked(self) -> None:
+        self._prepare_marks_template()
+        self._refresh_ui()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
-        remember_dialog_dir_safe(
-            selected_path,
-            app_name=APP_NAME,
-            logger=_logger,
-        )
+        try:
+            remember_dialog_dir(selected_path, app_name=APP_NAME)
+        except OSError:
+            remember_dialog_dir_safe(
+                selected_path,
+                app_name=APP_NAME,
+                logger=_logger,
+            )
 
     def _show_step_success_toast(self, step: int) -> None:
         show_toast(
@@ -447,8 +483,6 @@ class InstructorModule(QWidget):
         if not save_path:
             return
 
-        previous_done = self.step2_done
-        self.step3_path = save_path
         try:
             generate_marks_template_from_course_details(self.step2_course_details_path, save_path)
         except ValidationError as exc:
@@ -469,10 +503,7 @@ class InstructorModule(QWidget):
         self.step3_outdated = self.step3_done
         self.step4_outdated = self.step4_done
         self._remember_dialog_dir_safe(save_path)
-        if previous_done or self.step3_outdated or self.step4_outdated:
-            self.status_changed.emit(t("instructor.status.step2_uploaded"))
-        else:
-            self.status_changed.emit(t("instructor.status.step2_uploaded"))
+        self.status_changed.emit(t("instructor.status.step2_uploaded"))
         self._show_step_success_toast(2)
 
     def _upload_filled_marks(self) -> None:

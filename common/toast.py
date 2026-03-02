@@ -6,6 +6,20 @@ from typing import Literal
 from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QFrame, QGraphicsDropShadowEffect, QLabel, QVBoxLayout, QWidget
+from common.constants import (
+    TOAST_CONTENT_MARGIN_BOTTOM,
+    TOAST_CONTENT_MARGIN_LEFT,
+    TOAST_CONTENT_MARGIN_RIGHT,
+    TOAST_CONTENT_MARGIN_TOP,
+    TOAST_CONTENT_SPACING,
+    TOAST_DEFAULT_DURATION_MS,
+    TOAST_ERROR_DURATION_MS,
+    TOAST_MARGIN,
+    TOAST_SHADOW_ALPHA,
+    TOAST_SHADOW_BLUR_RADIUS,
+    TOAST_SHADOW_OFFSET_X,
+    TOAST_SHADOW_OFFSET_Y,
+)
 
 ToastLevel = Literal["info", "success", "warning", "error"]
 
@@ -39,8 +53,13 @@ class _ToastWidget(QFrame):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(4)
+        layout.setContentsMargins(
+            TOAST_CONTENT_MARGIN_LEFT,
+            TOAST_CONTENT_MARGIN_TOP,
+            TOAST_CONTENT_MARGIN_RIGHT,
+            TOAST_CONTENT_MARGIN_BOTTOM,
+        )
+        layout.setSpacing(TOAST_CONTENT_SPACING)
         if title.strip():
             title_label = QLabel(title)
             title_label.setStyleSheet("font-weight: 600;")
@@ -51,9 +70,9 @@ class _ToastWidget(QFrame):
 
         if not _IS_WINDOWS:
             shadow = QGraphicsDropShadowEffect(self)
-            shadow.setBlurRadius(24)
-            shadow.setOffset(0, 6)
-            shadow.setColor(QColor(0, 0, 0, 60))
+            shadow.setBlurRadius(TOAST_SHADOW_BLUR_RADIUS)
+            shadow.setOffset(TOAST_SHADOW_OFFSET_X, TOAST_SHADOW_OFFSET_Y)
+            shadow.setColor(QColor(0, 0, 0, TOAST_SHADOW_ALPHA))
             self.setGraphicsEffect(shadow)
 
 
@@ -75,11 +94,15 @@ def show_toast(
     duration_ms: int | None = None,
 ) -> None:
     host = _resolve_parent(parent)
-    ttl = duration_ms if duration_ms is not None else (4500 if level == "error" else 3000)
+    ttl = (
+        duration_ms
+        if duration_ms is not None
+        else (TOAST_ERROR_DURATION_MS if level == "error" else TOAST_DEFAULT_DURATION_MS)
+    )
     toast = _ToastWidget(host, title=title, message=message, level=level)
     toast.adjustSize()
 
-    margin = 16
+    margin = TOAST_MARGIN
     if host is not None:
         origin = host.mapToGlobal(QPoint(0, 0))
         x = origin.x() + host.width() - toast.width() - margin

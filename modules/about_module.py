@@ -16,10 +16,16 @@ from PySide6.QtWidgets import (
 from common.constants import (
     ABOUT_APP_NAME_STYLE,
     ABOUT_BODY_STYLE,
+    ABOUT_BODY_GAP_LARGE,
+    ABOUT_BODY_GAP_SMALL,
     ABOUT_COPYRIGHT_STYLE,
+    ABOUT_HEADER_SPACING,
     ABOUT_META_STYLE,
+    ABOUT_LAYOUT_MARGIN,
+    ABOUT_LAYOUT_SPACING,
     ABOUT_SUBTITLE_STYLE,
     ABOUT_ICON_SIZE,
+    ABOUT_TITLE_SPACING,
     APP_NAME,
     APP_SUBTITLE,
     SYSTEM_VERSION,
@@ -33,14 +39,19 @@ class AboutModule(QWidget):
         super().__init__()
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(40, 40, 40, 40)
-        root.setSpacing(18)
+        root.setContentsMargins(
+            ABOUT_LAYOUT_MARGIN,
+            ABOUT_LAYOUT_MARGIN,
+            ABOUT_LAYOUT_MARGIN,
+            ABOUT_LAYOUT_MARGIN,
+        )
+        root.setSpacing(ABOUT_LAYOUT_SPACING)
 
         # -------------------------------------------------
         # Header Section (Icon + Title Block)
         # -------------------------------------------------
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(20)
+        header_layout.setSpacing(ABOUT_HEADER_SPACING)
 
         icon_label = QLabel()
         icon_label.setFixedSize(ABOUT_ICON_SIZE, ABOUT_ICON_SIZE)
@@ -52,7 +63,7 @@ class AboutModule(QWidget):
         header_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
         title_layout = QVBoxLayout()
-        title_layout.setSpacing(4)
+        title_layout.setSpacing(ABOUT_TITLE_SPACING)
 
         app_name = QLabel(APP_NAME)
         app_name.setStyleSheet(ABOUT_APP_NAME_STYLE)
@@ -92,9 +103,9 @@ class AboutModule(QWidget):
         copyright_label.setStyleSheet(ABOUT_COPYRIGHT_STYLE)
 
         root.addWidget(description)
-        root.addSpacing(8)
+        root.addSpacing(ABOUT_BODY_GAP_LARGE)
         root.addWidget(institution)
-        root.addSpacing(4)
+        root.addSpacing(ABOUT_BODY_GAP_SMALL)
         root.addWidget(copyright_label)
 
         # Push content upward

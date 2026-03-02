@@ -13,6 +13,7 @@ from common.constants import (
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_ACTIVITYBAR_STYLESHEET,
     MAIN_WINDOW_TITLE,
+    STATUS_FLASH_TIMEOUT_MS,
     WINDOW_HEIGHT_CAP,
     WINDOW_MIN_HEIGHT,
     WINDOW_MIN_WIDTH,
@@ -223,7 +224,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.modules[module_key])
         self.statusBar().showMessage(t("status.ready"))
     
-    def flash_status(self, message: str, timeout: int = 3000):
+    def flash_status(self, message: str, timeout: int = STATUS_FLASH_TIMEOUT_MS):
         self.statusBar().showMessage(message)
         QTimer.singleShot(timeout, lambda: self.statusBar().showMessage(t("status.ready")))
 
