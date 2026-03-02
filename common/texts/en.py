@@ -96,4 +96,23 @@ TEXTS = {
     "instructor.status.step4_uploaded": "Filled marks uploaded.",
     "instructor.status.step4_changed": "Filled marks changed. Regenerate final report.",
     "instructor.status.step5_selected": "Final CO report path selected.",
+    # Coordinator module
+    "coordinator.title": "Coordinator File Collector",
+    "coordinator.drop_hint": "Drag and drop Excel files here to collect them for coordinator workflow.",
+    "coordinator.empty": "No Excel files added yet.",
+    "coordinator.remove_selected": "Remove Selected",
+    "coordinator.clear_all": "Clear All",
+    "coordinator.status.added": "{added} file(s) added. Total: {total}.",
+    "coordinator.duplicate.title": "File Already Exists",
+    "coordinator.duplicate.body": "{count} duplicate file(s) were skipped because they already exist in the list.",
+    "coordinator.invalid_register.title": "Missing Register Header",
+    "coordinator.invalid_register.body": (
+        "File must contain Register Number.\n\n{files}"
+    ),
+    "coordinator.status.ignored": (
+        "{count} file(s) were ignored (unsupported type, missing, duplicate, "
+        "or missing register header)."
+    ),
+    "coordinator.status.removed": "{count} file(s) removed.",
+    "coordinator.status.cleared": "{count} file(s) cleared.",
 }
