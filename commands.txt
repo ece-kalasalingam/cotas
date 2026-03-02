@@ -1,0 +1,8 @@
+# Build (generate version metadata, then package EXE)
+conda run -n obe python scripts\generate_version_file.py && conda run -n obe pyinstaller --noconfirm --clean --windowed --onedir --name "FOCUS" --icon assets\kare-logo.ico --version-file version.txt --add-data "assets;assets" --hidden-import PySide6.QtPdf --hidden-import PySide6.QtPdfWidgets --hidden-import PySide6.QtSvg main.py
+
+# UI hardcoded-string guard
+conda run -n obe python scripts\check_ui_strings.py
+
+# Tests
+conda run -n obe python -m pytest -v > unit_test.log 2>&1
