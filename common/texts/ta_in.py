@@ -93,4 +93,25 @@ TEXTS = {
     "instructor.status.step4_uploaded": "நிரப்பப்பட்ட மதிப்பெண்கள் பதிவேற்றப்பட்டன.",
     "instructor.status.step4_changed": "நிரப்பப்பட்ட மதிப்பெண்கள் மாற்றப்பட்டன. இறுதி அறிக்கையை மீண்டும் உருவாக்கவும்.",
     "instructor.status.step5_selected": "இறுதி CO அறிக்கை பாதை தேர்வு செய்யப்பட்டது.",
+    # Coordinator module
+    "coordinator.title": "Coordinator File Collector",
+    "coordinator.drop_hint": "Drag and drop Excel files here to collect them for coordinator workflow.",
+    "coordinator.empty": "No Excel files added yet.",
+    "coordinator.remove_selected": "Remove Selected",
+    "coordinator.clear_all": "Clear All",
+    "coordinator.status.added": "{added} file(s) added. Total: {total}.",
+    "coordinator.duplicate.title": "File Already Exists",
+    "coordinator.duplicate.body": "{count} duplicate file(s) were skipped because they already exist in the list.",
+    "coordinator.invalid_register.title": "Missing Register Header",
+    "coordinator.invalid_register.body": (
+        "File must contain Register Number.\n\n{files}"
+    ),
+    "coordinator.status.ignored": (
+        "{count} file(s) were ignored (unsupported type, missing, duplicate, "
+        "or missing register header)."
+    ),
+    "coordinator.status.removed": "{count} file(s) removed.",
+    "coordinator.status.cleared": "{count} file(s) cleared.",
 }
+
+

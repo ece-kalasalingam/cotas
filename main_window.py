@@ -21,6 +21,7 @@ from common.constants import (
 )
 from common.texts import t
 from common.utils import resource_path
+from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 
 _logger = logging.getLogger(__name__)
@@ -33,11 +34,6 @@ class _PlaceholderModule(QWidget):
         label = QLabel(t("module.placeholder", title=title), self)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
-
-
-class CourseCoordinatorModule(_PlaceholderModule):
-    def __init__(self):
-        super().__init__(t("module.course_coordinator"))
 
 
 class POAnalysisModule(_PlaceholderModule):
@@ -173,7 +169,7 @@ class MainWindow(QMainWindow):
             lambda: self.load_module(InstructorModule)
         )
         self.action_co_course.triggered.connect(
-            lambda: self.load_module(CourseCoordinatorModule)
+            lambda: self.load_module(CoordinatorModule)
         )
         self.action_po.triggered.connect(
             lambda: self.load_module(POAnalysisModule)
