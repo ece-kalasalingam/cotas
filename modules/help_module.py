@@ -11,13 +11,13 @@ from PySide6.QtPdfWidgets import QPdfView
 from PySide6.QtWidgets import (
     QFileDialog,
     QMenu,
-    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
 
 from common.constants import APP_NAME
 from common.texts import t
+from common.toast import show_toast
 from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
@@ -56,10 +56,11 @@ class HelpModule(QWidget):
 
     def _load_pdf(self) -> None:
         if not self.pdf_path.exists():
-            QMessageBox.warning(
+            show_toast(
                 self,
-                t("help.doc_missing_title"),
                 t("help.doc_missing_body", path=self.pdf_path),
+                title=t("help.doc_missing_title"),
+                level="warning",
             )
             return
 
@@ -72,10 +73,11 @@ class HelpModule(QWidget):
 
         if status == QPdfDocument.Status.Error and not self._pdf_error_shown:
             self._pdf_error_shown = True
-            QMessageBox.warning(
+            show_toast(
                 self,
-                t("help.doc_error_title"),
                 t("help.doc_error_body"),
+                title=t("help.doc_error_title"),
+                level="warning",
             )
 
     # -----------------------------------------------------
@@ -101,10 +103,11 @@ class HelpModule(QWidget):
 
     def download_pdf(self):
         if not self.pdf_path.exists():
-            QMessageBox.warning(
+            show_toast(
                 self,
-                t("help.missing_file_title"),
                 t("help.missing_file_body"),
+                title=t("help.missing_file_title"),
+                level="warning",
             )
             return
 
@@ -124,10 +127,11 @@ class HelpModule(QWidget):
                     logger=self._logger,
                 )
             except OSError as exc:
-                QMessageBox.critical(
+                show_toast(
                     self,
-                    t("help.save_failed_title"),
                     t("help.save_failed_body", error=exc),
+                    title=t("help.save_failed_title"),
+                    level="error",
                 )
 
     # -----------------------------------------------------
@@ -136,17 +140,19 @@ class HelpModule(QWidget):
 
     def open_external(self):
         if not self.pdf_path.exists():
-            QMessageBox.warning(
+            show_toast(
                 self,
-                t("help.missing_file_title"),
                 t("help.missing_file_body"),
+                title=t("help.missing_file_title"),
+                level="warning",
             )
             return
 
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.pdf_path)))
         if not opened:
-            QMessageBox.warning(
+            show_toast(
                 self,
-                t("help.open_failed_title"),
                 t("help.open_failed_body"),
+                title=t("help.open_failed_title"),
+                level="warning",
             )

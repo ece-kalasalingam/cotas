@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
-from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
+from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 
 try:
@@ -25,6 +25,7 @@ from common.constants import (
     UI_LANGUAGE,
 )
 from common.texts import set_language, set_language_from_system, t
+from common.toast import show_toast
 from common.utils import configure_app_logging, resource_path
 from main_window import MainWindow
 
@@ -105,12 +106,18 @@ def _install_excepthook() -> None:
             exc_info=(exc_type, exc_value, exc_traceback),
         )
         try:
-            QMessageBox.critical(None, APP_NAME, t("app.unexpected_error"))
+            show_toast(None, t("app.unexpected_error"), title=APP_NAME, level="error")
         except Exception:
             pass
         previous_hook(exc_type, exc_value, exc_traceback)
 
     sys.excepthook = _hook
+
+
+def _notify_and_wait(app: QApplication, *, title: str, message: str, level: str) -> int:
+    show_toast(None, message, title=title, level=level, duration_ms=2200)
+    QTimer.singleShot(2300, app.quit)
+    return app.exec()
 
 
 def main() -> int:
@@ -130,8 +137,12 @@ def main() -> int:
 
     single_instance_lock = _acquire_exe_single_instance_lock()
     if getattr(sys, "frozen", False) and single_instance_lock is None:
-        QMessageBox.information(None, APP_NAME, t("app.already_running"))
-        return 0
+        return _notify_and_wait(
+            app,
+            title=APP_NAME,
+            message=t("app.already_running"),
+            level="info",
+        )
 
     splash = QSplashScreen(
         _build_splash_pixmap(),

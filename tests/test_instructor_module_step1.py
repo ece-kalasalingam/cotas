@@ -38,7 +38,7 @@ def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"generated": 0, "remembered": 0, "critical": 0}
+    calls = {"generated": 0, "remembered": 0, "toast": 0}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -52,13 +52,13 @@ def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     monkeypatch.setattr(
         instructor_ui,
-        "remember_dialog_dir",
-        lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
+        "show_toast",
+        lambda *_args, **_kwargs: calls.__setitem__("toast", calls["toast"] + 1),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda *_args, **_kwargs: calls.__setitem__("critical", calls["critical"] + 1),
+        instructor_ui,
+        "remember_dialog_dir",
+        lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
@@ -67,7 +67,7 @@ def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> Non
     assert dummy.step1_path is None
     assert calls["generated"] == 0
     assert calls["remembered"] == 0
-    assert calls["critical"] == 0
+    assert calls["toast"] == 0
     assert dummy.status_changed.messages == []
 
 
@@ -104,7 +104,7 @@ def test_download_course_template_success(monkeypatch: pytest.MonkeyPatch) -> No
 def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"critical": [], "remembered": 0}
+    calls = {"toast": [], "remembered": 0}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -122,9 +122,9 @@ def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> No
         lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda parent, title, message: calls["critical"].append((parent, title, message)),
+        instructor_ui,
+        "show_toast",
+        lambda parent, message, **kwargs: calls["toast"].append((parent, message, kwargs)),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
@@ -133,15 +133,15 @@ def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> No
     assert dummy.step1_path is None
     assert calls["remembered"] == 0
     assert dummy.status_changed.messages == []
-    assert len(calls["critical"]) == 1
-    assert calls["critical"][0][1] == "instructor.msg.step_required_title"
-    assert calls["critical"][0][2] == "app.unexpected_error"
+    assert len(calls["toast"]) == 1
+    assert calls["toast"][0][1] == "app.unexpected_error"
+    assert calls["toast"][0][2]["title"] == "instructor.msg.step_required_title"
 
 
 def test_download_course_template_validation_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"critical": []}
+    calls = {"toast": []}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -154,17 +154,17 @@ def test_download_course_template_validation_error_message(monkeypatch: pytest.M
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValidationError("bad template")),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda parent, title, message: calls["critical"].append((parent, title, message)),
+        instructor_ui,
+        "show_toast",
+        lambda parent, message, **kwargs: calls["toast"].append((parent, message, kwargs)),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
 
     assert dummy.step1_done is False
     assert dummy.step1_path is None
-    assert len(calls["critical"]) == 1
-    assert calls["critical"][0][2] == "bad template"
+    assert len(calls["toast"]) == 1
+    assert calls["toast"][0][1] == "bad template"
 
 
 def test_download_course_template_dialog_receives_expected_defaults(
