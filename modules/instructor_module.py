@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -30,13 +29,18 @@ from common.constants import (
     UI_FONT_FAMILY,
 )
 from common.exceptions import AppSystemError, ValidationError
+from common.toast import show_toast
 from common.texts import t
 from common.utils import (
     remember_dialog_dir,
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
-from modules.instructor import generate_course_details_template
+from modules.instructor import (
+    generate_course_details_template,
+    generate_marks_template_from_course_details,
+    validate_course_details_workbook,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -45,21 +49,20 @@ class InstructorModule(QWidget):
     """Simple wizard-like UI for CO score workflow."""
 
     status_changed = Signal(str)
+    WORKFLOW_STEPS = (1, 2, 3, 4)
 
     STEP_TITLE_KEYS = {
         1: "instructor.step1.title",
         2: "instructor.step2.title",
-        3: "instructor.step3.title",
-        4: "instructor.step4.title",
-        5: "instructor.step5.title",
+        3: "instructor.step4.title",
+        4: "instructor.step5.title",
     }
 
     STEP_DESC_KEYS = {
         1: "instructor.step1.desc",
         2: "instructor.step2.desc",
-        3: "instructor.step3.desc",
-        4: "instructor.step4.desc",
-        5: "instructor.step5.desc",
+        3: "instructor.step4.desc",
+        4: "instructor.step5.desc",
     }
 
     PATH_ATTRS = {
@@ -67,7 +70,6 @@ class InstructorModule(QWidget):
         2: "step2_path",
         3: "step3_path",
         4: "step4_path",
-        5: "step5_path",
     }
 
     DONE_ATTRS = {
@@ -75,29 +77,25 @@ class InstructorModule(QWidget):
         2: "step2_done",
         3: "step3_done",
         4: "step4_done",
-        5: "step5_done",
     }
 
     OUTDATED_ATTRS = {
         3: "step3_outdated",
         4: "step4_outdated",
-        5: "step5_outdated",
     }
 
     ACTION_DEFAULT_KEYS = {
         1: "instructor.action.step1.default",
         2: "instructor.action.step2.default",
-        3: "instructor.action.step3.default",
-        4: "instructor.action.step4.default",
-        5: "instructor.action.step5.default",
+        3: "instructor.action.step4.default",
+        4: "instructor.action.step5.default",
     }
 
     ACTION_REDO_KEYS = {
         1: "instructor.action.step1.redo",
         2: "instructor.action.step2.redo",
-        3: "instructor.action.step3.redo",
-        4: "instructor.action.step4.redo",
-        5: "instructor.action.step5.redo",
+        3: "instructor.action.step4.redo",
+        4: "instructor.action.step5.redo",
     }
 
     def __init__(self):
@@ -106,19 +104,18 @@ class InstructorModule(QWidget):
 
         self.step1_path: str | None = None
         self.step2_path: str | None = None
+        self.step2_course_details_path: str | None = None
         self.step3_path: str | None = None
         self.step4_path: str | None = None
-        self.step5_path: str | None = None
 
         self.step1_done = False
         self.step2_done = False
         self.step3_done = False
         self.step4_done = False
-        self.step5_done = False
+        self.step2_upload_ready = False
 
-        self.step3_outdated = False
-        self.step4_outdated = False
-        self.step5_outdated = False
+        self.step3_outdated = False  # Filled marks
+        self.step4_outdated = False  # Final report
 
         self._step_items: list[QListWidgetItem] = []
         self._build_ui()
@@ -149,7 +146,7 @@ class InstructorModule(QWidget):
         self.step_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.step_list.setCursor(Qt.CursorShape.ArrowCursor)
         self.step_list.setSpacing(2)
-        for step in range(1, 6):
+        for step in self.WORKFLOW_STEPS:
             item = QListWidgetItem(self._step_list_text(step))
             self.step_list.addItem(item)
             self._step_items.append(item)
@@ -186,6 +183,11 @@ class InstructorModule(QWidget):
         self.primary_action.setObjectName("primaryAction")
         self.primary_action.clicked.connect(self._run_current_step_action)
         right_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self.secondary_action = QPushButton()
+        self.secondary_action.setObjectName("secondaryAction")
+        self.secondary_action.clicked.connect(self._run_secondary_step_action)
+        right_layout.addWidget(self.secondary_action, alignment=Qt.AlignmentFlag.AlignLeft)
         right_layout.addStretch(1)
 
         root.addWidget(left)
@@ -216,6 +218,11 @@ class InstructorModule(QWidget):
         return f"{step}. {title}  {state}"
 
     def _file_text_for_step(self, step: int) -> str:
+        if step == 2:
+            if self.step2_path:
+                return Path(self.step2_path).name
+            if self.step2_course_details_path:
+                return Path(self.step2_course_details_path).name
         path = self._step_path(step)
         return Path(path).name if path else t("instructor.file.none")
 
@@ -233,8 +240,6 @@ class InstructorModule(QWidget):
             return False, t("instructor.require.step2")
         if step == 4 and (not self.step3_done or self.step3_outdated):
             return False, t("instructor.require.step3")
-        if step == 5 and (not self.step4_done or self.step4_outdated):
-            return False, t("instructor.require.step4")
         return True, ""
 
     def _on_step_selected(self, step: int) -> None:
@@ -254,11 +259,12 @@ class InstructorModule(QWidget):
                 (self.step2_done, False),
                 (self.step3_done, self.step3_outdated),
                 (self.step4_done, self.step4_outdated),
-                (self.step5_done, self.step5_outdated),
             )
             if done and not outdated
         )
-        self.progress_label.setText(t("instructor.progress", completed=completed, total=5))
+        self.progress_label.setText(
+            t("instructor.progress", completed=completed, total=len(self.WORKFLOW_STEPS))
+        )
 
         self.step_list.blockSignals(True)
         for index, item in enumerate(self._step_items, start=1):
@@ -275,13 +281,25 @@ class InstructorModule(QWidget):
         )
         self.active_desc.setText(t(self.STEP_DESC_KEYS[self.current_step]))
         self.active_file.setText(self._file_text_for_step(self.current_step))
-        self.primary_action.setText(self._action_text_for_step(self.current_step))
+        if self.current_step == 2:
+            self.primary_action.setVisible(True)
+            self.primary_action.setText(t("instructor.action.step2.upload"))
+            self.secondary_action.setVisible(True)
+            self.secondary_action.setText(t("instructor.action.step2.prepare"))
+            self.secondary_action.setEnabled(self.step2_upload_ready)
+        else:
+            self.primary_action.setVisible(True)
+            self.primary_action.setText(self._action_text_for_step(self.current_step))
+            self.secondary_action.setVisible(False)
 
         can_run, reason = self._can_run_step(self.current_step)
-        self.primary_action.setEnabled(can_run)
+        if self.current_step == 2:
+            self.primary_action.setEnabled(True)
+        else:
+            self.primary_action.setEnabled(can_run)
         if not can_run:
             self.active_note.setText(reason)
-        elif self.step3_outdated or self.step4_outdated or self.step5_outdated:
+        elif self.step3_outdated or self.step4_outdated:
             if self._step_outdated(self.current_step):
                 self.active_note.setText(t("instructor.note.outdated_current"))
             else:
@@ -293,19 +311,47 @@ class InstructorModule(QWidget):
         actions = {
             1: self._download_course_template,
             2: self._upload_course_details,
-            3: self._generate_marks_template,
-            4: self._upload_filled_marks,
-            5: self._generate_final_report,
+            3: self._upload_filled_marks,
+            4: self._generate_final_report,
         }
         action = actions[self.current_step]
         action()
         self._refresh_ui()
+
+    def _run_secondary_step_action(self) -> None:
+        if self.current_step == 2:
+            self._prepare_marks_template()
+            self._refresh_ui()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         remember_dialog_dir_safe(
             selected_path,
             app_name=APP_NAME,
             logger=_logger,
+        )
+
+    def _show_step_success_toast(self, step: int) -> None:
+        show_toast(
+            self,
+            t("instructor.msg.step_completed", step=step, title=t(self.STEP_TITLE_KEYS[step])),
+            title=t("instructor.msg.success_title"),
+            level="success",
+        )
+
+    def _show_validation_error_toast(self, message: str) -> None:
+        show_toast(
+            self,
+            message,
+            title=t("instructor.msg.validation_title"),
+            level="error",
+        )
+
+    def _show_system_error_toast(self, step: int) -> None:
+        show_toast(
+            self,
+            t("instructor.msg.failed_to_do", action=t(self.STEP_TITLE_KEYS[step])),
+            title=t("instructor.msg.error_title"),
+            level="error",
         )
 
     def _download_course_template(self) -> None:
@@ -324,33 +370,22 @@ class InstructorModule(QWidget):
             generate_course_details_template(save_path, template_id=template_id)
         except ValidationError as exc:
             _logger.warning("Template generation validation failed: %s", exc)
-            QMessageBox.critical(
-                self,
-                t("instructor.msg.step_required_title"),
-                str(exc),
-            )
+            self._show_validation_error_toast(str(exc))
             return
         except AppSystemError:
             _logger.exception("System failure while generating course details template.")
-            QMessageBox.critical(
-                self,
-                t("instructor.msg.step_required_title"),
-                t("app.unexpected_error"),
-            )
+            self._show_system_error_toast(1)
             return
         except Exception:
             _logger.exception("Unexpected error while generating course details template.")
-            QMessageBox.critical(
-                self,
-                t("instructor.msg.step_required_title"),
-                t("app.unexpected_error"),
-            )
+            self._show_system_error_toast(1)
             return
 
         self.step1_path = save_path
         self.step1_done = True
         self._remember_dialog_dir_safe(save_path)
         self.status_changed.emit(t("instructor.status.step1_selected"))
+        self._show_step_success_toast(1)
 
     def _upload_course_details(self) -> None:
         open_path, _ = QFileDialog.getOpenFileName(
@@ -362,24 +397,45 @@ class InstructorModule(QWidget):
         if not open_path:
             return
 
-        replacing = self.step2_done
-        self.step2_path = open_path
-        self.step2_done = True
+        try:
+            validate_course_details_workbook(open_path)
+        except ValidationError as exc:
+            _logger.warning("Step 2 workbook validation failed: %s", exc)
+            self._show_validation_error_toast(str(exc))
+            return
+        except AppSystemError:
+            _logger.exception("System failure while validating Step 2 workbook.")
+            self._show_system_error_toast(2)
+            return
+        except Exception:
+            _logger.exception("Unexpected error while validating Step 2 workbook.")
+            self._show_system_error_toast(2)
+            return
+
+        replacing = self.step2_done or self.step2_upload_ready
+        self.step2_course_details_path = open_path
+        self.step2_upload_ready = True
+        self.step2_done = False
+        self.step2_path = None
         self._remember_dialog_dir_safe(open_path)
 
         if replacing:
-            self.step3_outdated = self.step3_done
             self.step4_outdated = self.step4_done
-            self.step5_outdated = self.step5_done
-            if self.step3_outdated or self.step4_outdated or self.step5_outdated:
+            self.step3_outdated = self.step3_done
+            if self.step3_outdated or self.step4_outdated:
                 self.status_changed.emit(t("instructor.status.step2_changed"))
         else:
-            self.status_changed.emit(t("instructor.status.step2_uploaded"))
+            self.status_changed.emit(t("instructor.status.step2_validated"))
+        self._show_step_success_toast(2)
 
-    def _generate_marks_template(self) -> None:
-        can_run, reason = self._can_run_step(3)
-        if not can_run:
-            QMessageBox.information(self, t("instructor.msg.step_required_title"), reason)
+    def _prepare_marks_template(self) -> None:
+        if not self.step2_upload_ready or not self.step2_course_details_path:
+            show_toast(
+                self,
+                t("instructor.require.step2"),
+                title=t("instructor.msg.step_required_title"),
+                level="info",
+            )
             return
 
         save_path, _ = QFileDialog.getSaveFileName(
@@ -391,84 +447,101 @@ class InstructorModule(QWidget):
         if not save_path:
             return
 
+        previous_done = self.step2_done
         self.step3_path = save_path
-        self.step3_done = True
-        self.step3_outdated = False
-        if self.step4_done:
-            self.step4_outdated = True
-        if self.step5_done:
-            self.step5_outdated = True
-        self._remember_dialog_dir_safe(save_path)
-        self.status_changed.emit(t("instructor.status.step3_selected"))
-
-    def _upload_filled_marks(self) -> None:
-        can_run, reason = self._can_run_step(4)
-        if not can_run:
-            QMessageBox.information(self, t("instructor.msg.step_required_title"), reason)
+        try:
+            generate_marks_template_from_course_details(self.step2_course_details_path, save_path)
+        except ValidationError as exc:
+            _logger.warning("Step 2 marks template generation validation failed: %s", exc)
+            self._show_validation_error_toast(str(exc))
+            return
+        except AppSystemError:
+            _logger.exception("System failure while generating Step 2 marks template.")
+            self._show_system_error_toast(2)
+            return
+        except Exception:
+            _logger.exception("Unexpected error while generating Step 2 marks template.")
+            self._show_system_error_toast(2)
             return
 
+        self.step2_path = save_path
+        self.step2_done = True
+        self.step3_outdated = self.step3_done
+        self.step4_outdated = self.step4_done
+        self._remember_dialog_dir_safe(save_path)
+        if previous_done or self.step3_outdated or self.step4_outdated:
+            self.status_changed.emit(t("instructor.status.step2_uploaded"))
+        else:
+            self.status_changed.emit(t("instructor.status.step2_uploaded"))
+        self._show_step_success_toast(2)
+
+    def _upload_filled_marks(self) -> None:
         open_path, _ = QFileDialog.getOpenFileName(
             self,
-            t("instructor.dialog.step4.title"),
+            t("instructor.dialog.step3.title"),
             resolve_dialog_start_path(APP_NAME),
             t("instructor.dialog.filter.excel_open"),
         )
         if not open_path:
             return
 
-        replacing = self.step4_done
-        self.step4_path = open_path
-        self.step4_done = True
-        self.step4_outdated = False
+        replacing = self.step3_done
+        self.step3_path = open_path
+        self.step3_done = True
+        self.step3_outdated = False
         self._remember_dialog_dir_safe(open_path)
 
-        if replacing and self.step5_done:
-            self.step5_outdated = True
-            self.status_changed.emit(t("instructor.status.step4_changed"))
+        if replacing and self.step3_done:
+            self.step4_outdated = True
+            self.status_changed.emit(t("instructor.status.step3_changed"))
         else:
-            self.status_changed.emit(t("instructor.status.step4_uploaded"))
+            self.status_changed.emit(t("instructor.status.step3_uploaded"))
+        self._show_step_success_toast(3)
 
     def _generate_final_report(self) -> None:
-        can_run, reason = self._can_run_step(5)
+        can_run, reason = self._can_run_step(4)
         if not can_run:
-            QMessageBox.information(self, t("instructor.msg.step_required_title"), reason)
+            show_toast(
+                self,
+                reason,
+                title=t("instructor.msg.step_required_title"),
+                level="info",
+            )
             return
 
         save_path, _ = QFileDialog.getSaveFileName(
             self,
-            t("instructor.dialog.step5.title"),
-            resolve_dialog_start_path(APP_NAME, t("instructor.dialog.step5.default_name")),
+            t("instructor.dialog.step4.title"),
+            resolve_dialog_start_path(APP_NAME, t("instructor.dialog.step4.default_name")),
             t("instructor.dialog.filter.excel"),
         )
         if not save_path:
             return
 
-        if not self.step4_path or not Path(self.step4_path).exists():
-            _logger.warning("Step 5 failed: Step 4 file is missing. step4_path=%s", self.step4_path)
-            QMessageBox.critical(
+        if not self.step3_path or not Path(self.step3_path).exists():
+            _logger.warning("Step 4 failed: Step 3 file is missing. step3_path=%s", self.step3_path)
+            show_toast(
                 self,
-                t("instructor.msg.step_required_title"),
-                t("instructor.require.step4"),
+                t("instructor.require.step3"),
+                title=t("instructor.msg.step_required_title"),
+                level="error",
             )
             return
 
         try:
-            shutil.copyfile(self.step4_path, save_path)
-        except OSError as exc:
+            shutil.copyfile(self.step3_path, save_path)
+        except OSError:
             _logger.exception(
                 "Failed to generate final report by copying filled marks. src=%s dst=%s",
-                self.step4_path,
+                self.step3_path,
                 save_path,
             )
-            QMessageBox.critical(
-                self,
-                t("instructor.msg.step_required_title"),
-                t("app.unexpected_error"),
-            )
+            self._show_system_error_toast(4)
             return
 
-        self.step5_path = save_path
-        self.step5_done = True
-        self.step5_outdated = False
+        self.step4_path = save_path
+        self.step4_done = True
+        self.step4_outdated = False
         self._remember_dialog_dir_safe(save_path)
-        self.status_changed.emit(t("instructor.status.step5_selected"))
+        self.status_changed.emit(t("instructor.status.step4_selected"))
+        self._show_step_success_toast(4)
