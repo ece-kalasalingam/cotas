@@ -4,7 +4,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
@@ -19,6 +19,8 @@ from common.constants import APP_NAME
 from common.texts import t
 from common.toast import show_toast
 from common.utils import (
+    emit_user_status,
+    log_process_message,
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
     resource_path,
@@ -26,6 +28,8 @@ from common.utils import (
 
 
 class HelpModule(QWidget):
+    status_changed = Signal(str)
+
     def __init__(self):
         super().__init__()
 
@@ -56,15 +60,31 @@ class HelpModule(QWidget):
 
     def _load_pdf(self) -> None:
         if not self.pdf_path.exists():
+            self._logger.warning("Help PDF is missing at path: %s", self.pdf_path)
             show_toast(
                 self,
                 t("help.doc_missing_body", path=self.pdf_path),
                 title=t("help.doc_missing_title"),
                 level="warning",
             )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.doc_missing"),
+                logger=self._logger,
+            )
             return
 
         self.pdf_doc.load(str(self.pdf_path))
+        log_process_message(
+            "loading help PDF",
+            logger=self._logger,
+            success_message="loading help PDF completed successfully.",
+        )
+        emit_user_status(
+            self.status_changed,
+            t("help.status.doc_loaded"),
+            logger=self._logger,
+        )
 
     def _on_pdf_status_changed(self, status: QPdfDocument.Status) -> None:
         if status == QPdfDocument.Status.Ready:
@@ -73,11 +93,17 @@ class HelpModule(QWidget):
 
         if status == QPdfDocument.Status.Error and not self._pdf_error_shown:
             self._pdf_error_shown = True
+            self._logger.warning("Help PDF failed to load. status=%s", status)
             show_toast(
                 self,
                 t("help.doc_error_body"),
                 title=t("help.doc_error_title"),
                 level="warning",
+            )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.doc_error"),
+                logger=self._logger,
             )
 
     # -----------------------------------------------------
@@ -102,12 +128,19 @@ class HelpModule(QWidget):
     # -----------------------------------------------------
 
     def download_pdf(self):
+        process_name = "saving help PDF"
         if not self.pdf_path.exists():
+            self._logger.warning("Help PDF save requested but source file is missing.")
             show_toast(
                 self,
                 t("help.missing_file_body"),
                 title=t("help.missing_file_title"),
                 level="warning",
+            )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.file_missing"),
+                logger=self._logger,
             )
             return
 
@@ -127,32 +160,95 @@ class HelpModule(QWidget):
                     logger=self._logger,
                 )
             except OSError as exc:
+                log_process_message(
+                    process_name,
+                    logger=self._logger,
+                    error=exc,
+                )
                 show_toast(
                     self,
-                    t("help.save_failed_body", error=exc),
+                    t("help.save_failed_body", error=""),
                     title=t("help.save_failed_title"),
                     level="error",
                 )
+                emit_user_status(
+                    self.status_changed,
+                    t("help.status.save_failed"),
+                    logger=self._logger,
+                )
+                return
+
+            log_process_message(
+                process_name,
+                logger=self._logger,
+                success_message=f"{process_name} completed successfully.",
+            )
+            show_toast(
+                self,
+                t("help.save_success_body"),
+                title=t("help.save_success_title"),
+                level="success",
+            )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.save_success"),
+                logger=self._logger,
+            )
 
     # -----------------------------------------------------
     # Open in System Viewer
     # -----------------------------------------------------
 
     def open_external(self):
+        process_name = "opening help PDF in default viewer"
         if not self.pdf_path.exists():
+            self._logger.warning("Help PDF open requested but source file is missing.")
             show_toast(
                 self,
                 t("help.missing_file_body"),
                 title=t("help.missing_file_title"),
                 level="warning",
             )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.file_missing"),
+                logger=self._logger,
+            )
             return
 
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.pdf_path)))
         if not opened:
+            log_process_message(
+                process_name,
+                logger=self._logger,
+                error=RuntimeError("Desktop service returned openUrl=False"),
+            )
             show_toast(
                 self,
                 t("help.open_failed_body"),
                 title=t("help.open_failed_title"),
                 level="warning",
             )
+            emit_user_status(
+                self.status_changed,
+                t("help.status.open_failed"),
+                logger=self._logger,
+            )
+            return
+
+        log_process_message(
+            process_name,
+            logger=self._logger,
+            success_message=f"{process_name} completed successfully.",
+        )
+        show_toast(
+            self,
+            t("help.open_success_body"),
+            title=t("help.open_success_title"),
+            level="success",
+        )
+        emit_user_status(
+            self.status_changed,
+            t("help.status.open_success"),
+            logger=self._logger,
+        )

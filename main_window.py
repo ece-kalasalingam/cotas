@@ -10,9 +10,10 @@ from PySide6.QtCore import QSize, QTimer, Qt
 
 # Import modules
 from common.constants import (
+    APP_SUBTITLE_TEXT_KEY,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_ACTIVITYBAR_STYLESHEET,
-    MAIN_WINDOW_TITLE,
+    MAIN_WINDOW_TITLE_TEXT_KEY,
     STATUS_FLASH_TIMEOUT_MS,
     WINDOW_HEIGHT_CAP,
     WINDOW_MIN_HEIGHT,
@@ -54,7 +55,7 @@ class MainWindow(QMainWindow):
         # ----------------------------
         # Window Setup
         # ----------------------------
-        self.setWindowTitle(MAIN_WINDOW_TITLE)
+        self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY, subtitle=t(APP_SUBTITLE_TEXT_KEY)))
         screen = QApplication.primaryScreen().geometry()
         s_height = screen.height()
 
@@ -210,7 +211,7 @@ class MainWindow(QMainWindow):
                     title=t("module.load_failed_title"),
                     level="error",
                 )
-                self.statusBar().showMessage(t("status.ready"))
+                self.flash_status(t("module.load_failed_status", module=module_key))
                 return
             self.modules[module_key] = new_module
             self.stack.addWidget(new_module)
@@ -240,6 +241,7 @@ class MainWindow(QMainWindow):
                 title=t("module.load_failed_title"),
                 level="error",
             )
+            self.flash_status(t("module.load_failed_status", module=t("nav.help")))
             return
 
         self.load_module(HelpModule)
@@ -255,6 +257,7 @@ class MainWindow(QMainWindow):
                 title=t("module.load_failed_title"),
                 level="error",
             )
+            self.flash_status(t("module.load_failed_status", module=t("nav.about")))
             return
 
         self.load_module(AboutModule)

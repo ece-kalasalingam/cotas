@@ -3,13 +3,16 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from common.exceptions import ValidationError
 from common.utils import (
     app_settings_path,
     coerce_excel_number,
+    emit_user_status,
     from_portable_path,
     get_last_saved_dir,
+    log_process_message,
     remember_dialog_dir,
     normalize,
     resolve_dialog_start_path,
@@ -221,6 +224,85 @@ class TestSettingsHelpers(unittest.TestCase):
                     os.path.normcase(loaded or ""),
                     os.path.normcase(str(target)),
                 )
+
+
+class TestLogProcessMessage(unittest.TestCase):
+    def test_success_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            notify=notify,
+            success_message="Workbook validated.",
+        )
+
+        self.assertTrue(result)
+        logger.info.assert_called_once_with("Workbook validated.")
+        notify.assert_called_once_with("Workbook validated.", "success")
+
+    def test_validation_error_shows_detailed_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = ValidationError("Row 4: CO value is missing.")
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.warning.assert_called_once_with(
+            "%s failed due to data error: %s",
+            "validating workbook",
+            "Row 4: CO value is missing.",
+        )
+        notify.assert_called_once_with("Row 4: CO value is missing.", "error")
+
+    def test_system_error_shows_process_scoped_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = RuntimeError("disk write failed")
+
+        result = log_process_message(
+            "generating final report",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.exception.assert_called_once_with(
+            "%s failed due to a system/application error.",
+            "generating final report",
+            exc_info=error,
+        )
+        notify.assert_called_once_with(
+            "Error happened while generating final report.",
+            "error",
+        )
+
+
+class TestEmitUserStatus(unittest.TestCase):
+    def test_emits_when_signal_has_emit(self) -> None:
+        signal = Mock()
+        logger = Mock()
+
+        emit_user_status(signal, "Done", logger=logger)
+
+        signal.emit.assert_called_once_with("Done")
+        logger.exception.assert_not_called()
+
+    def test_ignores_missing_emit(self) -> None:
+        signal = object()
+        logger = Mock()
+
+        emit_user_status(signal, "Done", logger=logger)
+
+        logger.debug.assert_called_once()
 
 
 if __name__ == "__main__":

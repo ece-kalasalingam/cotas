@@ -6,7 +6,9 @@ import os
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Literal
+
+from common.exceptions import ValidationError
 
 
 def resource_path(relative_path: str) -> str:
@@ -96,9 +98,13 @@ def configure_app_logging(
     app_name: str,
     *,
     log_file_name: str = "focus.log",
-    level: int = logging.INFO,
+    level: int = logging.DEBUG,
 ) -> Path:
-    """Configure app logging to file and console (console only in dev mode)."""
+    """Configure app logging to file only.
+
+    User-facing messages should be shown in UI (status/toast/log panel), while
+    detailed diagnostics are persisted in the log file.
+    """
     if getattr(configure_app_logging, "_configured", False):
         return app_log_path(app_name=app_name, log_file_name=log_file_name)
 
@@ -117,12 +123,6 @@ def configure_app_logging(
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
-
-    if not getattr(sys, "frozen", False):
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(level)
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
 
     configure_app_logging._configured = True
     return log_path
@@ -272,3 +272,64 @@ def coerce_excel_number(value: Any) -> Any:
         return float(number)
 
     return value
+
+
+def log_process_message(
+    process_name: str,
+    *,
+    logger: logging.Logger,
+    error: Exception | None = None,
+    notify: Callable[[str, Literal["info", "success", "warning", "error"]], None] | None = None,
+    success_message: str | None = None,
+) -> bool:
+    """Log and publish a user-facing status update for a process.
+
+    Behavior:
+    - Success: logs info and emits success message.
+    - ValidationError (data/user error): logs warning and emits full detailed error text.
+    - Other errors (system/app): logs traceback and emits a generic process-scoped error.
+    """
+    if error is None:
+        message = success_message or f"{process_name} completed successfully."
+        logger.info(message)
+        if notify is not None:
+            notify(message, "success")
+        return True
+
+    if isinstance(error, ValidationError):
+        detail = str(error).strip() or "Validation failed due to invalid data."
+        logger.warning("%s failed due to data error: %s", process_name, detail)
+        if notify is not None:
+            notify(detail, "error")
+        return False
+
+    logger.exception("%s failed due to a system/application error.", process_name, exc_info=error)
+    message = f"Error happened while {process_name}."
+    if notify is not None:
+        notify(message, "error")
+    return False
+
+
+def emit_user_status(
+    status_signal: Any | None,
+    message: str,
+    *,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Emit a user-facing status message through a Qt-like signal when available."""
+    if not message or not message.strip():
+        return
+    if status_signal is None:
+        return
+
+    emit = getattr(status_signal, "emit", None)
+    if not callable(emit):
+        if logger is not None:
+            logger.debug("Status signal does not expose an emit() method.")
+        return
+
+    try:
+        emit(message)
+    except Exception:
+        if logger is not None:
+            logger.exception("Failed to emit user status message.")

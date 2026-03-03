@@ -21,7 +21,8 @@ If policy changes, edit this file only.
 
 APP_NAME = "FOCUS"
 APP_SUBTITLE = "Framework for Outcome Computation and Unification System"
-MAIN_WINDOW_TITLE = f"{APP_NAME} - {APP_SUBTITLE}"
+APP_SUBTITLE_TEXT_KEY = "app.subtitle"
+MAIN_WINDOW_TITLE_TEXT_KEY = "app.main_window_title"
 APP_ORGANIZATION = APP_NAME
 MAIN_SPLASH_MS = 1500
 SINGLE_INSTANCE_LOCK_TIMEOUT_MS = 0
@@ -129,16 +130,12 @@ QPushButton#primaryAction:enabled {
     color: palette(highlighted-text);
     border: none;
 }
-QPushButton#normalAction {
+QPushButton {
     padding: 6px 12px;
     min-width: 150px;
     min-height: 30px;
     border-radius: 6px;
     border: 1px solid palette(mid);
-    background-color: transparent;
-}
-QPushButton#normalAction:hover {
-    background-color: palette(alternate-base);
 }
 """
 
@@ -187,11 +184,15 @@ MIN_MARK_VALUE: float = 0.0
 MARKS_ENTRY_VALIDATION_FORMULA: str = '=OR(D4="A",D4="a",AND(ISNUMBER(D4),D4>=0,D4<=D$3))'
 MARKS_ENTRY_VALIDATION_ERROR_TITLE: str = "Invalid marks"
 MARKS_ENTRY_VALIDATION_ERROR_MESSAGE: str = "Enter A/a or a numeric mark within allowed maximum."
+MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE: str = (
+    "Enter A/a or a numeric Likert value within allowed range."
+)
 MARKS_ENTRY_ROW_HEADERS = ("Sl. No.", "Reg. No.", "Student Name")
 MARKS_ENTRY_TOTAL_LABEL = "Total"
 MARKS_ENTRY_CO_PREFIX = "CO"
 MARKS_ENTRY_QUESTION_PREFIX = "Q"
 MARKS_ENTRY_CO_MARKS_LABEL_PREFIX = "Marks for CO"
+MARKS_ENTRY_COS_LABEL = "COs"
 
 
 # ==========================================================
