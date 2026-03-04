@@ -33,7 +33,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version='version.txt',
-    icon=['assets/kare-logo.ico'],
+    icon=['assets\\kare-logo.ico'],
 )
 coll = COLLECT(
     exe,
