@@ -1,7 +1,9 @@
 import os
+import re
 import sys
 import logging
 from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 
@@ -80,6 +82,80 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
     return lock
 
 
+def _activation_server_name() -> str:
+    raw_name = f"{APP_ORGANIZATION}_{APP_NAME}_single_instance"
+    # Keep the server name OS-safe and deterministic.
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", raw_name)
+
+
+def _signal_existing_instance_to_activate() -> bool:
+    socket = QLocalSocket()
+    socket.connectToServer(_activation_server_name())
+    connected = socket.waitForConnected(500)
+    if connected:
+        socket.write(b"ACTIVATE")
+        socket.flush()
+        socket.waitForBytesWritten(300)
+        ack_ok = (
+            socket.waitForReadyRead(700)
+            and bytes(socket.readAll().data()).strip() == b"OK"
+        )
+        socket.disconnectFromServer()
+        socket.deleteLater()
+        return ack_ok
+    socket.deleteLater()
+    return False
+
+
+def _raise_and_activate_window(window: MainWindow) -> None:
+    if window.isMinimized():
+        window.showNormal()
+    else:
+        window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized)
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    QApplication.alert(window)
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            hwnd = int(window.winId())
+            user32 = ctypes.windll.user32
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        except Exception:
+            _logger.exception("Win32 foreground activation fallback failed.")
+
+
+def _install_activation_server(window: MainWindow) -> QLocalServer:
+    server = QLocalServer()
+    server_name = _activation_server_name()
+    QLocalServer.removeServer(server_name)
+    if not server.listen(server_name):
+        _logger.warning("Could not start activation server: %s", server.errorString())
+        return server
+
+    def _on_new_connection() -> None:
+        while server.hasPendingConnections():
+            socket = server.nextPendingConnection()
+            if socket is not None:
+                socket.waitForReadyRead(150)
+                _ = socket.readAll().data()
+                _raise_and_activate_window(window)
+                socket.write(b"OK")
+                socket.flush()
+                socket.waitForBytesWritten(150)
+                socket.disconnectFromServer()
+                socket.deleteLater()
+
+    server.newConnection.connect(_on_new_connection)
+    return server
+
+
 def _setup_system_theme() -> None:
     global _theme_apply_in_progress
     if qdarktheme is None:
@@ -153,6 +229,8 @@ def main() -> int:
 
     single_instance_lock = _acquire_exe_single_instance_lock()
     if getattr(sys, "frozen", False) and single_instance_lock is None:
+        if _signal_existing_instance_to_activate():
+            return 0
         return _notify_and_wait(
             app,
             title=APP_NAME,
@@ -195,8 +273,10 @@ def main() -> int:
             window.apply_language_change()
 
     window = MainWindow(on_language_applied=_on_language_applied)
+    activation_server = _install_activation_server(window)
 
     def _finish_startup() -> None:
+        _ = activation_server
         window.show()
         splash.finish(window)
         # Defer theme setup until after first paint for faster perceived startup.
