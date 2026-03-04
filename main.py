@@ -25,13 +25,21 @@ from common.constants import (
     SPLASH_WIDTH,
     STARTUP_TOAST_DURATION_MS,
     STARTUP_TOAST_QUIT_DELAY_MS,
+    THEME_SETUP_DEFER_MS,
     THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
 )
-from common.texts import set_language, set_language_from_system, t
-from common.toast import show_toast
-from common.utils import configure_app_logging, resource_path
+from common.contracts import validate_blueprint_registry_contracts
+from common.texts import get_language, set_language, set_language_from_system, t
+from common.toast import ToastLevel, show_toast
+from common.utils import (
+    UI_LANGUAGE_AUTO_ALIASES,
+    configure_app_logging,
+    get_ui_language_preference,
+    resource_path,
+    set_ui_language_preference,
+)
 from main_window import MainWindow
 
 
@@ -72,7 +80,7 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
     return lock
 
 
-def _setup_theme() -> None:
+def _setup_system_theme() -> None:
     global _theme_apply_in_progress
     if qdarktheme is None:
         return
@@ -87,7 +95,7 @@ def _setup_theme() -> None:
         _theme_apply_in_progress = False
 
 
-def _schedule_theme_refresh() -> None:
+def _schedule_system_theme_refresh() -> None:
     global _theme_refresh_pending
     if qdarktheme is None or _theme_apply_in_progress or _theme_refresh_pending:
         return
@@ -96,7 +104,7 @@ def _schedule_theme_refresh() -> None:
     def _run() -> None:
         global _theme_refresh_pending
         _theme_refresh_pending = False
-        _setup_theme()
+        _setup_system_theme()
 
     # Debounce palette bursts to avoid recursive signal storms.
     QTimer.singleShot(THEME_REFRESH_DEBOUNCE_MS, _run)
@@ -119,7 +127,7 @@ def _install_excepthook() -> None:
     sys.excepthook = _hook
 
 
-def _notify_and_wait(app: QApplication, *, title: str, message: str, level: str) -> int:
+def _notify_and_wait(app: QApplication, *, title: str, message: str, level: ToastLevel) -> int:
     show_toast(None, message, title=title, level=level, duration_ms=STARTUP_TOAST_DURATION_MS)
     QTimer.singleShot(STARTUP_TOAST_QUIT_DELAY_MS, app.quit)
     return app.exec()
@@ -127,17 +135,20 @@ def _notify_and_wait(app: QApplication, *, title: str, message: str, level: str)
 
 def main() -> int:
     os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = QT_ADAPTIVE_STRUCTURE_SENSITIVITY
+    validate_blueprint_registry_contracts()
     configure_app_logging(APP_NAME)
-    if UI_LANGUAGE.lower() in {"auto", "system", "os"}:
+    startup_language = get_ui_language_preference(APP_NAME) or UI_LANGUAGE
+    if startup_language.lower() in UI_LANGUAGE_AUTO_ALIASES:
         set_language_from_system()
     else:
-        set_language(UI_LANGUAGE)
+        set_language(startup_language)
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_ORGANIZATION)
     app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
     _install_excepthook()
 
     single_instance_lock = _acquire_exe_single_instance_lock()
@@ -170,19 +181,32 @@ def main() -> int:
     )
     app.processEvents()
 
-    window = MainWindow()
+    def _apply_language_selection(language_code: str) -> bool:
+        previous = get_language()
+        if language_code.lower() in UI_LANGUAGE_AUTO_ALIASES:
+            set_language_from_system()
+        else:
+            set_language(language_code)
+        return get_language() != previous
+
+    def _on_language_applied(language_code: str) -> None:
+        set_ui_language_preference(APP_NAME, ui_language=language_code)
+        if _apply_language_selection(language_code):
+            window.apply_language_change()
+
+    window = MainWindow(on_language_applied=_on_language_applied)
 
     def _finish_startup() -> None:
         window.show()
         splash.finish(window)
         # Defer theme setup until after first paint for faster perceived startup.
         app.setStyle("Fusion")
-        QTimer.singleShot(0, _setup_theme)
+        QTimer.singleShot(THEME_SETUP_DEFER_MS, _setup_system_theme)
 
     # Keep splash visible long enough to be noticeable on fast systems.
     QTimer.singleShot(MAIN_SPLASH_MS, _finish_startup)
     if qdarktheme is not None:
-        app.paletteChanged.connect(lambda: _schedule_theme_refresh())
+        app.paletteChanged.connect(lambda: _schedule_system_theme_refresh())
 
     return app.exec()
 

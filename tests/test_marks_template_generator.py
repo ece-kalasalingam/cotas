@@ -7,6 +7,8 @@ import pytest
 openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
+from common.exceptions import JobCancelledError
+from common.jobs import CancellationToken
 from modules.instructor.course_details_template_generator import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
@@ -34,6 +36,8 @@ def test_generate_marks_template_creates_expected_sheets(tmp_path: Path) -> None
         assert "S1" in workbook.sheetnames
         assert "ESP" in workbook.sheetnames
         assert "CSURVEY" in workbook.sheetnames
+        assert workbook["Course_Metadata"].print_title_rows == "$1:$1"
+        assert workbook["Assessment_Config"].print_title_rows == "$1:$1"
     finally:
         workbook.close()
 
@@ -46,18 +50,41 @@ def test_direct_co_wise_sheet_headers_formulas_and_validation(tmp_path: Path) ->
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["S1"]
-        assert sheet["A1"].value == "Sl. No."
-        assert sheet["D1"].value == "Q1"
-        assert sheet["L1"].value == "Total"
-        assert sheet["D2"].value == "CO1"
-        assert sheet["D3"].value == 2
-        assert sheet["A4"].value == 1
-        assert sheet["B4"].value == "R101"
-        assert sheet["C4"].value == "STUD1"
-        assert sheet["L4"].value == "=SUM(D4:K4)"
+        assert sheet["B1"].value == "Course_Code"
+        assert sheet["C1"].value == "ECE000"
+        assert sheet["B8"].value == "Component name"
+        assert sheet["C8"].value == "S1"
+        assert sheet["A10"].value == "#"
+        assert sheet["D10"].value == "Q1"
+        assert sheet["L10"].value == "Total"
+        assert sheet["C11"].value == "CO"
+        assert sheet["D11"].value == "CO1"
+        assert sheet["C12"].value == "Max."
+        assert sheet["D12"].value == 2
+        assert sheet["A13"].value == 1
+        assert sheet["B13"].value == "R101"
+        assert sheet["C13"].value == "STUD1"
+        assert sheet["L13"].value == "=SUM(D13:K13)"
+        assert sheet.print_title_rows == "$1:$12"
+        active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
+        assert "D13" in active_cells
+        assert sheet.protection.sheet is True
+        assert sheet["A13"].protection.locked is True
+        assert sheet["D13"].protection.locked is False
+        assert sheet["C13"].alignment.wrap_text is True
+        assert sheet.page_setup.orientation == "landscape"
+        assert sheet.page_setup.paperSize == 9
+        assert sheet.page_margins.left == pytest.approx(0.25)
+        assert sheet.page_margins.right == pytest.approx(0.25)
+        assert sheet.column_dimensions["A"].width is not None
+        assert sheet.column_dimensions["B"].width is not None
+        assert sheet.column_dimensions["C"].width is not None
+        assert sheet.column_dimensions["D"].width is not None
+        assert sheet.column_dimensions["B"].width >= len("Component name") + 2
         validations = list(sheet.data_validations.dataValidation)
         assert validations
-        assert any("D$3" in (validation.formula1 or "") for validation in validations)
+        assert any("D$12" in (validation.formula1 or "") for validation in validations)
+        assert any("between 0 and 2" in (validation.error or "") for validation in validations)
     finally:
         workbook.close()
 
@@ -70,17 +97,33 @@ def test_direct_non_co_wise_sheet_layout_and_formulas(tmp_path: Path) -> None:
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["ESP"]
-        assert sheet["D1"].value == "Total"
-        assert sheet["E1"].value == "Marks for CO1"
-        assert sheet["D2"].value == "COs"
-        assert sheet["E2"].value == "CO1"
-        assert sheet["D3"].value == 100
-        assert sheet["E3"].value == 20
-        assert sheet["A4"].value == 0
-        assert "/5" in str(sheet["E4"].value)
+        assert sheet["B1"].value == "Course_Code"
+        assert sheet["C1"].value == "ECE000"
+        assert sheet["B8"].value == "Component name"
+        assert sheet["C8"].value == "ESP"
+        assert sheet["D10"].value == "Total"
+        assert sheet["E10"].value == "Marks for CO1"
+        assert sheet["C11"].value == "CO"
+        assert sheet["D11"].value in (None, "")
+        assert sheet["E11"].value == "CO1"
+        assert sheet["C12"].value == "Max."
+        assert sheet["D12"].value == 100
+        assert sheet.print_title_rows == "$1:$12"
+        co_marks = [sheet.cell(12, col).value for col in range(5, sheet.max_column + 1)]
+        assert co_marks
+        assert sum(float(value) for value in co_marks) == pytest.approx(float(sheet["D12"].value), abs=0.01)
+        assert sheet["A13"].value == 0
+        active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
+        assert "D13" in active_cells
+        assert sheet.protection.sheet is True
+        assert sheet["D13"].protection.locked is False
+        assert sheet["C13"].alignment.wrap_text is True
+        assert sheet["E13"].protection.locked is True
+        assert "ROUND" in str(sheet["E13"].value)
         validations = list(sheet.data_validations.dataValidation)
         assert validations
-        assert any("D$3" in (validation.formula1 or "") for validation in validations)
+        assert any("D$12" in (validation.formula1 or "") for validation in validations)
+        assert any("between 0 and 100" in (validation.error or "") for validation in validations)
     finally:
         workbook.close()
 
@@ -93,13 +136,47 @@ def test_indirect_sheet_uses_total_outcomes_and_likert_validation(tmp_path: Path
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["CSURVEY"]
-        assert sheet["A1"].value == "Sl. No."
-        assert sheet["D1"].value == "CO1"
-        assert sheet["I1"].value == "CO6"
-        assert sheet["A2"].value == 1
+        assert sheet["B1"].value == "Course_Code"
+        assert sheet["C1"].value == "ECE000"
+        assert sheet["B8"].value == "Component name"
+        assert sheet["C8"].value == "CSURVEY"
+        assert sheet["A10"].value == "#"
+        assert sheet["D10"].value == "CO1"
+        assert sheet["I10"].value == "CO6"
+        assert sheet["A11"].value == 1
+        assert sheet.print_title_rows == "$1:$10"
+        active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
+        assert "D11" in active_cells
+        assert sheet.protection.sheet is True
+        assert sheet["C11"].protection.locked is True
+        assert sheet["D11"].protection.locked is False
+        assert sheet["C11"].alignment.wrap_text is True
         validations = list(sheet.data_validations.dataValidation)
         assert validations
         formulas = [validation.formula1 or "" for validation in validations]
         assert any(">=1" in formula and "<=5" in formula for formula in formulas)
     finally:
         workbook.close()
+
+
+def test_marks_template_initial_selection_on_setup_sheets(tmp_path: Path) -> None:
+    source = _build_course_details(tmp_path)
+    output = tmp_path / "marks_template.xlsx"
+    generate_marks_template_from_course_details(source, output)
+
+    workbook = openpyxl.load_workbook(output)
+    try:
+        assert workbook["Course_Metadata"].sheet_view.selection[0].activeCell == "A2"
+        assert workbook["Assessment_Config"].sheet_view.selection[0].activeCell == "A2"
+    finally:
+        workbook.close()
+
+
+def test_generate_marks_template_honors_pre_cancel(tmp_path: Path) -> None:
+    source = _build_course_details(tmp_path)
+    output = tmp_path / "marks_template_cancelled.xlsx"
+    token = CancellationToken()
+    token.cancel()
+
+    with pytest.raises(JobCancelledError):
+        generate_marks_template_from_course_details(source, output, cancel_token=token)

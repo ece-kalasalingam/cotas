@@ -6,6 +6,7 @@ system failures.
 """
 
 from __future__ import annotations
+from typing import Any
 
 
 class AppError(Exception):
@@ -13,7 +14,22 @@ class AppError(Exception):
 
 
 class ValidationError(AppError):
-    """Raised when user or business-rule validation fails."""
+    """Raised when user or business-rule validation fails.
+
+    `code` and `context` allow UI layers to map to localized messages while
+    keeping processing logic language-neutral.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        code: str = "VALIDATION_ERROR",
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message or code)
+        self.code = code
+        self.context = dict(context or {})
 
 
 class ConfigurationError(AppError):
@@ -22,3 +38,7 @@ class ConfigurationError(AppError):
 
 class AppSystemError(AppError):
     """Raised for unexpected internal system-level failures."""
+
+
+class JobCancelledError(AppError):
+    """Raised when a cancellable job is interrupted by user/system request."""

@@ -1,8 +1,9 @@
-import logging
+﻿import logging
+from collections.abc import Callable
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QScrollArea, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QLabel
+    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton
 )
 
 from PySide6.QtGui import QAction, QActionGroup, QIcon
@@ -10,10 +11,11 @@ from PySide6.QtCore import QSize, QTimer, Qt
 
 # Import modules
 from common.constants import (
-    APP_SUBTITLE_TEXT_KEY,
+    APP_NAME,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_ACTIVITYBAR_STYLESHEET,
     MAIN_WINDOW_TITLE_TEXT_KEY,
+    MAIN_WINDOW_CONTENT_MARGINS,
     STATUS_FLASH_TIMEOUT_MS,
     WINDOW_HEIGHT_CAP,
     WINDOW_MIN_HEIGHT,
@@ -21,41 +23,53 @@ from common.constants import (
     WINDOW_TARGET_HEIGHT_RATIO,
     WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
-from common.texts import t
+from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
-from common.utils import resource_path
+from common.utils import (
+    UI_LANGUAGE_AUTO,
+    get_ui_language_preference,
+    resource_path,
+    set_ui_language_preference,
+)
 from modules.instructor_module import InstructorModule
 
 _logger = logging.getLogger(__name__)
 
 
 class _PlaceholderModule(QWidget):
-    def __init__(self, title: str):
+    def __init__(self, title_key: str):
         super().__init__()
+        self._title_key = title_key
         layout = QVBoxLayout(self)
-        label = QLabel(t("module.placeholder", title=title), self)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        self._label = QLabel(self)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._label.setWordWrap(True)
+        layout.addWidget(self._label)
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        self._label.setText(t("module.placeholder", title=t(self._title_key)))
 
 
 class CourseCoordinatorModule(_PlaceholderModule):
     def __init__(self):
-        super().__init__(t("module.course_coordinator"))
+        super().__init__("module.course_coordinator")
 
 
 class POAnalysisModule(_PlaceholderModule):
     def __init__(self):
-        super().__init__(t("module.po_analysis"))
+        super().__init__("module.po_analysis")
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, on_language_applied: Callable[[str], None] | None = None):
         super().__init__()
+        self._on_language_applied = on_language_applied
 
         # ----------------------------
         # Window Setup
         # ----------------------------
-        self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY, subtitle=t(APP_SUBTITLE_TEXT_KEY)))
+        self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY))
         screen = QApplication.primaryScreen().geometry()
         s_height = screen.height()
 
@@ -73,6 +87,8 @@ class MainWindow(QMainWindow):
         # ----------------------------
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         container = QWidget()
         central_layout = QVBoxLayout(container)
         scroll.setWidget(container)
@@ -82,16 +98,16 @@ class MainWindow(QMainWindow):
         #self.setCentralWidget(central_container)
 
         #central_layout = QVBoxLayout(central_container)
-        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setContentsMargins(*MAIN_WINDOW_CONTENT_MARGINS)
 
         self.work_area = QWidget()
         self.work_layout = QHBoxLayout(self.work_area)
+        self.work_layout.setContentsMargins(*MAIN_WINDOW_CONTENT_MARGINS)
         self.stack = QStackedWidget()
         self.work_layout.addWidget(self.stack)
         
         # Dictionary to keep track of initialized modules
         self.modules = {}
-        #self.work_layout.setContentsMargins(30, 30, 30, 30)
 
         central_layout.addWidget(self.work_area)
 
@@ -102,6 +118,7 @@ class MainWindow(QMainWindow):
         # ----------------------------
         self.activitybar = QToolBar(t("toolbar.navigation"))
         self.activitybar.setMovable(True)
+        self.activitybar.setFloatable(False)
         self.activitybar.setIconSize(QSize(MAIN_ACTIVITY_ICON_SIZE, MAIN_ACTIVITY_ICON_SIZE))
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
         self.activitybar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
@@ -163,11 +180,21 @@ class MainWindow(QMainWindow):
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.action_co_section.setChecked(True)
 
+        self.language_menu = QMenu(self)
+        self.language_action_group = QActionGroup(self.language_menu)
+        self.language_action_group.setExclusive(True)
+        self.language_menu.triggered.connect(self._on_language_menu_action)
+
         # ----------------------------
         # Status Bar
         # ----------------------------
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(t("status.ready"))
+        self.language_status_button = QPushButton(self)
+        self.language_status_button.setFlat(True)
+        self.language_status_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.language_status_button.clicked.connect(self._show_language_menu_from_statusbar)
+        self.statusBar().addPermanentWidget(self.language_status_button)
 
         # ----------------------------
         # Connect Navigation
@@ -187,6 +214,8 @@ class MainWindow(QMainWindow):
         self.action_about.triggered.connect(
             self._load_about_module
         )
+
+        self._refresh_language_switcher()
 
         # Load default module
         self.load_module(InstructorModule)
@@ -220,7 +249,6 @@ class MainWindow(QMainWindow):
             signal = getattr(new_module, "status_changed", None)
             if signal:
                 signal.connect(lambda msg: self.flash_status(msg))
-
         # Switch the visible widget
         self.stack.setCurrentWidget(self.modules[module_key])
         self.statusBar().showMessage(t("status.ready"))
@@ -261,3 +289,75 @@ class MainWindow(QMainWindow):
             return
 
         self.load_module(AboutModule)
+
+    def _refresh_language_switcher(self) -> None:
+        preferred = get_ui_language_preference(APP_NAME)
+        active_lang = get_language()
+        language_labels = dict(get_available_languages())
+        active_label = language_labels.get(active_lang, active_lang.upper())
+
+        self.language_status_button.setText(
+            t("language.switcher.button", language=active_label)
+        )
+        self._rebuild_language_menu(preferred)
+
+    def _rebuild_language_menu(self, preferred: str) -> None:
+        self.language_menu.clear()
+        self.language_action_group = QActionGroup(self.language_menu)
+        self.language_action_group.setExclusive(True)
+
+        system_action = self.language_menu.addAction(t("settings.language.system"))
+        system_action.setData(UI_LANGUAGE_AUTO)
+        system_action.setCheckable(True)
+        system_action.setChecked(preferred == UI_LANGUAGE_AUTO)
+        self.language_action_group.addAction(system_action)
+
+        self.language_menu.addSeparator()
+        for code, label in get_available_languages():
+            action = self.language_menu.addAction(label)
+            action.setData(code)
+            action.setCheckable(True)
+            action.setChecked(preferred == code)
+            self.language_action_group.addAction(action)
+
+    def _show_language_menu_from_statusbar(self) -> None:
+        pos = self.language_status_button.mapToGlobal(self.language_status_button.rect().topLeft())
+        self.language_menu.popup(pos)
+
+    def _on_language_menu_action(self, action: QAction) -> None:
+        if not self.language_status_button.isEnabled():
+            return
+        language_code = action.data()
+        if not isinstance(language_code, str):
+            return
+
+        set_ui_language_preference(APP_NAME, ui_language=language_code)
+        self.flash_status(t("language.switcher.applied_status", language=action.text()))
+        if callable(self._on_language_applied):
+            self._on_language_applied(language_code)
+
+    def apply_language_change(self) -> None:
+        self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY))
+        self.activitybar.setWindowTitle(t("toolbar.navigation"))
+        self.action_co_section.setText(t("module.instructor"))
+        self.action_co_course.setText(t("module.coordinator_short"))
+        self.action_po.setText(t("module.po_analysis"))
+        self.action_help.setText(t("nav.help"))
+        self.action_about.setText(t("nav.about"))
+        self._refresh_language_switcher()
+
+        for module in self.modules.values():
+            retranslate = getattr(module, "retranslate_ui", None)
+            if callable(retranslate):
+                retranslate()
+                continue
+            refresh = getattr(module, "_refresh_ui", None)
+            if callable(refresh):
+                refresh()
+
+        self.statusBar().showMessage(t("status.ready"))
+
+    def set_language_switch_enabled(self, enabled: bool) -> None:
+        self.language_status_button.setEnabled(enabled)
+        self.language_menu.setEnabled(enabled)
+

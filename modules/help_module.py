@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from common.constants import APP_NAME
+from common.constants import APP_NAME, HELP_LAYOUT_CONTENT_MARGINS
 from common.texts import t
 from common.toast import show_toast
 from common.utils import (
@@ -38,7 +38,7 @@ class HelpModule(QWidget):
         self._logger = logging.getLogger(__name__)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*HELP_LAYOUT_CONTENT_MARGINS)
 
         self.pdf_view = QPdfView()
         self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
