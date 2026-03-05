@@ -19,8 +19,8 @@ from common.constants import (
 from common.exceptions import JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.texts import get_language, set_language
-from modules.instructor import course_details_template_generator as mod
-from modules.instructor.course_details_template_generator import (
+from modules.instructor import instructor_template_engine as mod
+from modules.instructor.instructor_template_engine import (
     generate_course_details_template,
     validate_course_details_workbook,
 )

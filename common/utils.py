@@ -356,7 +356,12 @@ def log_process_message(
         user_message = user_success_message or log_message
         logger.info(
             log_message,
-            extra={"user_message": user_message, "job_id": job_id, "step_id": step_id},
+            extra={
+                "user_message": user_message,
+                "job_id": job_id,
+                "step_id": step_id,
+                "error_code": "NONE",
+            },
         )
         if notify is not None:
             notify(user_message, "success")
@@ -376,7 +381,12 @@ def log_process_message(
         logger.warning(
             "%s failed due to data error.",
             process_name,
-            extra={"user_message": user_message, "job_id": job_id, "step_id": step_id},
+            extra={
+                "user_message": user_message,
+                "job_id": job_id,
+                "step_id": step_id,
+                "error_code": str(getattr(error, "code", "VALIDATION_ERROR")),
+            },
         )
         if notify is not None:
             notify(user_message, "error")
@@ -387,7 +397,12 @@ def log_process_message(
         logger.error(
             "%s failed due to a system/application error.",
             process_name,
-            extra={"user_message": user_message, "job_id": job_id, "step_id": step_id},
+            extra={
+                "user_message": user_message,
+                "job_id": job_id,
+                "step_id": step_id,
+                "error_code": "APP_SYSTEM_ERROR",
+            },
         )
         if notify is not None:
             notify(user_message, "error")
@@ -397,7 +412,12 @@ def log_process_message(
         "%s failed due to a system/application error.",
         process_name,
         exc_info=error,
-        extra={"user_message": user_message, "job_id": job_id, "step_id": step_id},
+        extra={
+            "user_message": user_message,
+            "job_id": job_id,
+            "step_id": step_id,
+            "error_code": "UNEXPECTED_ERROR",
+        },
     )
     if notify is not None:
         notify(user_message, "error")

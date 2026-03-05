@@ -3,7 +3,7 @@
 ## Scope
 - Module: `modules/instructor_module.py`
 - Service: `services/instructor_workflow_service.py`
-- Generator: `modules/instructor/course_details_template_generator.py`
+- Generator: `modules/instructor/instructor_template_engine.py`
 
 ## Operational SLO Baseline
 - UI responsiveness: workflow actions must run in background and must not block the Qt event loop.
@@ -37,6 +37,8 @@
 
 ## Audit and Telemetry
 - Service emits lifecycle logs for each workflow operation with `job_id` and `step_id`.
+- Structured log extras include stable `error_code` and workflow `event`.
+- In-memory metrics snapshot is attached in workflow completion/failure logs.
 - Events:
   - started
   - completed (with duration)
@@ -47,6 +49,10 @@
 ## Secret Handling and Rotation
 - Workbook hash secret is sourced from environment variable:
   - `FOCUS_WORKBOOK_PASSWORD`
+- Optional previous secrets for rotation:
+  - `FOCUS_WORKBOOK_PASSWORD_PREVIOUS` (comma-separated)
+- Signature format version:
+  - `FOCUS_WORKBOOK_SIGNATURE_VERSION`
 - Minimum policy:
   - length >= 12
   - rotate periodically (recommended: every 90 days)
@@ -62,4 +68,13 @@
   1. `conda run -n obe python -m pyflakes .`
   2. `conda run -n obe python -m pytest -q`
   3. `conda run -n obe python scripts/check_ui_strings.py`
-  4. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
+  4. `conda run -n obe python -m bandit -q -r common -r modules -r services -x tests`
+  5. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
+
+## Timeout and Crash Pipeline
+- Workflow step timeout env:
+  - `FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS` (default `120`)
+- Crash spool for packaged builds:
+  - Local JSON reports under app settings `crash_reports/`.
+- Optional remote pipeline endpoint marker:
+  - `FOCUS_CRASH_REPORT_ENDPOINT`

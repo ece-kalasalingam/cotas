@@ -33,6 +33,7 @@ from common.constants import (
     UI_LANGUAGE,
 )
 from common.contracts import validate_blueprint_registry_contracts
+from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
 from common.texts import get_language, set_language, set_language_from_system, t
 from common.toast import ToastLevel, show_toast
 from common.utils import (
@@ -194,6 +195,20 @@ def _install_excepthook() -> None:
             "Unhandled exception in application.",
             exc_info=(exc_type, exc_value, exc_traceback),
         )
+        report_path = capture_unhandled_exception(exc_type, exc_value, exc_traceback)
+        if report_path is not None:
+            _logger.error(
+                "Crash report captured.",
+                extra={
+                    "user_message": f"Crash report saved: {report_path}",
+                    "error_code": "CRASH_REPORTED",
+                },
+            )
+            if has_remote_crash_endpoint():
+                _logger.info(
+                    "Crash report endpoint configured; upload pipeline can process local crash spool.",
+                    extra={"error_code": "CRASH_PIPELINE_READY"},
+                )
         try:
             show_toast(None, t("app.unexpected_error"), title=APP_NAME, level="error")
         except Exception:

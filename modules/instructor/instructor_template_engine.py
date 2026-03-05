@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any, Sequence
@@ -20,7 +20,6 @@ from common.constants import (
     ASSESSMENT_VALIDATION_YES_NO_OPTIONS,
     COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     HEADER_PATTERNFILL_COLOR,
     ID_COURSE_SETUP,
     LIKERT_MAX,
@@ -42,8 +41,9 @@ from common.constants import (
     SYSTEM_HASH_TEMPLATE_HASH_KEY,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_KEY,
-    WEIGHT_TOTAL_EXPECTED,
-    WEIGHT_TOTAL_ROUND_DIGITS,
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
+    SYSTEM_LAYOUT_SHEET,
     WORKBOOK_PASSWORD,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
@@ -53,6 +53,8 @@ from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import ValidationRule, WorkbookBlueprint
 from common.texts import t
 from common.utils import coerce_excel_number, normalize
+from common.workbook_signing import sign_payload, verify_payload_signature
+from modules.instructor.template_versions import course_setup_v1
 
 _logger = logging.getLogger(__name__)
 _YES_NO_TOKENS = {normalize(option) for option in ASSESSMENT_VALIDATION_YES_NO_OPTIONS}
@@ -102,7 +104,7 @@ def generate_course_details_template(
                 workbook.close()
                 workbook_closed = True
             except Exception:
-                pass
+                _logger.debug("Suppressing workbook close error during cleanup.", exc_info=True)
         if temp_output.exists():
             try:
                 temp_output.unlink()
@@ -232,7 +234,7 @@ def generate_marks_template_from_course_details(
                 target.close()
                 target_closed = True
             except Exception:
-                pass
+                _logger.debug("Suppressing target close error during cleanup.", exc_info=True)
         if temp_output.exists():
             try:
                 temp_output.unlink()
@@ -242,13 +244,20 @@ def generate_marks_template_from_course_details(
     try:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        context = _extract_marks_template_context(workbook)
+        template_id = _extract_and_validate_template_id(workbook)
+        context = _extract_marks_template_context_by_template(workbook, template_id)
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        _write_marks_template_workbook(target, context, cancel_token=cancel_token)
+        layout_manifest = _write_marks_template_workbook_by_template(
+            target,
+            context,
+            template_id=template_id,
+            cancel_token=cancel_token,
+        )
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
         _copy_system_hash_sheet(workbook, target)
+        _add_system_layout_sheet(target, layout_manifest)
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
         target.close()
@@ -297,6 +306,26 @@ def _extract_marks_template_context(workbook: Any) -> dict[str, Any]:
         "components": components,
         "questions_by_component": questions_by_component,
     }
+
+
+def _extract_marks_template_context_by_template(workbook: Any, template_id: str) -> dict[str, Any]:
+    extractor = _template_context_extractors().get(template_id)
+    if extractor is None:
+        raise ValidationError(t("instructor.validation.validator_missing", template_id=template_id))
+    return extractor(workbook)
+
+
+def _write_marks_template_workbook_by_template(
+    workbook: Any,
+    context: dict[str, Any],
+    *,
+    template_id: str,
+    cancel_token: CancellationToken | None = None,
+) -> dict[str, Any]:
+    writer = _template_marks_writers().get(template_id)
+    if writer is None:
+        raise ValidationError(t("instructor.validation.validator_missing", template_id=template_id))
+    return writer(workbook, context, template_id=template_id, cancel_token=cancel_token)
 
 
 def _extract_total_outcomes(metadata_rows: Sequence[Sequence[Any]]) -> int:
@@ -384,9 +413,10 @@ def _write_marks_template_workbook(
     workbook: Any,
     context: dict[str, Any],
     *,
+    template_id: str = ID_COURSE_SETUP,
     cancel_token: CancellationToken | None = None,
-) -> None:
-    setup_blueprint = _get_blueprint(ID_COURSE_SETUP)
+) -> dict[str, Any]:
+    setup_blueprint = _get_blueprint(template_id)
     header_fmt = _build_header_format(workbook, setup_blueprint.style_registry.get("header", {}))
     body_fmt = workbook.add_format({"border": 1})
     wrapped_body_fmt = workbook.add_format({"border": 1, "text_wrap": True})
@@ -404,6 +434,7 @@ def _write_marks_template_workbook(
     )
     unlocked_body_fmt = workbook.add_format({"border": 1, "locked": False})
 
+    layout_sheets: list[dict[str, Any]] = []
     _write_two_column_copy_sheet(
         workbook=workbook,
         title=COURSE_METADATA_SHEET,
@@ -411,6 +442,7 @@ def _write_marks_template_workbook(
         rows=context["metadata_rows"],
         header_fmt=header_fmt,
         body_fmt=body_fmt,
+        sheet_specs=layout_sheets,
     )
     _write_multi_column_copy_sheet(
         workbook=workbook,
@@ -420,6 +452,7 @@ def _write_marks_template_workbook(
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
+        sheet_specs=layout_sheets,
     )
 
     used_sheet_names = {normalize(COURSE_METADATA_SHEET), normalize(ASSESSMENT_CONFIG_SHEET)}
@@ -447,6 +480,7 @@ def _write_marks_template_workbook(
                     num_fmt,
                     header_num_fmt,
                     unlocked_body_fmt,
+                    sheet_specs=layout_sheets,
                 )
             else:
                 _write_direct_non_co_wise_sheet(
@@ -463,6 +497,7 @@ def _write_marks_template_workbook(
                     num_fmt,
                     header_num_fmt,
                     unlocked_body_fmt,
+                    sheet_specs=layout_sheets,
                 )
         else:
             _write_indirect_sheet(
@@ -477,7 +512,14 @@ def _write_marks_template_workbook(
                 unlocked_body_fmt,
                 wrapped_body_fmt,
                 wrapped_column_fmt,
+                sheet_specs=layout_sheets,
             )
+
+    return {
+        "schema_version": 1,
+        "sheet_order": [entry["name"] for entry in layout_sheets] + [SYSTEM_HASH_SHEET, SYSTEM_LAYOUT_SHEET],
+        "sheets": layout_sheets,
+    }
 
 
 def _copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
@@ -498,6 +540,7 @@ def _write_two_column_copy_sheet(
     rows: Sequence[Sequence[Any]],
     header_fmt: Any,
     body_fmt: Any,
+    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
@@ -509,6 +552,19 @@ def _write_two_column_copy_sheet(
     ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
     ws.set_selection(1, 0, 1, 0)
+    anchors = []
+    for row_index, row in enumerate(rows, start=2):
+        anchors.append([f"A{row_index}", row[0] if len(row) > 0 else ""])
+        anchors.append([f"B{row_index}", row[1] if len(row) > 1 else ""])
+    sheet_specs.append(
+        {
+            "name": title,
+            "header_row": 1,
+            "headers": list(header),
+            "anchors": anchors,
+            "formula_anchors": [],
+        }
+    )
 
 
 def _write_multi_column_copy_sheet(
@@ -519,6 +575,7 @@ def _write_multi_column_copy_sheet(
     header_fmt: Any,
     body_fmt: Any,
     num_fmt: Any,
+    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
@@ -531,6 +588,24 @@ def _write_multi_column_copy_sheet(
     ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
     ws.set_selection(1, 0, 1, 0)
+    anchors = []
+    for row_index, row in enumerate(rows, start=2):
+        for col_index, _header in enumerate(header):
+            anchors.append(
+                [
+                    f"{_excel_col_name(col_index)}{row_index}",
+                    row[col_index] if col_index < len(row) else "",
+                ]
+            )
+    sheet_specs.append(
+        {
+            "name": title,
+            "header_row": 1,
+            "headers": list(header),
+            "anchors": anchors,
+            "formula_anchors": [],
+        }
+    )
 
 
 def _write_direct_co_wise_sheet(
@@ -547,6 +622,7 @@ def _write_direct_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
+    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -633,6 +709,36 @@ def _write_direct_co_wise_sheet(
     ws.freeze_panes(header_start_row + 3, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
+    header_row = header_start_row + 1
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+            [f"C{header_row + 1}", _CO_LABEL],
+            [f"C{header_row + 2}", _MAX_LABEL],
+            [f"{_excel_col_name(total_col)}{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+        ]
+    )
+    formula_anchors: list[list[str]] = []
+    if students and question_count > 0:
+        first_mark_col = _excel_col_name(3)
+        last_mark_col = _excel_col_name(total_col - 1)
+        first_row_formula = f"=SUM({first_mark_col}{first_data_row + 1}:{last_mark_col}{first_data_row + 1})"
+        formula_anchors.append([f"{_excel_col_name(total_col)}{first_data_row + 1}", first_row_formula])
+    sheet_specs.append(
+        {
+            "name": sheet_name,
+            "kind": "direct_co_wise",
+            "header_row": header_row,
+            "headers": list(MARKS_ENTRY_ROW_HEADERS)
+            + [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
+            + [MARKS_ENTRY_TOTAL_LABEL],
+            "anchors": anchors,
+            "formula_anchors": formula_anchors,
+        }
+    )
 
 
 def _write_direct_non_co_wise_sheet(
@@ -649,6 +755,7 @@ def _write_direct_non_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
+    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -743,6 +850,51 @@ def _write_direct_non_co_wise_sheet(
     ws.freeze_panes(header_start_row + 3, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
+    header_row = header_start_row + 1
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+            [f"C{header_row + 1}", _CO_LABEL],
+            [f"C{header_row + 2}", _MAX_LABEL],
+            [f"D{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+        ]
+    )
+    formula_anchors: list[list[str]] = []
+    if students and covered_cos:
+        first_row = first_data_row + 1
+        for idx in range(len(covered_cos)):
+            co_col = 4 + idx
+            col_name_total = _excel_col_name(3)
+            divisor = len(covered_cos)
+            if idx == len(covered_cos) - 1 and len(covered_cos) > 1:
+                first_co_col_name = _excel_col_name(4)
+                prev_co_col_name = _excel_col_name(co_col - 1)
+                formula = (
+                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
+                    f'"A",IF(${col_name_total}{first_row}="","",${col_name_total}{first_row}-SUM('
+                    f"{first_co_col_name}{first_row}:{prev_co_col_name}{first_row})))"
+                )
+            else:
+                formula = (
+                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
+                    f'"A",IF(${col_name_total}{first_row}="","",ROUND(${col_name_total}{first_row}/{divisor},2)))'
+                )
+            formula_anchors.append([f"{_excel_col_name(co_col)}{first_row}", formula])
+    sheet_specs.append(
+        {
+            "name": sheet_name,
+            "kind": "direct_non_co_wise",
+            "header_row": header_row,
+            "headers": list(MARKS_ENTRY_ROW_HEADERS)
+            + [MARKS_ENTRY_TOTAL_LABEL]
+            + [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos],
+            "anchors": anchors,
+            "formula_anchors": formula_anchors,
+        }
+    )
 
 
 def _write_indirect_sheet(
@@ -757,6 +909,7 @@ def _write_indirect_sheet(
     unlocked_body_fmt: Any,
     wrapped_body_fmt: Any,
     wrapped_column_fmt: Any,
+    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -805,6 +958,25 @@ def _write_indirect_sheet(
     ws.freeze_panes(header_start_row + 1, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
+    header_row = header_start_row + 1
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+        ]
+    )
+    sheet_specs.append(
+        {
+            "name": sheet_name,
+            "kind": "indirect",
+            "header_row": header_row,
+            "headers": headers,
+            "anchors": anchors,
+            "formula_anchors": [],
+        }
+    )
 
 
 def _write_component_course_metadata(
@@ -831,6 +1003,14 @@ def _component_metadata_sample_rows(
         sample_rows.append(["", row[0] if len(row) > 0 else "", row[1] if len(row) > 1 else ""])
     sample_rows.append(["", _COMPONENT_NAME_LABEL, component_name])
     return sample_rows
+
+
+def _component_metadata_anchor_cells(metadata_rows: Sequence[Sequence[Any]]) -> list[list[Any]]:
+    anchors: list[list[Any]] = []
+    for row_index, row in enumerate(metadata_rows, start=1):
+        anchors.append([f"B{row_index}", row[0] if len(row) > 0 else ""])
+        anchors.append([f"C{row_index}", row[1] if len(row) > 1 else ""])
+    return anchors
 
 
 def _build_marks_validation_formula_for_column(
@@ -1074,9 +1254,29 @@ def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
     worksheet.hide()
 
 
+def _add_system_layout_sheet(workbook: Any, layout_manifest: dict[str, Any]) -> None:
+    worksheet = workbook.add_worksheet(SYSTEM_LAYOUT_SHEET)
+    manifest_text = _serialize_layout_manifest(layout_manifest)
+    manifest_hash = _compute_layout_manifest_hash(manifest_text)
+    worksheet.write_row(
+        0,
+        0,
+        [SYSTEM_LAYOUT_MANIFEST_HEADER, SYSTEM_LAYOUT_MANIFEST_HASH_HEADER],
+    )
+    worksheet.write_row(1, 0, [manifest_text, manifest_hash])
+    worksheet.hide()
+
+
 def _compute_template_hash(template_id: str) -> str:
-    payload = f"{template_id}|{WORKBOOK_PASSWORD}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return sign_payload(template_id)
+
+
+def _serialize_layout_manifest(layout_manifest: dict[str, Any]) -> str:
+    return json.dumps(layout_manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _compute_layout_manifest_hash(manifest_text: str) -> str:
+    return sign_payload(manifest_text)
 
 
 def validate_course_details_workbook(workbook_path: str | Path) -> str:
@@ -1135,8 +1335,7 @@ def _extract_and_validate_template_id(workbook: Any) -> str:
     )
     if not template_id:
         raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
-    expected_hash = _compute_template_hash(template_id)
-    if template_hash != expected_hash:
+    if not verify_payload_signature(template_id, template_hash):
         raise ValidationError(t("instructor.validation.system_hash_mismatch"))
     return template_id
 
@@ -1188,116 +1387,33 @@ def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
     return rows
 
 
-def _header_index_map(worksheet: Any, headers: Sequence[str]) -> dict[str, int]:
-    index: dict[str, int] = {}
-    for col_index, expected_header in enumerate(headers, start=1):
-        header_value = worksheet.cell(row=1, column=col_index).value
-        index[normalize(expected_header)] = col_index - 1
-        if normalize(header_value) != normalize(expected_header):
-            raise ValidationError(
-                t(
-                    "instructor.validation.unexpected_header",
-                    sheet_name=worksheet.title,
-                    col=col_index,
-                )
-            )
-    return index
-
-
 def _validate_template_specific_rules(workbook: Any, template_id: str) -> None:
-    if template_id == ID_COURSE_SETUP:
-        _validate_course_setup_v1(workbook)
-        return
-    raise ValidationError(t("instructor.validation.validator_missing", template_id=template_id))
+    validator = _template_rule_validators().get(template_id)
+    if validator is None:
+        raise ValidationError(t("instructor.validation.validator_missing", template_id=template_id))
+    validator(workbook)
 
 
-def _validate_course_setup_v1(workbook: Any) -> None:
-    metadata_sheet = workbook[COURSE_METADATA_SHEET]
-    assessment_sheet = workbook[ASSESSMENT_CONFIG_SHEET]
-    question_map_sheet = workbook[QUESTION_MAP_SHEET]
-    students_sheet = workbook[STUDENTS_SHEET]
-
-    total_outcomes = _validate_course_metadata(metadata_sheet)
-    component_config = _validate_assessment_config(assessment_sheet)
-    _validate_question_map(question_map_sheet, component_config, total_outcomes)
-    _validate_students(students_sheet)
+def _template_context_extractors() -> dict[str, Any]:
+    # Register per-template context builders here. New template versions can be
+    # implemented in separate modules and wired into this dispatch map.
+    return {
+        ID_COURSE_SETUP: course_setup_v1.extract_marks_template_context,
+    }
 
 
-def _validate_course_metadata(worksheet: Any) -> int:
-    expected_headers = list(COURSE_METADATA_HEADERS)
-    header_map = _header_index_map(worksheet, expected_headers)
-    field_header = normalize(expected_headers[0])
-    value_header = normalize(expected_headers[1])
-    rows = _iter_data_rows(worksheet, len(expected_headers))
+def _template_marks_writers() -> dict[str, Any]:
+    # Register per-template marks workbook writers here.
+    return {
+        ID_COURSE_SETUP: course_setup_v1.write_marks_template_workbook,
+    }
 
-    expected_field_rows = SAMPLE_SETUP_DATA.get(COURSE_METADATA_SHEET, [])
-    expected_field_types: dict[str, type] = {}
-    for field_name, sample_value in expected_field_rows:
-        key = normalize(field_name)
-        expected_field_types[key] = int if isinstance(sample_value, int) else str
 
-    actual_values: dict[str, Any] = {}
-    for row_number, row in enumerate(rows, start=2):
-        field_raw = row[header_map[field_header]]
-        value_raw = row[header_map[value_header]]
-        field_key = normalize(field_raw)
-        if not field_key:
-            raise ValidationError(t("instructor.validation.course_metadata_field_empty", row=row_number))
-        if field_key in actual_values:
-            raise ValidationError(
-                t(
-                    "instructor.validation.course_metadata_duplicate_field",
-                    row=row_number,
-                    field=field_raw,
-                )
-            )
-        if field_key not in expected_field_types:
-            raise ValidationError(
-                t(
-                    "instructor.validation.course_metadata_unknown_field",
-                    row=row_number,
-                    field=field_raw,
-                )
-            )
-        if normalize(value_raw) == "":
-            raise ValidationError(
-                t(
-                    "instructor.validation.course_metadata_value_required",
-                    row=row_number,
-                    field=field_raw,
-                )
-            )
-        actual_values[field_key] = coerce_excel_number(value_raw)
-
-    missing_fields = [name for name in expected_field_types if name not in actual_values]
-    if missing_fields:
-        raise ValidationError(
-            t(
-                "instructor.validation.course_metadata_missing_fields",
-                fields=", ".join(missing_fields),
-            )
-        )
-
-    for field_key, expected_type in expected_field_types.items():
-        value = actual_values[field_key]
-        if expected_type is int:
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise ValidationError(
-                    t("instructor.validation.course_metadata_field_must_be_int", field=field_key)
-                )
-        else:
-            if not isinstance(value, str) or normalize(value) == "":
-                raise ValidationError(
-                    t(
-                        "instructor.validation.course_metadata_field_must_be_non_empty_str",
-                        field=field_key,
-                    )
-                )
-
-    total_outcomes = actual_values.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY))
-    if isinstance(total_outcomes, bool) or not isinstance(total_outcomes, int) or total_outcomes <= 0:
-        raise ValidationError(t("instructor.validation.course_metadata_total_outcomes_invalid"))
-    return total_outcomes
+def _template_rule_validators() -> dict[str, Any]:
+    # Register per-template course-details validators here.
+    return {
+        ID_COURSE_SETUP: course_setup_v1.validate_course_details_rules,
+    }
 
 
 def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str) -> bool:
@@ -1312,98 +1428,6 @@ def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str)
             )
         )
     return token == _YES_TOKEN
-
-
-def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
-    assessment_headers = ASSESSMENT_CONFIG_HEADERS
-    expected_headers = list(assessment_headers)
-    header_map = _header_index_map(worksheet, expected_headers)
-    component_header = normalize(assessment_headers[0])
-    weight_header = normalize(assessment_headers[1])
-    cia_header = normalize(assessment_headers[2])
-    co_wise_header = normalize(assessment_headers[3])
-    direct_header = normalize(assessment_headers[4])
-    rows = _iter_data_rows(worksheet, len(expected_headers))
-
-    if not rows:
-        raise ValidationError(t("instructor.validation.assessment_component_required_one"))
-
-    component_config: dict[str, dict[str, Any]] = {}
-    direct_weight_total = 0.0
-    indirect_weight_total = 0.0
-    direct_count = 0
-    indirect_count = 0
-
-    for row_number, row in enumerate(rows, start=2):
-        component_raw = row[header_map[component_header]]
-        component_key = normalize(component_raw)
-        if not component_key:
-            raise ValidationError(
-                t("instructor.validation.assessment_component_required", row=row_number)
-            )
-        if component_key in component_config:
-            raise ValidationError(
-                t(
-                    "instructor.validation.assessment_component_duplicate",
-                    row=row_number,
-                    component=component_raw,
-                )
-            )
-
-        weight_value = coerce_excel_number(row[header_map[weight_header]])
-        if (
-            isinstance(weight_value, bool)
-            or not isinstance(weight_value, (int, float))
-        ):
-            raise ValidationError(
-                t("instructor.validation.assessment_weight_numeric", row=row_number)
-            )
-
-        is_direct = _parse_yes_no(
-            row[header_map[direct_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[4],
-        )
-        co_wise_breakup = _parse_yes_no(
-            row[header_map[co_wise_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[3],
-        )
-        _parse_yes_no(
-            row[header_map[cia_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[2],
-        )
-
-        if is_direct:
-            direct_weight_total += float(weight_value)
-            direct_count += 1
-        else:
-            indirect_weight_total += float(weight_value)
-            indirect_count += 1
-
-        component_config[component_key] = {
-            "display_name": str(component_raw).strip(),
-            "co_wise_breakup": co_wise_breakup,
-        }
-
-    if direct_count == 0:
-        raise ValidationError(t("instructor.validation.assessment_direct_missing"))
-    if indirect_count == 0:
-        raise ValidationError(t("instructor.validation.assessment_indirect_missing"))
-    if round(direct_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
-        raise ValidationError(
-            t("instructor.validation.assessment_direct_total_invalid", found=direct_weight_total)
-        )
-    if round(indirect_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
-        raise ValidationError(
-            t("instructor.validation.assessment_indirect_total_invalid", found=indirect_weight_total)
-        )
-
-    return component_config
 
 
 def _co_tokens(value: Any) -> list[int]:
@@ -1432,115 +1456,3 @@ def _co_tokens(value: Any) -> list[int]:
     return numbers
 
 
-def _validate_question_map(
-    worksheet: Any,
-    component_config: dict[str, dict[str, Any]],
-    total_outcomes: int,
-) -> None:
-    expected_headers = list(QUESTION_MAP_HEADERS)
-    header_map = _header_index_map(worksheet, expected_headers)
-    component_header = normalize(expected_headers[0])
-    question_header = normalize(expected_headers[1])
-    max_marks_header = normalize(expected_headers[2])
-    co_header = normalize(expected_headers[3])
-    rows = _iter_data_rows(worksheet, len(expected_headers))
-
-    if not rows:
-        raise ValidationError(t("instructor.validation.question_map_row_required_one"))
-
-    seen_co_wise_questions: set[tuple[str, str]] = set()
-    for row_number, row in enumerate(rows, start=2):
-        component_raw = row[header_map[component_header]]
-        component_key = normalize(component_raw)
-        if not component_key:
-            raise ValidationError(t("instructor.validation.question_component_required", row=row_number))
-        if component_key not in component_config:
-            raise ValidationError(
-                t(
-                    "instructor.validation.question_component_unknown",
-                    row=row_number,
-                    component=component_raw,
-                )
-            )
-
-        question_raw = row[header_map[question_header]]
-        question_key = normalize(question_raw)
-        if not question_key:
-            raise ValidationError(
-                t("instructor.validation.question_label_required", row=row_number)
-            )
-
-        max_marks = coerce_excel_number(row[header_map[max_marks_header]])
-        if isinstance(max_marks, bool) or not isinstance(max_marks, (int, float)):
-            raise ValidationError(t("instructor.validation.question_max_marks_numeric", row=row_number))
-        if float(max_marks) <= 0:
-            raise ValidationError(
-                t("instructor.validation.question_max_marks_positive", row=row_number)
-            )
-
-        co_values = _co_tokens(row[header_map[co_header]])
-        if not co_values:
-            raise ValidationError(t("instructor.validation.question_co_required", row=row_number))
-        if len(set(co_values)) != len(co_values):
-            raise ValidationError(t("instructor.validation.question_co_no_repeat", row=row_number))
-        if any(co_number <= 0 or co_number > total_outcomes for co_number in co_values):
-            raise ValidationError(
-                t(
-                    "instructor.validation.question_co_out_of_range",
-                    row=row_number,
-                    total_outcomes=total_outcomes,
-                )
-            )
-
-        is_co_wise = bool(component_config[component_key]["co_wise_breakup"])
-        if is_co_wise:
-            if len(co_values) != 1:
-                raise ValidationError(
-                    t(
-                        "instructor.validation.question_co_wise_requires_one",
-                        row=row_number,
-                        component=component_raw,
-                    )
-                )
-            question_id = (component_key, question_key)
-            if question_id in seen_co_wise_questions:
-                raise ValidationError(
-                    t(
-                        "instructor.validation.question_duplicate_for_component",
-                        row=row_number,
-                        question=question_raw,
-                        component=component_raw,
-                    )
-                )
-            seen_co_wise_questions.add(question_id)
-
-
-def _validate_students(worksheet: Any) -> None:
-    expected_headers = list(STUDENTS_HEADERS)
-    header_map = _header_index_map(worksheet, expected_headers)
-    reg_no_header = normalize(expected_headers[0])
-    student_name_header = normalize(expected_headers[1])
-    rows = _iter_data_rows(worksheet, len(expected_headers))
-
-    if not rows:
-        raise ValidationError(t("instructor.validation.students_row_required_one"))
-
-    seen_reg_numbers: set[str] = set()
-    for row_number, row in enumerate(rows, start=2):
-        reg_no_raw = row[header_map[reg_no_header]]
-        student_name_raw = row[header_map[student_name_header]]
-
-        reg_no = str(reg_no_raw).strip() if reg_no_raw is not None else ""
-        student_name = str(student_name_raw).strip() if student_name_raw is not None else ""
-
-        if not reg_no or not student_name:
-            raise ValidationError(
-                t("instructor.validation.students_reg_and_name_required", row=row_number)
-            )
-
-        reg_key = normalize(reg_no)
-        if reg_key in seen_reg_numbers:
-            raise ValidationError(
-                t("instructor.validation.students_duplicate_reg_no", row=row_number, reg_no=reg_no)
-            )
-        seen_reg_numbers.add(reg_key)

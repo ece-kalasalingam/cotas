@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import pytest
 
-from common.exceptions import JobCancelledError
+from common.exceptions import AppSystemError, JobCancelledError
 from common.jobs import CancellationToken
 from services import instructor_workflow_service as service_mod
 
@@ -113,3 +114,42 @@ def test_service_generate_final_report_cleans_temp_when_replace_fails(
 
     assert dst.read_text(encoding="utf-8") == "stable"
     assert list(tmp_path.glob("report.xlsx.*.tmp")) == []
+
+
+def test_service_enforces_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    service = service_mod.InstructorWorkflowService()
+    context = service.create_job_context(step_id="step3")
+    src = tmp_path / "filled.xlsx"
+    dst = tmp_path / "report.xlsx"
+    src.write_text("data", encoding="utf-8")
+    monkeypatch.setenv("FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS", "1")
+
+    def _slow_copy(*_args, **_kwargs):
+        time.sleep(2)
+        return None
+
+    monkeypatch.setattr(service_mod.shutil, "copyfile", _slow_copy)
+
+    with pytest.raises(AppSystemError, match="exceeded timeout"):
+        service.generate_final_report(src, dst, context=context)
+
+
+def test_service_logs_stable_error_code_for_validation_errors(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    service = service_mod.InstructorWorkflowService()
+    context = service.create_job_context(step_id="step2")
+    monkeypatch.setattr(
+        service_mod,
+        "validate_course_details_workbook",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            service_mod.ValidationError("bad data", code="BAD_DATA")
+        ),
+    )
+
+    caplog.set_level(logging.INFO, logger=service_mod.__name__)
+    with pytest.raises(service_mod.ValidationError):
+        service.validate_course_details_workbook(tmp_path / "broken.xlsx", context=context)
+
+    codes = [getattr(record, "error_code", None) for record in caplog.records]
+    assert "BAD_DATA" in codes

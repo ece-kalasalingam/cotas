@@ -7,8 +7,8 @@ import os
 import re
 import shutil
 import tempfile
+import json
 from html import escape
-from hashlib import sha256
 from datetime import datetime
 from pathlib import Path
 
@@ -33,11 +33,12 @@ from common.constants import (
     APP_NAME,
     COURSE_METADATA_SHEET,
     ID_COURSE_SETUP,
-    MARKS_ENTRY_ROW_HEADERS,
+    SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+    SYSTEM_LAYOUT_MANIFEST_KEY,
+    SYSTEM_LAYOUT_SHEET,
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_KEY,
     SYSTEM_HASH_TEMPLATE_ID_KEY,
-    WORKBOOK_PASSWORD,
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
@@ -67,12 +68,14 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
+from common.workbook_signing import verify_payload_signature
 from domain import InstructorWorkflowState
 from modules.instructor import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
+from modules.instructor.template_versions import course_setup_v1
 from services import InstructorWorkflowService
 
 _logger = logging.getLogger(__name__)
@@ -266,7 +269,7 @@ def _validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         )
 
     try:
-        workbook = openpyxl.load_workbook(workbook_file, data_only=True)
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
     except Exception as exc:
         raise ValidationError(
             t("instructor.validation.workbook_open_failed", workbook=workbook_file),
@@ -288,25 +291,66 @@ def _validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         template_hash = str(hash_sheet["B2"].value).strip() if hash_sheet["B2"].value is not None else ""
         if not template_id:
             raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
-        expected_hash = sha256(f"{template_id}|{WORKBOOK_PASSWORD}".encode("utf-8")).hexdigest()
-        if template_hash != expected_hash:
+        if not verify_payload_signature(template_id, template_hash):
             raise ValidationError(t("instructor.validation.system_hash_mismatch"))
 
-        marks_sheet_names = [name for name in workbook.sheetnames if name != SYSTEM_HASH_SHEET]
-        if not marks_sheet_names:
-            raise ValidationError(t("instructor.validation.filled_marks_workbook_invalid"))
+        if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
+            raise ValidationError(
+                t("instructor.validation.step3.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
+            )
+        layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
+        if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
+            raise ValidationError(
+                t(
+                    "instructor.validation.step3.layout_header_mismatch",
+                    column="A1",
+                    expected=SYSTEM_LAYOUT_MANIFEST_KEY,
+                )
+            )
+        if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
+            raise ValidationError(
+                t(
+                    "instructor.validation.step3.layout_header_mismatch",
+                    column="B1",
+                    expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+                )
+            )
 
-        expected_headers = [normalize(header) for header in MARKS_ENTRY_ROW_HEADERS]
-        for sheet_name in marks_sheet_names:
-            worksheet = workbook[sheet_name]
-            actual_headers = [
-                normalize(worksheet.cell(row=1, column=col_index + 1).value)
-                for col_index in range(len(expected_headers))
-            ]
-            if actual_headers != expected_headers:
-                raise ValidationError(t("instructor.validation.filled_marks_workbook_invalid"))
+        manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
+        manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
+        if not manifest_text or not manifest_hash:
+            raise ValidationError(t("instructor.validation.step3.layout_manifest_missing"))
+        if not verify_payload_signature(manifest_text, manifest_hash):
+            raise ValidationError(t("instructor.validation.step3.layout_hash_mismatch"))
+
+        try:
+            manifest = json.loads(manifest_text)
+        except Exception as exc:
+            raise ValidationError(t("instructor.validation.step3.layout_manifest_json_invalid")) from exc
+        _validate_filled_marks_manifest_schema_by_template(workbook, manifest, template_id=template_id)
     finally:
         workbook.close()
+
+
+def _validate_filled_marks_manifest_schema_by_template(
+    workbook: object,
+    manifest: object,
+    *,
+    template_id: str,
+) -> None:
+    validator = _filled_marks_manifest_validators().get(template_id)
+    if validator is None:
+        raise ValidationError(
+            t("instructor.validation.step3.template_validator_missing", template_id=template_id)
+        )
+    validator(workbook, manifest)
+
+
+def _filled_marks_manifest_validators() -> dict[str, object]:
+    # Register per-template filled-marks schema validators here.
+    return {
+        ID_COURSE_SETUP: course_setup_v1.validate_filled_marks_manifest_schema,
+    }
 
 
 class InstructorModule(QWidget):
@@ -916,6 +960,7 @@ class InstructorModule(QWidget):
         )
         if not save_path:
             return
+        self._remember_dialog_dir_safe(save_path)
 
         workflow_service = getattr(self, "_workflow_service", None)
         token = CancellationToken()
@@ -933,7 +978,6 @@ class InstructorModule(QWidget):
             self.step2_done = True
             self.step3_outdated = self.step3_done
             self.step4_outdated = self.step4_done
-            self._remember_dialog_dir_safe(save_path)
             _publish_status_compat(self, t("instructor.status.step2_uploaded"))
             log_process_message(
                 process_name,
@@ -1027,6 +1071,7 @@ class InstructorModule(QWidget):
         )
         if not save_path:
             return
+        self._remember_dialog_dir_safe(save_path)
 
         workflow_service = getattr(self, "_workflow_service", None)
         token = CancellationToken()
@@ -1042,7 +1087,6 @@ class InstructorModule(QWidget):
         def _on_finished(_result: object) -> None:
             self.step1_path = save_path
             self.step1_done = True
-            self._remember_dialog_dir_safe(save_path)
             _publish_status_compat(self, t("instructor.status.step1_selected"))
             log_process_message(
                 process_name,
@@ -1133,6 +1177,7 @@ class InstructorModule(QWidget):
         )
         if not open_path:
             return
+        self._remember_dialog_dir_safe(open_path)
 
         workflow_service = getattr(self, "_workflow_service", None)
         token = CancellationToken()
@@ -1156,7 +1201,6 @@ class InstructorModule(QWidget):
                 if isinstance(result, dict)
                 else t("instructor.dialog.step3.default_name")
             ) or t("instructor.dialog.step3.default_name")
-            self._remember_dialog_dir_safe(open_path)
 
             if replacing:
                 self.step4_outdated = self.step4_done
@@ -1258,6 +1302,7 @@ class InstructorModule(QWidget):
         )
         if not open_path:
             return
+        self._remember_dialog_dir_safe(open_path)
 
         token = CancellationToken()
         workflow_service = getattr(self, "_workflow_service", None)
@@ -1275,7 +1320,6 @@ class InstructorModule(QWidget):
             self.step3_path = open_path
             self.step3_done = True
             self.step3_outdated = False
-            self._remember_dialog_dir_safe(open_path)
 
             if replacing and self.step3_done:
                 self.step4_outdated = True

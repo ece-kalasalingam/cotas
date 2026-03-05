@@ -58,6 +58,7 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _app, _default=None: "D:/tmp/filled_marks.xlsx",
     )
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+    monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
 
 
 def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):

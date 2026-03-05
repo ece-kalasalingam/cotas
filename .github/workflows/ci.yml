@@ -36,6 +36,9 @@ jobs:
       - name: Dependency vulnerability audit
         run: python -m pip_audit
 
+      - name: SAST (Bandit)
+        run: python -m bandit -q -c .bandit.yaml -r common modules services
+
       - name: Run quality gate
         env:
           QT_QPA_PLATFORM: offscreen
