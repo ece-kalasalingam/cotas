@@ -56,6 +56,7 @@ def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _app, _default=None: "D:/tmp/default.xlsx",
     )
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+    monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
 
 
 def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
@@ -166,7 +167,7 @@ def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert dummy.step1_done is False
     assert dummy.step1_path is None
-    assert calls["remembered"] == 0
+    assert calls["remembered"] == 1
     assert dummy.status_changed.messages == []
     assert calls["toast"] == []
     assert dummy._toasts == [("system", "1")]

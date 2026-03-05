@@ -82,6 +82,7 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_dialog_start_path",
         lambda _app, _default=None: "D:/tmp/default.xlsx",
     )
+    monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
 
 
 def test_step1_async_cancelled_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:

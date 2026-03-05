@@ -7,9 +7,10 @@ import pytest
 openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
-from common.exceptions import JobCancelledError
+from common.exceptions import JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from modules.instructor.course_details_template_generator import (
+from modules.instructor import instructor_template_engine as gen_mod
+from modules.instructor.instructor_template_engine import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
 )
@@ -33,6 +34,7 @@ def test_generate_marks_template_creates_expected_sheets(tmp_path: Path) -> None
     try:
         assert workbook.sheetnames[:2] == ["Course_Metadata", "Assessment_Config"]
         assert "__SYSTEM_HASH__" in workbook.sheetnames
+        assert "__SYSTEM_LAYOUT__" in workbook.sheetnames
         assert "S1" in workbook.sheetnames
         assert "ESP" in workbook.sheetnames
         assert "CSURVEY" in workbook.sheetnames
@@ -180,3 +182,18 @@ def test_generate_marks_template_honors_pre_cancel(tmp_path: Path) -> None:
 
     with pytest.raises(JobCancelledError):
         generate_marks_template_from_course_details(source, output, cancel_token=token)
+
+
+def test_generate_marks_template_rejects_unknown_template_version(tmp_path: Path) -> None:
+    source = _build_course_details(tmp_path)
+    output = tmp_path / "marks_template_unknown.xlsx"
+    workbook = openpyxl.load_workbook(source)
+    try:
+        workbook["__SYSTEM_HASH__"]["A2"] = "COURSE_SETUP_V2"
+        workbook["__SYSTEM_HASH__"]["B2"] = gen_mod._compute_template_hash("COURSE_SETUP_V2")
+        workbook.save(source)
+    finally:
+        workbook.close()
+
+    with pytest.raises(ValidationError, match="No validator implemented"):
+        generate_marks_template_from_course_details(source, output)

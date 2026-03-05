@@ -16,6 +16,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     commands = [
         [sys.executable, "-m", "pyflakes", "."],
+        [sys.executable, "-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services"],
         [sys.executable, "scripts/check_ui_strings.py"],
         [sys.executable, "-m", "pytest", "-q"],
     ]

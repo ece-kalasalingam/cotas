@@ -6,3 +6,4 @@ pyqtdarktheme==2.1.0
 pytest==9.0.2
 pyflakes==3.4.0
 pip-audit==2.9.0
+bandit==1.8.6

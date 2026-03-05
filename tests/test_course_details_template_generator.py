@@ -7,8 +7,8 @@ import pytest
 
 from common.exceptions import AppSystemError, ValidationError
 from common.sheet_schema import SheetSchema, ValidationRule, WorkbookBlueprint
-from modules.instructor import course_details_template_generator as mod
-from modules.instructor.course_details_template_generator import (
+from modules.instructor import instructor_template_engine as mod
+from modules.instructor.instructor_template_engine import (
     generate_course_details_template,
 )
 

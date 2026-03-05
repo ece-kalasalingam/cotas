@@ -194,6 +194,23 @@ if len(WORKBOOK_PASSWORD) < 12:
     raise ConfigurationError(
         f"{WORKBOOK_PASSWORD_ENV_VAR} must be at least 12 characters long"
     )
+WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR = "FOCUS_WORKBOOK_PASSWORD_PREVIOUS"
+WORKBOOK_PASSWORD_PREVIOUS: tuple[str, ...] = tuple(
+    secret.strip()
+    for secret in os.getenv(WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR, "").split(",")
+    if secret.strip()
+)
+for _previous_secret in WORKBOOK_PASSWORD_PREVIOUS:
+    if len(_previous_secret) < 12:
+        raise ConfigurationError(
+            f"{WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR} entries must be at least 12 characters long"
+        )
+WORKBOOK_SIGNATURE_VERSION_ENV_VAR = "FOCUS_WORKBOOK_SIGNATURE_VERSION"
+WORKBOOK_SIGNATURE_VERSION = os.getenv(WORKBOOK_SIGNATURE_VERSION_ENV_VAR, "v1").strip().lower() or "v1"
+if WORKBOOK_SIGNATURE_VERSION not in {"v1"}:
+    raise ConfigurationError(
+        f"{WORKBOOK_SIGNATURE_VERSION_ENV_VAR} must be one of: v1"
+    )
 
 # Protection behavior flags
 ALLOW_SORT: bool = True
@@ -244,6 +261,7 @@ if LIKERT_MIN >= LIKERT_MAX:
 # ==========================================================
 
 SYSTEM_HASH_SHEET = "__SYSTEM_HASH__"
+SYSTEM_LAYOUT_SHEET = "__SYSTEM_LAYOUT__"
 COURSE_METADATA_SHEET = "Course_Metadata"
 ASSESSMENT_CONFIG_SHEET = "Assessment_Config"
 QUESTION_MAP_SHEET = "Question_Map"
@@ -263,6 +281,10 @@ SYSTEM_HASH_TEMPLATE_ID_HEADER = "Template_ID"
 SYSTEM_HASH_TEMPLATE_HASH_HEADER = "Template_Hash"
 SYSTEM_HASH_TEMPLATE_ID_KEY = "template_id"
 SYSTEM_HASH_TEMPLATE_HASH_KEY = "template_hash"
+SYSTEM_LAYOUT_MANIFEST_HEADER = "Layout_Manifest"
+SYSTEM_LAYOUT_MANIFEST_HASH_HEADER = "Layout_Hash"
+SYSTEM_LAYOUT_MANIFEST_KEY = "layout_manifest"
+SYSTEM_LAYOUT_MANIFEST_HASH_KEY = "layout_hash"
 COURSE_METADATA_TOTAL_OUTCOMES_KEY = "total_outcomes"
 
 
