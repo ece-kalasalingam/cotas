@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -170,6 +171,33 @@ def test_marks_template_initial_selection_on_setup_sheets(tmp_path: Path) -> Non
     try:
         assert workbook["Course_Metadata"].sheet_view.selection[0].activeCell == "A2"
         assert workbook["Assessment_Config"].sheet_view.selection[0].activeCell == "A2"
+    finally:
+        workbook.close()
+
+
+def test_marks_template_manifest_includes_student_identity_fingerprint(tmp_path: Path) -> None:
+    source = _build_course_details(tmp_path)
+    output = tmp_path / "marks_template.xlsx"
+    generate_marks_template_from_course_details(source, output)
+
+    workbook = openpyxl.load_workbook(output)
+    try:
+        manifest_text = workbook["__SYSTEM_LAYOUT__"]["A2"].value
+        assert isinstance(manifest_text, str)
+        manifest = json.loads(manifest_text)
+        component_specs = [
+            spec
+            for spec in manifest.get("sheets", [])
+            if spec.get("kind") in {"direct_co_wise", "direct_non_co_wise", "indirect"}
+        ]
+        assert component_specs
+        for spec in component_specs:
+            assert isinstance(spec.get("student_count"), int)
+            assert spec["student_count"] > 0
+            assert isinstance(spec.get("student_identity_hash"), str)
+            assert spec["student_identity_hash"]
+            assert isinstance(spec.get("mark_structure"), dict)
+            assert spec["mark_structure"]
     finally:
         workbook.close()
 
