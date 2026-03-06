@@ -435,6 +435,8 @@ def _write_marks_template_workbook(
     unlocked_body_fmt = workbook.add_format({"border": 1, "locked": False})
 
     layout_sheets: list[dict[str, Any]] = []
+    students = context["students"]
+    student_identity_hash = _student_identity_hash(students)
     _write_two_column_copy_sheet(
         workbook=workbook,
         title=COURSE_METADATA_SHEET,
@@ -480,6 +482,7 @@ def _write_marks_template_workbook(
                     num_fmt,
                     header_num_fmt,
                     unlocked_body_fmt,
+                    student_identity_hash,
                     sheet_specs=layout_sheets,
                 )
             else:
@@ -497,6 +500,7 @@ def _write_marks_template_workbook(
                     num_fmt,
                     header_num_fmt,
                     unlocked_body_fmt,
+                    student_identity_hash,
                     sheet_specs=layout_sheets,
                 )
         else:
@@ -505,13 +509,14 @@ def _write_marks_template_workbook(
                 sheet_name,
                 context["metadata_rows"],
                 component_name,
-                context["students"],
+                students,
                 context["total_outcomes"],
                 header_fmt,
                 body_fmt,
                 unlocked_body_fmt,
                 wrapped_body_fmt,
                 wrapped_column_fmt,
+                student_identity_hash,
                 sheet_specs=layout_sheets,
             )
 
@@ -622,45 +627,49 @@ def _write_direct_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
+    student_identity_hash: str,
     sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     question_count = len(questions)
     total_col = 3 + question_count
-    ws.write_row(header_start_row, 0, list(MARKS_ENTRY_ROW_HEADERS), header_fmt)
-    for idx in range(question_count):
+    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
+    question_headers = [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
+    co_labels = [f"{MARKS_ENTRY_CO_PREFIX}{question['co_values'][0]}" for question in questions]
+    max_marks_values = [float(question["max_marks"]) for question in questions]
+    sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
+
+    ws.write_row(header_start_row, 0, row_headers, header_fmt)
+    for idx, question_header in enumerate(question_headers):
         ws.write(
             header_start_row,
             3 + idx,
-            f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}",
+            question_header,
             header_fmt,
         )
     ws.write(header_start_row, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
 
     ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL], header_fmt)
-    for idx, question in enumerate(questions):
-        co_number = question["co_values"][0]
-        ws.write(header_start_row + 1, 3 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
+    for idx, co_label in enumerate(co_labels):
+        ws.write(header_start_row + 1, 3 + idx, co_label, header_fmt)
     ws.write(header_start_row + 1, total_col, "", header_fmt)
 
     ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL], header_fmt)
-    component_total = 0.0
-    for idx, question in enumerate(questions):
-        max_marks = float(question["max_marks"])
-        component_total += max_marks
+    component_total = sum(max_marks_values)
+    for idx, max_marks in enumerate(max_marks_values):
         ws.write_number(header_start_row + 2, 3 + idx, max_marks, header_num_fmt)
     ws.write_number(header_start_row + 2, total_col, component_total, header_num_fmt)
 
     first_data_row = header_start_row + 3
+    first_mark_col = _excel_col_name(3)
+    last_mark_col = _excel_col_name(total_col - 1)
     for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
         ws.write_number(row_offset, 0, row_offset - (first_data_row - 1), body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
         ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         for col in range(3, total_col):
             ws.write_blank(row_offset, col, None, unlocked_body_fmt)
-        first_mark_col = _excel_col_name(3)
-        last_mark_col = _excel_col_name(total_col - 1)
         ws.write_formula(
             row_offset,
             total_col,
@@ -672,9 +681,8 @@ def _write_direct_co_wise_sheet(
         first_row = first_data_row
         last_row = first_data_row + len(students) - 1
         max_marks_row = header_start_row + 2
-        for idx, question in enumerate(questions):
+        for idx, max_marks_value in enumerate(max_marks_values):
             col_index = 3 + idx
-            max_marks_value = float(question["max_marks"])
             validation_formula = _build_marks_validation_formula_for_column(
                 col_index=col_index,
                 first_data_row=first_data_row,
@@ -695,9 +703,9 @@ def _write_direct_co_wise_sheet(
             )
 
     sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [
-        list(MARKS_ENTRY_ROW_HEADERS) + [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)] + [MARKS_ENTRY_TOTAL_LABEL],
-        ["", "", _CO_LABEL] + [f"{MARKS_ENTRY_CO_PREFIX}{question['co_values'][0]}" for question in questions] + [""],
-        ["", "", _MAX_LABEL] + [float(question["max_marks"]) for question in questions] + [component_total],
+        sheet_headers,
+        ["", "", _CO_LABEL] + co_labels + [""],
+        ["", "", _MAX_LABEL] + max_marks_values + [component_total],
     ]
     preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
     for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
@@ -732,11 +740,14 @@ def _write_direct_co_wise_sheet(
             "name": sheet_name,
             "kind": "direct_co_wise",
             "header_row": header_row,
-            "headers": list(MARKS_ENTRY_ROW_HEADERS)
-            + [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
-            + [MARKS_ENTRY_TOTAL_LABEL],
+            "headers": sheet_headers,
             "anchors": anchors,
             "formula_anchors": formula_anchors,
+            "student_count": len(students),
+            "student_identity_hash": student_identity_hash,
+            "mark_structure": {
+                "mark_maxima": max_marks_values,
+            },
         }
     )
 
@@ -755,6 +766,7 @@ def _write_direct_non_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
+    student_identity_hash: str,
     sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
@@ -763,19 +775,24 @@ def _write_direct_non_co_wise_sheet(
     co_count = max(1, len(covered_cos))
     total_max = sum(float(question["max_marks"]) for question in questions)
     max_marks_per_co = _split_equal_with_residual(total_max, co_count)
+    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
+    co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
+    co_prefix_labels = [f"{MARKS_ENTRY_CO_PREFIX}{co}" for co in covered_cos]
+    sheet_headers = row_headers + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
+    mark_maxima = [total_max] + [float(value) for value in max_marks_per_co]
 
-    ws.write_row(header_start_row, 0, list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
-    for idx, co_number in enumerate(covered_cos):
+    ws.write_row(header_start_row, 0, row_headers + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
+    for idx, co_header in enumerate(co_mark_headers):
         ws.write(
             header_start_row,
             4 + idx,
-            f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co_number}",
+            co_header,
             header_fmt,
         )
 
     ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL, ""], header_fmt)
-    for idx, co_number in enumerate(covered_cos):
-        ws.write(header_start_row + 1, 4 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
+    for idx, co_prefix in enumerate(co_prefix_labels):
+        ws.write(header_start_row + 1, 4 + idx, co_prefix, header_fmt)
 
     ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL, ""], header_fmt)
     ws.write_number(header_start_row + 2, 3, total_max, header_num_fmt)
@@ -783,18 +800,18 @@ def _write_direct_non_co_wise_sheet(
         ws.write_number(header_start_row + 2, 4 + idx, value, header_num_fmt)
 
     first_data_row = header_start_row + 3
+    co_total = len(covered_cos)
+    col_name_total = _excel_col_name(3)
+    divisor = co_total if co_total else 1
+    first_co_col_name = _excel_col_name(4) if co_total > 1 else ""
     for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
         ws.write_number(row_offset, 0, row_offset - first_data_row, body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
         ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         ws.write_blank(row_offset, 3, None, unlocked_body_fmt)
-        co_total = len(covered_cos)
         for idx in range(co_total):
             co_col = 4 + idx
-            col_name_total = _excel_col_name(3)
-            divisor = co_total if co_total else 1
             if idx == co_total - 1 and co_total > 1:
-                first_co_col_name = _excel_col_name(4)
                 prev_co_col_name = _excel_col_name(co_col - 1)
                 formula = (
                     f'=IF(OR(${col_name_total}{row_offset + 1}="A",${col_name_total}{row_offset + 1}="a"),'
@@ -838,8 +855,8 @@ def _write_direct_non_co_wise_sheet(
         )
 
     sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [
-        list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL] + [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos],
-        ["", "", _CO_LABEL, ""] + [f"{MARKS_ENTRY_CO_PREFIX}{co}" for co in covered_cos],
+        sheet_headers,
+        ["", "", _CO_LABEL, ""] + co_prefix_labels,
         ["", "", _MAX_LABEL, total_max] + max_marks_per_co,
     ]
     preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
@@ -865,12 +882,12 @@ def _write_direct_non_co_wise_sheet(
     formula_anchors: list[list[str]] = []
     if students and covered_cos:
         first_row = first_data_row + 1
+        divisor = len(covered_cos)
+        col_name_total = _excel_col_name(3)
+        first_co_col_name = _excel_col_name(4) if divisor > 1 else ""
         for idx in range(len(covered_cos)):
             co_col = 4 + idx
-            col_name_total = _excel_col_name(3)
-            divisor = len(covered_cos)
             if idx == len(covered_cos) - 1 and len(covered_cos) > 1:
-                first_co_col_name = _excel_col_name(4)
                 prev_co_col_name = _excel_col_name(co_col - 1)
                 formula = (
                     f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
@@ -888,11 +905,14 @@ def _write_direct_non_co_wise_sheet(
             "name": sheet_name,
             "kind": "direct_non_co_wise",
             "header_row": header_row,
-            "headers": list(MARKS_ENTRY_ROW_HEADERS)
-            + [MARKS_ENTRY_TOTAL_LABEL]
-            + [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos],
+            "headers": sheet_headers,
             "anchors": anchors,
             "formula_anchors": formula_anchors,
+            "student_count": len(students),
+            "student_identity_hash": student_identity_hash,
+            "mark_structure": {
+                "mark_maxima": mark_maxima,
+            },
         }
     )
 
@@ -909,6 +929,7 @@ def _write_indirect_sheet(
     unlocked_body_fmt: Any,
     wrapped_body_fmt: Any,
     wrapped_column_fmt: Any,
+    student_identity_hash: str,
     sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
@@ -975,6 +996,11 @@ def _write_indirect_sheet(
             "headers": headers,
             "anchors": anchors,
             "formula_anchors": [],
+            "student_count": len(students),
+            "student_identity_hash": student_identity_hash,
+            "mark_structure": {
+                "likert_range": [LIKERT_MIN, LIKERT_MAX],
+            },
         }
     )
 
@@ -1011,6 +1037,12 @@ def _component_metadata_anchor_cells(metadata_rows: Sequence[Sequence[Any]]) -> 
         anchors.append([f"B{row_index}", row[0] if len(row) > 0 else ""])
         anchors.append([f"C{row_index}", row[1] if len(row) > 1 else ""])
     return anchors
+
+
+def _student_identity_hash(students: Sequence[tuple[str, str]]) -> str:
+    # Stable signature of ordered student identities copied from course details.
+    payload = "\n".join(f"{reg_no.strip()}|{student_name.strip()}" for reg_no, student_name in students)
+    return sign_payload(payload)
 
 
 def _build_marks_validation_formula_for_column(

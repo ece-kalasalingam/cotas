@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Sequence
 
@@ -11,6 +12,9 @@ from common.constants import (
     COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+    LIKERT_MAX,
+    LIKERT_MIN,
+    MIN_MARK_VALUE,
     QUESTION_MAP_HEADERS,
     QUESTION_MAP_SHEET,
     STUDENTS_HEADERS,
@@ -22,6 +26,10 @@ from common.exceptions import ValidationError
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.texts import t
 from common.utils import coerce_excel_number, normalize
+from common.workbook_signing import sign_payload
+
+_logger = logging.getLogger(__name__)
+_MAX_DECIMAL_PLACES = 2
 
 
 def extract_marks_template_context(workbook: Any) -> dict[str, Any]:
@@ -78,6 +86,8 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
         )
 
     has_marks_component = False
+    baseline_student_hash: str | None = None
+    baseline_student_sheet: str | None = None
     for spec in sheet_specs:
         if not isinstance(spec, dict):
             raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
@@ -170,6 +180,47 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
 
         if sheet_name not in (COURSE_METADATA_SHEET, ASSESSMENT_CONFIG_SHEET):
             has_marks_component = True
+            _validate_component_structure_snapshot(
+                worksheet=worksheet,
+                sheet_name=sheet_name,
+                sheet_kind=spec.get("kind"),
+                header_row=header_row,
+                structure=spec.get("mark_structure"),
+                header_count=len(expected_headers),
+            )
+            actual_student_hash = _validate_component_student_identity(
+                worksheet=worksheet,
+                sheet_name=sheet_name,
+                sheet_kind=spec.get("kind"),
+                header_row=header_row,
+                expected_student_count=spec.get("student_count"),
+                expected_student_hash=spec.get("student_identity_hash"),
+            )
+            if baseline_student_hash is None:
+                baseline_student_hash = actual_student_hash
+                baseline_student_sheet = sheet_name
+            elif actual_student_hash != baseline_student_hash:
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.student_identity_cross_sheet_mismatch",
+                        sheet_name=sheet_name,
+                        reference_sheet=baseline_student_sheet,
+                    )
+                )
+            _validate_non_empty_marks_entries(
+                worksheet=worksheet,
+                sheet_name=sheet_name,
+                sheet_kind=spec.get("kind"),
+                header_count=len(expected_headers),
+                header_row=header_row,
+            )
+            _log_marks_anomaly_warnings(
+                worksheet=worksheet,
+                sheet_name=sheet_name,
+                sheet_kind=spec.get("kind"),
+                header_count=len(expected_headers),
+                header_row=header_row,
+            )
 
     if not has_marks_component:
         raise ValidationError(t("instructor.validation.step3.no_component_sheets"))
@@ -541,3 +592,438 @@ def _normalized_formula(value: object) -> str:
     token = token.replace("$", "")
     token = token.replace(" ", "")
     return token
+
+
+def _validate_component_student_identity(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_row: int,
+    expected_student_count: Any,
+    expected_student_hash: Any,
+) -> str:
+    if not isinstance(expected_student_count, int) or expected_student_count < 0:
+        raise ValidationError(
+            t("instructor.validation.step3.student_identity_spec_invalid", sheet_name=sheet_name)
+        )
+    if not isinstance(expected_student_hash, str) or not expected_student_hash.strip():
+        raise ValidationError(
+            t("instructor.validation.step3.student_identity_spec_invalid", sheet_name=sheet_name)
+        )
+
+    students = _extract_component_students(
+        worksheet=worksheet,
+        sheet_name=sheet_name,
+        sheet_kind=sheet_kind,
+        header_row=header_row,
+    )
+    if len(students) != expected_student_count:
+        raise ValidationError(
+            t(
+                "instructor.validation.step3.student_identity_mismatch",
+                sheet_name=sheet_name,
+            )
+        )
+
+    actual_hash = _student_identity_hash(students)
+    if actual_hash != expected_student_hash:
+        raise ValidationError(
+            t(
+                "instructor.validation.step3.student_identity_mismatch",
+                sheet_name=sheet_name,
+            )
+        )
+    return actual_hash
+
+
+def _extract_component_students(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_row: int,
+) -> list[tuple[str, str]]:
+    first_row = _marks_data_start_row(sheet_kind, header_row)
+    students: list[tuple[str, str]] = []
+    seen_reg_numbers: set[str] = set()
+    row = first_row
+    while True:
+        reg_value = worksheet.cell(row=row, column=2).value
+        name_value = worksheet.cell(row=row, column=3).value
+        reg_no = str(reg_value).strip() if reg_value is not None else ""
+        student_name = str(name_value).strip() if name_value is not None else ""
+        if not reg_no and not student_name:
+            break
+        if not reg_no or not student_name:
+            raise ValidationError(
+                t(
+                    "instructor.validation.step3.student_identity_mismatch",
+                    sheet_name=sheet_name,
+                )
+            )
+        reg_key = normalize(reg_no)
+        if reg_key in seen_reg_numbers:
+            raise ValidationError(
+                t(
+                    "instructor.validation.step3.student_reg_duplicate",
+                    sheet_name=sheet_name,
+                    reg_no=reg_no,
+                )
+            )
+        seen_reg_numbers.add(reg_key)
+        students.append((reg_no, student_name))
+        row += 1
+    return students
+
+
+def _student_identity_hash(students: Sequence[tuple[str, str]]) -> str:
+    payload = "\n".join(f"{reg_no.strip()}|{student_name.strip()}" for reg_no, student_name in students)
+    return sign_payload(payload)
+
+
+def _validate_non_empty_marks_entries(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_count: int,
+    header_row: int,
+) -> None:
+    student_count = _infer_student_count(worksheet=worksheet, sheet_kind=sheet_kind, header_row=header_row)
+    if student_count <= 0:
+        return
+
+    data_start_row = _marks_data_start_row(sheet_kind, header_row)
+    mark_cols = _marks_entry_columns(sheet_kind, header_count)
+    max_row = header_row + 2
+    minimum = _mark_min_for_sheet(sheet_kind)
+    maximum_by_col = {
+        col: _mark_max_for_cell(worksheet, sheet_kind, max_row, col)
+        for col in mark_cols
+    }
+    for row in range(data_start_row, data_start_row + student_count):
+        has_absent = False
+        has_numeric = False
+        for col in mark_cols:
+            cell = worksheet.cell(row=row, column=col)
+            cell_value = cell.value
+            token = normalize(cell_value)
+            if token == "":
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.mark_entry_empty",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                    )
+                )
+            if token == "a":
+                has_absent = True
+                continue
+            has_numeric = True
+            numeric_value = coerce_excel_number(cell_value)
+            if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.mark_value_invalid",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        minimum=minimum,
+                        maximum=maximum_by_col[col],
+                    )
+                )
+            if not _has_allowed_decimal_precision(float(numeric_value)):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.mark_precision_invalid",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        decimals=_MAX_DECIMAL_PLACES,
+                    )
+                )
+            if sheet_kind == "indirect" and not _is_integer_value(float(numeric_value)):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.indirect_mark_must_be_integer",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                    )
+                )
+            maximum = maximum_by_col[col]
+            if float(numeric_value) < minimum or float(numeric_value) > maximum:
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.mark_value_invalid",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        minimum=minimum,
+                        maximum=maximum,
+                    )
+                )
+        _validate_absence_policy_for_row(
+            sheet_name=sheet_name,
+            worksheet=worksheet,
+            sheet_kind=sheet_kind,
+            row=row,
+            mark_cols=mark_cols,
+            has_absent=has_absent,
+            has_numeric=has_numeric,
+        )
+    _validate_row_total_consistency(
+        worksheet=worksheet,
+        sheet_name=sheet_name,
+        sheet_kind=sheet_kind,
+        header_count=header_count,
+        header_row=header_row,
+        student_count=student_count,
+    )
+
+
+def _marks_data_start_row(sheet_kind: Any, header_row: int) -> int:
+    if sheet_kind == "indirect":
+        return header_row + 1
+    return header_row + 3
+
+
+def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
+    # Column 4 is "D" and the first mark-entry column across all component sheets.
+    if sheet_kind == "direct_non_co_wise":
+        return range(4, 5)
+    if sheet_kind == "direct_co_wise":
+        # Direct CO-wise sheets append "Total" as the last header; mark cells are before it.
+        return range(4, header_count)
+    if sheet_kind == "indirect":
+        return range(4, header_count + 1)
+    raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+
+
+def _mark_min_for_sheet(sheet_kind: Any) -> float:
+    if sheet_kind == "indirect":
+        return float(max(MIN_MARK_VALUE, LIKERT_MIN))
+    return float(MIN_MARK_VALUE)
+
+
+def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) -> float:
+    if sheet_kind == "indirect":
+        return float(LIKERT_MAX)
+    if sheet_kind == "direct_non_co_wise":
+        max_value = coerce_excel_number(worksheet.cell(row=max_row, column=4).value)
+    elif sheet_kind == "direct_co_wise":
+        max_value = coerce_excel_number(worksheet.cell(row=max_row, column=col).value)
+    else:
+        raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+    if isinstance(max_value, bool) or not isinstance(max_value, (int, float)):
+        raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+    return float(max_value)
+
+
+def _infer_student_count(*, worksheet: Any, sheet_kind: Any, header_row: int) -> int:
+    first_row = _marks_data_start_row(sheet_kind, header_row)
+    count = 0
+    row = first_row
+    while True:
+        reg_no = worksheet.cell(row=row, column=2).value
+        student_name = worksheet.cell(row=row, column=3).value
+        if normalize(reg_no) == "" and normalize(student_name) == "":
+            break
+        count += 1
+        row += 1
+    return count
+
+
+def _validate_absence_policy_for_row(
+    *,
+    sheet_name: str,
+    worksheet: Any,
+    sheet_kind: Any,
+    row: int,
+    mark_cols: range,
+    has_absent: bool,
+    has_numeric: bool,
+) -> None:
+    if has_absent and has_numeric:
+        raise ValidationError(
+            t(
+                "instructor.validation.step3.absence_policy_violation",
+                sheet_name=sheet_name,
+                row=row,
+                range=f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
+            )
+        )
+    if sheet_kind == "direct_non_co_wise":
+        return
+
+
+def _validate_row_total_consistency(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_count: int,
+    header_row: int,
+    student_count: int,
+) -> None:
+    first_row = _marks_data_start_row(sheet_kind, header_row)
+    last_row = first_row + student_count - 1
+    if last_row < first_row:
+        return
+
+    if sheet_kind == "direct_co_wise":
+        total_col = header_count
+        first_mark_col = 4
+        last_mark_col = header_count - 1
+        for row in range(first_row, last_row + 1):
+            actual = worksheet.cell(row=row, column=total_col).value
+            expected = f"=SUM({_excel_col_name(first_mark_col)}{row}:{_excel_col_name(last_mark_col)}{row})"
+            if _normalized_formula(actual) != _normalized_formula(expected):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.total_formula_mismatch",
+                        sheet_name=sheet_name,
+                        cell=worksheet.cell(row=row, column=total_col).coordinate,
+                    )
+                )
+        return
+
+    if sheet_kind == "direct_non_co_wise":
+        # CO split columns should remain formula-driven for every student row.
+        for row in range(first_row, last_row + 1):
+            for col in range(5, header_count + 1):
+                formula = worksheet.cell(row=row, column=col).value
+                if not isinstance(formula, str) or not formula.startswith("="):
+                    raise ValidationError(
+                        t(
+                            "instructor.validation.step3.co_formula_mismatch",
+                            sheet_name=sheet_name,
+                            cell=worksheet.cell(row=row, column=col).coordinate,
+                        )
+                    )
+        return
+
+
+def _validate_component_structure_snapshot(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_row: int,
+    structure: Any,
+    header_count: int,
+) -> None:
+    if not isinstance(structure, dict):
+        raise ValidationError(
+            t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+        )
+    max_row = header_row + 2
+    if sheet_kind == "direct_co_wise":
+        maxima = structure.get("mark_maxima")
+        if not isinstance(maxima, list):
+            raise ValidationError(
+                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+            )
+        for idx, expected in enumerate(maxima, start=4):
+            actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
+            if not _filled_marks_values_match(expected, actual):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.structure_snapshot_mismatch",
+                        sheet_name=sheet_name,
+                        cell=worksheet.cell(row=max_row, column=idx).coordinate,
+                    )
+                )
+        return
+    if sheet_kind == "direct_non_co_wise":
+        maxima = structure.get("mark_maxima")
+        if not isinstance(maxima, list):
+            raise ValidationError(
+                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+            )
+        for idx, expected in enumerate(maxima, start=4):
+            actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
+            if not _filled_marks_values_match(expected, actual):
+                raise ValidationError(
+                    t(
+                        "instructor.validation.step3.structure_snapshot_mismatch",
+                        sheet_name=sheet_name,
+                        cell=worksheet.cell(row=max_row, column=idx).coordinate,
+                    )
+                )
+        return
+    if sheet_kind == "indirect":
+        likert_range = structure.get("likert_range")
+        if likert_range != [LIKERT_MIN, LIKERT_MAX]:
+            raise ValidationError(
+                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+            )
+        return
+    raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+
+
+def _has_allowed_decimal_precision(value: float) -> bool:
+    scaled = round(value * (10**_MAX_DECIMAL_PLACES))
+    return abs(value - (scaled / (10**_MAX_DECIMAL_PLACES))) <= 1e-9
+
+
+def _is_integer_value(value: float) -> bool:
+    return abs(value - round(value)) <= 1e-9
+
+
+def _excel_col_name(col_index_1_based: int) -> str:
+    index = col_index_1_based
+    label = ""
+    while index > 0:
+        index, rem = divmod(index - 1, 26)
+        label = chr(65 + rem) + label
+    return label
+
+
+def _log_marks_anomaly_warnings(
+    *,
+    worksheet: Any,
+    sheet_name: str,
+    sheet_kind: Any,
+    header_count: int,
+    header_row: int,
+) -> None:
+    student_count = _infer_student_count(worksheet=worksheet, sheet_kind=sheet_kind, header_row=header_row)
+    if student_count <= 0:
+        return
+    start_row = _marks_data_start_row(sheet_kind, header_row)
+    mark_cols = _marks_entry_columns(sheet_kind, header_count)
+    for col in mark_cols:
+        absent_count = 0
+        numeric_count = 0
+        frequency_by_value: dict[float, int] = {}
+        for row in range(start_row, start_row + student_count):
+            cell_value = worksheet.cell(row=row, column=col).value
+            token = normalize(cell_value)
+            if token == "a":
+                absent_count += 1
+                continue
+            numeric = coerce_excel_number(cell_value)
+            if isinstance(numeric, (int, float)) and not isinstance(numeric, bool):
+                numeric_count += 1
+                number = float(numeric)
+                frequency_by_value[number] = frequency_by_value.get(number, 0) + 1
+        if absent_count / student_count >= 0.9:
+            _logger.warning(
+                "Step3 anomaly: high absence ratio sheet=%s col=%s absent=%s total=%s",
+                sheet_name,
+                _excel_col_name(col),
+                absent_count,
+                student_count,
+            )
+        if numeric_count:
+            same = max(frequency_by_value.values())
+            if same / numeric_count >= 0.95:
+                _logger.warning(
+                    "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s",
+                    sheet_name,
+                    _excel_col_name(col),
+                    same,
+                    numeric_count,
+                )

@@ -31,7 +31,47 @@ def _build_marks_template(tmp_path: Path) -> Path:
     details = _build_course_details(tmp_path)
     output = tmp_path / "marks_template.xlsx"
     generate_marks_template_from_course_details(details, output)
+    _fill_all_mark_entries(output)
     return output
+
+
+def _fill_all_mark_entries(workbook_path: Path) -> None:
+    workbook = openpyxl.load_workbook(workbook_path)
+    try:
+        manifest_text = workbook["__SYSTEM_LAYOUT__"]["A2"].value
+        assert isinstance(manifest_text, str)
+        manifest = json.loads(manifest_text)
+        for spec in manifest.get("sheets", []):
+            kind = spec.get("kind")
+            if kind not in {"direct_co_wise", "direct_non_co_wise", "indirect"}:
+                continue
+            sheet = workbook[spec["name"]]
+            header_row = int(spec["header_row"])
+            header_count = len(spec["headers"])
+            if kind == "indirect":
+                first_data_row = header_row + 1
+                mark_cols = range(4, header_count + 1)
+            elif kind == "direct_non_co_wise":
+                first_data_row = header_row + 3
+                mark_cols = range(4, 5)
+            else:
+                first_data_row = header_row + 3
+                mark_cols = range(4, header_count)
+            student_count = 0
+            row = first_data_row
+            while True:
+                reg_no = sheet.cell(row=row, column=2).value
+                student_name = sheet.cell(row=row, column=3).value
+                if reg_no is None and student_name is None:
+                    break
+                student_count += 1
+                row += 1
+            for data_row in range(first_data_row, first_data_row + student_count):
+                for col in mark_cols:
+                    sheet.cell(row=data_row, column=col).value = 1
+        workbook.save(workbook_path)
+    finally:
+        workbook.close()
 
 
 def test_high_volume_workbook_generation_validation_and_step3_schema(tmp_path: Path) -> None:
@@ -98,6 +138,7 @@ def test_high_volume_workbook_generation_validation_and_step3_schema(tmp_path: P
     assert validate_course_details_workbook(details_path) == "COURSE_SETUP_V1"
     marks_path = tmp_path / "marks_high_volume.xlsx"
     generate_marks_template_from_course_details(details_path, marks_path)
+    _fill_all_mark_entries(marks_path)
     instructor_ui._validate_uploaded_filled_marks_workbook(marks_path)
 
     generated = openpyxl.load_workbook(marks_path, data_only=False)
