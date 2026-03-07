@@ -284,6 +284,12 @@ TEXTS = {
     ),
     "coordinator.status.removed": "{count} file(s) removed.",
     "coordinator.status.cleared": "{count} file(s) cleared.",
+    "coordinator.cancel_processing": "Cancel Processing",
+    "coordinator.status.processing_started": "Processing dropped files...",
+    "coordinator.status.queued": "{count} file(s) queued while current processing is running.",
+    "coordinator.status.cancelling": "Cancelling coordinator processing...",
+    "coordinator.status.operation_cancelled": "Coordinator processing cancelled.",
+    "coordinator.status.processing_failed": "Coordinator processing failed.",
 }
 
 
