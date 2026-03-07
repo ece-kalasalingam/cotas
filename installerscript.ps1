@@ -1,4 +1,7 @@
-$env:WB_PWD = 'ece@KLU131984'
+if (-not $env:WB_PWD) {
+    Write-Error "WB_PWD environment variable is not set. Aborting build."
+    exit 1
+}
 
 $args = @(
     "/DWorkbookPassword=$env:WB_PWD"
