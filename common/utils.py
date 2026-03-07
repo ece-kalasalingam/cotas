@@ -162,7 +162,9 @@ def configure_app_logging(
 
 def to_portable_path(path_value: str) -> str:
     """Serialize filesystem path to a JSON-safe, OS-readable form."""
-    return Path(path_value).expanduser().resolve().as_posix()
+    expanded = os.path.expanduser(path_value)
+    normalized = os.path.normpath(expanded)
+    return normalized.replace("\\", "/")
 
 
 def from_portable_path(path_value: str) -> str:
@@ -259,7 +261,8 @@ def remember_dialog_dir(selected_path: str, app_name: str) -> None:
         return
 
     try:
-        selected = Path(selected_path).expanduser().resolve()
+        normalized_selected = os.path.normpath(os.path.expanduser(selected_path))
+        selected = Path(normalized_selected)
     except OSError:
         return
 
