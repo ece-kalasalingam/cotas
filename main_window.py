@@ -2,7 +2,7 @@ import logging
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QScrollArea, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QLabel, QMessageBox
+    QVBoxLayout, QStatusBar, QLabel
 )
 
 from PySide6.QtGui import QAction, QActionGroup, QIcon
@@ -20,6 +20,7 @@ from common.constants import (
     WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
 from common.texts import t
+from common.toast import show_toast
 from common.utils import resource_path
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
@@ -198,10 +199,11 @@ class MainWindow(QMainWindow):
                 new_module = module_class()
             except Exception as exc:
                 _logger.exception("Failed to load module '%s'.", module_key)
-                QMessageBox.critical(
+                show_toast(
                     self,
-                    t("module.load_failed_title"),
                     t("module.load_failed_body", module=module_key, error=exc),
+                    title=t("module.load_failed_title"),
+                    level="error",
                 )
                 self.statusBar().showMessage(t("status.ready"))
                 return
@@ -227,10 +229,11 @@ class MainWindow(QMainWindow):
             from modules.help_module import HelpModule
         except Exception as exc:
             _logger.exception("Failed to import Help module.")
-            QMessageBox.critical(
+            show_toast(
                 self,
-                t("module.load_failed_title"),
                 t("module.load_failed_body", module=t("nav.help"), error=exc),
+                title=t("module.load_failed_title"),
+                level="error",
             )
             return
 
@@ -241,10 +244,11 @@ class MainWindow(QMainWindow):
             from modules.about_module import AboutModule
         except Exception as exc:
             _logger.exception("Failed to import About module.")
-            QMessageBox.critical(
+            show_toast(
                 self,
-                t("module.load_failed_title"),
                 t("module.load_failed_body", module=t("nav.about"), error=exc),
+                title=t("module.load_failed_title"),
+                level="error",
             )
             return
 

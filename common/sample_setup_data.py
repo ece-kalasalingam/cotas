@@ -13,7 +13,7 @@ SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
         ["Semester", "III"],
         ["Academic_Year", "2025-26"],
         ["Faculty_Name", "ABCCE"],
-        ["Total_Outcomes", 5],
+        ["Total_Outcomes", 6],
     ],
     "Assessment_Config": [
         ["S1", 17.5, "YES", "YES", "YES"],
