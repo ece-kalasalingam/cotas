@@ -31,8 +31,6 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
-from common.texts import t
-from common.utils import resource_path
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 

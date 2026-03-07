@@ -264,7 +264,6 @@ TEXTS = {
     "instructor.marks.question_prefix": "Q",
     "instructor.marks.co_marks_label_prefix": "CO க்கான மதிப்பெண்",
     "instructor.marks.cos_label": "COக்கள்",
-}
     "instructor.status.step5_selected": "இறுதி CO அறிக்கை பாதை தேர்வு செய்யப்பட்டது.",
     # Coordinator module
     "coordinator.title": "Coordinator File Collector",
