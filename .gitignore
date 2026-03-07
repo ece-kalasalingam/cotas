@@ -27,6 +27,8 @@ htmlcov/
 # Logs and local runtime files
 *.log
 settings.json
+.tmp/
+.tmp/*.env
 
 # IDE/editor settings
 .vscode/

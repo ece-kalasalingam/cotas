@@ -4,7 +4,7 @@ TEXTS = {
     # Startup / main
     "app.already_running": "பயன்பாடு ஏற்கனவே இயங்கிக்கொண்டிருக்கிறது.",
     "app.unexpected_error": "எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.",
-    "app.subtitle": "Framework for Outcome Computation and Unification System",
+    "app.subtitle": "முடிவு கணக்கீடு மற்றும் ஒருங்கிணைப்பு அமைப்புக்கான கட்டமைப்பு",
     "app.main_window_title": "FOCUS",
     "splash.starting": "பயன்பாடு தொடங்குகிறது...",
     "splash.loading_main_window": "முதன்மை சாளரம் ஏற்றப்படுகிறது...",
@@ -264,4 +264,29 @@ TEXTS = {
     "instructor.marks.question_prefix": "Q",
     "instructor.marks.co_marks_label_prefix": "CO க்கான மதிப்பெண்",
     "instructor.marks.cos_label": "COக்கள்",
+    # Coordinator module
+    "coordinator.title": "ஒருங்கிணைப்பாளர் கோப்பு சேகரிப்பான்",
+    "coordinator.drop_hint": "ஒருங்கிணைப்பாளர் பணிச்சுற்றுக்காக Excel கோப்புகளை சேர்க்க இங்கே இழுத்து விடுங்கள்.",
+    "coordinator.empty": "இன்னும் எந்த Excel கோப்புகளும் சேர்க்கப்படவில்லை.",
+    "coordinator.remove_selected": "தேர்வை நீக்கு",
+    "coordinator.clear_all": "அனைத்தையும் நீக்கு",
+    "coordinator.status.added": "{added} கோப்பு(கள்) சேர்க்கப்பட்டது. மொத்தம்: {total}.",
+    "coordinator.duplicate.title": "கோப்பு ஏற்கனவே உள்ளது",
+    "coordinator.duplicate.body": "பட்டியலில் ஏற்கனவே உள்ளதால் {count} நகல் கோப்பு(கள்) தவிர்க்கப்பட்டன.",
+    "coordinator.invalid_register.title": "பதிவு எண் தலைப்பு இல்லை",
+    "coordinator.invalid_register.body": (
+        "கோப்பில் Register Number இருக்க வேண்டும்.\n\n{files}"
+    ),
+    "coordinator.status.ignored": (
+        "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன (ஆதரிக்காத வகை, இல்லை, நகல், "
+        "அல்லது பதிவு எண் தலைப்பு இல்லை)."
+    ),
+    "coordinator.status.removed": "{count} கோப்பு(கள்) நீக்கப்பட்டன.",
+    "coordinator.status.cleared": "{count} கோப்பு(கள்) அழிக்கப்பட்டன.",
+    "coordinator.cancel_processing": "செயலாக்கத்தை ரத்து செய்",
+    "coordinator.status.processing_started": "இழுத்து விடப்பட்ட கோப்புகள் செயலாக்கப்படுகின்றன...",
+    "coordinator.status.queued": "நடப்பு செயலாக்கம் நடைபெறுவதால் {count} கோப்பு(கள்) வரிசைப்படுத்தப்பட்டன.",
+    "coordinator.status.cancelling": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்படுகிறது...",
+    "coordinator.status.operation_cancelled": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்பட்டது.",
+    "coordinator.status.processing_failed": "ஒருங்கிணைப்பாளர் செயலாக்கம் தோல்வியடைந்தது.",
 }

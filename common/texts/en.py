@@ -264,4 +264,29 @@ TEXTS = {
     "instructor.marks.question_prefix": "Q",
     "instructor.marks.co_marks_label_prefix": "Marks for CO",
     "instructor.marks.cos_label": "COs",
+    # Coordinator module
+    "coordinator.title": "Coordinator File Collector",
+    "coordinator.drop_hint": "Drag and drop Excel files here to collect them for coordinator workflow.",
+    "coordinator.empty": "No Excel files added yet.",
+    "coordinator.remove_selected": "Remove Selected",
+    "coordinator.clear_all": "Clear All",
+    "coordinator.status.added": "{added} file(s) added. Total: {total}.",
+    "coordinator.duplicate.title": "File Already Exists",
+    "coordinator.duplicate.body": "{count} duplicate file(s) were skipped because they already exist in the list.",
+    "coordinator.invalid_register.title": "Missing Register Header",
+    "coordinator.invalid_register.body": (
+        "File must contain Register Number.\n\n{files}"
+    ),
+    "coordinator.status.ignored": (
+        "{count} file(s) were ignored (unsupported type, missing, duplicate, "
+        "or missing register header)."
+    ),
+    "coordinator.status.removed": "{count} file(s) removed.",
+    "coordinator.status.cleared": "{count} file(s) cleared.",
+    "coordinator.cancel_processing": "Cancel Processing",
+    "coordinator.status.processing_started": "Processing dropped files...",
+    "coordinator.status.queued": "{count} file(s) queued while current processing is running.",
+    "coordinator.status.cancelling": "Cancelling coordinator processing...",
+    "coordinator.status.operation_cancelled": "Coordinator processing cancelled.",
+    "coordinator.status.processing_failed": "Coordinator processing failed.",
 }

@@ -259,16 +259,22 @@ class InstructorWorkflowService:
         timeout_seconds: int,
         cancel_token: CancellationToken | None,
     ) -> _T:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(work)
-            try:
-                return future.result(timeout=timeout_seconds)
-            except FuturesTimeoutError as exc:
-                if cancel_token is not None:
-                    cancel_token.cancel()
-                raise AppSystemError(
-                    f"{operation} exceeded timeout of {timeout_seconds} seconds."
-                ) from exc
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(work)
+        timed_out = False
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FuturesTimeoutError as exc:
+            timed_out = True
+            future.cancel()
+            if cancel_token is not None:
+                cancel_token.cancel()
+            raise AppSystemError(
+                f"{operation} exceeded timeout of {timeout_seconds} seconds."
+            ) from exc
+        finally:
+            # Avoid blocking on timeout; the worker thread may continue in background.
+            executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
 
     @staticmethod
     def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:

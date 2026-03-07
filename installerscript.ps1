@@ -1,8 +1,15 @@
-$env:WB_PWD = 'ece@KLU131984'
+param(
+    [string]$WorkbookPassword = $env:WB_PWD,
+    [string]$AppVersion = "1.0.0"
+)
+
+if ([string]::IsNullOrWhiteSpace($WorkbookPassword)) {
+    throw "Workbook password is required. Set WB_PWD in environment or pass -WorkbookPassword."
+}
 
 $args = @(
-    "/DWorkbookPassword=$env:WB_PWD"
-    "/DAppVersion=1.0.0"
+    "/DWorkbookPassword=$WorkbookPassword"
+    "/DAppVersion=$AppVersion"
     "installer\focus.iss"
 )
 

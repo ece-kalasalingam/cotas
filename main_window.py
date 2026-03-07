@@ -31,6 +31,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
+from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 
 _logger = logging.getLogger(__name__)
@@ -49,11 +50,6 @@ class _PlaceholderModule(QWidget):
 
     def retranslate_ui(self) -> None:
         self._label.setText(t("module.placeholder", title=t(self._title_key)))
-
-
-class CourseCoordinatorModule(_PlaceholderModule):
-    def __init__(self):
-        super().__init__("module.course_coordinator")
 
 
 class POAnalysisModule(_PlaceholderModule):
@@ -203,7 +199,7 @@ class MainWindow(QMainWindow):
             lambda: self.load_module(InstructorModule)
         )
         self.action_co_course.triggered.connect(
-            lambda: self.load_module(CourseCoordinatorModule)
+            lambda: self.load_module(CoordinatorModule)
         )
         self.action_po.triggered.connect(
             lambda: self.load_module(POAnalysisModule)

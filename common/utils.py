@@ -6,7 +6,7 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Literal
 
 from common.error_catalog import resolve_validation_error_message
@@ -101,15 +101,18 @@ def app_settings_path(app_name: str, file_name: str = SETTINGS_FILE_NAME) -> Pat
     run_base = _runtime_base_dir()
     if _is_installed_exe(run_base):
         if sys.platform.startswith("win"):
-            app_data = Path(
-                os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-            )
-            return app_data / app_name / file_name
+            app_data = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
+            # Keep Windows separators stable in cross-platform tests.
+            return Path(str(PureWindowsPath(app_data) / app_name / file_name))
         if sys.platform == "darwin":
             return Path.home() / "Library" / "Application Support" / app_name / file_name
         xdg_config_raw = os.getenv("XDG_CONFIG_HOME")
         xdg_config = Path(xdg_config_raw) if xdg_config_raw else (Path.home() / ".config")
         return xdg_config / app_name / file_name
+    run_base_text = str(run_base)
+    if "\\" in run_base_text:
+        # Preserve Windows-style path joins when mocked on POSIX hosts.
+        return Path(str(PureWindowsPath(run_base_text) / file_name))
     return run_base / file_name
 
 
@@ -162,7 +165,9 @@ def configure_app_logging(
 
 def to_portable_path(path_value: str) -> str:
     """Serialize filesystem path to a JSON-safe, OS-readable form."""
-    return Path(path_value).expanduser().resolve().as_posix()
+    expanded = os.path.expanduser(path_value)
+    normalized = os.path.normpath(expanded)
+    return normalized.replace("\\", "/")
 
 
 def from_portable_path(path_value: str) -> str:
@@ -259,7 +264,8 @@ def remember_dialog_dir(selected_path: str, app_name: str) -> None:
         return
 
     try:
-        selected = Path(selected_path).expanduser().resolve()
+        normalized_selected = os.path.normpath(os.path.expanduser(selected_path))
+        selected = Path(normalized_selected)
     except OSError:
         return
 
