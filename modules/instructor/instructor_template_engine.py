@@ -434,9 +434,12 @@ def _write_marks_template_workbook(
     )
     unlocked_body_fmt = workbook.add_format({"border": 1, "locked": False})
 
-    layout_sheets: list[dict[str, Any]] = []
+    layout_sheets, component_plans = _precompute_marks_layout_manifest(
+        context=context,
+        cancel_token=cancel_token,
+    )
+
     students = context["students"]
-    student_identity_hash = _student_identity_hash(students)
     _write_two_column_copy_sheet(
         workbook=workbook,
         title=COURSE_METADATA_SHEET,
@@ -444,7 +447,6 @@ def _write_marks_template_workbook(
         rows=context["metadata_rows"],
         header_fmt=header_fmt,
         body_fmt=body_fmt,
-        sheet_specs=layout_sheets,
     )
     _write_multi_column_copy_sheet(
         workbook=workbook,
@@ -454,61 +456,49 @@ def _write_marks_template_workbook(
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
-        sheet_specs=layout_sheets,
     )
 
-    used_sheet_names = {normalize(COURSE_METADATA_SHEET), normalize(ASSESSMENT_CONFIG_SHEET)}
-    for component in context["components"]:
+    for plan in component_plans:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        component_name = component["display_name"]
-        sheet_name = _safe_sheet_name(component_name, used_sheet_names)
-        questions = context["questions_by_component"].get(component["key"], [])
-        if component["is_direct"]:
-            if not questions:
-                raise ValidationError(t("instructor.validation.question_map_row_required_one"))
-            if component["co_wise_breakup"]:
-                _write_direct_co_wise_sheet(
-                    workbook,
-                    sheet_name,
-                    context["metadata_rows"],
-                    component_name,
-                    context["students"],
-                    questions,
-                    header_fmt,
-                    body_fmt,
-                    wrapped_body_fmt,
-                    wrapped_column_fmt,
-                    num_fmt,
-                    header_num_fmt,
-                    unlocked_body_fmt,
-                    student_identity_hash,
-                    sheet_specs=layout_sheets,
-                )
-            else:
-                _write_direct_non_co_wise_sheet(
-                    workbook,
-                    sheet_name,
-                    context["metadata_rows"],
-                    component_name,
-                    context["students"],
-                    questions,
-                    header_fmt,
-                    body_fmt,
-                    wrapped_body_fmt,
-                    wrapped_column_fmt,
-                    num_fmt,
-                    header_num_fmt,
-                    unlocked_body_fmt,
-                    student_identity_hash,
-                    sheet_specs=layout_sheets,
-                )
+        if plan["kind"] == "direct_co_wise":
+            _write_direct_co_wise_sheet(
+                workbook,
+                plan["sheet_name"],
+                context["metadata_rows"],
+                plan["component_name"],
+                students,
+                plan["questions"],
+                header_fmt,
+                body_fmt,
+                wrapped_body_fmt,
+                wrapped_column_fmt,
+                num_fmt,
+                header_num_fmt,
+                unlocked_body_fmt,
+            )
+        elif plan["kind"] == "direct_non_co_wise":
+            _write_direct_non_co_wise_sheet(
+                workbook,
+                plan["sheet_name"],
+                context["metadata_rows"],
+                plan["component_name"],
+                students,
+                plan["questions"],
+                header_fmt,
+                body_fmt,
+                wrapped_body_fmt,
+                wrapped_column_fmt,
+                num_fmt,
+                header_num_fmt,
+                unlocked_body_fmt,
+            )
         else:
             _write_indirect_sheet(
                 workbook,
-                sheet_name,
+                plan["sheet_name"],
                 context["metadata_rows"],
-                component_name,
+                plan["component_name"],
                 students,
                 context["total_outcomes"],
                 header_fmt,
@@ -516,8 +506,6 @@ def _write_marks_template_workbook(
                 unlocked_body_fmt,
                 wrapped_body_fmt,
                 wrapped_column_fmt,
-                student_identity_hash,
-                sheet_specs=layout_sheets,
             )
 
     return {
@@ -525,6 +513,103 @@ def _write_marks_template_workbook(
         "sheet_order": [entry["name"] for entry in layout_sheets] + [SYSTEM_HASH_SHEET, SYSTEM_LAYOUT_SHEET],
         "sheets": layout_sheets,
     }
+
+
+def _precompute_marks_layout_manifest(
+    *,
+    context: dict[str, Any],
+    cancel_token: CancellationToken | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    students = context["students"]
+    metadata_rows = context["metadata_rows"]
+    assessment_rows = context["assessment_rows"]
+    questions_by_component = context["questions_by_component"]
+    total_outcomes = context["total_outcomes"]
+    student_identity_hash = _student_identity_hash(students)
+
+    layout_sheets: list[dict[str, Any]] = [
+        _build_two_column_copy_sheet_spec(
+            title=COURSE_METADATA_SHEET,
+            header=COURSE_METADATA_HEADERS,
+            rows=metadata_rows,
+        ),
+        _build_multi_column_copy_sheet_spec(
+            title=ASSESSMENT_CONFIG_SHEET,
+            header=ASSESSMENT_CONFIG_HEADERS,
+            rows=assessment_rows,
+        ),
+    ]
+    component_plans: list[dict[str, Any]] = []
+
+    used_sheet_names = {normalize(COURSE_METADATA_SHEET), normalize(ASSESSMENT_CONFIG_SHEET)}
+    for component in context["components"]:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        component_name = component["display_name"]
+        sheet_name = _safe_sheet_name(component_name, used_sheet_names)
+        questions = questions_by_component.get(component["key"], [])
+        if component["is_direct"]:
+            if not questions:
+                raise ValidationError(t("instructor.validation.question_map_row_required_one"))
+            if component["co_wise_breakup"]:
+                layout_sheets.append(
+                    _build_direct_co_wise_sheet_spec(
+                        sheet_name=sheet_name,
+                        metadata_rows=metadata_rows,
+                        component_name=component_name,
+                        students=students,
+                        questions=questions,
+                        student_identity_hash=student_identity_hash,
+                    )
+                )
+                component_plans.append(
+                    {
+                        "kind": "direct_co_wise",
+                        "sheet_name": sheet_name,
+                        "component_name": component_name,
+                        "questions": questions,
+                    }
+                )
+            else:
+                layout_sheets.append(
+                    _build_direct_non_co_wise_sheet_spec(
+                        sheet_name=sheet_name,
+                        metadata_rows=metadata_rows,
+                        component_name=component_name,
+                        students=students,
+                        questions=questions,
+                        student_identity_hash=student_identity_hash,
+                    )
+                )
+                component_plans.append(
+                    {
+                        "kind": "direct_non_co_wise",
+                        "sheet_name": sheet_name,
+                        "component_name": component_name,
+                        "questions": questions,
+                    }
+                )
+        else:
+            layout_sheets.append(
+                _build_indirect_sheet_spec(
+                    sheet_name=sheet_name,
+                    metadata_rows=metadata_rows,
+                    component_name=component_name,
+                    students=students,
+                    total_outcomes=total_outcomes,
+                    student_identity_hash=student_identity_hash,
+                )
+            )
+            component_plans.append(
+                {
+                    "kind": "indirect",
+                    "sheet_name": sheet_name,
+                    "component_name": component_name,
+                    "questions": [],
+                }
+            )
+
+    return layout_sheets, component_plans
 
 
 def _copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
@@ -545,7 +630,6 @@ def _write_two_column_copy_sheet(
     rows: Sequence[Sequence[Any]],
     header_fmt: Any,
     body_fmt: Any,
-    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
@@ -557,19 +641,25 @@ def _write_two_column_copy_sheet(
     ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
     ws.set_selection(1, 0, 1, 0)
+
+
+def _build_two_column_copy_sheet_spec(
+    *,
+    title: str,
+    header: tuple[str, str],
+    rows: Sequence[Sequence[Any]],
+) -> dict[str, Any]:
     anchors = []
     for row_index, row in enumerate(rows, start=2):
         anchors.append([f"A{row_index}", row[0] if len(row) > 0 else ""])
         anchors.append([f"B{row_index}", row[1] if len(row) > 1 else ""])
-    sheet_specs.append(
-        {
-            "name": title,
-            "header_row": 1,
-            "headers": list(header),
-            "anchors": anchors,
-            "formula_anchors": [],
-        }
-    )
+    return {
+        "name": title,
+        "header_row": 1,
+        "headers": list(header),
+        "anchors": anchors,
+        "formula_anchors": [],
+    }
 
 
 def _write_multi_column_copy_sheet(
@@ -580,7 +670,6 @@ def _write_multi_column_copy_sheet(
     header_fmt: Any,
     body_fmt: Any,
     num_fmt: Any,
-    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
@@ -593,6 +682,14 @@ def _write_multi_column_copy_sheet(
     ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
     ws.set_selection(1, 0, 1, 0)
+
+
+def _build_multi_column_copy_sheet_spec(
+    *,
+    title: str,
+    header: Sequence[str],
+    rows: Sequence[Sequence[Any]],
+) -> dict[str, Any]:
     anchors = []
     for row_index, row in enumerate(rows, start=2):
         for col_index, _header in enumerate(header):
@@ -602,15 +699,171 @@ def _write_multi_column_copy_sheet(
                     row[col_index] if col_index < len(row) else "",
                 ]
             )
-    sheet_specs.append(
-        {
-            "name": title,
-            "header_row": 1,
-            "headers": list(header),
-            "anchors": anchors,
-            "formula_anchors": [],
-        }
+    return {
+        "name": title,
+        "header_row": 1,
+        "headers": list(header),
+        "anchors": anchors,
+        "formula_anchors": [],
+    }
+
+
+def _build_direct_co_wise_sheet_spec(
+    *,
+    sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
+    students: Sequence[tuple[str, str]],
+    questions: Sequence[dict[str, Any]],
+    student_identity_hash: str,
+) -> dict[str, Any]:
+    header_start_row = len(metadata_rows) + 2
+    header_row = header_start_row + 1
+    question_count = len(questions)
+    total_col = 3 + question_count
+    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
+    question_headers = [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
+    max_marks_values = [float(question["max_marks"]) for question in questions]
+    sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
+
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+            [f"C{header_row + 1}", _CO_LABEL],
+            [f"C{header_row + 2}", _MAX_LABEL],
+            [f"{_excel_col_name(total_col)}{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+        ]
     )
+
+    formula_anchors: list[list[str]] = []
+    if students and question_count > 0:
+        first_data_row = header_start_row + 3
+        first_mark_col = _excel_col_name(3)
+        last_mark_col = _excel_col_name(total_col - 1)
+        first_row_formula = f"=SUM({first_mark_col}{first_data_row + 1}:{last_mark_col}{first_data_row + 1})"
+        formula_anchors.append([f"{_excel_col_name(total_col)}{first_data_row + 1}", first_row_formula])
+
+    return {
+        "name": sheet_name,
+        "kind": "direct_co_wise",
+        "header_row": header_row,
+        "headers": sheet_headers,
+        "anchors": anchors,
+        "formula_anchors": formula_anchors,
+        "student_count": len(students),
+        "student_identity_hash": student_identity_hash,
+        "mark_structure": {
+            "mark_maxima": max_marks_values,
+        },
+    }
+
+
+def _build_direct_non_co_wise_sheet_spec(
+    *,
+    sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
+    students: Sequence[tuple[str, str]],
+    questions: Sequence[dict[str, Any]],
+    student_identity_hash: str,
+) -> dict[str, Any]:
+    header_start_row = len(metadata_rows) + 2
+    header_row = header_start_row + 1
+    covered_cos = sorted({co for q in questions for co in q["co_values"]})
+    co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
+    total_max = sum(float(question["max_marks"]) for question in questions)
+    max_marks_per_co = _split_equal_with_residual(total_max, max(1, len(covered_cos)))
+    mark_maxima = [total_max] + [float(value) for value in max_marks_per_co]
+    sheet_headers = list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
+
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+            [f"C{header_row + 1}", _CO_LABEL],
+            [f"C{header_row + 2}", _MAX_LABEL],
+            [f"D{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+        ]
+    )
+
+    formula_anchors: list[list[str]] = []
+    if students and covered_cos:
+        first_data_row = header_start_row + 3
+        first_row = first_data_row + 1
+        divisor = len(covered_cos)
+        col_name_total = _excel_col_name(3)
+        first_co_col_name = _excel_col_name(4) if divisor > 1 else ""
+        for idx in range(len(covered_cos)):
+            co_col = 4 + idx
+            if idx == len(covered_cos) - 1 and len(covered_cos) > 1:
+                prev_co_col_name = _excel_col_name(co_col - 1)
+                formula = (
+                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
+                    f'"A",IF(${col_name_total}{first_row}="","",${col_name_total}{first_row}-SUM('
+                    f"{first_co_col_name}{first_row}:{prev_co_col_name}{first_row})))"
+                )
+            else:
+                formula = (
+                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
+                    f'"A",IF(${col_name_total}{first_row}="","",ROUND(${col_name_total}{first_row}/{divisor},2)))'
+                )
+            formula_anchors.append([f"{_excel_col_name(co_col)}{first_row}", formula])
+
+    return {
+        "name": sheet_name,
+        "kind": "direct_non_co_wise",
+        "header_row": header_row,
+        "headers": sheet_headers,
+        "anchors": anchors,
+        "formula_anchors": formula_anchors,
+        "student_count": len(students),
+        "student_identity_hash": student_identity_hash,
+        "mark_structure": {
+            "mark_maxima": mark_maxima,
+        },
+    }
+
+
+def _build_indirect_sheet_spec(
+    *,
+    sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
+    students: Sequence[tuple[str, str]],
+    total_outcomes: int,
+    student_identity_hash: str,
+) -> dict[str, Any]:
+    header_start_row = len(metadata_rows) + 2
+    header_row = header_start_row + 1
+    headers = list(MARKS_ENTRY_ROW_HEADERS) + [
+        f"{MARKS_ENTRY_CO_PREFIX}{i}" for i in range(1, total_outcomes + 1)
+    ]
+    anchors = _component_metadata_anchor_cells(metadata_rows)
+    component_row = len(metadata_rows) + 1
+    anchors.extend(
+        [
+            [f"B{component_row}", _COMPONENT_NAME_LABEL],
+            [f"C{component_row}", component_name],
+        ]
+    )
+    return {
+        "name": sheet_name,
+        "kind": "indirect",
+        "header_row": header_row,
+        "headers": headers,
+        "anchors": anchors,
+        "formula_anchors": [],
+        "student_count": len(students),
+        "student_identity_hash": student_identity_hash,
+        "mark_structure": {
+            "likert_range": [LIKERT_MIN, LIKERT_MAX],
+        },
+    }
 
 
 def _write_direct_co_wise_sheet(
@@ -627,8 +880,6 @@ def _write_direct_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
-    student_identity_hash: str,
-    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -717,39 +968,6 @@ def _write_direct_co_wise_sheet(
     ws.freeze_panes(header_start_row + 3, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
-    header_row = header_start_row + 1
-    anchors = _component_metadata_anchor_cells(metadata_rows)
-    component_row = len(metadata_rows) + 1
-    anchors.extend(
-        [
-            [f"B{component_row}", _COMPONENT_NAME_LABEL],
-            [f"C{component_row}", component_name],
-            [f"C{header_row + 1}", _CO_LABEL],
-            [f"C{header_row + 2}", _MAX_LABEL],
-            [f"{_excel_col_name(total_col)}{header_row}", MARKS_ENTRY_TOTAL_LABEL],
-        ]
-    )
-    formula_anchors: list[list[str]] = []
-    if students and question_count > 0:
-        first_mark_col = _excel_col_name(3)
-        last_mark_col = _excel_col_name(total_col - 1)
-        first_row_formula = f"=SUM({first_mark_col}{first_data_row + 1}:{last_mark_col}{first_data_row + 1})"
-        formula_anchors.append([f"{_excel_col_name(total_col)}{first_data_row + 1}", first_row_formula])
-    sheet_specs.append(
-        {
-            "name": sheet_name,
-            "kind": "direct_co_wise",
-            "header_row": header_row,
-            "headers": sheet_headers,
-            "anchors": anchors,
-            "formula_anchors": formula_anchors,
-            "student_count": len(students),
-            "student_identity_hash": student_identity_hash,
-            "mark_structure": {
-                "mark_maxima": max_marks_values,
-            },
-        }
-    )
 
 
 def _write_direct_non_co_wise_sheet(
@@ -766,8 +984,6 @@ def _write_direct_non_co_wise_sheet(
     num_fmt: Any,
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
-    student_identity_hash: str,
-    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -779,7 +995,6 @@ def _write_direct_non_co_wise_sheet(
     co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
     co_prefix_labels = [f"{MARKS_ENTRY_CO_PREFIX}{co}" for co in covered_cos]
     sheet_headers = row_headers + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
-    mark_maxima = [total_max] + [float(value) for value in max_marks_per_co]
 
     ws.write_row(header_start_row, 0, row_headers + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
     for idx, co_header in enumerate(co_mark_headers):
@@ -867,54 +1082,6 @@ def _write_direct_non_co_wise_sheet(
     ws.freeze_panes(header_start_row + 3, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
-    header_row = header_start_row + 1
-    anchors = _component_metadata_anchor_cells(metadata_rows)
-    component_row = len(metadata_rows) + 1
-    anchors.extend(
-        [
-            [f"B{component_row}", _COMPONENT_NAME_LABEL],
-            [f"C{component_row}", component_name],
-            [f"C{header_row + 1}", _CO_LABEL],
-            [f"C{header_row + 2}", _MAX_LABEL],
-            [f"D{header_row}", MARKS_ENTRY_TOTAL_LABEL],
-        ]
-    )
-    formula_anchors: list[list[str]] = []
-    if students and covered_cos:
-        first_row = first_data_row + 1
-        divisor = len(covered_cos)
-        col_name_total = _excel_col_name(3)
-        first_co_col_name = _excel_col_name(4) if divisor > 1 else ""
-        for idx in range(len(covered_cos)):
-            co_col = 4 + idx
-            if idx == len(covered_cos) - 1 and len(covered_cos) > 1:
-                prev_co_col_name = _excel_col_name(co_col - 1)
-                formula = (
-                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
-                    f'"A",IF(${col_name_total}{first_row}="","",${col_name_total}{first_row}-SUM('
-                    f"{first_co_col_name}{first_row}:{prev_co_col_name}{first_row})))"
-                )
-            else:
-                formula = (
-                    f'=IF(OR(${col_name_total}{first_row}="A",${col_name_total}{first_row}="a"),'
-                    f'"A",IF(${col_name_total}{first_row}="","",ROUND(${col_name_total}{first_row}/{divisor},2)))'
-                )
-            formula_anchors.append([f"{_excel_col_name(co_col)}{first_row}", formula])
-    sheet_specs.append(
-        {
-            "name": sheet_name,
-            "kind": "direct_non_co_wise",
-            "header_row": header_row,
-            "headers": sheet_headers,
-            "anchors": anchors,
-            "formula_anchors": formula_anchors,
-            "student_count": len(students),
-            "student_identity_hash": student_identity_hash,
-            "mark_structure": {
-                "mark_maxima": mark_maxima,
-            },
-        }
-    )
 
 
 def _write_indirect_sheet(
@@ -929,8 +1096,6 @@ def _write_indirect_sheet(
     unlocked_body_fmt: Any,
     wrapped_body_fmt: Any,
     wrapped_column_fmt: Any,
-    student_identity_hash: str,
-    sheet_specs: list[dict[str, Any]],
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
@@ -979,30 +1144,6 @@ def _write_indirect_sheet(
     ws.freeze_panes(header_start_row + 1, 3)
     ws.set_selection(first_data_row, 3, first_data_row, 3)
     _protect_sheet(ws)
-    header_row = header_start_row + 1
-    anchors = _component_metadata_anchor_cells(metadata_rows)
-    component_row = len(metadata_rows) + 1
-    anchors.extend(
-        [
-            [f"B{component_row}", _COMPONENT_NAME_LABEL],
-            [f"C{component_row}", component_name],
-        ]
-    )
-    sheet_specs.append(
-        {
-            "name": sheet_name,
-            "kind": "indirect",
-            "header_row": header_row,
-            "headers": headers,
-            "anchors": anchors,
-            "formula_anchors": [],
-            "student_count": len(students),
-            "student_identity_hash": student_identity_hash,
-            "mark_structure": {
-                "likert_range": [LIKERT_MIN, LIKERT_MAX],
-            },
-        }
-    )
 
 
 def _write_component_course_metadata(
