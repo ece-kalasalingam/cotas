@@ -27,6 +27,8 @@ from common.constants import (
     LIKERT_MIN,
     MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
     MARKS_ENTRY_CO_PREFIX,
+    MARKS_ENTRY_COS_LABEL,
+    MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE,
     MARKS_ENTRY_QUESTION_PREFIX,
     MARKS_ENTRY_ROW_HEADERS,
     MARKS_ENTRY_TOTAL_LABEL,
@@ -215,9 +217,7 @@ def generate_marks_template_from_course_details(
 
 def _extract_marks_template_context(workbook: Any) -> dict[str, Any]:
     metadata_rows = _iter_data_rows(workbook[COURSE_METADATA_SHEET], len(COURSE_METADATA_HEADERS))
-    assessment_rows = _iter_data_rows(
-        workbook[ASSESSMENT_CONFIG_SHEET], len(ASSESSMENT_CONFIG_HEADERS)
-    )
+    assessment_rows = _iter_data_rows(workbook[ASSESSMENT_CONFIG_SHEET], len(ASSESSMENT_CONFIG_HEADERS))
     question_rows = _iter_data_rows(workbook[QUESTION_MAP_SHEET], len(QUESTION_MAP_HEADERS))
     student_rows = _iter_data_rows(workbook[STUDENTS_SHEET], len(STUDENTS_HEADERS))
 
@@ -515,7 +515,7 @@ def _write_direct_non_co_wise_sheet(
     for idx, co_number in enumerate(covered_cos):
         ws.write(0, 4 + idx, f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co_number}", header_fmt)
 
-    ws.write_row(1, 0, ["", "", "", "COs"], header_fmt)
+    ws.write_row(1, 0, ["", "", "", MARKS_ENTRY_COS_LABEL], header_fmt)
     for idx, co_number in enumerate(covered_cos):
         ws.write(1, 4 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
 
@@ -600,8 +600,8 @@ def _write_indirect_sheet(
                     f'=OR(D2="A",D2="a",AND(ISNUMBER(D2),D2>={MIN_MARK_VALUE},'
                     f'D2>={LIKERT_MIN},D2<={LIKERT_MAX}))'
                 ),
-                "error_title": "Invalid marks",
-                "error_message": "Enter A/a or a numeric Likert value within allowed range.",
+                "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
+                "error_message": MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE,
                 "ignore_blank": True,
             },
         )
@@ -916,6 +916,8 @@ def _validate_course_setup_v1(workbook: Any) -> None:
 def _validate_course_metadata(worksheet: Any) -> int:
     expected_headers = list(COURSE_METADATA_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
+    field_header = normalize(expected_headers[0])
+    value_header = normalize(expected_headers[1])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     expected_field_rows = SAMPLE_SETUP_DATA.get(COURSE_METADATA_SHEET, [])
@@ -926,8 +928,8 @@ def _validate_course_metadata(worksheet: Any) -> int:
 
     actual_values: dict[str, Any] = {}
     for row_number, row in enumerate(rows, start=2):
-        field_raw = row[header_map["field"]]
-        value_raw = row[header_map["value"]]
+        field_raw = row[header_map[field_header]]
+        value_raw = row[header_map[value_header]]
         field_key = normalize(field_raw)
         if not field_key:
             raise ValidationError(t("instructor.validation.course_metadata_field_empty", row=row_number))
@@ -1003,8 +1005,14 @@ def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str)
 
 
 def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
-    expected_headers = list(ASSESSMENT_CONFIG_HEADERS)
+    assessment_headers = ASSESSMENT_CONFIG_HEADERS
+    expected_headers = list(assessment_headers)
     header_map = _header_index_map(worksheet, expected_headers)
+    component_header = normalize(assessment_headers[0])
+    weight_header = normalize(assessment_headers[1])
+    cia_header = normalize(assessment_headers[2])
+    co_wise_header = normalize(assessment_headers[3])
+    direct_header = normalize(assessment_headers[4])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
@@ -1017,7 +1025,7 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     indirect_count = 0
 
     for row_number, row in enumerate(rows, start=2):
-        component_raw = row[header_map["component"]]
+        component_raw = row[header_map[component_header]]
         component_key = normalize(component_raw)
         if not component_key:
             raise ValidationError(
@@ -1032,7 +1040,7 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
                 )
             )
 
-        weight_value = coerce_excel_number(row[header_map["weight (%)"]])
+        weight_value = coerce_excel_number(row[header_map[weight_header]])
         if (
             isinstance(weight_value, bool)
             or not isinstance(weight_value, (int, float))
@@ -1042,22 +1050,22 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
             )
 
         is_direct = _parse_yes_no(
-            row[header_map["direct"]],
+            row[header_map[direct_header]],
             ASSESSMENT_CONFIG_SHEET,
             row_number,
-            ASSESSMENT_CONFIG_HEADERS[4],
+            assessment_headers[4],
         )
         co_wise_breakup = _parse_yes_no(
-            row[header_map["co_wise_marks_breakup"]],
+            row[header_map[co_wise_header]],
             ASSESSMENT_CONFIG_SHEET,
             row_number,
-            ASSESSMENT_CONFIG_HEADERS[3],
+            assessment_headers[3],
         )
         _parse_yes_no(
-            row[header_map["cia"]],
+            row[header_map[cia_header]],
             ASSESSMENT_CONFIG_SHEET,
             row_number,
-            ASSESSMENT_CONFIG_HEADERS[2],
+            assessment_headers[2],
         )
 
         if is_direct:
@@ -1121,6 +1129,10 @@ def _validate_question_map(
 ) -> None:
     expected_headers = list(QUESTION_MAP_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
+    component_header = normalize(expected_headers[0])
+    question_header = normalize(expected_headers[1])
+    max_marks_header = normalize(expected_headers[2])
+    co_header = normalize(expected_headers[3])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
@@ -1128,7 +1140,7 @@ def _validate_question_map(
 
     seen_co_wise_questions: set[tuple[str, str]] = set()
     for row_number, row in enumerate(rows, start=2):
-        component_raw = row[header_map["component"]]
+        component_raw = row[header_map[component_header]]
         component_key = normalize(component_raw)
         if not component_key:
             raise ValidationError(t("instructor.validation.question_component_required", row=row_number))
@@ -1141,14 +1153,14 @@ def _validate_question_map(
                 )
             )
 
-        question_raw = row[header_map["q_no/rubric_parameter"]]
+        question_raw = row[header_map[question_header]]
         question_key = normalize(question_raw)
         if not question_key:
             raise ValidationError(
                 t("instructor.validation.question_label_required", row=row_number)
             )
 
-        max_marks = coerce_excel_number(row[header_map["max_marks"]])
+        max_marks = coerce_excel_number(row[header_map[max_marks_header]])
         if isinstance(max_marks, bool) or not isinstance(max_marks, (int, float)):
             raise ValidationError(t("instructor.validation.question_max_marks_numeric", row=row_number))
         if float(max_marks) <= 0:
@@ -1156,7 +1168,7 @@ def _validate_question_map(
                 t("instructor.validation.question_max_marks_positive", row=row_number)
             )
 
-        co_values = _co_tokens(row[header_map["co"]])
+        co_values = _co_tokens(row[header_map[co_header]])
         if not co_values:
             raise ValidationError(t("instructor.validation.question_co_required", row=row_number))
         if len(set(co_values)) != len(co_values):
@@ -1196,6 +1208,8 @@ def _validate_question_map(
 def _validate_students(worksheet: Any) -> None:
     expected_headers = list(STUDENTS_HEADERS)
     header_map = _header_index_map(worksheet, expected_headers)
+    reg_no_header = normalize(expected_headers[0])
+    student_name_header = normalize(expected_headers[1])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
@@ -1203,8 +1217,8 @@ def _validate_students(worksheet: Any) -> None:
 
     seen_reg_numbers: set[str] = set()
     for row_number, row in enumerate(rows, start=2):
-        reg_no_raw = row[header_map["reg_no"]]
-        student_name_raw = row[header_map["student_name"]]
+        reg_no_raw = row[header_map[reg_no_header]]
+        student_name_raw = row[header_map[student_name_header]]
 
         reg_no = str(reg_no_raw).strip() if reg_no_raw is not None else ""
         student_name = str(student_name_raw).strip() if student_name_raw is not None else ""

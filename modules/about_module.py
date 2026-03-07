@@ -27,7 +27,7 @@ from common.constants import (
     ABOUT_ICON_SIZE,
     ABOUT_TITLE_SPACING,
     APP_NAME,
-    APP_SUBTITLE,
+    APP_SUBTITLE_TEXT_KEY,
     SYSTEM_VERSION,
 )
 from common.texts import t
@@ -68,7 +68,7 @@ class AboutModule(QWidget):
         app_name = QLabel(APP_NAME)
         app_name.setStyleSheet(ABOUT_APP_NAME_STYLE)
 
-        subtitle = QLabel(APP_SUBTITLE)
+        subtitle = QLabel(t(APP_SUBTITLE_TEXT_KEY))
         subtitle.setStyleSheet(ABOUT_SUBTITLE_STYLE)
 
         version_label = QLabel(t("about.version", version=SYSTEM_VERSION))

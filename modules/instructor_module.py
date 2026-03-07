@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -38,6 +40,8 @@ from common.exceptions import AppSystemError, ValidationError
 from common.toast import show_toast
 from common.texts import t
 from common.utils import (
+    emit_user_status,
+    log_process_message,
     remember_dialog_dir,
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
@@ -49,6 +53,21 @@ from modules.instructor import (
 )
 
 _logger = logging.getLogger(__name__)
+
+
+class _UILogHandler(logging.Handler):
+    """Forward logger messages to the in-panel user log view."""
+
+    def __init__(self, sink):
+        super().__init__(level=logging.INFO)
+        self._sink = sink
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = f"{record.levelname}: {record.getMessage()}"
+            self._sink(message)
+        except Exception:
+            pass
 
 
 class InstructorModule(QWidget):
@@ -123,8 +142,10 @@ class InstructorModule(QWidget):
         self.step3_outdated = False  # Filled marks
         self.step4_outdated = False  # Final report
 
+        self._ui_log_handler: _UILogHandler | None = None
         self._step_items: list[QListWidgetItem] = []
         self._build_ui()
+        self._setup_ui_logging()
         self._refresh_ui()
 
     def _build_ui(self) -> None:
@@ -171,29 +192,34 @@ class InstructorModule(QWidget):
         )
         right_layout.setSpacing(INSTRUCTOR_CARD_SPACING)
 
+        top_content = QWidget()
+        top_layout = QVBoxLayout(top_content)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(INSTRUCTOR_CARD_SPACING)
+
         self.active_title = QLabel()
         self.active_title.setFont(
             QFont(UI_FONT_FAMILY, INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE, QFont.Weight.Bold)
         )
-        right_layout.addWidget(self.active_title)
+        top_layout.addWidget(self.active_title)
 
         self.active_desc = QLabel()
         self.active_desc.setWordWrap(True)
-        right_layout.addWidget(self.active_desc)
+        top_layout.addWidget(self.active_desc)
 
         self.active_file = QLabel(t("instructor.file.none"))
         self.active_file.setWordWrap(True)
-        right_layout.addWidget(self.active_file)
+        top_layout.addWidget(self.active_file)
 
         self.active_note = QLabel(t("instructor.note.default"))
         self.active_note.setWordWrap(True)
         self.active_note.setObjectName("hintText")
-        right_layout.addWidget(self.active_note)
+        top_layout.addWidget(self.active_note)
 
         self.primary_action = QPushButton()
         self.primary_action.setObjectName("primaryAction")
         self.primary_action.clicked.connect(self._run_current_step_action)
-        right_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
+        top_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.step2_action_row = QWidget()
         step2_action_layout = QHBoxLayout(self.step2_action_row)
@@ -206,7 +232,6 @@ class InstructorModule(QWidget):
         step2_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
 
         self.step2_upload_action = QPushButton()
-        self.step2_upload_action.setObjectName("normalAction")
         self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
         step2_action_layout.addWidget(self.step2_upload_action)
 
@@ -215,8 +240,19 @@ class InstructorModule(QWidget):
         self.step2_prepare_action.clicked.connect(self._on_step2_prepare_clicked)
         step2_action_layout.addWidget(self.step2_prepare_action)
         step2_action_layout.addStretch(1)
-        right_layout.addWidget(self.step2_action_row)
-        right_layout.addStretch(1)
+        top_layout.addWidget(self.step2_action_row)
+        top_layout.addStretch(1)
+
+        right_layout.addWidget(top_content, 1)
+
+        self.user_log_title = QLabel(t("instructor.log.title"))
+        right_layout.addWidget(self.user_log_title)
+
+        self.user_log_view = QPlainTextEdit()
+        self.user_log_view.setReadOnly(True)
+        self.user_log_view.setMinimumHeight(120)
+        self.user_log_view.setObjectName("userLogView")
+        right_layout.addWidget(self.user_log_view)
 
         root.addWidget(left)
         root.addWidget(right, 1)
@@ -366,6 +402,37 @@ class InstructorModule(QWidget):
                 logger=_logger,
             )
 
+    def _setup_ui_logging(self) -> None:
+        if self._ui_log_handler is not None:
+            return
+        self._ui_log_handler = _UILogHandler(self._append_user_log)
+        _logger.addHandler(self._ui_log_handler)
+        self._append_user_log(t("instructor.log.ready"))
+
+    def _append_user_log(self, message: str) -> None:
+        if not message or not message.strip():
+            return
+        text = message.strip()
+        if not (
+            len(text) >= 10
+            and text[0] == "["
+            and text[3] == ":"
+            and text[6] == ":"
+            and text[9] == "]"
+        ):
+            text = f"[{datetime.now().strftime('%H:%M:%S')}] {text}"
+        self.user_log_view.appendPlainText(text)
+
+    def _publish_status(self, message: str) -> None:
+        self._append_user_log(message)
+        emit_user_status(getattr(self, "status_changed", None), message, logger=_logger)
+
+    def closeEvent(self, event) -> None:
+        if self._ui_log_handler is not None:
+            _logger.removeHandler(self._ui_log_handler)
+            self._ui_log_handler = None
+        super().closeEvent(event)
+
     def _show_step_success_toast(self, step: int) -> None:
         show_toast(
             self,
@@ -392,6 +459,7 @@ class InstructorModule(QWidget):
 
     def _download_course_template(self) -> None:
         template_id = ID_COURSE_SETUP
+        process_name = "generating course details template"
 
         save_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -405,25 +473,43 @@ class InstructorModule(QWidget):
         try:
             generate_course_details_template(save_path, template_id=template_id)
         except ValidationError as exc:
-            _logger.warning("Template generation validation failed: %s", exc)
-            self._show_validation_error_toast(str(exc))
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+                notify=lambda message, _level: self._show_validation_error_toast(message),
+            )
             return
-        except AppSystemError:
-            _logger.exception("System failure while generating course details template.")
+        except AppSystemError as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(1)
             return
-        except Exception:
-            _logger.exception("Unexpected error while generating course details template.")
+        except Exception as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(1)
             return
 
         self.step1_path = save_path
         self.step1_done = True
         self._remember_dialog_dir_safe(save_path)
-        self.status_changed.emit(t("instructor.status.step1_selected"))
+        self._publish_status(t("instructor.status.step1_selected"))
+        log_process_message(
+            process_name,
+            logger=_logger,
+            success_message=f"{process_name} completed successfully.",
+        )
         self._show_step_success_toast(1)
 
     def _upload_course_details(self) -> None:
+        process_name = "validating uploaded course details workbook"
         open_path, _ = QFileDialog.getOpenFileName(
             self,
             t("instructor.dialog.step2.title"),
@@ -436,15 +522,27 @@ class InstructorModule(QWidget):
         try:
             validate_course_details_workbook(open_path)
         except ValidationError as exc:
-            _logger.warning("Step 2 workbook validation failed: %s", exc)
-            self._show_validation_error_toast(str(exc))
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+                notify=lambda message, _level: self._show_validation_error_toast(message),
+            )
             return
-        except AppSystemError:
-            _logger.exception("System failure while validating Step 2 workbook.")
+        except AppSystemError as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(2)
             return
-        except Exception:
-            _logger.exception("Unexpected error while validating Step 2 workbook.")
+        except Exception as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(2)
             return
 
@@ -459,12 +557,18 @@ class InstructorModule(QWidget):
             self.step4_outdated = self.step4_done
             self.step3_outdated = self.step3_done
             if self.step3_outdated or self.step4_outdated:
-                self.status_changed.emit(t("instructor.status.step2_changed"))
+                self._publish_status(t("instructor.status.step2_changed"))
         else:
-            self.status_changed.emit(t("instructor.status.step2_validated"))
+            self._publish_status(t("instructor.status.step2_validated"))
+        log_process_message(
+            process_name,
+            logger=_logger,
+            success_message=f"{process_name} completed successfully.",
+        )
         self._show_step_success_toast(2)
 
     def _prepare_marks_template(self) -> None:
+        process_name = "generating marks template"
         if not self.step2_upload_ready or not self.step2_course_details_path:
             show_toast(
                 self,
@@ -486,15 +590,27 @@ class InstructorModule(QWidget):
         try:
             generate_marks_template_from_course_details(self.step2_course_details_path, save_path)
         except ValidationError as exc:
-            _logger.warning("Step 2 marks template generation validation failed: %s", exc)
-            self._show_validation_error_toast(str(exc))
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+                notify=lambda message, _level: self._show_validation_error_toast(message),
+            )
             return
-        except AppSystemError:
-            _logger.exception("System failure while generating Step 2 marks template.")
+        except AppSystemError as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(2)
             return
-        except Exception:
-            _logger.exception("Unexpected error while generating Step 2 marks template.")
+        except Exception as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
+            )
             self._show_system_error_toast(2)
             return
 
@@ -503,10 +619,16 @@ class InstructorModule(QWidget):
         self.step3_outdated = self.step3_done
         self.step4_outdated = self.step4_done
         self._remember_dialog_dir_safe(save_path)
-        self.status_changed.emit(t("instructor.status.step2_uploaded"))
+        self._publish_status(t("instructor.status.step2_uploaded"))
+        log_process_message(
+            process_name,
+            logger=_logger,
+            success_message=f"{process_name} completed successfully.",
+        )
         self._show_step_success_toast(2)
 
     def _upload_filled_marks(self) -> None:
+        process_name = "uploading filled marks workbook"
         open_path, _ = QFileDialog.getOpenFileName(
             self,
             t("instructor.dialog.step3.title"),
@@ -524,12 +646,18 @@ class InstructorModule(QWidget):
 
         if replacing and self.step3_done:
             self.step4_outdated = True
-            self.status_changed.emit(t("instructor.status.step3_changed"))
+            self._publish_status(t("instructor.status.step3_changed"))
         else:
-            self.status_changed.emit(t("instructor.status.step3_uploaded"))
+            self._publish_status(t("instructor.status.step3_uploaded"))
+        log_process_message(
+            process_name,
+            logger=_logger,
+            success_message=f"{process_name} completed successfully.",
+        )
         self._show_step_success_toast(3)
 
     def _generate_final_report(self) -> None:
+        process_name = "generating final CO report"
         can_run, reason = self._can_run_step(4)
         if not can_run:
             show_toast(
@@ -561,11 +689,11 @@ class InstructorModule(QWidget):
 
         try:
             shutil.copyfile(self.step3_path, save_path)
-        except OSError:
-            _logger.exception(
-                "Failed to generate final report by copying filled marks. src=%s dst=%s",
-                self.step3_path,
-                save_path,
+        except OSError as exc:
+            log_process_message(
+                process_name,
+                logger=_logger,
+                error=exc,
             )
             self._show_system_error_toast(4)
             return
@@ -574,5 +702,10 @@ class InstructorModule(QWidget):
         self.step4_done = True
         self.step4_outdated = False
         self._remember_dialog_dir_safe(save_path)
-        self.status_changed.emit(t("instructor.status.step4_selected"))
+        self._publish_status(t("instructor.status.step4_selected"))
+        log_process_message(
+            process_name,
+            logger=_logger,
+            success_message=f"{process_name} completed successfully.",
+        )
         self._show_step_success_toast(4)
