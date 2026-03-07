@@ -9,7 +9,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from common.constants import APP_NAME, APP_SUBTITLE, SYSTEM_VERSION
+from common.constants import (
+    APP_EXECUTABLE_NAME,
+    APP_INTERNAL_NAME,
+    APP_PRODUCT_NAME,
+    SYSTEM_VERSION,
+)
 
 
 def _parse_version(version: str) -> tuple[int, int, int, int]:
@@ -52,13 +57,13 @@ VSVersionInfo(
         StringTable(
           '040904B0',
           [
-            StringStruct('CompanyName', '{APP_NAME}'),
-            StringStruct('FileDescription', '{APP_SUBTITLE}'),
+            StringStruct('CompanyName', '{APP_PRODUCT_NAME}'),
+            StringStruct('FileDescription', '{APP_PRODUCT_NAME}'),
             StringStruct('FileVersion', '{version_str}'),
-            StringStruct('InternalName', '{APP_NAME}'),
+            StringStruct('InternalName', '{APP_INTERNAL_NAME}'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026'),
-            StringStruct('OriginalFilename', '{APP_NAME}.exe'),
-            StringStruct('ProductName', '{APP_NAME}'),
+            StringStruct('OriginalFilename', '{APP_EXECUTABLE_NAME}.exe'),
+            StringStruct('ProductName', '{APP_PRODUCT_NAME}'),
             StringStruct('ProductVersion', '{version_str}')
           ]
         )

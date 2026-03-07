@@ -68,15 +68,15 @@ class AboutModule(QWidget):
         app_name = QLabel(APP_NAME)
         app_name.setStyleSheet(ABOUT_APP_NAME_STYLE)
 
-        subtitle = QLabel(t(APP_SUBTITLE_TEXT_KEY))
-        subtitle.setStyleSheet(ABOUT_SUBTITLE_STYLE)
+        self.subtitle = QLabel()
+        self.subtitle.setStyleSheet(ABOUT_SUBTITLE_STYLE)
 
-        version_label = QLabel(t("about.version", version=SYSTEM_VERSION))
-        version_label.setStyleSheet(ABOUT_META_STYLE)
+        self.version_label = QLabel()
+        self.version_label.setStyleSheet(ABOUT_META_STYLE)
 
         title_layout.addWidget(app_name)
-        title_layout.addWidget(subtitle)
-        title_layout.addWidget(version_label)
+        title_layout.addWidget(self.subtitle)
+        title_layout.addWidget(self.version_label)
 
         header_layout.addLayout(title_layout)
         header_layout.addStretch()
@@ -92,23 +92,32 @@ class AboutModule(QWidget):
         # -------------------------------------------------
         # Body Information
         # -------------------------------------------------
-        description = QLabel(t("about.description", app_name=APP_NAME))
-        description.setWordWrap(True)
-        description.setStyleSheet(ABOUT_BODY_STYLE)
+        self.description = QLabel()
+        self.description.setWordWrap(True)
+        self.description.setStyleSheet(ABOUT_BODY_STYLE)
 
-        institution = QLabel(t("about.institution"))
-        institution.setStyleSheet(ABOUT_BODY_STYLE)
+        self.institution = QLabel()
+        self.institution.setStyleSheet(ABOUT_BODY_STYLE)
 
-        copyright_label = QLabel(t("about.copyright", year=datetime.now().year))
-        copyright_label.setStyleSheet(ABOUT_COPYRIGHT_STYLE)
+        self.copyright_label = QLabel()
+        self.copyright_label.setStyleSheet(ABOUT_COPYRIGHT_STYLE)
 
-        root.addWidget(description)
+        root.addWidget(self.description)
         root.addSpacing(ABOUT_BODY_GAP_LARGE)
-        root.addWidget(institution)
+        root.addWidget(self.institution)
         root.addSpacing(ABOUT_BODY_GAP_SMALL)
-        root.addWidget(copyright_label)
+        root.addWidget(self.copyright_label)
 
         # Push content upward
         spacer = QLabel()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         root.addWidget(spacer)
+
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        self.subtitle.setText(t(APP_SUBTITLE_TEXT_KEY))
+        self.version_label.setText(t("about.version", version=SYSTEM_VERSION))
+        self.description.setText(t("about.description", app_name=APP_NAME))
+        self.institution.setText(t("about.institution"))
+        self.copyright_label.setText(t("about.copyright", year=datetime.now().year))

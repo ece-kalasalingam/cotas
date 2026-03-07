@@ -16,13 +16,13 @@ VSVersionInfo(
         StringTable(
           '040904B0',
           [
-            StringStruct('CompanyName', 'FOCUS'),
-            StringStruct('FileDescription', 'Framework for Outcome Computation and Unification System'),
+            StringStruct('CompanyName', 'Focus'),
+            StringStruct('FileDescription', 'Focus'),
             StringStruct('FileVersion', '1.0.0.0'),
-            StringStruct('InternalName', 'FOCUS'),
+            StringStruct('InternalName', 'focus'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026'),
-            StringStruct('OriginalFilename', 'FOCUS.exe'),
-            StringStruct('ProductName', 'FOCUS'),
+            StringStruct('OriginalFilename', 'focus.exe'),
+            StringStruct('ProductName', 'Focus'),
             StringStruct('ProductVersion', '1.0.0.0')
           ]
         )

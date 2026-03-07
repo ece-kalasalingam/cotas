@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 CALL_ARG_INDEXES: dict[str, tuple[int, ...]] = {
@@ -75,7 +74,9 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     failures: list[str] = []
     for file_path in _target_files(repo_root):
-        source = file_path.read_text(encoding="utf-8")
+        # Use utf-8-sig so files with a UTF-8 BOM are parsed consistently
+        # across all platforms and CI environments.
+        source = file_path.read_text(encoding="utf-8-sig")
         failures.extend(_find_violations(source, file_path))
 
     if failures:

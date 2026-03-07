@@ -20,6 +20,10 @@ class _DummyModule:
     def __init__(self) -> None:
         self.step1_path: str | None = None
         self.step1_done = False
+        self.state = type("State", (), {"busy": False})()
+        self._active_jobs: list[object] = []
+        self._cancel_token = None
+        self._workflow_service = None
         self.status_changed = _SignalRecorder()
         self._toasts: list[tuple[str, str]] = []
 
@@ -35,6 +39,14 @@ class _DummyModule:
     def _show_step_success_toast(self, step: int) -> None:
         self._toasts.append(("success", str(step)))
 
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
+        if not hasattr(self, "state"):
+            self.state = type("State", (), {"busy": False})()
+        self.state.busy = busy
+
+    def _refresh_ui(self) -> None:
+        return
+
 
 def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
@@ -43,6 +55,19 @@ def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_dialog_start_path",
         lambda _app, _default=None: "D:/tmp/default.xlsx",
     )
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+
+def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+    try:
+        result = fn(*args, **kwargs)
+    except Exception as exc:  # pragma: no cover - helper supports both paths
+        if on_failed is not None:
+            on_failed(exc)
+    else:
+        if on_finished is not None:
+            on_finished(result)
+    return object()
 
 
 def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -197,3 +222,45 @@ def test_download_course_template_dialog_receives_expected_defaults(
     assert captured["title"] == "instructor.dialog.step1.title"
     assert captured["start_path"] == "D:/tmp/default.xlsx"
     assert captured["filter"] == "instructor.dialog.filter.excel"
+
+
+def test_download_course_template_async_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_ui_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.state = type("State", (), {"busy": False})()
+    dummy._active_jobs = []
+    dummy._cancel_token = None
+    dummy._workflow_service = None
+    generated: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/course_details_async.xlsx", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "generate_course_details_template",
+        lambda path, template_id: generated.append((path, template_id)),
+    )
+
+    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - success path
+            if on_failed is not None:
+                on_failed(exc)
+        else:
+            if on_finished is not None:
+                on_finished(result)
+        return object()
+
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+    instructor_ui.InstructorModule._download_course_template_async(dummy)
+
+    assert generated == [("D:/tmp/course_details_async.xlsx", instructor_ui.ID_COURSE_SETUP)]
+    assert dummy.step1_done is True
+    assert dummy.step1_path == "D:/tmp/course_details_async.xlsx"
+    assert dummy.state.busy is False
+    assert dummy.status_changed.messages == ["instructor.status.step1_selected"]

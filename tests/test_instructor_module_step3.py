@@ -22,6 +22,10 @@ class _DummyModule:
         self.step3_done = False
         self.step3_outdated = True
         self.step4_outdated = False
+        self.state = type("State", (), {"busy": False})()
+        self._active_jobs: list[object] = []
+        self._cancel_token = None
+        self._workflow_service = None
         self.status_changed = _SignalRecorder()
         self._toasts: list[tuple[str, str]] = []
 
@@ -31,6 +35,20 @@ class _DummyModule:
     def _show_step_success_toast(self, step: int) -> None:
         self._toasts.append(("success", str(step)))
 
+    def _show_validation_error_toast(self, message: str) -> None:
+        self._toasts.append(("validation", message))
+
+    def _show_system_error_toast(self, step: int) -> None:
+        self._toasts.append(("system", str(step)))
+
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
+        if not hasattr(self, "state"):
+            self.state = type("State", (), {"busy": False})()
+        self.state.busy = busy
+
+    def _refresh_ui(self) -> None:
+        return
+
 
 def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
@@ -39,6 +57,19 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_dialog_start_path",
         lambda _app, _default=None: "D:/tmp/filled_marks.xlsx",
     )
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+
+def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+    try:
+        result = fn(*args, **kwargs)
+    except Exception as exc:  # pragma: no cover - helper supports both paths
+        if on_failed is not None:
+            on_failed(exc)
+    else:
+        if on_finished is not None:
+            on_finished(result)
+    return object()
 
 
 def test_step3_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,6 +80,11 @@ def test_step3_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
         instructor_ui.QFileDialog,
         "getOpenFileName",
         lambda *_args, **_kwargs: ("", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: None,
     )
 
     instructor_ui.InstructorModule._upload_filled_marks(dummy)
@@ -72,6 +108,11 @@ def test_step3_upload_success_allowed_without_step2(monkeypatch: pytest.MonkeyPa
         instructor_ui,
         "remember_dialog_dir",
         lambda path, app_name: remembered.append((path, app_name)),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: None,
     )
 
     instructor_ui.InstructorModule._upload_filled_marks(dummy)
@@ -97,6 +138,11 @@ def test_step3_replace_marks_flags_step4_outdated(monkeypatch: pytest.MonkeyPatc
         lambda *_args, **_kwargs: ("D:/tmp/new_filled_marks.xlsx", ""),
     )
     monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: None,
+    )
 
     instructor_ui.InstructorModule._upload_filled_marks(dummy)
 
@@ -105,3 +151,44 @@ def test_step3_replace_marks_flags_step4_outdated(monkeypatch: pytest.MonkeyPatc
     assert dummy.step3_path == "D:/tmp/new_filled_marks.xlsx"
     assert dummy.step4_outdated is True
     assert dummy.status_changed.messages == ["instructor.status.step3_changed"]
+
+
+def test_step3_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.state = type("State", (), {"busy": False})()
+    dummy._active_jobs = []
+    dummy._cancel_token = None
+    dummy._workflow_service = None
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/filled_marks_async.xlsx", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - success path
+            if on_failed is not None:
+                on_failed(exc)
+        else:
+            if on_finished is not None:
+                on_finished(result)
+        return object()
+
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+    instructor_ui.InstructorModule._upload_filled_marks_async(dummy)
+
+    assert dummy.step3_done is True
+    assert dummy.step3_path == "D:/tmp/filled_marks_async.xlsx"
+    assert dummy.step3_outdated is False
+    assert dummy.state.busy is False
+    assert dummy.status_changed.messages == ["instructor.status.step3_uploaded"]

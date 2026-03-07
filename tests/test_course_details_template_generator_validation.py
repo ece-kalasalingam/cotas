@@ -7,8 +7,19 @@ import pytest
 openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
-from common.constants import ID_COURSE_SETUP
-from common.exceptions import ValidationError
+from common.constants import (
+    ASSESSMENT_CONFIG_SHEET,
+    COURSE_METADATA_HEADERS,
+    COURSE_METADATA_SHEET,
+    ID_COURSE_SETUP,
+    QUESTION_MAP_SHEET,
+    STUDENTS_SHEET,
+    SYSTEM_HASH_SHEET,
+)
+from common.exceptions import JobCancelledError, ValidationError
+from common.jobs import CancellationToken
+from common.texts import get_language, set_language
+from modules.instructor import course_details_template_generator as mod
 from modules.instructor.course_details_template_generator import (
     generate_course_details_template,
     validate_course_details_workbook,
@@ -76,3 +87,50 @@ def test_validate_uploaded_workbook_rejects_duplicate_student_reg_no(tmp_path: P
 
     with pytest.raises(ValidationError, match="duplicate Reg_No"):
         validate_course_details_workbook(output)
+
+
+def test_generation_is_schema_stable_when_language_changes_mid_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "course_setup.xlsx"
+    original_generate_worksheet = mod.generate_worksheet
+    switched = {"done": False}
+    previous_language = get_language()
+
+    def _generate_worksheet_with_mid_switch(*args, **kwargs):
+        if not switched["done"]:
+            switched["done"] = True
+            set_language("ta-IN")
+        return original_generate_worksheet(*args, **kwargs)
+
+    set_language("en")
+    monkeypatch.setattr(mod, "generate_worksheet", _generate_worksheet_with_mid_switch)
+    try:
+        generate_course_details_template(output)
+        assert switched["done"] is True
+        assert validate_course_details_workbook(output) == ID_COURSE_SETUP
+
+        workbook = openpyxl.load_workbook(output, data_only=True)
+        try:
+            assert workbook.sheetnames == [
+                COURSE_METADATA_SHEET,
+                ASSESSMENT_CONFIG_SHEET,
+                QUESTION_MAP_SHEET,
+                STUDENTS_SHEET,
+                SYSTEM_HASH_SHEET,
+            ]
+            assert workbook[COURSE_METADATA_SHEET]["A1"].value == COURSE_METADATA_HEADERS[0]
+            assert workbook[COURSE_METADATA_SHEET]["B1"].value == COURSE_METADATA_HEADERS[1]
+        finally:
+            workbook.close()
+    finally:
+        set_language(previous_language)
+
+
+def test_generate_course_details_template_honors_pre_cancel(tmp_path: Path) -> None:
+    output = tmp_path / "cancelled_course_setup.xlsx"
+    token = CancellationToken()
+    token.cancel()
+
+    with pytest.raises(JobCancelledError):
+        generate_course_details_template(output, cancel_token=token)

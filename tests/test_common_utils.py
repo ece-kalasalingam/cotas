@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from common.exceptions import ValidationError
+from common.exceptions import AppSystemError, ValidationError
 from common.utils import (
     app_settings_path,
     coerce_excel_number,
@@ -239,7 +239,8 @@ class TestLogProcessMessage(unittest.TestCase):
         )
 
         self.assertTrue(result)
-        logger.info.assert_called_once_with("Workbook validated.")
+        logger.info.assert_called_once()
+        self.assertEqual(logger.info.call_args.args[0], "Workbook validated.")
         notify.assert_called_once_with("Workbook validated.", "success")
 
     def test_validation_error_shows_detailed_message(self) -> None:
@@ -255,12 +256,53 @@ class TestLogProcessMessage(unittest.TestCase):
         )
 
         self.assertFalse(result)
-        logger.warning.assert_called_once_with(
-            "%s failed due to data error: %s",
-            "validating workbook",
-            "Row 4: CO value is missing.",
-        )
+        logger.warning.assert_called_once()
+        self.assertEqual(logger.warning.call_args.args[:2], ("%s failed due to data error.", "validating workbook"))
         notify.assert_called_once_with("Row 4: CO value is missing.", "error")
+
+    def test_validation_error_prefers_code_mapping_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = ValidationError(
+            "fallback",
+            code="WORKBOOK_NOT_FOUND",
+            context={"workbook": "sample.xlsx"},
+        )
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        notify.assert_called_once()
+        self.assertIn("sample.xlsx", notify.call_args.args[0])
+        self.assertEqual(notify.call_args.args[1], "error")
+
+    def test_app_system_error_logs_generic_english_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = AppSystemError("உருவாக்கம் தோல்வியடைந்தது")
+
+        result = log_process_message(
+            "generating final report",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.error.assert_called_once()
+        self.assertEqual(
+            logger.error.call_args.args[:2],
+            ("%s failed due to a system/application error.", "generating final report"),
+        )
+        notify.assert_called_once_with(
+            "Error happened while generating final report.",
+            "error",
+        )
 
     def test_system_error_shows_process_scoped_message(self) -> None:
         logger = Mock()
@@ -275,11 +317,12 @@ class TestLogProcessMessage(unittest.TestCase):
         )
 
         self.assertFalse(result)
-        logger.exception.assert_called_once_with(
-            "%s failed due to a system/application error.",
-            "generating final report",
-            exc_info=error,
+        logger.exception.assert_called_once()
+        self.assertEqual(
+            logger.exception.call_args.args[:2],
+            ("%s failed due to a system/application error.", "generating final report"),
         )
+        self.assertIs(logger.exception.call_args.kwargs.get("exc_info"), error)
         notify.assert_called_once_with(
             "Error happened while generating final report.",
             "error",

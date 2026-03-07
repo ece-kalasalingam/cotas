@@ -1,3 +1,5 @@
+import os
+
 from common.exceptions import ConfigurationError
 
 """
@@ -20,20 +22,23 @@ If policy changes, edit this file only.
 # ==========================================================
 
 APP_NAME = "FOCUS"
+APP_EXECUTABLE_NAME = "focus"
+APP_INTERNAL_NAME = "focus"
+APP_PRODUCT_NAME = "Focus"
 APP_SUBTITLE = "Framework for Outcome Computation and Unification System"
 APP_SUBTITLE_TEXT_KEY = "app.subtitle"
 MAIN_WINDOW_TITLE_TEXT_KEY = "app.main_window_title"
-APP_ORGANIZATION = APP_NAME
+APP_ORGANIZATION = "FOCUS"
 MAIN_SPLASH_MS = 1500
 SINGLE_INSTANCE_LOCK_TIMEOUT_MS = 0
 THEME_REFRESH_DEBOUNCE_MS = 120
+THEME_SETUP_DEFER_MS = 0
 UI_STANDARD_TIMEOUT_MS = 3000
 STARTUP_TOAST_DURATION_MS = 2200
 STARTUP_TOAST_QUIT_DELAY_MS = 2300
 QT_ADAPTIVE_STRUCTURE_SENSITIVITY = "1"
 
 SYSTEM_VERSION = "1.0.0"
-REGULATION_VERSION = "R2025"
 ID_COURSE_SETUP = "COURSE_SETUP_V1"
 UI_LANGUAGE = "auto"  # "auto" uses OS user language; fallback is English (1033).
 UI_FONT_FAMILY = "Segoe UI"
@@ -55,6 +60,7 @@ WINDOW_MIN_WIDTH = 1005
 WINDOW_MIN_HEIGHT = WINDOW_STANDARD_HEIGHT
 MAIN_ACTIVITY_ICON_SIZE = 30
 STATUS_FLASH_TIMEOUT_MS = UI_STANDARD_TIMEOUT_MS
+MAIN_WINDOW_CONTENT_MARGINS = (0, 0, 0, 0)
 
 ABOUT_ICON_SIZE = 72
 ABOUT_LAYOUT_MARGIN = 40
@@ -71,6 +77,11 @@ INSTRUCTOR_CARD_MARGIN = 20
 INSTRUCTOR_CARD_SPACING = 14
 INSTRUCTOR_STEP2_ACTION_SPACING = 10
 INSTRUCTOR_STEP2_ACTION_MARGIN = 0
+INSTRUCTOR_TOP_LAYOUT_MARGINS = (0, 0, 0, 0)
+INSTRUCTOR_INFO_TAB_FIXED_HEIGHT = 220
+INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS = (0, 0, 0, 0)
+INSTRUCTOR_INFO_TAB_LAYOUT_SPACING = 0
+HELP_LAYOUT_CONTENT_MARGINS = (0, 0, 0, 0)
 
 # Shared UI style snippets
 ABOUT_APP_NAME_STYLE = "font-size: 24px; font-weight: 600;"
@@ -137,6 +148,20 @@ QPushButton {
     border-radius: 6px;
     border: 1px solid palette(mid);
 }
+QTabWidget#instructorInfoTabs::pane {
+    border: none;
+    background: palette(base);
+}
+QTabWidget#instructorInfoTabs QTabBar::tab:first {
+    margin-left: 8px;
+}
+QTabWidget#instructorInfoTabs QPlainTextEdit,
+QTabWidget#instructorInfoTabs QTextBrowser {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+    padding: 8px;
+}
 """
 
 
@@ -157,27 +182,31 @@ if round(DIRECT_RATIO + INDIRECT_RATIO, 5) != 1.0:
 # EXCEL SHEET CONSTANTS
 # ==========================================================
 
-# One unified password for all sheets (template + reports)
-WORKBOOK_PASSWORD: str = "admin"
+# One unified password for all sheets (template + reports).
+# This must always be provided via environment variable in all environments.
+WORKBOOK_PASSWORD_ENV_VAR = "FOCUS_WORKBOOK_PASSWORD"
+WORKBOOK_PASSWORD: str = os.getenv(WORKBOOK_PASSWORD_ENV_VAR, "").strip()
+if not WORKBOOK_PASSWORD:
+    raise ConfigurationError(
+        f"{WORKBOOK_PASSWORD_ENV_VAR} is required and must not be empty"
+    )
+if len(WORKBOOK_PASSWORD) < 12:
+    raise ConfigurationError(
+        f"{WORKBOOK_PASSWORD_ENV_VAR} must be at least 12 characters long"
+    )
 
 # Protection behavior flags
 ALLOW_SORT: bool = True
 ALLOW_FILTER: bool = True
 ALLOW_SELECT_LOCKED: bool = False
-ALLOW_SELECT_UNLOCKED: bool = False
+ALLOW_SELECT_UNLOCKED: bool = True
 
 HEADER_PATTERNFILL_COLOR = "F2F2F2"
-HEADER_PATTERNFILL_TYPE = "solid"
 
 
 # ==========================================================
 # MARK ENTRY RULES
 # ==========================================================
-
-ABSENT_SYMBOL: str = "A"
-
-# Numeric formatting
-DEFAULT_NUMBER_FORMAT: str = "0.00"
 
 # Marks validation lower bound
 MIN_MARK_VALUE: float = 0.0
@@ -187,7 +216,7 @@ MARKS_ENTRY_VALIDATION_ERROR_MESSAGE: str = "Enter A/a or a numeric mark within 
 MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE: str = (
     "Enter A/a or a numeric Likert value within allowed range."
 )
-MARKS_ENTRY_ROW_HEADERS = ("Sl. No.", "Reg. No.", "Student Name")
+MARKS_ENTRY_ROW_HEADERS = ("#", "Reg. No.", "Student Name")
 MARKS_ENTRY_TOTAL_LABEL = "Total"
 MARKS_ENTRY_CO_PREFIX = "CO"
 MARKS_ENTRY_QUESTION_PREFIX = "Q"
@@ -210,21 +239,11 @@ if LIKERT_MIN >= LIKERT_MAX:
 # PAGE LAYOUT DEFAULTS
 # ==========================================================
 
-# Margins (in inches)
-PAGE_MARGIN_STANDARD: float = 0.2
-MARGIN_LEFT: float = PAGE_MARGIN_STANDARD
-MARGIN_RIGHT: float = PAGE_MARGIN_STANDARD
-MARGIN_TOP: float = 0.5
-MARGIN_BOTTOM: float = 0.5
-MARGIN_HEADER: float = PAGE_MARGIN_STANDARD
-MARGIN_FOOTER: float = PAGE_MARGIN_STANDARD
-
 # ==========================================================
 # SYSTEM SHEET NAMES
 # ==========================================================
 
 SYSTEM_HASH_SHEET = "__SYSTEM_HASH__"
-COURSE_INFO_SHEET = "Course_Info"
 COURSE_METADATA_SHEET = "Course_Metadata"
 ASSESSMENT_CONFIG_SHEET = "Assessment_Config"
 QUESTION_MAP_SHEET = "Question_Map"
@@ -252,7 +271,6 @@ COURSE_METADATA_TOTAL_OUTCOMES_KEY = "total_outcomes"
 # ==========================================================
 
 MAX_EXCEL_SHEETNAME_LENGTH = 31
-MAX_CO_LIMIT = 50  # Safety upper bound
 WEIGHT_TOTAL_EXPECTED = 100.0
 WEIGHT_TOTAL_ROUND_DIGITS = 6
 
@@ -261,28 +279,17 @@ TOAST_DEFAULT_DURATION_MS = UI_STANDARD_TIMEOUT_MS
 TOAST_ERROR_DURATION_MS = 4500
 TOAST_MARGIN = 16
 TOAST_CONTENT_MARGIN_X = 12
-TOAST_CONTENT_MARGIN_Y = 10
+TOAST_CONTENT_MARGIN_Y = 8
 TOAST_CONTENT_MARGIN_LEFT = TOAST_CONTENT_MARGIN_X
 TOAST_CONTENT_MARGIN_TOP = TOAST_CONTENT_MARGIN_Y
 TOAST_CONTENT_MARGIN_RIGHT = TOAST_CONTENT_MARGIN_X
 TOAST_CONTENT_MARGIN_BOTTOM = TOAST_CONTENT_MARGIN_Y
-TOAST_CONTENT_SPACING = 4
+TOAST_CONTENT_SPACING = 2
 TOAST_SHADOW_BLUR_RADIUS = 24
 TOAST_SHADOW_OFFSET_X = 0
 TOAST_SHADOW_OFFSET_Y = 6
 TOAST_SHADOW_ALPHA = 60
-
-# ==========================================================
-# ATTAINMENT THRESHOLDS
-# ==========================================================
-
-PASS_MARK: float = 40.0
-THRESHOLD_MARK: float = 60.0
-HIGH_BENCHMARK_MARK: float = 80.0
-
-STATUS_NORMAL = 0
-STATUS_A = 1
-STATUS_NA = 2
+TOAST_MAX_WIDTH = 460
 
 # ==========================================================
 # END OF CONSTANTS

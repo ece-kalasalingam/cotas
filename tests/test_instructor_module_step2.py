@@ -26,6 +26,11 @@ class _DummyModule:
         self.step4_done = False
         self.step3_outdated = False
         self.step4_outdated = False
+        self.state = type("State", (), {"busy": False})()
+        self._active_jobs: list[object] = []
+        self._cancel_token = None
+        self._workflow_service = None
+        self._step2_marks_default_name = "marks_template.xlsx"
         self.status_changed = _SignalRecorder()
         self._toasts: list[tuple[str, str]] = []
 
@@ -41,6 +46,14 @@ class _DummyModule:
     def _show_step_success_toast(self, step: int) -> None:
         self._toasts.append(("success", str(step)))
 
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
+        if not hasattr(self, "state"):
+            self.state = type("State", (), {"busy": False})()
+        self.state.busy = busy
+
+    def _refresh_ui(self) -> None:
+        return
+
 
 def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
@@ -49,6 +62,19 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_dialog_start_path",
         lambda _app, _default=None: "D:/tmp/course_details.xlsx",
     )
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+
+def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+    try:
+        result = fn(*args, **kwargs)
+    except Exception as exc:  # pragma: no cover - helper supports both paths
+        if on_failed is not None:
+            on_failed(exc)
+    else:
+        if on_finished is not None:
+            on_finished(result)
+    return object()
 
 
 def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,4 +187,114 @@ def test_step2_prepare_marks_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert dummy.step2_path == "D:/tmp/marks_template.xlsx"
     assert remembered == [("D:/tmp/marks_template.xlsx", instructor_ui.APP_NAME)]
     assert dummy.status_changed.messages == ["instructor.status.step2_uploaded"]
+
+
+def test_step2_prepare_marks_uses_cached_default_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.step2_upload_ready = True
+    dummy.step2_course_details_path = "D:/tmp/course_details.xlsx"
+    dummy._step2_marks_default_name = "ECE101_III_A_2025-26_Marks.xlsx"
+    captured_defaults: list[str] = []
+
+    def _capture_start_path(_app: str, default_name: str | None = None) -> str:
+        captured_defaults.append(default_name or "")
+        return f"D:/tmp/{default_name}" if default_name else "D:/tmp/marks_template.xlsx"
+
+    monkeypatch.setattr(instructor_ui, "resolve_dialog_start_path", _capture_start_path)
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+
+    instructor_ui.InstructorModule._prepare_marks_template(dummy)
+
+    assert captured_defaults == ["ECE101_III_A_2025-26_Marks.xlsx"]
+
+
+def test_step2_prepare_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.step2_upload_ready = True
+    dummy.step2_course_details_path = "D:/tmp/course_details.xlsx"
+    dummy.state = type("State", (), {"busy": False})()
+    dummy._active_jobs = []
+    dummy._cancel_token = None
+    dummy._workflow_service = None
+    generated: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/marks_template_async.xlsx", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "generate_marks_template_from_course_details",
+        lambda src, dst: generated.append((src, dst)),
+    )
+
+    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - test exercises success path
+            if on_failed is not None:
+                on_failed(exc)
+        else:
+            if on_finished is not None:
+                on_finished(result)
+        return object()
+
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+    instructor_ui.InstructorModule._prepare_marks_template_async(dummy)
+
+    assert generated == [("D:/tmp/course_details.xlsx", "D:/tmp/marks_template_async.xlsx")]
+    assert dummy.step2_done is True
+    assert dummy.step2_path == "D:/tmp/marks_template_async.xlsx"
+    assert dummy.state.busy is False
+    assert dummy.status_changed.messages == ["instructor.status.step2_uploaded"]
+
+
+def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.state = type("State", (), {"busy": False})()
+    dummy._active_jobs = []
+    dummy._cancel_token = None
+    dummy._workflow_service = None
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/course_details_async.xlsx", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "validate_course_details_workbook",
+        lambda *_args, **_kwargs: instructor_ui.ID_COURSE_SETUP,
+    )
+
+    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - success path
+            if on_failed is not None:
+                on_failed(exc)
+        else:
+            if on_finished is not None:
+                on_finished(result)
+        return object()
+
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+    instructor_ui.InstructorModule._upload_course_details_async(dummy)
+
+    assert dummy.step2_upload_ready is True
+    assert dummy.step2_course_details_path == "D:/tmp/course_details_async.xlsx"
+    assert dummy.step2_done is False
+    assert dummy.step2_path is None
+    assert dummy.state.busy is False
+    assert dummy.status_changed.messages == ["instructor.status.step2_validated"]
 

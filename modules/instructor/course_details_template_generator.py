@@ -27,14 +27,10 @@ from common.constants import (
     LIKERT_MIN,
     MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
     MARKS_ENTRY_CO_PREFIX,
-    MARKS_ENTRY_COS_LABEL,
-    MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE,
     MARKS_ENTRY_QUESTION_PREFIX,
     MARKS_ENTRY_ROW_HEADERS,
     MARKS_ENTRY_TOTAL_LABEL,
-    MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
     MARKS_ENTRY_VALIDATION_ERROR_TITLE,
-    MARKS_ENTRY_VALIDATION_FORMULA,
     MAX_EXCEL_SHEETNAME_LENGTH,
     MIN_MARK_VALUE,
     QUESTION_MAP_HEADERS,
@@ -50,7 +46,8 @@ from common.constants import (
     WEIGHT_TOTAL_ROUND_DIGITS,
     WORKBOOK_PASSWORD,
 )
-from common.exceptions import AppSystemError, ValidationError
+from common.exceptions import AppSystemError, JobCancelledError, ValidationError
+from common.jobs import CancellationToken
 from common.registry import BLUEPRINT_REGISTRY
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import ValidationRule, WorkbookBlueprint
@@ -60,16 +57,34 @@ from common.utils import coerce_excel_number, normalize
 _logger = logging.getLogger(__name__)
 _YES_NO_TOKENS = {normalize(option) for option in ASSESSMENT_VALIDATION_YES_NO_OPTIONS}
 _YES_TOKEN = normalize(ASSESSMENT_VALIDATION_YES_NO_OPTIONS[0])
+_AUTO_FIT_SAMPLE_ROWS = 6
+_AUTO_FIT_PADDING = 2
+_AUTO_FIT_MIN_WIDTH = 8
+_AUTO_FIT_MAX_WIDTH = 60
+_PAGE_MIN_MARGIN_IN = 0.25
+_COMPONENT_NAME_LABEL = "Component name"
+_CO_LABEL = "CO"
+_MAX_LABEL = "Max."
+
+
+def _ve(message: str, *, code: str, **context: object) -> ValidationError:
+    return ValidationError(message, code=code, context=context)
 
 
 def generate_course_details_template(
-    output_path: str | Path, template_id: str = ID_COURSE_SETUP
+    output_path: str | Path,
+    template_id: str = ID_COURSE_SETUP,
+    *,
+    cancel_token: CancellationToken | None = None,
 ) -> Path:
     """Generate and save the course details template workbook with atomic replace."""
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
-        raise ValidationError(t("instructor.validation.xlsxwriter_missing")) from exc
+        raise _ve(
+            t("instructor.validation.xlsxwriter_missing"),
+            code="XLSXWRITER_MISSING",
+        ) from exc
 
     blueprint = _get_blueprint(template_id)
     sample_data = SAMPLE_SETUP_DATA
@@ -95,10 +110,14 @@ def generate_course_details_template(
                 _logger.warning("Failed to cleanup temp template file: %s", temp_output)
 
     try:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         header_format = _build_header_format(workbook, blueprint.style_registry.get("header", {}))
         body_format = _build_body_format(workbook, blueprint.style_registry.get("body", {}))
 
         for sheet_schema in blueprint.sheets:
+            if cancel_token is not None:
+                cancel_token.raise_if_cancelled()
             if len(sheet_schema.header_matrix) != 1:
                 raise ValidationError(
                     t(
@@ -117,17 +136,28 @@ def generate_course_details_template(
             )
 
             for validation in sheet_schema.validations:
+                if cancel_token is not None:
+                    cancel_token.raise_if_cancelled()
                 _apply_validation(worksheet, validation)
 
             if sheet_schema.is_protected:
                 _protect_sheet(worksheet)
 
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         _add_system_hash_sheet(workbook, template_id)
 
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         workbook.close()
         workbook_closed = True
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         os.replace(temp_output, output)
     except ValidationError:
+        _cleanup_incomplete_output()
+        raise
+    except JobCancelledError:
         _cleanup_incomplete_output()
         raise
     except Exception as exc:
@@ -147,30 +177,50 @@ def generate_course_details_template(
 def generate_marks_template_from_course_details(
     course_details_path: str | Path,
     output_path: str | Path,
+    *,
+    cancel_token: CancellationToken | None = None,
 ) -> Path:
     """Generate marks-entry workbook from a validated course-details workbook."""
     try:
         import openpyxl
     except ModuleNotFoundError as exc:
-        raise ValidationError(t("instructor.validation.openpyxl_missing")) from exc
+        raise _ve(
+            t("instructor.validation.openpyxl_missing"),
+            code="OPENPYXL_MISSING",
+        ) from exc
 
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
-        raise ValidationError(t("instructor.validation.xlsxwriter_missing")) from exc
+        raise _ve(
+            t("instructor.validation.xlsxwriter_missing"),
+            code="XLSXWRITER_MISSING",
+        ) from exc
 
     source_file = Path(course_details_path)
     if not source_file.exists():
-        raise ValidationError(t("instructor.validation.workbook_not_found", workbook=source_file))
+        raise _ve(
+            t("instructor.validation.workbook_not_found", workbook=source_file),
+            code="WORKBOOK_NOT_FOUND",
+            workbook=str(source_file),
+        )
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     temp_output = output.with_name(f"{output.name}.{uuid4().hex}.tmp")
 
     try:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         workbook = openpyxl.load_workbook(source_file, data_only=True)
+    except JobCancelledError:
+        raise
     except Exception as exc:
-        raise ValidationError(t("instructor.validation.workbook_open_failed", workbook=source_file)) from exc
+        raise _ve(
+            t("instructor.validation.workbook_open_failed", workbook=source_file),
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(source_file),
+        ) from exc
 
     target = xlsxwriter.Workbook(str(temp_output), {"constant_memory": True})
     target_closed = False
@@ -190,13 +240,26 @@ def generate_marks_template_from_course_details(
                 _logger.warning("Failed to cleanup temp marks template file: %s", temp_output)
 
     try:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         context = _extract_marks_template_context(workbook)
-        _write_marks_template_workbook(target, context)
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        _write_marks_template_workbook(target, context, cancel_token=cancel_token)
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         _copy_system_hash_sheet(workbook, target)
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         target.close()
         target_closed = True
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         os.replace(temp_output, output)
     except ValidationError:
+        _cleanup_incomplete_output()
+        raise
+    except JobCancelledError:
         _cleanup_incomplete_output()
         raise
     except Exception as exc:
@@ -317,10 +380,29 @@ def _extract_questions(question_rows: Sequence[Sequence[Any]]) -> dict[str, list
     return questions_by_component
 
 
-def _write_marks_template_workbook(workbook: Any, context: dict[str, Any]) -> None:
-    header_fmt = workbook.add_format({"bold": True, "border": 1, "align": "center", "valign": "vcenter"})
+def _write_marks_template_workbook(
+    workbook: Any,
+    context: dict[str, Any],
+    *,
+    cancel_token: CancellationToken | None = None,
+) -> None:
+    setup_blueprint = _get_blueprint(ID_COURSE_SETUP)
+    header_fmt = _build_header_format(workbook, setup_blueprint.style_registry.get("header", {}))
     body_fmt = workbook.add_format({"border": 1})
+    wrapped_body_fmt = workbook.add_format({"border": 1, "text_wrap": True})
+    wrapped_column_fmt = workbook.add_format({"text_wrap": True})
     num_fmt = workbook.add_format({"border": 1, "num_format": "0.00"})
+    header_num_fmt = workbook.add_format(
+        {
+            "bold": True,
+            "bg_color": str(setup_blueprint.style_registry.get("header", {}).get("bg_color", HEADER_PATTERNFILL_COLOR)),
+            "border": 1,
+            "align": "center",
+            "valign": "vcenter",
+            "num_format": "0.00",
+        }
+    )
+    unlocked_body_fmt = workbook.add_format({"border": 1, "locked": False})
 
     _write_two_column_copy_sheet(
         workbook=workbook,
@@ -342,6 +424,8 @@ def _write_marks_template_workbook(workbook: Any, context: dict[str, Any]) -> No
 
     used_sheet_names = {normalize(COURSE_METADATA_SHEET), normalize(ASSESSMENT_CONFIG_SHEET)}
     for component in context["components"]:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         component_name = component["display_name"]
         sheet_name = _safe_sheet_name(component_name, used_sheet_names)
         questions = context["questions_by_component"].get(component["key"], [])
@@ -352,30 +436,47 @@ def _write_marks_template_workbook(workbook: Any, context: dict[str, Any]) -> No
                 _write_direct_co_wise_sheet(
                     workbook,
                     sheet_name,
+                    context["metadata_rows"],
+                    component_name,
                     context["students"],
                     questions,
                     header_fmt,
                     body_fmt,
+                    wrapped_body_fmt,
+                    wrapped_column_fmt,
                     num_fmt,
+                    header_num_fmt,
+                    unlocked_body_fmt,
                 )
             else:
                 _write_direct_non_co_wise_sheet(
                     workbook,
                     sheet_name,
+                    context["metadata_rows"],
+                    component_name,
                     context["students"],
                     questions,
                     header_fmt,
                     body_fmt,
+                    wrapped_body_fmt,
+                    wrapped_column_fmt,
                     num_fmt,
+                    header_num_fmt,
+                    unlocked_body_fmt,
                 )
         else:
             _write_indirect_sheet(
                 workbook,
                 sheet_name,
+                context["metadata_rows"],
+                component_name,
                 context["students"],
                 context["total_outcomes"],
                 header_fmt,
                 body_fmt,
+                unlocked_body_fmt,
+                wrapped_body_fmt,
+                wrapped_column_fmt,
             )
 
 
@@ -405,7 +506,9 @@ def _write_two_column_copy_sheet(
     for row_index, row in enumerate(rows, start=1):
         ws.write(row_index, 0, row[0] if len(row) > 0 else "", body_fmt)
         ws.write(row_index, 1, row[1] if len(row) > 1 else "", body_fmt)
+    ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
+    ws.set_selection(1, 0, 1, 0)
 
 
 def _write_multi_column_copy_sheet(
@@ -425,46 +528,61 @@ def _write_multi_column_copy_sheet(
         for col_index, value in enumerate(row[: len(header)]):
             cell_fmt = num_fmt if col_index == 1 and isinstance(value, (int, float)) else body_fmt
             ws.write(row_index, col_index, value, cell_fmt)
+    ws.repeat_rows(0, 0)
     ws.freeze_panes(1, 0)
+    ws.set_selection(1, 0, 1, 0)
 
 
 def _write_direct_co_wise_sheet(
     workbook: Any,
     sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
     students: Sequence[tuple[str, str]],
     questions: Sequence[dict[str, Any]],
     header_fmt: Any,
     body_fmt: Any,
+    wrapped_body_fmt: Any,
+    wrapped_column_fmt: Any,
     num_fmt: Any,
+    header_num_fmt: Any,
+    unlocked_body_fmt: Any,
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
+    header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     question_count = len(questions)
     total_col = 3 + question_count
-    ws.write_row(0, 0, list(MARKS_ENTRY_ROW_HEADERS), header_fmt)
+    ws.write_row(header_start_row, 0, list(MARKS_ENTRY_ROW_HEADERS), header_fmt)
     for idx in range(question_count):
-        ws.write(0, 3 + idx, f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}", header_fmt)
-    ws.write(0, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
+        ws.write(
+            header_start_row,
+            3 + idx,
+            f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}",
+            header_fmt,
+        )
+    ws.write(header_start_row, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
 
-    ws.write_row(1, 0, ["", "", ""], header_fmt)
+    ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL], header_fmt)
     for idx, question in enumerate(questions):
         co_number = question["co_values"][0]
-        ws.write(1, 3 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
-    ws.write(1, total_col, "", header_fmt)
+        ws.write(header_start_row + 1, 3 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
+    ws.write(header_start_row + 1, total_col, "", header_fmt)
 
-    ws.write_row(2, 0, ["", "", ""], header_fmt)
+    ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL], header_fmt)
     component_total = 0.0
     for idx, question in enumerate(questions):
         max_marks = float(question["max_marks"])
         component_total += max_marks
-        ws.write_number(2, 3 + idx, max_marks, num_fmt)
-    ws.write_number(2, total_col, component_total, num_fmt)
+        ws.write_number(header_start_row + 2, 3 + idx, max_marks, header_num_fmt)
+    ws.write_number(header_start_row + 2, total_col, component_total, header_num_fmt)
 
-    for row_offset, (reg_no, student_name) in enumerate(students, start=3):
-        ws.write_number(row_offset, 0, row_offset - 2, body_fmt)
+    first_data_row = header_start_row + 3
+    for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
+        ws.write_number(row_offset, 0, row_offset - (first_data_row - 1), body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
-        ws.write(row_offset, 2, student_name, body_fmt)
+        ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         for col in range(3, total_col):
-            ws.write_blank(row_offset, col, None, body_fmt)
+            ws.write_blank(row_offset, col, None, unlocked_body_fmt)
         first_mark_col = _excel_col_name(3)
         last_mark_col = _excel_col_name(total_col - 1)
         ws.write_formula(
@@ -475,78 +593,129 @@ def _write_direct_co_wise_sheet(
         )
 
     if students and question_count > 0:
-        first_row = 3
-        last_row = 2 + len(students)
-        validation_formula = MARKS_ENTRY_VALIDATION_FORMULA
-        ws.data_validation(
-            first_row,
-            3,
-            last_row,
-            total_col - 1,
-            {
-                "validate": "custom",
-                "value": validation_formula,
-                "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
-                "error_message": MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
-                "ignore_blank": True,
-            },
-        )
+        first_row = first_data_row
+        last_row = first_data_row + len(students) - 1
+        max_marks_row = header_start_row + 2
+        for idx, question in enumerate(questions):
+            col_index = 3 + idx
+            max_marks_value = float(question["max_marks"])
+            validation_formula = _build_marks_validation_formula_for_column(
+                col_index=col_index,
+                first_data_row=first_data_row,
+                max_marks_row=max_marks_row,
+            )
+            ws.data_validation(
+                first_row,
+                col_index,
+                last_row,
+                col_index,
+                {
+                    "validate": "custom",
+                    "value": validation_formula,
+                    "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
+                    "error_message": _build_marks_validation_error_message(max_marks_value),
+                    "ignore_blank": True,
+                },
+            )
 
-    _set_common_student_columns(ws, total_col)
-    ws.freeze_panes(3, 3)
+    sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [
+        list(MARKS_ENTRY_ROW_HEADERS) + [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)] + [MARKS_ENTRY_TOTAL_LABEL],
+        ["", "", _CO_LABEL] + [f"{MARKS_ENTRY_CO_PREFIX}{question['co_values'][0]}" for question in questions] + [""],
+        ["", "", _MAX_LABEL] + [float(question["max_marks"]) for question in questions] + [component_total],
+    ]
+    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
+        sample_rows.append(
+            [row_offset - (first_data_row - 1), reg_no, student_name] + [""] * question_count + [""]
+        )
+    _set_common_student_columns(ws, total_col, sample_rows, wrapped_column_fmt)
+    ws.repeat_rows(0, header_start_row + 2)
+    ws.freeze_panes(header_start_row + 3, 3)
+    ws.set_selection(first_data_row, 3, first_data_row, 3)
+    _protect_sheet(ws)
 
 
 def _write_direct_non_co_wise_sheet(
     workbook: Any,
     sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
     students: Sequence[tuple[str, str]],
     questions: Sequence[dict[str, Any]],
     header_fmt: Any,
     body_fmt: Any,
+    wrapped_body_fmt: Any,
+    wrapped_column_fmt: Any,
     num_fmt: Any,
+    header_num_fmt: Any,
+    unlocked_body_fmt: Any,
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
+    header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     covered_cos = sorted({co for q in questions for co in q["co_values"]})
     co_count = max(1, len(covered_cos))
     total_max = sum(float(question["max_marks"]) for question in questions)
-    per_co = total_max / co_count if co_count else total_max
+    max_marks_per_co = _split_equal_with_residual(total_max, co_count)
 
-    ws.write_row(0, 0, list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
+    ws.write_row(header_start_row, 0, list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
     for idx, co_number in enumerate(covered_cos):
-        ws.write(0, 4 + idx, f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co_number}", header_fmt)
+        ws.write(
+            header_start_row,
+            4 + idx,
+            f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co_number}",
+            header_fmt,
+        )
 
-    ws.write_row(1, 0, ["", "", "", MARKS_ENTRY_COS_LABEL], header_fmt)
+    ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL, ""], header_fmt)
     for idx, co_number in enumerate(covered_cos):
-        ws.write(1, 4 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
+        ws.write(header_start_row + 1, 4 + idx, f"{MARKS_ENTRY_CO_PREFIX}{co_number}", header_fmt)
 
-    ws.write_row(2, 0, ["", "", "", ""], header_fmt)
-    ws.write_number(2, 3, total_max, num_fmt)
-    for idx in range(len(covered_cos)):
-        ws.write_number(2, 4 + idx, per_co, num_fmt)
+    ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL, ""], header_fmt)
+    ws.write_number(header_start_row + 2, 3, total_max, header_num_fmt)
+    for idx, value in enumerate(max_marks_per_co):
+        ws.write_number(header_start_row + 2, 4 + idx, value, header_num_fmt)
 
-    for row_offset, (reg_no, student_name) in enumerate(students, start=3):
-        ws.write_number(row_offset, 0, row_offset - 3, body_fmt)
+    first_data_row = header_start_row + 3
+    for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
+        ws.write_number(row_offset, 0, row_offset - first_data_row, body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
-        ws.write(row_offset, 2, student_name, body_fmt)
-        ws.write_blank(row_offset, 3, None, body_fmt)
-        for idx in range(len(covered_cos)):
+        ws.write(row_offset, 2, student_name, wrapped_body_fmt)
+        ws.write_blank(row_offset, 3, None, unlocked_body_fmt)
+        co_total = len(covered_cos)
+        for idx in range(co_total):
             co_col = 4 + idx
             col_name_total = _excel_col_name(3)
-            divisor = len(covered_cos) if covered_cos else 1
+            divisor = co_total if co_total else 1
+            if idx == co_total - 1 and co_total > 1:
+                first_co_col_name = _excel_col_name(4)
+                prev_co_col_name = _excel_col_name(co_col - 1)
+                formula = (
+                    f'=IF(OR(${col_name_total}{row_offset + 1}="A",${col_name_total}{row_offset + 1}="a"),'
+                    f'"A",IF(${col_name_total}{row_offset + 1}="","",'
+                    f'${col_name_total}{row_offset + 1}-SUM({first_co_col_name}{row_offset + 1}:'
+                    f'{prev_co_col_name}{row_offset + 1})))'
+                )
+            else:
+                formula = (
+                    f'=IF(OR(${col_name_total}{row_offset + 1}="A",${col_name_total}{row_offset + 1}="a"),'
+                    f'"A",IF(${col_name_total}{row_offset + 1}="","",ROUND(${col_name_total}{row_offset + 1}/'
+                    f"{divisor},2)))"
+                )
             ws.write_formula(
                 row_offset,
                 co_col,
-                (
-                    f'=IF(OR(${col_name_total}{row_offset + 1}="A",${col_name_total}{row_offset + 1}="a"),'
-                    f'"A",IF(${col_name_total}{row_offset + 1}="","",${col_name_total}{row_offset + 1}/{divisor}))'
-                ),
+                formula,
                 num_fmt,
             )
 
     if students:
-        first_row = 3
-        last_row = 2 + len(students)
-        validation_formula = MARKS_ENTRY_VALIDATION_FORMULA
+        first_row = first_data_row
+        last_row = first_data_row + len(students) - 1
+        validation_formula = _build_marks_validation_formula_for_column(
+            col_index=3,
+            first_data_row=first_data_row,
+            max_marks_row=header_start_row + 2,
+        )
         ws.data_validation(
             first_row,
             3,
@@ -556,39 +725,57 @@ def _write_direct_non_co_wise_sheet(
                 "validate": "custom",
                 "value": validation_formula,
                 "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
-                "error_message": MARKS_ENTRY_VALIDATION_ERROR_MESSAGE,
+                "error_message": _build_marks_validation_error_message(total_max),
                 "ignore_blank": True,
             },
         )
 
-    _set_common_student_columns(ws, 3 + len(covered_cos))
-    ws.freeze_panes(3, 3)
+    sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [
+        list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL] + [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos],
+        ["", "", _CO_LABEL, ""] + [f"{MARKS_ENTRY_CO_PREFIX}{co}" for co in covered_cos],
+        ["", "", _MAX_LABEL, total_max] + max_marks_per_co,
+    ]
+    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
+        sample_rows.append([row_offset - first_data_row, reg_no, student_name, ""] + [""] * len(covered_cos))
+    _set_common_student_columns(ws, 3 + len(covered_cos), sample_rows, wrapped_column_fmt)
+    ws.repeat_rows(0, header_start_row + 2)
+    ws.freeze_panes(header_start_row + 3, 3)
+    ws.set_selection(first_data_row, 3, first_data_row, 3)
+    _protect_sheet(ws)
 
 
 def _write_indirect_sheet(
     workbook: Any,
     sheet_name: str,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
     students: Sequence[tuple[str, str]],
     total_outcomes: int,
     header_fmt: Any,
     body_fmt: Any,
+    unlocked_body_fmt: Any,
+    wrapped_body_fmt: Any,
+    wrapped_column_fmt: Any,
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
+    header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     headers = list(MARKS_ENTRY_ROW_HEADERS) + [
         f"{MARKS_ENTRY_CO_PREFIX}{i}" for i in range(1, total_outcomes + 1)
     ]
-    ws.write_row(0, 0, headers, header_fmt)
+    ws.write_row(header_start_row, 0, headers, header_fmt)
 
-    for row_offset, (reg_no, student_name) in enumerate(students, start=1):
-        ws.write_number(row_offset, 0, row_offset, body_fmt)
+    first_data_row = header_start_row + 1
+    for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
+        ws.write_number(row_offset, 0, row_offset - header_start_row, body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
-        ws.write(row_offset, 2, student_name, body_fmt)
+        ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         for col in range(3, 3 + total_outcomes):
-            ws.write_blank(row_offset, col, None, body_fmt)
+            ws.write_blank(row_offset, col, None, unlocked_body_fmt)
 
     if students and total_outcomes > 0:
-        first_row = 1
-        last_row = len(students)
+        first_row = first_data_row
+        last_row = first_data_row + len(students) - 1
         ws.data_validation(
             first_row,
             3,
@@ -597,25 +784,121 @@ def _write_indirect_sheet(
             {
                 "validate": "custom",
                 "value": (
-                    f'=OR(D2="A",D2="a",AND(ISNUMBER(D2),D2>={MIN_MARK_VALUE},'
-                    f'D2>={LIKERT_MIN},D2<={LIKERT_MAX}))'
+                    f'=OR(D{first_data_row + 1}="A",D{first_data_row + 1}="a",'
+                    f'AND(ISNUMBER(D{first_data_row + 1}),D{first_data_row + 1}>={MIN_MARK_VALUE},'
+                    f'D{first_data_row + 1}>={LIKERT_MIN},D{first_data_row + 1}<={LIKERT_MAX}))'
                 ),
                 "error_title": MARKS_ENTRY_VALIDATION_ERROR_TITLE,
-                "error_message": MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE,
+                "error_message": (
+                    f"Enter A/a or a numeric Likert value between {LIKERT_MIN} and {LIKERT_MAX}."
+                ),
                 "ignore_blank": True,
             },
         )
 
-    _set_common_student_columns(ws, 2 + total_outcomes)
-    ws.freeze_panes(1, 3)
+    sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [headers]
+    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    for row_index, (reg_no, student_name) in enumerate(preview_students, start=1):
+        sample_rows.append([row_index, reg_no, student_name] + [""] * total_outcomes)
+    _set_common_student_columns(ws, 2 + total_outcomes, sample_rows, wrapped_column_fmt)
+    ws.repeat_rows(0, header_start_row)
+    ws.freeze_panes(header_start_row + 1, 3)
+    ws.set_selection(first_data_row, 3, first_data_row, 3)
+    _protect_sheet(ws)
 
 
-def _set_common_student_columns(ws: Any, last_col: int) -> None:
-    ws.set_column(0, 0, 10)
-    ws.set_column(1, 1, 18)
-    ws.set_column(2, 2, 28)
-    if last_col >= 3:
-        ws.set_column(3, last_col, 12)
+def _write_component_course_metadata(
+    ws: Any,
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
+    body_fmt: Any,
+) -> int:
+    for row_index, row in enumerate(metadata_rows):
+        ws.write(row_index, 1, row[0] if len(row) > 0 else "", body_fmt)
+        ws.write(row_index, 2, row[1] if len(row) > 1 else "", body_fmt)
+    component_row = len(metadata_rows)
+    ws.write(component_row, 1, _COMPONENT_NAME_LABEL, body_fmt)
+    ws.write(component_row, 2, component_name, body_fmt)
+    return len(metadata_rows) + 2
+
+
+def _component_metadata_sample_rows(
+    metadata_rows: Sequence[Sequence[Any]],
+    component_name: str,
+) -> list[list[Any]]:
+    sample_rows: list[list[Any]] = []
+    for row in metadata_rows:
+        sample_rows.append(["", row[0] if len(row) > 0 else "", row[1] if len(row) > 1 else ""])
+    sample_rows.append(["", _COMPONENT_NAME_LABEL, component_name])
+    return sample_rows
+
+
+def _build_marks_validation_formula_for_column(
+    col_index: int,
+    first_data_row: int,
+    max_marks_row: int,
+) -> str:
+    col_name = _excel_col_name(col_index)
+    excel_data_row = first_data_row + 1
+    excel_max_row = max_marks_row + 1
+    return (
+        f'=OR({col_name}{excel_data_row}="A",{col_name}{excel_data_row}="a",'
+        f"AND(ISNUMBER({col_name}{excel_data_row}),{col_name}{excel_data_row}>={MIN_MARK_VALUE},"
+        f"{col_name}{excel_data_row}<={col_name}${excel_max_row}))"
+    )
+
+
+def _build_marks_validation_error_message(max_marks_value: Any) -> str:
+    coerced_max = coerce_excel_number(max_marks_value)
+    if isinstance(coerced_max, bool) or not isinstance(coerced_max, (int, float)):
+        max_value_text = str(max_marks_value).strip()
+    else:
+        max_value_text = f"{coerced_max:g}"
+    return (
+        f"Enter A/a or a numeric mark between {MIN_MARK_VALUE:g} and {max_value_text}."
+    )
+
+
+def _set_common_student_columns(
+    ws: Any,
+    last_col: int,
+    sample_rows: Sequence[Sequence[Any]],
+    wrapped_c_column_format: Any,
+) -> None:
+    ws.set_paper(9)  # A4
+    ws.set_landscape()
+    ws.set_margins(_PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN)
+    ws.fit_to_pages(1, 0)
+
+    widths = _compute_sampled_column_widths(sample_rows, last_col)
+
+    for col in range(0, last_col + 1):
+        width = widths.get(col, _AUTO_FIT_MIN_WIDTH)
+        if col == 2:
+            ws.set_column(col, col, width, wrapped_c_column_format)
+        else:
+            ws.set_column(col, col, width)
+
+
+def _compute_sampled_column_widths(
+    sample_rows: Sequence[Sequence[Any]],
+    last_col: int,
+) -> dict[int, int]:
+    widths: dict[int, int] = {}
+    for col_index in range(last_col + 1):
+        max_len = 0
+        for row in sample_rows:
+            if col_index >= len(row):
+                continue
+            value = row[col_index]
+            if value is None:
+                continue
+            max_len = max(max_len, len(str(value).strip()))
+        widths[col_index] = min(
+            _AUTO_FIT_MAX_WIDTH,
+            max(_AUTO_FIT_MIN_WIDTH, max_len + _AUTO_FIT_PADDING),
+        )
+    return widths
 
 
 def _excel_col_name(col_index: int) -> str:
@@ -625,6 +908,17 @@ def _excel_col_name(col_index: int) -> str:
         index, rem = divmod(index - 1, 26)
         label = chr(65 + rem) + label
     return label
+
+
+def _split_equal_with_residual(total: float, parts: int) -> list[float]:
+    if parts <= 0:
+        return []
+    if parts == 1:
+        return [round(total, 2)]
+    base = round(total / parts, 2)
+    values = [base] * parts
+    values[-1] = round(total - sum(values[:-1]), 2)
+    return values
 
 
 def _safe_sheet_name(name: str, used_sheet_names: set[str]) -> str:
@@ -651,12 +945,15 @@ def _get_blueprint(template_id: str) -> WorkbookBlueprint:
     blueprint = BLUEPRINT_REGISTRY.get(template_id)
     if blueprint is None:
         available = ", ".join(sorted(BLUEPRINT_REGISTRY))
-        raise ValidationError(
+        raise _ve(
             t(
                 "instructor.validation.unknown_template",
                 template_id=template_id,
                 available=available,
-            )
+            ),
+            code="UNKNOWN_TEMPLATE",
+            template_id=template_id,
+            available=available,
         )
     return blueprint
 
@@ -751,6 +1048,8 @@ def _apply_validation(worksheet: Any, rule: ValidationRule) -> None:
 
 
 def _protect_sheet(worksheet: Any) -> None:
+    # Keep locked-cell selection disabled and unlocked-cell selection enabled so
+    # keyboard navigation (Tab) jumps between mark-entry cells.
     worksheet.protect(
         WORKBOOK_PASSWORD,
         {
@@ -785,16 +1084,27 @@ def validate_course_details_workbook(workbook_path: str | Path) -> str:
     try:
         import openpyxl
     except ModuleNotFoundError as exc:
-        raise ValidationError(t("instructor.validation.openpyxl_missing")) from exc
+        raise _ve(
+            t("instructor.validation.openpyxl_missing"),
+            code="OPENPYXL_MISSING",
+        ) from exc
 
     workbook_file = Path(workbook_path)
     if not workbook_file.exists():
-        raise ValidationError(t("instructor.validation.workbook_not_found", workbook=workbook_file))
+        raise _ve(
+            t("instructor.validation.workbook_not_found", workbook=workbook_file),
+            code="WORKBOOK_NOT_FOUND",
+            workbook=str(workbook_file),
+        )
 
     try:
         workbook = openpyxl.load_workbook(workbook_file, data_only=True)
     except Exception as exc:
-        raise ValidationError(t("instructor.validation.workbook_open_failed", workbook=workbook_file)) from exc
+        raise _ve(
+            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(workbook_file),
+        ) from exc
 
     try:
         template_id = _extract_and_validate_template_id(workbook)

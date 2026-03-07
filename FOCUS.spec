@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='FOCUS',
+    name='focus',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -33,7 +33,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version='version.txt',
-    icon=['assets\\kare-logo.ico'],
+    icon=['assets/kare-logo.ico'],
 )
 coll = COLLECT(
     exe,
@@ -42,5 +42,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='FOCUS',
+    name='focus',
 )
