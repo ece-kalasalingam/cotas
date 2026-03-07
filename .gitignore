@@ -1,120 +1,37 @@
-# ==============================
-# PYTHON
-# ==============================
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Compiled extensions
-*.so
 *.pyd
-*.dll
 
-# Distribution / packaging
-.Python
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Packaging and build outputs
 build/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-*.egg
-MANIFEST
-obsolete/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# ==============================
-# VIRTUAL ENVIRONMENTS
-# ==============================
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.venv/
-conda-meta/
-
-# ==============================
-# CONDA
-# ==============================
-*.conda
-*.tar.bz2
-
-# ==============================
-# PYTEST / COVERAGE
-# ==============================
+# Test and coverage artifacts
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
-.tox/
-.nox/
-tests/
-pytest.ini
-debug*.py
 
-# ==============================
-# JUPYTER
-# ==============================
-.ipynb_checkpoints/
+# Type checker / linter caches
+.mypy_cache/
+.ruff_cache/
 
-# ==============================
-# IDE / EDITOR
-# ==============================
-# VS Code
-.vscode/
-
-# PyCharm
-.idea/
-*.iml
-
-# ==============================
-# OS FILES
-# ==============================
-# Windows
-Thumbs.db
-Desktop.ini
-
-# macOS
-.DS_Store
-
-# ==============================
-# LOG FILES
-# ==============================
+# Logs and local runtime files
 *.log
+settings.json
 
-# ==============================
-# TEMP FILES
-# ==============================
-*.tmp
-*.temp
-*.bak
-~$*
+# IDE/editor settings
+.vscode/
+.idea/
 
-# ==============================
-# GENERATED FILES
-# ==============================
-*.xlsx
-*.zip
-
-
-# ==============================
-# BUILD ARTIFACTS (PyInstaller)
-# ==============================
-build/
-dist/
-
-# ==============================
-# ENV FILES (CRITICAL)
-# ==============================
-.env
-.env.*
+# OS files
+.DS_Store
+Thumbs.db
