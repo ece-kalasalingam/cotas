@@ -31,6 +31,9 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
+from common.texts import t
+from common.utils import resource_path
+from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 
 _logger = logging.getLogger(__name__)
@@ -203,7 +206,7 @@ class MainWindow(QMainWindow):
             lambda: self.load_module(InstructorModule)
         )
         self.action_co_course.triggered.connect(
-            lambda: self.load_module(CourseCoordinatorModule)
+            lambda: self.load_module(CoordinatorModule)
         )
         self.action_po.triggered.connect(
             lambda: self.load_module(POAnalysisModule)
