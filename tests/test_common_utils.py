@@ -3,13 +3,16 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from common.exceptions import AppSystemError, ValidationError
 from common.utils import (
     app_settings_path,
     coerce_excel_number,
+    emit_user_status,
     from_portable_path,
     get_last_saved_dir,
+    log_process_message,
     remember_dialog_dir,
     normalize,
     resolve_dialog_start_path,
@@ -221,6 +224,128 @@ class TestSettingsHelpers(unittest.TestCase):
                     os.path.normcase(loaded or ""),
                     os.path.normcase(str(target)),
                 )
+
+
+class TestLogProcessMessage(unittest.TestCase):
+    def test_success_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            notify=notify,
+            success_message="Workbook validated.",
+        )
+
+        self.assertTrue(result)
+        logger.info.assert_called_once()
+        self.assertEqual(logger.info.call_args.args[0], "Workbook validated.")
+        notify.assert_called_once_with("Workbook validated.", "success")
+
+    def test_validation_error_shows_detailed_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = ValidationError("Row 4: CO value is missing.")
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.warning.assert_called_once()
+        self.assertEqual(logger.warning.call_args.args[:2], ("%s failed due to data error.", "validating workbook"))
+        notify.assert_called_once_with("Row 4: CO value is missing.", "error")
+
+    def test_validation_error_prefers_code_mapping_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = ValidationError(
+            "fallback",
+            code="WORKBOOK_NOT_FOUND",
+            context={"workbook": "sample.xlsx"},
+        )
+
+        result = log_process_message(
+            "validating workbook",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        notify.assert_called_once()
+        self.assertIn("sample.xlsx", notify.call_args.args[0])
+        self.assertEqual(notify.call_args.args[1], "error")
+
+    def test_app_system_error_logs_generic_english_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = AppSystemError("உருவாக்கம் தோல்வியடைந்தது")
+
+        result = log_process_message(
+            "generating final report",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.error.assert_called_once()
+        self.assertEqual(
+            logger.error.call_args.args[:2],
+            ("%s failed due to a system/application error.", "generating final report"),
+        )
+        notify.assert_called_once_with(
+            "Error happened while generating final report.",
+            "error",
+        )
+
+    def test_system_error_shows_process_scoped_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = RuntimeError("disk write failed")
+
+        result = log_process_message(
+            "generating final report",
+            logger=logger,
+            error=error,
+            notify=notify,
+        )
+
+        self.assertFalse(result)
+        logger.exception.assert_called_once()
+        self.assertEqual(
+            logger.exception.call_args.args[:2],
+            ("%s failed due to a system/application error.", "generating final report"),
+        )
+        self.assertIs(logger.exception.call_args.kwargs.get("exc_info"), error)
+        notify.assert_called_once_with(
+            "Error happened while generating final report.",
+            "error",
+        )
+
+
+class TestEmitUserStatus(unittest.TestCase):
+    def test_emits_when_signal_has_emit(self) -> None:
+        signal = Mock()
+        logger = Mock()
+
+        emit_user_status(signal, "Done", logger=logger)
+
+        signal.emit.assert_called_once_with("Done")
+        logger.exception.assert_not_called()
+
+    def test_ignores_missing_emit(self) -> None:
+        signal = object()
+        logger = Mock()
+
+        emit_user_status(signal, "Done", logger=logger)
+
+        logger.debug.assert_called_once()
 
 
 if __name__ == "__main__":

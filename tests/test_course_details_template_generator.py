@@ -7,8 +7,8 @@ import pytest
 
 from common.exceptions import AppSystemError, ValidationError
 from common.sheet_schema import SheetSchema, ValidationRule, WorkbookBlueprint
-from modules.instructor import course_details_template_generator as mod
-from modules.instructor.course_details_template_generator import (
+from modules.instructor import instructor_template_engine as mod
+from modules.instructor.instructor_template_engine import (
     generate_course_details_template,
 )
 
@@ -20,6 +20,7 @@ class _FakeWorksheet:
         self.writes: list[tuple[int, int, object]] = []
         self.set_columns: list[tuple[int, int, int]] = []
         self.freeze_calls: list[tuple[int, int]] = []
+        self.hidden = False
 
     def write(self, row, col, value, _fmt=None) -> None:
         self.writes.append((row, col, value))
@@ -39,6 +40,9 @@ class _FakeWorksheet:
 
     def protect(self, *args, **kwargs) -> None:
         self.protect_calls.append((args, kwargs))
+
+    def hide(self) -> None:
+        self.hidden = True
 
 
 class _FakeWorkbook:
@@ -174,8 +178,9 @@ def test_sheet_order_and_count_match_blueprint(monkeypatch: pytest.MonkeyPatch, 
         "Assessment_Config",
         "Question_Map",
         "Students",
+        "__SYSTEM_HASH__",
     ]
-    assert len(created["wb"].worksheets) == 4
+    assert len(created["wb"].worksheets) == 5
 
 
 def test_course_metadata_header_cells_written(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -204,8 +209,31 @@ def test_headers_set_freeze_panes_after_header_row(monkeypatch: pytest.MonkeyPat
     _install_fake_xlsxwriter(monkeypatch, _TrackingWorkbook)
     generate_course_details_template(tmp_path / "course_setup.xlsx")
 
-    for ws in created["wb"].worksheets:
+    for ws in created["wb"].worksheets[:-1]:
         assert ws.freeze_calls == [(1, 0)]
+
+
+def test_system_hash_sheet_contains_template_id_and_hash(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    created: dict[str, _FakeWorkbook] = {}
+
+    class _TrackingWorkbook(_FakeWorkbook):
+        def __init__(self, path: str, options: dict | None = None) -> None:
+            super().__init__(path, options)
+            created["wb"] = self
+
+    _install_fake_xlsxwriter(monkeypatch, _TrackingWorkbook)
+    generate_course_details_template(tmp_path / "course_setup.xlsx")
+
+    hash_ws = created["wb"].worksheets[-1]
+    assert hash_ws.writes[:4] == [
+        (0, 0, "Template_ID"),
+        (0, 1, "Template_Hash"),
+        (1, 0, mod.ID_COURSE_SETUP),
+        (1, 1, mod._compute_template_hash(mod.ID_COURSE_SETUP)),
+    ]
+    assert hash_ws.hidden is True
 
 
 def test_apply_validation_skips_when_validate_not_set() -> None:

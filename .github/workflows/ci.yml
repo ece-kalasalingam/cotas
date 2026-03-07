@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            lock_file: requirements-lock-windows.txt
+          - os: macos-latest
+            lock_file: requirements-lock-macos.txt
+          - os: ubuntu-latest
+            lock_file: requirements-lock-linux.txt
+    runs-on: ${{ matrix.os }}
+    env:
+      FOCUS_WORKBOOK_PASSWORD: ${{ secrets.FOCUS_WORKBOOK_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ matrix.lock_file }}
+
+      - name: Dependency vulnerability audit
+        run: python -m pip_audit
+
+      - name: SAST (Bandit)
+        run: python -m bandit -q -c .bandit.yaml -r common modules services
+
+      - name: Run quality gate
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/quality_gate.py

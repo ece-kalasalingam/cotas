@@ -20,10 +20,32 @@ class _DummyModule:
     def __init__(self) -> None:
         self.step1_path: str | None = None
         self.step1_done = False
+        self.state = type("State", (), {"busy": False})()
+        self._active_jobs: list[object] = []
+        self._cancel_token = None
+        self._workflow_service = None
         self.status_changed = _SignalRecorder()
+        self._toasts: list[tuple[str, str]] = []
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         instructor_ui.remember_dialog_dir(selected_path, app_name=instructor_ui.APP_NAME)
+
+    def _show_validation_error_toast(self, message: str) -> None:
+        self._toasts.append(("validation", message))
+
+    def _show_system_error_toast(self, step: int) -> None:
+        self._toasts.append(("system", str(step)))
+
+    def _show_step_success_toast(self, step: int) -> None:
+        self._toasts.append(("success", str(step)))
+
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
+        if not hasattr(self, "state"):
+            self.state = type("State", (), {"busy": False})()
+        self.state.busy = busy
+
+    def _refresh_ui(self) -> None:
+        return
 
 
 def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,12 +55,26 @@ def _patch_common_ui_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_dialog_start_path",
         lambda _app, _default=None: "D:/tmp/default.xlsx",
     )
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+    monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
+
+
+def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+    try:
+        result = fn(*args, **kwargs)
+    except Exception as exc:  # pragma: no cover - helper supports both paths
+        if on_failed is not None:
+            on_failed(exc)
+    else:
+        if on_finished is not None:
+            on_finished(result)
+    return object()
 
 
 def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"generated": 0, "remembered": 0, "critical": 0}
+    calls = {"generated": 0, "remembered": 0, "toast": 0}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -52,13 +88,13 @@ def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     monkeypatch.setattr(
         instructor_ui,
-        "remember_dialog_dir",
-        lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
+        "show_toast",
+        lambda *_args, **_kwargs: calls.__setitem__("toast", calls["toast"] + 1),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda *_args, **_kwargs: calls.__setitem__("critical", calls["critical"] + 1),
+        instructor_ui,
+        "remember_dialog_dir",
+        lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
@@ -67,7 +103,7 @@ def test_download_course_template_cancel(monkeypatch: pytest.MonkeyPatch) -> Non
     assert dummy.step1_path is None
     assert calls["generated"] == 0
     assert calls["remembered"] == 0
-    assert calls["critical"] == 0
+    assert calls["toast"] == 0
     assert dummy.status_changed.messages == []
 
 
@@ -104,7 +140,7 @@ def test_download_course_template_success(monkeypatch: pytest.MonkeyPatch) -> No
 def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"critical": [], "remembered": 0}
+    calls = {"toast": [], "remembered": 0}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -122,26 +158,25 @@ def test_download_course_template_failure(monkeypatch: pytest.MonkeyPatch) -> No
         lambda *_args, **_kwargs: calls.__setitem__("remembered", calls["remembered"] + 1),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda parent, title, message: calls["critical"].append((parent, title, message)),
+        instructor_ui,
+        "show_toast",
+        lambda parent, message, **kwargs: calls["toast"].append((parent, message, kwargs)),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
 
     assert dummy.step1_done is False
     assert dummy.step1_path is None
-    assert calls["remembered"] == 0
+    assert calls["remembered"] == 1
     assert dummy.status_changed.messages == []
-    assert len(calls["critical"]) == 1
-    assert calls["critical"][0][1] == "instructor.msg.step_required_title"
-    assert calls["critical"][0][2] == "app.unexpected_error"
+    assert calls["toast"] == []
+    assert dummy._toasts == [("system", "1")]
 
 
 def test_download_course_template_validation_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_ui_dependencies(monkeypatch)
     dummy = _DummyModule()
-    calls = {"critical": []}
+    calls = {"toast": []}
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
@@ -154,17 +189,17 @@ def test_download_course_template_validation_error_message(monkeypatch: pytest.M
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValidationError("bad template")),
     )
     monkeypatch.setattr(
-        instructor_ui.QMessageBox,
-        "critical",
-        lambda parent, title, message: calls["critical"].append((parent, title, message)),
+        instructor_ui,
+        "show_toast",
+        lambda parent, message, **kwargs: calls["toast"].append((parent, message, kwargs)),
     )
 
     instructor_ui.InstructorModule._download_course_template(dummy)
 
     assert dummy.step1_done is False
     assert dummy.step1_path is None
-    assert len(calls["critical"]) == 1
-    assert calls["critical"][0][2] == "bad template"
+    assert calls["toast"] == []
+    assert dummy._toasts == [("validation", "bad template")]
 
 
 def test_download_course_template_dialog_receives_expected_defaults(
@@ -188,3 +223,45 @@ def test_download_course_template_dialog_receives_expected_defaults(
     assert captured["title"] == "instructor.dialog.step1.title"
     assert captured["start_path"] == "D:/tmp/default.xlsx"
     assert captured["filter"] == "instructor.dialog.filter.excel"
+
+
+def test_download_course_template_async_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_common_ui_dependencies(monkeypatch)
+    dummy = _DummyModule()
+    dummy.state = type("State", (), {"busy": False})()
+    dummy._active_jobs = []
+    dummy._cancel_token = None
+    dummy._workflow_service = None
+    generated: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/course_details_async.xlsx", ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "generate_course_details_template",
+        lambda path, template_id: generated.append((path, template_id)),
+    )
+
+    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:  # pragma: no cover - success path
+            if on_failed is not None:
+                on_failed(exc)
+        else:
+            if on_finished is not None:
+                on_finished(result)
+        return object()
+
+    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+
+    instructor_ui.InstructorModule._download_course_template_async(dummy)
+
+    assert generated == [("D:/tmp/course_details_async.xlsx", instructor_ui.ID_COURSE_SETUP)]
+    assert dummy.step1_done is True
+    assert dummy.step1_path == "D:/tmp/course_details_async.xlsx"
+    assert dummy.state.busy is False
+    assert dummy.status_changed.messages == ["instructor.status.step1_selected"]

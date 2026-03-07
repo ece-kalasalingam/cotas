@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 from typing import Any
+from common.constants import (
+    ASSESSMENT_CONFIG_SHEET,
+    COURSE_METADATA_SHEET,
+    QUESTION_MAP_SHEET,
+    STUDENTS_SHEET,
+)
 
 
 SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
-    "Course_Metadata": [
+    COURSE_METADATA_SHEET: [
         ["Course_Code", "ECE000"],
         ["Course_Name", "SAMPLE COURSE"],
         ["Section", "A"],
         ["Semester", "III"],
         ["Academic_Year", "2025-26"],
         ["Faculty_Name", "ABCCE"],
-        ["Total_Outcomes", 5],
+        ["Total_Outcomes", 6],
     ],
-    "Assessment_Config": [
+    ASSESSMENT_CONFIG_SHEET: [
         ["S1", 17.5, "YES", "YES", "YES"],
         ["S2", 17.5, "YES", "YES", "YES"],
         ["MSP", 10, "YES", "YES", "YES"],
@@ -24,7 +30,7 @@ SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
         ["ESE", 30, "NO", "NO", "YES"],
         ["CSURVEY", 100, "NO", "YES", "NO"],
     ],
-    "Question_Map": [
+    QUESTION_MAP_SHEET: [
         ["S1", 1, 2, 1],
         ["S1", 2, 2, 1],
         ["S1", 3, 2, 2],
@@ -51,10 +57,10 @@ SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
         ["RLP", 3, 30, 5],
         ["RLP", 4, 20, 6],
         ["RLP", 5, 20, 6],
-        ["ESP", 1, 100, "1,2,3,4,5"],
-        ["ESE", 1, 100, "1,2,3,4,5"],
+        ["ESP", 1, 100, "1,2,3,4,5, 6"],
+        ["ESE", 1, 100, "1,2,3,4,5, 6"],
     ],
-    "Students": [
+    STUDENTS_SHEET: [
         ["R101", "STUD1"],
         ["R1032", "STUD2"],
     ],

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 import ctypes
 import locale
 import logging
-from ctypes import wintypes
+import sys
 
 from common.texts.en import TEXTS as EN_TEXTS
 from common.texts.ta_in import TEXTS as TA_IN_TEXTS
@@ -24,6 +24,10 @@ _LCID_TO_LANG: dict[int, str] = {
     1033: "en",  # English (United States)
     1097: "ta-in",  # Tamil (India)
 }
+_LANGUAGE_LABELS: dict[str, str] = {
+    "en": "English",
+    "ta-in": "Tamil (India)",
+}
 
 
 def _normalize_lang(lang: str) -> str:
@@ -34,7 +38,11 @@ def _normalize_lang(lang: str) -> str:
 
 
 def _get_windows_ui_lcid() -> int | None:
+    if not sys.platform.startswith("win"):
+        return None
     try:
+        from ctypes import wintypes
+
         get_ui_lang = ctypes.windll.kernel32.GetUserDefaultUILanguage
         get_ui_lang.argtypes = []
         get_ui_lang.restype = wintypes.USHORT
@@ -126,6 +134,18 @@ def set_language_from_system(
 def get_language() -> str:
     """Return active language code."""
     return _active_lang
+
+
+def get_available_languages() -> tuple[tuple[str, str], ...]:
+    """Return supported language options as (code, label)."""
+    options: list[tuple[str, str]] = []
+    for code in _CATALOGS:
+        label_key = f"language.name.{code}"
+        label = t(label_key)
+        if label == label_key:
+            label = _LANGUAGE_LABELS.get(code, code)
+        options.append((code, label))
+    return tuple(options)
 
 
 def t(key: str, **kwargs: object) -> str:

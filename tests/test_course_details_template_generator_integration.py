@@ -7,7 +7,8 @@ import pytest
 pytest.importorskip("xlsxwriter")
 openpyxl = pytest.importorskip("openpyxl")
 
-from modules.instructor.course_details_template_generator import (
+from modules.instructor.instructor_template_engine import (
+    _compute_template_hash,
     generate_course_details_template,
 )
 
@@ -23,6 +24,7 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
             "Assessment_Config",
             "Question_Map",
             "Students",
+            "__SYSTEM_HASH__",
         ]
 
         course_sheet = workbook["Course_Metadata"]
@@ -38,6 +40,13 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
         validations = list(assessment_sheet.data_validations.dataValidation)
         assert validations
         assert "E2:E301" in str(validations[0].sqref)
+
+        hash_sheet = workbook["__SYSTEM_HASH__"]
+        assert hash_sheet.sheet_state == "hidden"
+        assert hash_sheet["A1"].value == "Template_ID"
+        assert hash_sheet["B1"].value == "Template_Hash"
+        assert hash_sheet["A2"].value == "COURSE_SETUP_V1"
+        assert hash_sheet["B2"].value == _compute_template_hash("COURSE_SETUP_V1")
     finally:
         workbook.close()
 

@@ -1,8 +1,10 @@
 import os
+import re
 import sys
 import logging
 from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
-from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 
 try:
@@ -15,17 +17,32 @@ from common.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     MAIN_SPLASH_MS,
+    QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
+    SINGLE_INSTANCE_LOCK_TIMEOUT_MS,
     SPLASH_BG_COLOR,
     SPLASH_HEIGHT,
     SPLASH_STATUS_COLOR,
     SPLASH_TEXT_COLOR,
     SPLASH_TITLE_FONT_SIZE,
     SPLASH_WIDTH,
+    STARTUP_TOAST_DURATION_MS,
+    STARTUP_TOAST_QUIT_DELAY_MS,
+    THEME_SETUP_DEFER_MS,
+    THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
 )
-from common.texts import set_language, set_language_from_system, t
-from common.utils import configure_app_logging, resource_path
+from common.contracts import validate_blueprint_registry_contracts
+from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
+from common.texts import get_language, set_language, set_language_from_system, t
+from common.toast import ToastLevel, show_toast
+from common.utils import (
+    UI_LANGUAGE_AUTO_ALIASES,
+    configure_app_logging,
+    get_ui_language_preference,
+    resource_path,
+    set_ui_language_preference,
+)
 from main_window import MainWindow
 
 
@@ -60,13 +77,87 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
     lock = QLockFile(lock_path)
 
     # Immediate check; if already locked, another instance is running.
-    if not lock.tryLock(0):
+    if not lock.tryLock(SINGLE_INSTANCE_LOCK_TIMEOUT_MS):
         return None
 
     return lock
 
 
-def _setup_theme() -> None:
+def _activation_server_name() -> str:
+    raw_name = f"{APP_ORGANIZATION}_{APP_NAME}_single_instance"
+    # Keep the server name OS-safe and deterministic.
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", raw_name)
+
+
+def _signal_existing_instance_to_activate() -> bool:
+    socket = QLocalSocket()
+    socket.connectToServer(_activation_server_name())
+    connected = socket.waitForConnected(500)
+    if connected:
+        socket.write(b"ACTIVATE")
+        socket.flush()
+        socket.waitForBytesWritten(300)
+        ack_ok = (
+            socket.waitForReadyRead(700)
+            and bytes(socket.readAll().data()).strip() == b"OK"
+        )
+        socket.disconnectFromServer()
+        socket.deleteLater()
+        return ack_ok
+    socket.deleteLater()
+    return False
+
+
+def _raise_and_activate_window(window: MainWindow) -> None:
+    if window.isMinimized():
+        window.showNormal()
+    else:
+        window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized)
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    QApplication.alert(window)
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            hwnd = int(window.winId())
+            user32 = ctypes.windll.user32
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        except Exception:
+            _logger.exception("Win32 foreground activation fallback failed.")
+
+
+def _install_activation_server(window: MainWindow) -> QLocalServer:
+    server = QLocalServer()
+    server_name = _activation_server_name()
+    QLocalServer.removeServer(server_name)
+    if not server.listen(server_name):
+        _logger.warning("Could not start activation server: %s", server.errorString())
+        return server
+
+    def _on_new_connection() -> None:
+        while server.hasPendingConnections():
+            socket = server.nextPendingConnection()
+            if socket is not None:
+                socket.waitForReadyRead(150)
+                _ = socket.readAll().data()
+                _raise_and_activate_window(window)
+                socket.write(b"OK")
+                socket.flush()
+                socket.waitForBytesWritten(150)
+                socket.disconnectFromServer()
+                socket.deleteLater()
+
+    server.newConnection.connect(_on_new_connection)
+    return server
+
+
+def _setup_system_theme() -> None:
     global _theme_apply_in_progress
     if qdarktheme is None:
         return
@@ -81,7 +172,7 @@ def _setup_theme() -> None:
         _theme_apply_in_progress = False
 
 
-def _schedule_theme_refresh() -> None:
+def _schedule_system_theme_refresh() -> None:
     global _theme_refresh_pending
     if qdarktheme is None or _theme_apply_in_progress or _theme_refresh_pending:
         return
@@ -90,10 +181,10 @@ def _schedule_theme_refresh() -> None:
     def _run() -> None:
         global _theme_refresh_pending
         _theme_refresh_pending = False
-        _setup_theme()
+        _setup_system_theme()
 
     # Debounce palette bursts to avoid recursive signal storms.
-    QTimer.singleShot(120, _run)
+    QTimer.singleShot(THEME_REFRESH_DEBOUNCE_MS, _run)
 
 
 def _install_excepthook() -> None:
@@ -104,8 +195,22 @@ def _install_excepthook() -> None:
             "Unhandled exception in application.",
             exc_info=(exc_type, exc_value, exc_traceback),
         )
+        report_path = capture_unhandled_exception(exc_type, exc_value, exc_traceback)
+        if report_path is not None:
+            _logger.error(
+                "Crash report captured.",
+                extra={
+                    "user_message": f"Crash report saved: {report_path}",
+                    "error_code": "CRASH_REPORTED",
+                },
+            )
+            if has_remote_crash_endpoint():
+                _logger.info(
+                    "Crash report endpoint configured; upload pipeline can process local crash spool.",
+                    extra={"error_code": "CRASH_PIPELINE_READY"},
+                )
         try:
-            QMessageBox.critical(None, APP_NAME, t("app.unexpected_error"))
+            show_toast(None, t("app.unexpected_error"), title=APP_NAME, level="error")
         except Exception:
             pass
         previous_hook(exc_type, exc_value, exc_traceback)
@@ -113,25 +218,40 @@ def _install_excepthook() -> None:
     sys.excepthook = _hook
 
 
+def _notify_and_wait(app: QApplication, *, title: str, message: str, level: ToastLevel) -> int:
+    show_toast(None, message, title=title, level=level, duration_ms=STARTUP_TOAST_DURATION_MS)
+    QTimer.singleShot(STARTUP_TOAST_QUIT_DELAY_MS, app.quit)
+    return app.exec()
+
+
 def main() -> int:
-    os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = "1"
+    os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = QT_ADAPTIVE_STRUCTURE_SENSITIVITY
+    validate_blueprint_registry_contracts()
     configure_app_logging(APP_NAME)
-    if UI_LANGUAGE.lower() in {"auto", "system", "os"}:
+    startup_language = get_ui_language_preference(APP_NAME) or UI_LANGUAGE
+    if startup_language.lower() in UI_LANGUAGE_AUTO_ALIASES:
         set_language_from_system()
     else:
-        set_language(UI_LANGUAGE)
+        set_language(startup_language)
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_ORGANIZATION)
     app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
     _install_excepthook()
 
     single_instance_lock = _acquire_exe_single_instance_lock()
     if getattr(sys, "frozen", False) and single_instance_lock is None:
-        QMessageBox.information(None, APP_NAME, t("app.already_running"))
-        return 0
+        if _signal_existing_instance_to_activate():
+            return 0
+        return _notify_and_wait(
+            app,
+            title=APP_NAME,
+            message=t("app.already_running"),
+            level="info",
+        )
 
     splash = QSplashScreen(
         _build_splash_pixmap(),
@@ -154,19 +274,34 @@ def main() -> int:
     )
     app.processEvents()
 
-    window = MainWindow()
+    def _apply_language_selection(language_code: str) -> bool:
+        previous = get_language()
+        if language_code.lower() in UI_LANGUAGE_AUTO_ALIASES:
+            set_language_from_system()
+        else:
+            set_language(language_code)
+        return get_language() != previous
+
+    def _on_language_applied(language_code: str) -> None:
+        set_ui_language_preference(APP_NAME, ui_language=language_code)
+        if _apply_language_selection(language_code):
+            window.apply_language_change()
+
+    window = MainWindow(on_language_applied=_on_language_applied)
+    activation_server = _install_activation_server(window)
 
     def _finish_startup() -> None:
+        _ = activation_server
         window.show()
         splash.finish(window)
         # Defer theme setup until after first paint for faster perceived startup.
         app.setStyle("Fusion")
-        QTimer.singleShot(0, _setup_theme)
+        QTimer.singleShot(THEME_SETUP_DEFER_MS, _setup_system_theme)
 
     # Keep splash visible long enough to be noticeable on fast systems.
     QTimer.singleShot(MAIN_SPLASH_MS, _finish_startup)
     if qdarktheme is not None:
-        app.paletteChanged.connect(lambda: _schedule_theme_refresh())
+        app.paletteChanged.connect(lambda: _schedule_system_theme_refresh())
 
     return app.exec()
 
