@@ -16,6 +16,11 @@ dist/
 
 # Test and coverage artifacts
 .pytest_cache/
+.pytest_cache_cotas/
+.pytest_temp_cotas/
+pytest-cache-files-*/
+pytest.ini
+scripts/pytest_safe.ps1
 .coverage
 .coverage.*
 htmlcov/
