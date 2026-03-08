@@ -37,6 +37,11 @@ def _placeholders(value: str) -> set[str]:
     return set(re.findall(r"\{[^{}]+\}", value))
 
 
+def _catalog_value(catalog: dict[str, str], key: str, language: str) -> str:
+    assert key in catalog, f"Missing {language} coordinator key in catalog: {key}"
+    return catalog[key]
+
+
 def test_coordinator_module_keys_exist_in_both_catalogs() -> None:
     keys = _coordinator_keys_used_in_module()
     assert keys, (
@@ -51,8 +56,10 @@ def test_coordinator_module_keys_exist_in_both_catalogs() -> None:
 
 def test_coordinator_tamil_placeholders_match_english() -> None:
     for key in sorted(_coordinator_keys_used_in_module()):
-        ta_placeholders = _placeholders(TA_TEXTS[key])
-        en_placeholders = _placeholders(EN_TEXTS[key])
+        ta_value = _catalog_value(TA_TEXTS, key, "Tamil")
+        en_value = _catalog_value(EN_TEXTS, key, "English")
+        ta_placeholders = _placeholders(ta_value)
+        en_placeholders = _placeholders(en_value)
         assert ta_placeholders == en_placeholders, (
             f"Placeholder mismatch for key {key}: "
             f"TA={sorted(ta_placeholders)}, EN={sorted(en_placeholders)}"
@@ -61,8 +68,8 @@ def test_coordinator_tamil_placeholders_match_english() -> None:
 
 def test_coordinator_tamil_strings_are_not_english_fallbacks() -> None:
     for key in sorted(_coordinator_keys_used_in_module()):
-        en_value = EN_TEXTS[key]
-        ta_value = TA_TEXTS[key]
+        en_value = _catalog_value(EN_TEXTS, key, "English")
+        ta_value = _catalog_value(TA_TEXTS, key, "Tamil")
         # Allow short labels/acronyms/proper nouns to remain identical.
         if len(en_value) <= 10:
             continue
