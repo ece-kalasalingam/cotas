@@ -276,7 +276,7 @@ TEXTS = {
     "coordinator.duplicate.body": "பட்டியலில் ஏற்கனவே உள்ளதால் {count} நகல் கோப்பு(கள்) தவிர்க்கப்பட்டன.",
     "coordinator.invalid_register.title": "பதிவு எண் தலைப்பு இல்லை",
     "coordinator.invalid_register.body": (
-        "கோப்பில் Register Number இருக்க வேண்டும்.\n\n{files}"
+        "கோப்பில் பதிவு எண் தலைப்பு இருக்க வேண்டும்.\n\n{files}"
     ),
     "coordinator.status.ignored": (
         "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன (ஆதரிக்காத வகை, இல்லை, நகல், "
