@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from common.texts.en import TEXTS as EN_TEXTS
@@ -13,6 +14,7 @@ def _normalized_text(value: str) -> str:
     return " ".join(value.split()).strip(".,;:!?")
 
 
+@lru_cache(maxsize=1)
 def _coordinator_keys_used_in_module() -> set[str]:
     module_path = Path(MODULES_INIT_FILE).resolve().parent / "coordinator_module.py"
     source = module_path.read_text(encoding="utf-8")
