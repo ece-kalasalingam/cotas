@@ -8,8 +8,9 @@ from common.texts.ta_in import TEXTS as TA_TEXTS
 
 
 def _coordinator_keys_used_in_module() -> set[str]:
-    source = Path("modules/coordinator_module.py").read_text(encoding="utf-8")
-    return set(re.findall(r't\("((?:coordinator)\.[^"]+)"', source))
+    repo_root = Path(__file__).resolve().parent.parent
+    source = (repo_root / "modules" / "coordinator_module.py").read_text(encoding="utf-8")
+    return set(re.findall(r't\(\s*["\']((?:coordinator)\.[^"\']+)["\']', source))
 
 
 def _placeholders(value: str) -> set[str]:
@@ -19,8 +20,10 @@ def _placeholders(value: str) -> set[str]:
 def test_coordinator_module_keys_exist_in_both_catalogs() -> None:
     keys = _coordinator_keys_used_in_module()
     assert keys
-    assert all(key in EN_TEXTS for key in keys)
-    assert all(key in TA_TEXTS for key in keys)
+    missing_en = keys - EN_TEXTS.keys()
+    assert not missing_en, f"Missing English coordinator keys: {sorted(missing_en)}"
+    missing_ta = keys - TA_TEXTS.keys()
+    assert not missing_ta, f"Missing Tamil coordinator keys: {sorted(missing_ta)}"
 
 
 def test_coordinator_tamil_placeholders_match_english() -> None:
