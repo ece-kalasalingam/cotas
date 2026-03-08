@@ -7,6 +7,10 @@ from common.texts.en import TEXTS as EN_TEXTS
 from common.texts.ta_in import TEXTS as TA_TEXTS
 
 
+def _normalized_text(value: str) -> str:
+    return " ".join(value.split()).strip(".,;:!?")
+
+
 def _coordinator_keys_used_in_module() -> set[str]:
     repo_root = Path(__file__).resolve().parent.parent
     source = (repo_root / "modules" / "coordinator_module.py").read_text(encoding="utf-8")
@@ -43,4 +47,7 @@ def test_coordinator_tamil_strings_are_not_english_fallbacks() -> None:
         # Allow short labels/acronyms/proper nouns to remain identical.
         if len(en_value) <= 10:
             continue
-        assert ta_value != en_value
+        assert _normalized_text(ta_value) != _normalized_text(en_value), (
+            f"Possible English fallback for key {key}: "
+            f"TA={ta_value!r}, EN={en_value!r}"
+        )
