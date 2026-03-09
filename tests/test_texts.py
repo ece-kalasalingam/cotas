@@ -1,7 +1,7 @@
 import logging
 
 import common.texts as texts
-from common.texts import set_language, set_language_from_system, t
+from common.texts import get_available_languages, set_language, set_language_from_system, t
 
 
 def test_t_formats_placeholders():
@@ -35,6 +35,19 @@ def test_system_language_uses_windows_lcid_when_available():
 def test_system_language_falls_back_to_english_1033():
     set_language_from_system(system_lcid=9999, system_locale="xx_YY")
     assert t("status.ready") == "Ready"
+    set_language("en")
+
+
+def test_available_language_labels_are_native_and_language_independent():
+    set_language("en")
+    labels_in_english_ui = dict(get_available_languages())
+
+    set_language("ta-IN")
+    labels_in_tamil_ui = dict(get_available_languages())
+
+    assert labels_in_english_ui == labels_in_tamil_ui
+    assert labels_in_english_ui["en"] == "English"
+    assert labels_in_english_ui["ta-in"] == "தமிழ் (இந்தியா)"
     set_language("en")
 
 

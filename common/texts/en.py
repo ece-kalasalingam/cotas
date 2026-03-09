@@ -4,7 +4,6 @@ TEXTS = {
     # Startup / main
     "app.already_running": "Application is already running.",
     "app.unexpected_error": "An unexpected error occurred. Please check the log file.",
-    "app.subtitle": "Framework for Outcome Computation and Unification System",
     "app.main_window_title": "FOCUS",
     "splash.starting": "Starting application...",
     "splash.loading_main_window": "Loading main window...",
@@ -28,7 +27,6 @@ TEXTS = {
     "settings.theme.system": "System",
     "settings.theme.light": "Light",
     "settings.theme.dark": "Dark",
-    "settings.language.system": "System Language",
     "settings.apply": "Apply",
     "settings.saved.title": "Settings Updated",
     "settings.saved.body": "Language preference was applied.",
@@ -36,8 +34,6 @@ TEXTS = {
     "language.switcher.button": "Language: {language}",
     "language.switcher.status": "Language {language}",
     "language.switcher.applied_status": "Language set to {language}.",
-    "language.name.en": "English",
-    "language.name.ta-in": "Tamil (India)",
     # About
     "about.version": "Version {version}",
     "about.description": (

@@ -11,12 +11,14 @@ from common.utils import (
     coerce_excel_number,
     emit_user_status,
     from_portable_path,
+    get_ui_language_preference,
     get_last_saved_dir,
     log_process_message,
     remember_dialog_dir,
     normalize,
     resolve_dialog_start_path,
     resource_path,
+    set_ui_language_preference,
     set_last_saved_dir,
     to_portable_path,
 )
@@ -192,6 +194,23 @@ class TestSettingsHelpers(unittest.TestCase):
                     os.path.normcase(loaded or ""),
                     os.path.normcase(str(target)),
                 )
+
+    def test_ui_language_preference_defaults_to_english(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_base = Path(tmp)
+            with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
+                "common.utils._is_installed_exe", return_value=False
+            ):
+                self.assertEqual(get_ui_language_preference(app_name="FOCUS"), "en")
+
+    def test_ui_language_auto_aliases_normalize_to_english(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_base = Path(tmp)
+            with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
+                "common.utils._is_installed_exe", return_value=False
+            ):
+                set_ui_language_preference(app_name="FOCUS", ui_language="auto")
+                self.assertEqual(get_ui_language_preference(app_name="FOCUS"), "en")
 
     def test_resolve_dialog_start_path_prefers_json_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

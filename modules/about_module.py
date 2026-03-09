@@ -27,7 +27,7 @@ from common.constants import (
     ABOUT_ICON_SIZE,
     ABOUT_TITLE_SPACING,
     APP_NAME,
-    APP_SUBTITLE_TEXT_KEY,
+    APP_SUBTITLE,
     SYSTEM_VERSION,
 )
 from common.texts import t
@@ -116,7 +116,7 @@ class AboutModule(QWidget):
         self.retranslate_ui()
 
     def retranslate_ui(self) -> None:
-        self.subtitle.setText(t(APP_SUBTITLE_TEXT_KEY))
+        self.subtitle.setText(APP_SUBTITLE)
         self.version_label.setText(t("about.version", version=SYSTEM_VERSION))
         self.description.setText(t("about.description", app_name=APP_NAME))
         self.institution.setText(t("about.institution"))

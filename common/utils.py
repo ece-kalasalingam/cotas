@@ -16,7 +16,7 @@ SETTINGS_FILE_NAME = "settings.json"
 DEFAULT_LOG_FILE_NAME = "focus.log"
 SETTINGS_KEY_UI_LANGUAGE = "ui_language"
 SETTINGS_KEY_LAST_SAVED_DIR = "last_saved_dir"
-UI_LANGUAGE_AUTO = "auto"
+UI_LANGUAGE_DEFAULT = "en"
 UI_LANGUAGE_AUTO_ALIASES = {"auto", "system", "os"}
 PORTABLE_MODE_ENV_VAR = "FOCUS_PORTABLE"
 LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [job=%(job_id)s step=%(step_id)s] %(message)s"
@@ -193,10 +193,10 @@ def _write_settings_payload(settings_file: Path, payload: dict[str, Any]) -> Non
     )
 
 
-def _normalize_ui_language(value: str | None, *, default: str = UI_LANGUAGE_AUTO) -> str:
+def _normalize_ui_language(value: str | None, *, default: str = UI_LANGUAGE_DEFAULT) -> str:
     normalized = (value or "").strip().replace("_", "-").lower()
     if normalized in UI_LANGUAGE_AUTO_ALIASES:
-        return UI_LANGUAGE_AUTO
+        return default
     return normalized or default
 
 
@@ -204,7 +204,7 @@ def get_ui_language_preference(app_name: str, file_name: str = SETTINGS_FILE_NAM
     """Return persisted UI language preference with normalized default."""
     settings_file = app_settings_path(app_name=app_name, file_name=file_name)
     payload = _read_settings_payload(settings_file)
-    return _normalize_ui_language(payload.get(SETTINGS_KEY_UI_LANGUAGE), default=UI_LANGUAGE_AUTO)
+    return _normalize_ui_language(payload.get(SETTINGS_KEY_UI_LANGUAGE), default=UI_LANGUAGE_DEFAULT)
 
 
 def set_ui_language_preference(
@@ -216,7 +216,10 @@ def set_ui_language_preference(
     """Persist UI language preference and return settings path."""
     settings_file = app_settings_path(app_name=app_name, file_name=file_name)
     payload = _read_settings_payload(settings_file)
-    payload[SETTINGS_KEY_UI_LANGUAGE] = _normalize_ui_language(ui_language, default=UI_LANGUAGE_AUTO)
+    payload[SETTINGS_KEY_UI_LANGUAGE] = _normalize_ui_language(
+        ui_language,
+        default=UI_LANGUAGE_DEFAULT,
+    )
     _write_settings_payload(settings_file, payload)
     return settings_file
 

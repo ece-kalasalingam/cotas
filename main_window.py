@@ -26,7 +26,6 @@ from common.constants import (
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
 from common.utils import (
-    UI_LANGUAGE_AUTO,
     get_ui_language_preference,
     resource_path,
     set_ui_language_preference,
@@ -302,13 +301,6 @@ class MainWindow(QMainWindow):
         self.language_action_group = QActionGroup(self.language_menu)
         self.language_action_group.setExclusive(True)
 
-        system_action = self.language_menu.addAction(t("settings.language.system"))
-        system_action.setData(UI_LANGUAGE_AUTO)
-        system_action.setCheckable(True)
-        system_action.setChecked(preferred == UI_LANGUAGE_AUTO)
-        self.language_action_group.addAction(system_action)
-
-        self.language_menu.addSeparator()
         for code, label in get_available_languages():
             action = self.language_menu.addAction(label)
             action.setData(code)

@@ -93,14 +93,15 @@ def test_language_menu_has_single_checked_action(
 
     window = main_window_ui.MainWindow()
     try:
-        window._rebuild_language_menu("auto")
-        checked_auto = [
+        window._rebuild_language_menu("ta-in")
+        checked_tamil = [
             action
             for action in window.language_menu.actions()
             if action.isCheckable() and action.isChecked()
         ]
-        assert len(checked_auto) == 1
-        assert checked_auto[0].data() == "auto"
+        assert len(checked_tamil) == 1
+        assert checked_tamil[0].data() == "ta-in"
+        assert all(action.data() != "auto" for action in window.language_menu.actions())
 
         window._rebuild_language_menu("en")
         checked_en = [

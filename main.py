@@ -34,7 +34,7 @@ from common.constants import (
 )
 from common.contracts import validate_blueprint_registry_contracts
 from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
-from common.texts import get_language, set_language, set_language_from_system, t
+from common.texts import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
 from common.utils import (
     UI_LANGUAGE_AUTO_ALIASES,
@@ -230,7 +230,7 @@ def main() -> int:
     configure_app_logging(APP_NAME)
     startup_language = get_ui_language_preference(APP_NAME) or UI_LANGUAGE
     if startup_language.lower() in UI_LANGUAGE_AUTO_ALIASES:
-        set_language_from_system()
+        set_language(UI_LANGUAGE)
     else:
         set_language(startup_language)
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -277,7 +277,7 @@ def main() -> int:
     def _apply_language_selection(language_code: str) -> bool:
         previous = get_language()
         if language_code.lower() in UI_LANGUAGE_AUTO_ALIASES:
-            set_language_from_system()
+            set_language(UI_LANGUAGE)
         else:
             set_language(language_code)
         return get_language() != previous

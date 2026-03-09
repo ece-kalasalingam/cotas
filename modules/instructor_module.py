@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import tempfile
-import json
 from html import escape
 from datetime import datetime
 from pathlib import Path
@@ -31,14 +29,7 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
-    COURSE_METADATA_SHEET,
     ID_COURSE_SETUP,
-    SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
-    SYSTEM_LAYOUT_MANIFEST_KEY,
-    SYSTEM_LAYOUT_SHEET,
-    SYSTEM_HASH_SHEET,
-    SYSTEM_HASH_TEMPLATE_HASH_KEY,
-    SYSTEM_HASH_TEMPLATE_ID_KEY,
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
@@ -60,25 +51,67 @@ from common.qt_jobs import run_in_background
 from common.toast import show_toast
 from common.texts import t
 from common.utils import (
-    coerce_excel_number,
     emit_user_status,
     log_process_message,
-    normalize,
     remember_dialog_dir,
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
-from common.workbook_signing import verify_payload_signature
 from domain import InstructorWorkflowState
 from modules.instructor import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
-from modules.instructor.template_versions import course_setup_v1
+from modules.instructor.async_runner import (
+    AsyncOperationRunner,
+    publish_status_compat as _publish_status_compat_impl,
+    set_busy_compat as _set_busy_compat_impl,
+    start_async_operation_compat as _start_async_operation_compat_impl,
+)
+from modules.instructor.messages import (
+    localized_log_messages,
+    show_step_success_toast,
+    show_system_error_toast,
+    show_validation_error_toast,
+)
+from modules.instructor.steps.shared_workbook_ops import (
+    build_marks_template_default_name,
+)
+from modules.instructor.steps.step1_course_details_template import (
+    download_course_template_async,
+)
+from modules.instructor.steps.step2_course_details_and_marks_template import (
+    prepare_marks_template_async,
+    upload_course_details_async,
+)
+from modules.instructor.steps.step3_filled_marks_and_final_report import (
+    generate_final_report_async,
+    upload_filled_marks_async,
+)
+from modules.instructor.validators.step3_filled_marks_validator import (
+    filled_marks_manifest_validators,
+    validate_filled_marks_manifest_schema_by_template,
+    validate_uploaded_filled_marks_workbook,
+)
+from modules.instructor.workflow_controller import InstructorWorkflowController
 from services import InstructorWorkflowService
 
 _logger = logging.getLogger(__name__)
+
+# Runtime bindings consumed via `globals()` by extracted step handlers.
+_STEP_RUNTIME_BINDINGS = {
+    "QFileDialog": QFileDialog,
+    "ID_COURSE_SETUP": ID_COURSE_SETUP,
+    "AppSystemError": AppSystemError,
+    "JobCancelledError": JobCancelledError,
+    "ValidationError": ValidationError,
+    "log_process_message": log_process_message,
+    "resolve_dialog_start_path": resolve_dialog_start_path,
+    "generate_course_details_template": generate_course_details_template,
+    "generate_marks_template_from_course_details": generate_marks_template_from_course_details,
+    "validate_course_details_workbook": validate_course_details_workbook,
+}
 
 
 class _UILogHandler(logging.Handler):
@@ -98,18 +131,11 @@ class _UILogHandler(logging.Handler):
 
 
 def _publish_status_compat(target: object, message: str) -> None:
-    """Publish status for both full widget instances and lightweight test doubles."""
-    publish = getattr(target, "_publish_status", None)
-    if callable(publish):
-        publish(message)
-        return
-    emit_user_status(getattr(target, "status_changed", None), message, logger=_logger)
+    _publish_status_compat_impl(target=target, message=message, logger=_logger)
 
 
 def _set_busy_compat(target: object, busy: bool, *, job_id: str | None = None) -> None:
-    setter = getattr(target, "_set_busy", None)
-    if callable(setter):
-        setter(busy, job_id=job_id)
+    _set_busy_compat_impl(target=target, busy=busy, job_id=job_id)
 
 
 def _start_async_operation_compat(
@@ -121,110 +147,27 @@ def _start_async_operation_compat(
     on_success,
     on_failure,
 ) -> None:
-    starter = getattr(target, "_start_async_operation", None)
-    if callable(starter):
-        starter(
-            token=token,
-            job_id=job_id,
-            work=work,
-            on_success=on_success,
-            on_failure=on_failure,
-        )
-        return
-
-    setattr(target, "_cancel_token", token)
-    _set_busy_compat(target, True, job_id=job_id)
-    job_ref: dict[str, object] = {}
-
-    def _finalize() -> None:
-        active_jobs = getattr(target, "_active_jobs", None)
-        tracked_job = job_ref.get("job")
-        if isinstance(active_jobs, list) and tracked_job in active_jobs:
-            active_jobs.remove(tracked_job)
-        setattr(target, "_cancel_token", None)
-        _set_busy_compat(target, False)
-        refresh = getattr(target, "_refresh_ui", None)
-        if callable(refresh):
-            refresh()
-
-    def _on_finished(result: object) -> None:
-        try:
-            on_success(result)
-        finally:
-            _finalize()
-
-    def _on_failed(exc: Exception) -> None:
-        try:
-            on_failure(exc)
-        finally:
-            _finalize()
-
-    job = run_in_background(work, on_finished=_on_finished, on_failed=_on_failed)
-    job_ref["job"] = job
-    active_jobs = getattr(target, "_active_jobs", None)
-    if isinstance(active_jobs, list):
-        active_jobs.append(job)
-
-
-def _localized_log_messages(process_key: str) -> tuple[str, str]:
-    user_process_name = t(process_key)
-    return (
-        t("instructor.log.completed_process", process=user_process_name),
-        t("instructor.log.error_while_process", process=user_process_name),
+    _start_async_operation_compat_impl(
+        target=target,
+        token=token,
+        job_id=job_id,
+        work=work,
+        on_success=on_success,
+        on_failure=on_failure,
+        run_async=run_in_background,
     )
 
 
-def _sanitize_filename_token(value: object) -> str:
-    token = str(value).strip()
-    token = re.sub(r'[<>:"/\\|?*]+', "_", token)
-    token = re.sub(r"\s+", "", token)
-    token = token.strip(" ._")
-    return token
+def _localized_log_messages(process_key: str) -> tuple[str, str]:
+    return localized_log_messages(process_key)
 
 
 def _build_marks_template_default_name(course_details_path: str | None) -> str:
-    fallback = t("instructor.dialog.step3.default_name")
-    if not course_details_path:
-        return fallback
-
-    try:
-        import openpyxl
-    except ModuleNotFoundError:
-        return fallback
-
-    workbook = None
-    try:
-        workbook = openpyxl.load_workbook(course_details_path, data_only=True)
-        if COURSE_METADATA_SHEET not in workbook.sheetnames:
-            return fallback
-        sheet = workbook[COURSE_METADATA_SHEET]
-        fields: dict[str, str] = {}
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            key = normalize(row[0] if len(row) > 0 else None)
-            if not key:
-                continue
-            value = row[1] if len(row) > 1 else None
-            coerced = coerce_excel_number(value)
-            fields[key] = str(coerced).strip() if coerced is not None else ""
-
-        parts = [
-            _sanitize_filename_token(fields.get("course_code", "")),
-            _sanitize_filename_token(fields.get("semester", "")),
-            _sanitize_filename_token(fields.get("section", "")),
-            _sanitize_filename_token(fields.get("academic_year", "")),
-            "Marks",
-        ]
-        if any(not part for part in parts[:4]):
-            return fallback
-        return f"{'_'.join(parts)}.xlsx"
-    except Exception:
-        return fallback
-    finally:
-        if workbook is not None:
-            workbook.close()
+    return build_marks_template_default_name(course_details_path)
 
 
 def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:
+    # Keep module-level shutil/os usage for compatibility with existing tests.
     source = Path(source_path)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -251,85 +194,7 @@ def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:
 
 
 def _validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
-    """Validate a filled marks workbook before enabling final-report generation."""
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise ValidationError(
-            t("instructor.validation.openpyxl_missing"),
-            code="OPENPYXL_MISSING",
-        ) from exc
-
-    workbook_file = Path(workbook_path)
-    if not workbook_file.exists():
-        raise ValidationError(
-            t("instructor.validation.workbook_not_found", workbook=workbook_file),
-            code="WORKBOOK_NOT_FOUND",
-            context={"workbook": str(workbook_file)},
-        )
-
-    try:
-        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
-    except Exception as exc:
-        raise ValidationError(
-            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
-            code="WORKBOOK_OPEN_FAILED",
-            context={"workbook": str(workbook_file)},
-        ) from exc
-
-    try:
-        if SYSTEM_HASH_SHEET not in workbook.sheetnames:
-            raise ValidationError(t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET))
-
-        hash_sheet = workbook[SYSTEM_HASH_SHEET]
-        if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_KEY):
-            raise ValidationError(t("instructor.validation.system_hash_missing_template_id_header"))
-        if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_KEY):
-            raise ValidationError(t("instructor.validation.system_hash_missing_template_hash_header"))
-
-        template_id = str(hash_sheet["A2"].value).strip() if hash_sheet["A2"].value is not None else ""
-        template_hash = str(hash_sheet["B2"].value).strip() if hash_sheet["B2"].value is not None else ""
-        if not template_id:
-            raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
-        if not verify_payload_signature(template_id, template_hash):
-            raise ValidationError(t("instructor.validation.system_hash_mismatch"))
-
-        if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
-            raise ValidationError(
-                t("instructor.validation.step3.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
-            )
-        layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
-        if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
-            raise ValidationError(
-                t(
-                    "instructor.validation.step3.layout_header_mismatch",
-                    column="A1",
-                    expected=SYSTEM_LAYOUT_MANIFEST_KEY,
-                )
-            )
-        if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
-            raise ValidationError(
-                t(
-                    "instructor.validation.step3.layout_header_mismatch",
-                    column="B1",
-                    expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
-                )
-            )
-
-        manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
-        manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
-        if not manifest_text or not manifest_hash:
-            raise ValidationError(t("instructor.validation.step3.layout_manifest_missing"))
-        if not verify_payload_signature(manifest_text, manifest_hash):
-            raise ValidationError(t("instructor.validation.step3.layout_hash_mismatch"))
-
-        try:
-            manifest = json.loads(manifest_text)
-        except Exception as exc:
-            raise ValidationError(t("instructor.validation.step3.layout_manifest_json_invalid")) from exc
-        _validate_filled_marks_manifest_schema_by_template(workbook, manifest, template_id=template_id)
-    finally:
-        workbook.close()
+    validate_uploaded_filled_marks_workbook(workbook_path)
 
 
 def _validate_filled_marks_manifest_schema_by_template(
@@ -338,19 +203,15 @@ def _validate_filled_marks_manifest_schema_by_template(
     *,
     template_id: str,
 ) -> None:
-    validator = _filled_marks_manifest_validators().get(template_id)
-    if validator is None:
-        raise ValidationError(
-            t("instructor.validation.step3.template_validator_missing", template_id=template_id)
-        )
-    validator(workbook, manifest)
+    validate_filled_marks_manifest_schema_by_template(
+        workbook,
+        manifest,
+        template_id=template_id,
+    )
 
 
 def _filled_marks_manifest_validators() -> dict[str, object]:
-    # Register per-template filled-marks schema validators here.
-    return {
-        ID_COURSE_SETUP: course_setup_v1.validate_filled_marks_manifest_schema,
-    }
+    return filled_marks_manifest_validators()
 
 
 class InstructorModule(QWidget):
@@ -435,6 +296,8 @@ class InstructorModule(QWidget):
         self._active_jobs: list[object] = []
         self._is_closing = False
         self._step2_marks_default_name = t("instructor.dialog.step3.default_name")
+        self._workflow_controller = InstructorWorkflowController(self)
+        self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
 
         self._ui_log_handler: _UILogHandler | None = None
         self._step_items: list[QListWidgetItem] = []
@@ -659,43 +522,28 @@ class InstructorModule(QWidget):
             link_label.setText(self._quick_link_markup(link_key, path))
 
     def _step_path(self, step: int) -> str | None:
-        return getattr(self, self.PATH_ATTRS[step])
+        return self._workflow_controller.step_path(step)
 
     def _step_done(self, step: int) -> bool:
-        return bool(getattr(self, self.DONE_ATTRS[step]))
+        return self._workflow_controller.step_done(step)
 
     def _step_outdated(self, step: int) -> bool:
-        outdated_attr = self.OUTDATED_ATTRS.get(step)
-        return bool(getattr(self, outdated_attr)) if outdated_attr else False
+        return self._workflow_controller.step_outdated(step)
 
     def _step_state_text(self, step: int) -> str:
-        done = self._step_done(step)
-        outdated = self._step_outdated(step)
-        if done and outdated:
-            return t("instructor.badge.needs_update")
-        return t("instructor.badge.done") if done else t("instructor.badge.pending")
+        return self._workflow_controller.step_state_text(step)
 
     def _step_list_text(self, step: int) -> str:
-        title = t(self.STEP_TITLE_KEYS[step])
-        state = self._step_state_text(step)
-        return f"{step}. {title}  {state}"
+        return self._workflow_controller.step_list_text(step)
 
     def _action_text_for_step(self, step: int) -> str:
-        return t(
-            self.ACTION_REDO_KEYS[step]
-            if self._step_done(step)
-            else self.ACTION_DEFAULT_KEYS[step]
-        )
+        return self._workflow_controller.action_text_for_step(step)
 
     def _can_run_step(self, step: int) -> tuple[bool, str]:
-        if step in (1, 2, 3):
-            return True, ""
-        return True, ""
+        return self._workflow_controller.can_run_step(step)
 
     def _on_step_selected(self, step: int) -> None:
-        self.current_step = step
-        self.state.current_step = step
-        self._refresh_ui()
+        self._workflow_controller.on_step_selected(step)
 
     def _on_step_row_changed(self, row: int) -> None:
         if row < 0:
@@ -889,34 +737,13 @@ class InstructorModule(QWidget):
         on_success,
         on_failure,
     ) -> None:
-        self._cancel_token = token
-        self._set_busy(True, job_id=job_id)
-        job_ref: dict[str, object] = {}
-
-        def _finalize() -> None:
-            tracked_job = job_ref.get("job")
-            if tracked_job in self._active_jobs:
-                self._active_jobs.remove(tracked_job)
-            self._cancel_token = None
-            self._set_busy(False)
-            if not self._is_closing:
-                self._refresh_ui()
-
-        def _on_finished(result: object) -> None:
-            try:
-                on_success(result)
-            finally:
-                _finalize()
-
-        def _on_failed(exc: Exception) -> None:
-            try:
-                on_failure(exc)
-            finally:
-                _finalize()
-
-        job = run_in_background(work, on_finished=_on_finished, on_failed=_on_failed)
-        job_ref["job"] = job
-        self._active_jobs.append(job)
+        self._async_runner.start(
+            token=token,
+            job_id=job_id,
+            work=work,
+            on_success=on_success,
+            on_failure=on_failure,
+        )
 
     def closeEvent(self, event) -> None:
         self._is_closing = True
@@ -930,620 +757,28 @@ class InstructorModule(QWidget):
         super().closeEvent(event)
 
     def _prepare_marks_template_async(self) -> None:
-        if self.state.busy:
-            return
-
-        process_name = t("instructor.log.process.generate_marks_template")
-        user_success_message, user_error_message = _localized_log_messages(
-            "instructor.log.process.generate_marks_template"
-        )
-        if not self.step2_upload_ready or not self.step2_course_details_path:
-            show_toast(
-                self,
-                t("instructor.require.step2"),
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
-            return
-
-        source_path = self.step2_course_details_path
-        default_name = getattr(
-            self,
-            "_step2_marks_default_name",
-            t("instructor.dialog.step3.default_name"),
-        ) or t("instructor.dialog.step3.default_name")
-        save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            t("instructor.dialog.step3.title"),
-            resolve_dialog_start_path(APP_NAME, default_name),
-            t("instructor.dialog.filter.excel"),
-        )
-        if not save_path:
-            return
-        self._remember_dialog_dir_safe(save_path)
-
-        workflow_service = getattr(self, "_workflow_service", None)
-        token = CancellationToken()
-        job_context = (
-            workflow_service.create_job_context(
-                step_id="step2_generate_marks_template",
-                payload={"source": source_path, "output": save_path},
-            )
-            if workflow_service is not None
-            else None
-        )
-
-        def _on_finished(_result: object) -> None:
-            self.step2_path = save_path
-            self.step2_done = True
-            self.step3_outdated = self.step3_done
-            self.step4_outdated = self.step4_done
-            _publish_status_compat(self, t("instructor.status.step2_uploaded"))
-            log_process_message(
-                process_name,
-                logger=_logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            self._show_step_success_toast(2)
-
-        def _on_failed(exc: Exception) -> None:
-            if isinstance(exc, JobCancelledError):
-                user_message = t("instructor.status.operation_cancelled")
-                _publish_status_compat(self, user_message)
-                _logger.info(
-                    "%s cancelled by user/system request.",
-                    process_name,
-                    extra={
-                        "user_message": user_message,
-                        "job_id": job_context.job_id if job_context else None,
-                        "step_id": job_context.step_id if job_context else None,
-                    },
-                )
-                return
-            if isinstance(exc, ValidationError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    notify=lambda message, _level: self._show_validation_error_toast(message),
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-            elif isinstance(exc, AppSystemError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(2)
-            else:
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(2)
-
-        def _work() -> Path:
-            if workflow_service is not None and job_context is not None:
-                return workflow_service.generate_marks_template(
-                    source_path,
-                    save_path,
-                    context=job_context,
-                    cancel_token=token,
-                )
-            generate_marks_template_from_course_details(source_path, save_path)
-            return Path(save_path)
-
-        _start_async_operation_compat(
-            self,
-            token=token,
-            job_id=job_context.job_id if job_context else None,
-            work=_work,
-            on_success=_on_finished,
-            on_failure=_on_failed,
-        )
+        prepare_marks_template_async(self, ns=globals())
 
     def _download_course_template_async(self) -> None:
-        if self.state.busy:
-            return
-
-        template_id = ID_COURSE_SETUP
-        process_name = t("instructor.log.process.generate_course_details_template")
-        user_success_message, user_error_message = _localized_log_messages(
-            "instructor.log.process.generate_course_details_template"
-        )
-
-        save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            t("instructor.dialog.step1.title"),
-            resolve_dialog_start_path(APP_NAME, t("instructor.dialog.step1.default_name")),
-            t("instructor.dialog.filter.excel"),
-        )
-        if not save_path:
-            return
-        self._remember_dialog_dir_safe(save_path)
-
-        workflow_service = getattr(self, "_workflow_service", None)
-        token = CancellationToken()
-        job_context = (
-            workflow_service.create_job_context(
-                step_id="step1_generate_course_template",
-                payload={"template_id": template_id, "output": save_path},
-            )
-            if workflow_service is not None
-            else None
-        )
-
-        def _on_finished(_result: object) -> None:
-            self.step1_path = save_path
-            self.step1_done = True
-            _publish_status_compat(self, t("instructor.status.step1_selected"))
-            log_process_message(
-                process_name,
-                logger=_logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            self._show_step_success_toast(1)
-
-        def _on_failed(exc: Exception) -> None:
-            if isinstance(exc, JobCancelledError):
-                user_message = t("instructor.status.operation_cancelled")
-                _publish_status_compat(self, user_message)
-                _logger.info(
-                    "%s cancelled by user/system request.",
-                    process_name,
-                    extra={
-                        "user_message": user_message,
-                        "job_id": job_context.job_id if job_context else None,
-                        "step_id": job_context.step_id if job_context else None,
-                    },
-                )
-                return
-            if isinstance(exc, ValidationError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    notify=lambda message, _level: self._show_validation_error_toast(message),
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-            elif isinstance(exc, AppSystemError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(1)
-            else:
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(1)
-
-        def _work() -> Path:
-            if workflow_service is not None and job_context is not None:
-                return workflow_service.generate_course_details_template(
-                    save_path,
-                    context=job_context,
-                    cancel_token=token,
-                )
-            generate_course_details_template(save_path, template_id=template_id)
-            return Path(save_path)
-
-        _start_async_operation_compat(
-            self,
-            token=token,
-            job_id=job_context.job_id if job_context else None,
-            work=_work,
-            on_success=_on_finished,
-            on_failure=_on_failed,
-        )
+        download_course_template_async(self, ns=globals())
 
     def _upload_course_details_async(self) -> None:
-        if self.state.busy:
-            return
-
-        process_name = t("instructor.log.process.validate_course_details_workbook")
-        user_success_message, user_error_message = _localized_log_messages(
-            "instructor.log.process.validate_course_details_workbook"
-        )
-        open_path, _ = QFileDialog.getOpenFileName(
-            self,
-            t("instructor.dialog.step2.title"),
-            resolve_dialog_start_path(APP_NAME),
-            t("instructor.dialog.filter.excel_open"),
-        )
-        if not open_path:
-            return
-        self._remember_dialog_dir_safe(open_path)
-
-        workflow_service = getattr(self, "_workflow_service", None)
-        token = CancellationToken()
-        job_context = (
-            workflow_service.create_job_context(
-                step_id="step2_validate_course_details",
-                payload={"path": open_path},
-            )
-            if workflow_service is not None
-            else None
-        )
-
-        def _on_finished(result: object) -> None:
-            replacing = self.step2_done or self.step2_upload_ready
-            self.step2_course_details_path = open_path
-            self.step2_upload_ready = True
-            self.step2_done = False
-            self.step2_path = None
-            self._step2_marks_default_name = (
-                result.get("default_marks_name")
-                if isinstance(result, dict)
-                else t("instructor.dialog.step3.default_name")
-            ) or t("instructor.dialog.step3.default_name")
-
-            if replacing:
-                self.step4_outdated = self.step4_done
-                self.step3_outdated = self.step3_done
-                if self.step3_outdated or self.step4_outdated:
-                    _publish_status_compat(self, t("instructor.status.step2_changed"))
-            else:
-                _publish_status_compat(self, t("instructor.status.step2_validated"))
-            log_process_message(
-                process_name,
-                logger=_logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            self._show_step_success_toast(2)
-
-        def _on_failed(exc: Exception) -> None:
-            if isinstance(exc, JobCancelledError):
-                user_message = t("instructor.status.operation_cancelled")
-                _publish_status_compat(self, user_message)
-                _logger.info(
-                    "%s cancelled by user/system request.",
-                    process_name,
-                    extra={
-                        "user_message": user_message,
-                        "job_id": job_context.job_id if job_context else None,
-                        "step_id": job_context.step_id if job_context else None,
-                    },
-                )
-                return
-            if isinstance(exc, ValidationError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    notify=lambda message, _level: self._show_validation_error_toast(message),
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-            elif isinstance(exc, AppSystemError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(2)
-            else:
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(2)
-
-        def _work() -> dict[str, str]:
-            if workflow_service is not None and job_context is not None:
-                workflow_service.validate_course_details_workbook(
-                    open_path,
-                    context=job_context,
-                    cancel_token=token,
-                )
-            else:
-                validate_course_details_workbook(open_path)
-            token.raise_if_cancelled()
-            return {
-                "default_marks_name": _build_marks_template_default_name(open_path),
-            }
-
-        _start_async_operation_compat(
-            self,
-            token=token,
-            job_id=job_context.job_id if job_context else None,
-            work=_work,
-            on_success=_on_finished,
-            on_failure=_on_failed,
-        )
+        upload_course_details_async(self, ns=globals())
 
     def _upload_filled_marks_async(self) -> None:
-        if self.state.busy:
-            return
-
-        process_name = t("instructor.log.process.upload_filled_marks_workbook")
-        user_success_message, user_error_message = _localized_log_messages(
-            "instructor.log.process.upload_filled_marks_workbook"
-        )
-        open_path, _ = QFileDialog.getOpenFileName(
-            self,
-            t("instructor.dialog.step3.title"),
-            resolve_dialog_start_path(APP_NAME),
-            t("instructor.dialog.filter.excel_open"),
-        )
-        if not open_path:
-            return
-        self._remember_dialog_dir_safe(open_path)
-
-        token = CancellationToken()
-        workflow_service = getattr(self, "_workflow_service", None)
-        job_context = (
-            workflow_service.create_job_context(
-                step_id="step3_upload_filled_marks",
-                payload={"path": open_path},
-            )
-            if workflow_service is not None
-            else None
-        )
-
-        def _on_finished(_result: object) -> None:
-            replacing = self.step3_done
-            self.step3_path = open_path
-            self.step3_done = True
-            self.step3_outdated = False
-
-            if replacing and self.step3_done:
-                self.step4_outdated = True
-                _publish_status_compat(self, t("instructor.status.step3_changed"))
-            else:
-                _publish_status_compat(self, t("instructor.status.step3_uploaded"))
-            log_process_message(
-                process_name,
-                logger=_logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            self._show_step_success_toast(3)
-
-        def _on_failed(exc: Exception) -> None:
-            if isinstance(exc, JobCancelledError):
-                user_message = t("instructor.status.operation_cancelled")
-                _publish_status_compat(self, user_message)
-                _logger.info(
-                    "%s cancelled by user/system request.",
-                    process_name,
-                    extra={
-                        "user_message": user_message,
-                        "job_id": job_context.job_id if job_context else None,
-                        "step_id": job_context.step_id if job_context else None,
-                    },
-                )
-                return
-            if isinstance(exc, ValidationError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    notify=lambda message, _level: self._show_validation_error_toast(message),
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-            elif isinstance(exc, AppSystemError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(3)
-            else:
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(3)
-
-        def _work() -> bool:
-            token.raise_if_cancelled()
-            _validate_uploaded_filled_marks_workbook(open_path)
-            token.raise_if_cancelled()
-            return True
-
-        _start_async_operation_compat(
-            self,
-            token=token,
-            job_id=job_context.job_id if job_context else None,
-            work=_work,
-            on_success=_on_finished,
-            on_failure=_on_failed,
-        )
+        upload_filled_marks_async(self, ns=globals())
 
     def _generate_final_report_async(self) -> None:
-        if self.state.busy:
-            return
-
-        process_name = t("instructor.log.process.generate_final_co_report")
-        user_success_message, user_error_message = _localized_log_messages(
-            "instructor.log.process.generate_final_co_report"
-        )
-        can_run, reason = self._can_run_step(3)
-        if not can_run:
-            show_toast(
-                self,
-                reason,
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
-            return
-        if not self.step3_done or self.step3_outdated:
-            show_toast(
-                self,
-                t("instructor.require.step3"),
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
-            return
-
-        save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            t("instructor.dialog.step4.title"),
-            resolve_dialog_start_path(APP_NAME, t("instructor.dialog.step4.default_name")),
-            t("instructor.dialog.filter.excel"),
-        )
-        if not save_path:
-            return
-
-        if not self.step3_path or not Path(self.step3_path).exists():
-            _logger.warning("Step 4 failed: Step 3 file is missing. step3_path=%s", self.step3_path)
-            show_toast(
-                self,
-                t("instructor.require.step3"),
-                title=t("instructor.msg.step_required_title"),
-                level="error",
-            )
-            return
-        source_path = self.step3_path
-
-        workflow_service = getattr(self, "_workflow_service", None)
-        token = CancellationToken()
-        job_context = (
-            workflow_service.create_job_context(
-                step_id="step3_generate_final_report",
-                payload={"source": source_path, "output": save_path},
-            )
-            if workflow_service is not None
-            else None
-        )
-
-        def _on_finished(_result: object) -> None:
-            self.step4_path = save_path
-            self.step4_done = True
-            self.step4_outdated = False
-            self._remember_dialog_dir_safe(save_path)
-            _publish_status_compat(self, t("instructor.status.step4_selected"))
-            log_process_message(
-                process_name,
-                logger=_logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            self._show_step_success_toast(3)
-
-        def _on_failed(exc: Exception) -> None:
-            if isinstance(exc, JobCancelledError):
-                user_message = t("instructor.status.operation_cancelled")
-                _publish_status_compat(self, user_message)
-                _logger.info(
-                    "%s cancelled by user/system request.",
-                    process_name,
-                    extra={
-                        "user_message": user_message,
-                        "job_id": job_context.job_id if job_context else None,
-                        "step_id": job_context.step_id if job_context else None,
-                    },
-                )
-                return
-            if isinstance(exc, ValidationError):
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    notify=lambda message, _level: self._show_validation_error_toast(message),
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-            else:
-                log_process_message(
-                    process_name,
-                    logger=_logger,
-                    error=exc,
-                    user_error_message=user_error_message,
-                    job_id=job_context.job_id if job_context else None,
-                    step_id=job_context.step_id if job_context else None,
-                )
-                self._show_system_error_toast(3)
-
-        def _work() -> Path:
-            if workflow_service is not None and job_context is not None:
-                return workflow_service.generate_final_report(
-                    source_path,
-                    save_path,
-                    context=job_context,
-                    cancel_token=token,
-                )
-            return _atomic_copy_file(source_path, save_path)
-
-        _start_async_operation_compat(
-            self,
-            token=token,
-            job_id=job_context.job_id if job_context else None,
-            work=_work,
-            on_success=_on_finished,
-            on_failure=_on_failed,
-        )
+        generate_final_report_async(self, ns=globals())
 
     def _show_step_success_toast(self, step: int) -> None:
-        show_toast(
-            self,
-            t("instructor.msg.step_completed", step=step, title=t(self.STEP_TITLE_KEYS[step])),
-            title=t("instructor.msg.success_title"),
-            level="success",
-        )
+        show_step_success_toast(self, step=step, title_key=self.STEP_TITLE_KEYS[step])
 
     def _show_validation_error_toast(self, message: str) -> None:
-        show_toast(
-            self,
-            message,
-            title=t("instructor.msg.validation_title"),
-            level="error",
-        )
+        show_validation_error_toast(self, message)
 
     def _show_system_error_toast(self, step: int) -> None:
-        show_toast(
-            self,
-            t("instructor.msg.failed_to_do", action=t(self.STEP_TITLE_KEYS[step])),
-            title=t("instructor.msg.error_title"),
-            level="error",
-        )
+        show_system_error_toast(self, title_key=self.STEP_TITLE_KEYS[step])
 
     def _download_course_template(self) -> None:
         InstructorModule._download_course_template_async(self)

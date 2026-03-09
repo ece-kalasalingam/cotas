@@ -26,7 +26,6 @@ APP_EXECUTABLE_NAME = "focus"
 APP_INTERNAL_NAME = "focus"
 APP_PRODUCT_NAME = "Focus"
 APP_SUBTITLE = "Framework for Outcome Computation and Unification System"
-APP_SUBTITLE_TEXT_KEY = "app.subtitle"
 MAIN_WINDOW_TITLE_TEXT_KEY = "app.main_window_title"
 APP_ORGANIZATION = "FOCUS"
 MAIN_SPLASH_MS = 1500
@@ -40,7 +39,7 @@ QT_ADAPTIVE_STRUCTURE_SENSITIVITY = "1"
 
 SYSTEM_VERSION = "1.0.0"
 ID_COURSE_SETUP = "COURSE_SETUP_V1"
-UI_LANGUAGE = "auto"  # "auto" uses OS user language; fallback is English (1033).
+UI_LANGUAGE = "en"  # Default UI language policy is explicit English.
 UI_FONT_FAMILY = "Segoe UI"
 
 # Splash defaults

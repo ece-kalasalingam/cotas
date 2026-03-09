@@ -16,14 +16,13 @@ dist/
 
 # Test and coverage artifacts
 .pytest_cache/
-.pytest_cache_cotas/
-.pytest_temp_cotas/
+.pytest_*/
+.tmp_runtime_*/
 pytest-cache-files-*/
-pytest.ini
-scripts/pytest_safe.ps1
 .coverage
 .coverage.*
 htmlcov/
+.pytest_tmp_env/
 
 # Type checker / linter caches
 .mypy_cache/
@@ -42,3 +41,4 @@ settings.json
 # OS files
 .DS_Store
 Thumbs.db
+

@@ -4,7 +4,6 @@ TEXTS = {
     # Startup / main
     "app.already_running": "பயன்பாடு ஏற்கனவே இயங்கிக்கொண்டிருக்கிறது.",
     "app.unexpected_error": "எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.",
-    "app.subtitle": "முடிவு கணக்கீடு மற்றும் ஒருங்கிணைப்பு அமைப்புக்கான கட்டமைப்பு",
     "app.main_window_title": "FOCUS",
     "splash.starting": "பயன்பாடு தொடங்குகிறது...",
     "splash.loading_main_window": "முதன்மை சாளரம் ஏற்றப்படுகிறது...",
@@ -28,7 +27,6 @@ TEXTS = {
     "settings.theme.system": "கணினி இயல்புநிலை",
     "settings.theme.light": "ஒளி",
     "settings.theme.dark": "இருள்",
-    "settings.language.system": "கணினி மொழி",
     "settings.apply": "பயன்படுத்து",
     "settings.saved.title": "அமைப்புகள் புதுப்பிக்கப்பட்டன",
     "settings.saved.body": "மொழி விருப்பம் செயல்படுத்தப்பட்டது.",
@@ -36,8 +34,6 @@ TEXTS = {
     "language.switcher.button": "மொழி: {language}",
     "language.switcher.status": "மொழி {language}",
     "language.switcher.applied_status": "மொழி {language} ஆக அமைக்கப்பட்டது.",
-    "language.name.en": "ஆங்கிலம்",
-    "language.name.ta-in": "தமிழ் (இந்தியா)",
     # About
     "about.version": "பதிப்பு {version}",
     "about.description": (

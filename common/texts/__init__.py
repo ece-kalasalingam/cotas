@@ -26,7 +26,7 @@ _LCID_TO_LANG: dict[int, str] = {
 }
 _LANGUAGE_LABELS: dict[str, str] = {
     "en": "English",
-    "ta-in": "Tamil (India)",
+    "ta-in": "தமிழ் (இந்தியா)",
 }
 
 
@@ -138,14 +138,7 @@ def get_language() -> str:
 
 def get_available_languages() -> tuple[tuple[str, str], ...]:
     """Return supported language options as (code, label)."""
-    options: list[tuple[str, str]] = []
-    for code in _CATALOGS:
-        label_key = f"language.name.{code}"
-        label = t(label_key)
-        if label == label_key:
-            label = _LANGUAGE_LABELS.get(code, code)
-        options.append((code, label))
-    return tuple(options)
+    return tuple((code, _LANGUAGE_LABELS.get(code, code)) for code in _CATALOGS)
 
 
 def t(key: str, **kwargs: object) -> str:
