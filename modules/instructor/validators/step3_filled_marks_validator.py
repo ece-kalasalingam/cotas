@@ -18,7 +18,7 @@ from common.exceptions import ValidationError
 from common.texts import t
 from common.utils import normalize
 from common.workbook_signing import verify_payload_signature
-from modules.instructor.template_versions import course_setup_v1
+from domain.template_versions import course_setup_v1
 
 
 def filled_marks_manifest_validators() -> dict[str, object]:

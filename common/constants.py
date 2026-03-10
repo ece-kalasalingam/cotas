@@ -182,34 +182,39 @@ if round(DIRECT_RATIO + INDIRECT_RATIO, 5) != 1.0:
 # ==========================================================
 
 # One unified password for all sheets (template + reports).
-# This must always be provided via environment variable in all environments.
+# Kept non-fatal at import time to avoid breaking tooling/bootstrap flows.
+# Runtime signing/protection paths should enforce this policy explicitly.
 WORKBOOK_PASSWORD_ENV_VAR = "FOCUS_WORKBOOK_PASSWORD"
 WORKBOOK_PASSWORD: str = os.getenv(WORKBOOK_PASSWORD_ENV_VAR, "").strip()
-if not WORKBOOK_PASSWORD:
-    raise ConfigurationError(
-        f"{WORKBOOK_PASSWORD_ENV_VAR} is required and must not be empty"
-    )
-if len(WORKBOOK_PASSWORD) < 12:
-    raise ConfigurationError(
-        f"{WORKBOOK_PASSWORD_ENV_VAR} must be at least 12 characters long"
-    )
+WORKBOOK_PASSWORD_MIN_LENGTH = 12
 WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR = "FOCUS_WORKBOOK_PASSWORD_PREVIOUS"
 WORKBOOK_PASSWORD_PREVIOUS: tuple[str, ...] = tuple(
     secret.strip()
     for secret in os.getenv(WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR, "").split(",")
     if secret.strip()
 )
-for _previous_secret in WORKBOOK_PASSWORD_PREVIOUS:
-    if len(_previous_secret) < 12:
-        raise ConfigurationError(
-            f"{WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR} entries must be at least 12 characters long"
-        )
 WORKBOOK_SIGNATURE_VERSION_ENV_VAR = "FOCUS_WORKBOOK_SIGNATURE_VERSION"
 WORKBOOK_SIGNATURE_VERSION = os.getenv(WORKBOOK_SIGNATURE_VERSION_ENV_VAR, "v1").strip().lower() or "v1"
 if WORKBOOK_SIGNATURE_VERSION not in {"v1"}:
     raise ConfigurationError(
         f"{WORKBOOK_SIGNATURE_VERSION_ENV_VAR} must be one of: v1"
     )
+
+
+def ensure_workbook_secret_policy() -> None:
+    if not WORKBOOK_PASSWORD:
+        raise ConfigurationError(
+            f"{WORKBOOK_PASSWORD_ENV_VAR} is required and must not be empty"
+        )
+    if len(WORKBOOK_PASSWORD) < WORKBOOK_PASSWORD_MIN_LENGTH:
+        raise ConfigurationError(
+            f"{WORKBOOK_PASSWORD_ENV_VAR} must be at least {WORKBOOK_PASSWORD_MIN_LENGTH} characters long"
+        )
+    for previous_secret in WORKBOOK_PASSWORD_PREVIOUS:
+        if len(previous_secret) < WORKBOOK_PASSWORD_MIN_LENGTH:
+            raise ConfigurationError(
+                f"{WORKBOOK_PASSWORD_PREVIOUS_ENV_VAR} entries must be at least {WORKBOOK_PASSWORD_MIN_LENGTH} characters long"
+            )
 
 # Protection behavior flags
 ALLOW_SORT: bool = True
@@ -226,18 +231,76 @@ HEADER_PATTERNFILL_COLOR = "F2F2F2"
 
 # Marks validation lower bound
 MIN_MARK_VALUE: float = 0.0
-MARKS_ENTRY_VALIDATION_FORMULA: str = '=OR(D4="A",D4="a",AND(ISNUMBER(D4),D4>=0,D4<=D$3))'
 MARKS_ENTRY_VALIDATION_ERROR_TITLE: str = "Invalid marks"
-MARKS_ENTRY_VALIDATION_ERROR_MESSAGE: str = "Enter A/a or a numeric mark within allowed maximum."
-MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_MESSAGE: str = (
-    "Enter A/a or a numeric Likert value within allowed range."
+MARKS_ENTRY_VALIDATION_ERROR_RANGE_TEMPLATE: str = (
+    "Enter A/a or a numeric mark between {minimum} and {maximum}."
+)
+MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_RANGE_TEMPLATE: str = (
+    "Enter A/a or a numeric Likert value between {minimum} and {maximum}."
 )
 MARKS_ENTRY_ROW_HEADERS = ("#", "Reg. No.", "Student Name")
 MARKS_ENTRY_TOTAL_LABEL = "Total"
 MARKS_ENTRY_CO_PREFIX = "CO"
 MARKS_ENTRY_QUESTION_PREFIX = "Q"
 MARKS_ENTRY_CO_MARKS_LABEL_PREFIX = "Marks for CO"
-MARKS_ENTRY_COS_LABEL = "COs"
+
+# Final CO report (step 3 generate)
+CO_REPORT_DIRECT_SHEET_SUFFIX = "_Direct"
+CO_REPORT_INDIRECT_SHEET_SUFFIX = "_Indirect"
+CO_REPORT_ABSENT_TOKEN = "A"
+CO_REPORT_NOT_APPLICABLE_TOKEN = "NA"
+CO_REPORT_HEADER_SERIAL = "#"
+CO_REPORT_HEADER_REG_NO = "Reg. No."
+CO_REPORT_HEADER_STUDENT_NAME = "Student Name"
+CO_REPORT_HEADER_TOTAL = "Total"
+CO_REPORT_HEADER_TOTAL_100 = "Total (100%)"
+CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE = "Total ({ratio}%)"
+CO_REPORT_PERCENT_SYMBOL = "%"
+CO_REPORT_MAX_DECIMAL_PLACES = 2
+CO_REPORT_SCALED_LABEL_TEMPLATE = "scaled 0-{max_value}"
+CO_REPORT_COMPONENT_NAME_LABEL = "Component name"
+INSTRUCTOR_COMPONENT_NAME_LABEL = "Component name"
+INSTRUCTOR_CO_LABEL = "CO"
+INSTRUCTOR_MAX_LABEL = "Max."
+WORKBOOK_TEMP_SUFFIX = ".tmp"
+WORKFLOW_STEP_TIMEOUT_ENV_VAR = "FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS"
+WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE = "generate_course_details_template"
+WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK = "validate_course_details_workbook"
+WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE = "generate_marks_template"
+WORKFLOW_OPERATION_GENERATE_FINAL_REPORT = "generate_final_report"
+WORKFLOW_STEP_ID_STEP1_GENERATE_COURSE_TEMPLATE = "step1_generate_course_template"
+WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS = "step2_validate_course_details"
+WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE = "step2_generate_marks_template"
+WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS = "step3_upload_filled_marks"
+WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT = "step3_generate_final_report"
+WORKFLOW_PAYLOAD_KEY_TEMPLATE_ID = "template_id"
+WORKFLOW_PAYLOAD_KEY_OUTPUT = "output"
+WORKFLOW_PAYLOAD_KEY_SOURCE = "source"
+WORKFLOW_PAYLOAD_KEY_PATH = "path"
+LOG_EXTRA_KEY_USER_MESSAGE = "user_message"
+LOG_EXTRA_KEY_JOB_ID = "job_id"
+LOG_EXTRA_KEY_STEP_ID = "step_id"
+PROCESS_MESSAGE_SUCCESS_SUFFIX = " completed successfully."
+PROCESS_MESSAGE_CANCELLED_TEMPLATE = "%s cancelled by user/system request."
+WORKFLOW_USER_MESSAGE_STARTED_SUFFIX = " started."
+WORKFLOW_USER_MESSAGE_COMPLETED_TEMPLATE = " completed in {duration_ms} ms."
+WORKFLOW_USER_MESSAGE_CANCELLED_TEMPLATE = " cancelled after {duration_ms} ms."
+WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE = " failed after {duration_ms} ms."
+WORKFLOW_TIMEOUT_ERROR_TEMPLATE = "{operation} exceeded timeout of {timeout_seconds} seconds."
+LAYOUT_MANIFEST_KEY_SHEET_ORDER = "sheet_order"
+LAYOUT_MANIFEST_KEY_SHEETS = "sheets"
+LAYOUT_SHEET_SPEC_KEY_NAME = "name"
+LAYOUT_SHEET_SPEC_KEY_KIND = "kind"
+LAYOUT_SHEET_SPEC_KEY_HEADER_ROW = "header_row"
+LAYOUT_SHEET_SPEC_KEY_HEADERS = "headers"
+LAYOUT_SHEET_SPEC_KEY_ANCHORS = "anchors"
+LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS = "formula_anchors"
+LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT = "student_count"
+LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH = "student_identity_hash"
+LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE = "mark_structure"
+LAYOUT_SHEET_KIND_DIRECT_CO_WISE = "direct_co_wise"
+LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE = "direct_non_co_wise"
+LAYOUT_SHEET_KIND_INDIRECT = "indirect"
 
 
 # ==========================================================
@@ -261,6 +324,7 @@ if LIKERT_MIN >= LIKERT_MAX:
 
 SYSTEM_HASH_SHEET = "__SYSTEM_HASH__"
 SYSTEM_LAYOUT_SHEET = "__SYSTEM_LAYOUT__"
+SYSTEM_REPORT_INTEGRITY_SHEET = "__REPORT_INTEGRITY__"
 COURSE_METADATA_SHEET = "Course_Metadata"
 ASSESSMENT_CONFIG_SHEET = "Assessment_Config"
 QUESTION_MAP_SHEET = "Question_Map"
@@ -284,7 +348,21 @@ SYSTEM_LAYOUT_MANIFEST_HEADER = "Layout_Manifest"
 SYSTEM_LAYOUT_MANIFEST_HASH_HEADER = "Layout_Hash"
 SYSTEM_LAYOUT_MANIFEST_KEY = "layout_manifest"
 SYSTEM_LAYOUT_MANIFEST_HASH_KEY = "layout_hash"
+SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER = "Report_Manifest"
+SYSTEM_REPORT_INTEGRITY_HASH_HEADER = "Report_Hash"
 COURSE_METADATA_TOTAL_OUTCOMES_KEY = "total_outcomes"
+COURSE_METADATA_FACULTY_NAME_KEY = "faculty_name"
+COURSE_METADATA_COURSE_CODE_KEY = "course_code"
+COURSE_METADATA_SEMESTER_KEY = "semester"
+COURSE_METADATA_SECTION_KEY = "section"
+COURSE_METADATA_ACADEMIC_YEAR_KEY = "academic_year"
+CO_REPORT_METADATA_OUTCOME_FIELD = "Course Outcome"
+CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE = "CO{co} - Direct"
+CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE = "CO{co} - Indirect"
+MARKS_TEMPLATE_NAME_SUFFIX = "Marks"
+CO_REPORT_TEMPLATE_NAME_SUFFIX = "COReport"
+FILENAME_JOIN_SEPARATOR = "_"
+FILE_EXTENSION_XLSX = ".xlsx"
 
 
 # ==========================================================

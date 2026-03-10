@@ -3,6 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from common.constants import (
+    LOG_EXTRA_KEY_JOB_ID,
+    LOG_EXTRA_KEY_STEP_ID,
+    LOG_EXTRA_KEY_USER_MESSAGE,
+    PROCESS_MESSAGE_CANCELLED_TEMPLATE,
+    PROCESS_MESSAGE_SUCCESS_SUFFIX,
+    WORKFLOW_PAYLOAD_KEY_OUTPUT,
+    WORKFLOW_PAYLOAD_KEY_PATH,
+    WORKFLOW_PAYLOAD_KEY_SOURCE,
+    WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+    WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS,
+)
+
+_LOG_STEP4_SOURCE_MISSING = "Step 4 failed: Step 3 file is missing. step3_path=%s"
 
 
 def upload_filled_marks_async(module: object, *, ns: dict[str, object]) -> None:
@@ -28,8 +42,8 @@ def upload_filled_marks_async(module: object, *, ns: dict[str, object]) -> None:
     workflow_service = getattr(module, "_workflow_service", None)
     job_context = (
         workflow_service.create_job_context(
-            step_id="step3_upload_filled_marks",
-            payload={"path": open_path},
+            step_id=WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS,
+            payload={WORKFLOW_PAYLOAD_KEY_PATH: open_path},
         )
         if workflow_service is not None
         else None
@@ -49,7 +63,7 @@ def upload_filled_marks_async(module: object, *, ns: dict[str, object]) -> None:
         ns["log_process_message"](
             process_name,
             logger=ns["_logger"],
-            success_message=f"{process_name} completed successfully.",
+            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
@@ -61,12 +75,12 @@ def upload_filled_marks_async(module: object, *, ns: dict[str, object]) -> None:
             user_message = t("instructor.status.operation_cancelled")
             ns["_publish_status_compat"](module, user_message)
             ns["_logger"].info(
-                "%s cancelled by user/system request.",
+                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
                 extra={
-                    "user_message": user_message,
-                    "job_id": job_context.job_id if job_context else None,
-                    "step_id": job_context.step_id if job_context else None,
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message,
+                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
+                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
                 },
             )
             return
@@ -143,17 +157,18 @@ def generate_final_report_async(module: object, *, ns: dict[str, object]) -> Non
         )
         return
 
+    default_name = ns["_build_final_report_default_name"](module.step3_path)
     save_path, _ = ns["QFileDialog"].getSaveFileName(
         module,
         t("instructor.dialog.step4.title"),
-        ns["resolve_dialog_start_path"](ns["APP_NAME"], t("instructor.dialog.step4.default_name")),
+        ns["resolve_dialog_start_path"](ns["APP_NAME"], default_name),
         t("instructor.dialog.filter.excel"),
     )
     if not save_path:
         return
 
     if not module.step3_path or not Path(module.step3_path).exists():
-        ns["_logger"].warning("Step 4 failed: Step 3 file is missing. step3_path=%s", module.step3_path)
+        ns["_logger"].warning(_LOG_STEP4_SOURCE_MISSING, module.step3_path)
         ns["show_toast"](
             module,
             t("instructor.require.step3"),
@@ -167,8 +182,8 @@ def generate_final_report_async(module: object, *, ns: dict[str, object]) -> Non
     token = ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
-            step_id="step3_generate_final_report",
-            payload={"source": source_path, "output": save_path},
+            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path},
         )
         if workflow_service is not None
         else None
@@ -183,7 +198,7 @@ def generate_final_report_async(module: object, *, ns: dict[str, object]) -> Non
         ns["log_process_message"](
             process_name,
             logger=ns["_logger"],
-            success_message=f"{process_name} completed successfully.",
+            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
@@ -195,12 +210,12 @@ def generate_final_report_async(module: object, *, ns: dict[str, object]) -> Non
             user_message = t("instructor.status.operation_cancelled")
             ns["_publish_status_compat"](module, user_message)
             ns["_logger"].info(
-                "%s cancelled by user/system request.",
+                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
                 extra={
-                    "user_message": user_message,
-                    "job_id": job_context.job_id if job_context else None,
-                    "step_id": job_context.step_id if job_context else None,
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message,
+                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
+                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
                 },
             )
             return
@@ -225,6 +240,9 @@ def generate_final_report_async(module: object, *, ns: dict[str, object]) -> Non
             module._show_system_error_toast(3)
 
     def _work() -> Path:
+        token.raise_if_cancelled()
+        ns["_validate_uploaded_filled_marks_workbook"](source_path)
+        token.raise_if_cancelled()
         if workflow_service is not None and job_context is not None:
             return workflow_service.generate_final_report(
                 source_path,

@@ -8,7 +8,18 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from common.constants import COURSE_METADATA_SHEET
+from common.constants import (
+    CO_REPORT_TEMPLATE_NAME_SUFFIX,
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_SECTION_KEY,
+    COURSE_METADATA_SEMESTER_KEY,
+    COURSE_METADATA_SHEET,
+    FILE_EXTENSION_XLSX,
+    FILENAME_JOIN_SEPARATOR,
+    MARKS_TEMPLATE_NAME_SUFFIX,
+    WORKBOOK_TEMP_SUFFIX,
+)
 from common.texts import t
 from common.utils import coerce_excel_number, normalize
 
@@ -22,8 +33,28 @@ def sanitize_filename_token(value: object) -> str:
 
 
 def build_marks_template_default_name(course_details_path: str | None) -> str:
-    fallback = t("instructor.dialog.step3.default_name")
-    if not course_details_path:
+    return _build_workbook_default_name_from_metadata(
+        workbook_path=course_details_path,
+        suffix_label=MARKS_TEMPLATE_NAME_SUFFIX,
+        fallback=t("instructor.dialog.step3.default_name"),
+    )
+
+
+def build_final_report_default_name(filled_marks_path: str | None) -> str:
+    return _build_workbook_default_name_from_metadata(
+        workbook_path=filled_marks_path,
+        suffix_label=CO_REPORT_TEMPLATE_NAME_SUFFIX,
+        fallback=t("instructor.dialog.step4.default_name"),
+    )
+
+
+def _build_workbook_default_name_from_metadata(
+    *,
+    workbook_path: str | None,
+    suffix_label: str,
+    fallback: str,
+) -> str:
+    if not workbook_path:
         return fallback
 
     try:
@@ -33,7 +64,7 @@ def build_marks_template_default_name(course_details_path: str | None) -> str:
 
     workbook = None
     try:
-        workbook = openpyxl.load_workbook(course_details_path, data_only=True)
+        workbook = openpyxl.load_workbook(workbook_path, data_only=True)
         if COURSE_METADATA_SHEET not in workbook.sheetnames:
             return fallback
         sheet = workbook[COURSE_METADATA_SHEET]
@@ -47,15 +78,15 @@ def build_marks_template_default_name(course_details_path: str | None) -> str:
             fields[key] = str(coerced).strip() if coerced is not None else ""
 
         parts = [
-            sanitize_filename_token(fields.get("course_code", "")),
-            sanitize_filename_token(fields.get("semester", "")),
-            sanitize_filename_token(fields.get("section", "")),
-            sanitize_filename_token(fields.get("academic_year", "")),
-            "Marks",
+            sanitize_filename_token(fields.get(COURSE_METADATA_COURSE_CODE_KEY, "")),
+            sanitize_filename_token(fields.get(COURSE_METADATA_SEMESTER_KEY, "")),
+            sanitize_filename_token(fields.get(COURSE_METADATA_SECTION_KEY, "")),
+            sanitize_filename_token(fields.get(COURSE_METADATA_ACADEMIC_YEAR_KEY, "")),
+            suffix_label,
         ]
         if any(not part for part in parts[:4]):
             return fallback
-        return f"{'_'.join(parts)}.xlsx"
+        return f"{FILENAME_JOIN_SEPARATOR.join(parts)}{FILE_EXTENSION_XLSX}"
     except Exception:
         return fallback
     finally:
@@ -74,7 +105,7 @@ def atomic_copy_file(source_path: str | Path, output_path: str | Path, *, logger
             delete=False,
             dir=str(output.parent),
             prefix=f"{output.name}.",
-            suffix=".tmp",
+            suffix=WORKBOOK_TEMP_SUFFIX,
         ) as temp_file:
             temp_name = temp_file.name
         shutil.copyfile(str(source), temp_name)

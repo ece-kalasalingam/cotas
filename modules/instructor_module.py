@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import tempfile
+import importlib
+import time
 from html import escape
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -76,6 +75,8 @@ from modules.instructor.messages import (
     show_validation_error_toast,
 )
 from modules.instructor.steps.shared_workbook_ops import (
+    atomic_copy_file as _shared_atomic_copy_file,
+    build_final_report_default_name,
     build_marks_template_default_name,
 )
 from modules.instructor.steps.step1_course_details_template import (
@@ -98,20 +99,21 @@ from modules.instructor.workflow_controller import InstructorWorkflowController
 from services import InstructorWorkflowService
 
 _logger = logging.getLogger(__name__)
+shutil = importlib.import_module("shutil")
 
-# Runtime bindings consumed via `globals()` by extracted step handlers.
-_STEP_RUNTIME_BINDINGS = {
-    "QFileDialog": QFileDialog,
-    "ID_COURSE_SETUP": ID_COURSE_SETUP,
-    "AppSystemError": AppSystemError,
-    "JobCancelledError": JobCancelledError,
-    "ValidationError": ValidationError,
-    "log_process_message": log_process_message,
-    "resolve_dialog_start_path": resolve_dialog_start_path,
-    "generate_course_details_template": generate_course_details_template,
-    "generate_marks_template_from_course_details": generate_marks_template_from_course_details,
-    "validate_course_details_workbook": validate_course_details_workbook,
-}
+# Step handlers receive `ns=globals()`, so these names must stay module-visible.
+_STEP_RUNTIME_GLOBALS = (
+    QFileDialog,
+    ID_COURSE_SETUP,
+    AppSystemError,
+    JobCancelledError,
+    ValidationError,
+    log_process_message,
+    resolve_dialog_start_path,
+    generate_course_details_template,
+    generate_marks_template_from_course_details,
+    validate_course_details_workbook,
+)
 
 
 class _UILogHandler(logging.Handler):
@@ -166,31 +168,12 @@ def _build_marks_template_default_name(course_details_path: str | None) -> str:
     return build_marks_template_default_name(course_details_path)
 
 
+def _build_final_report_default_name(filled_marks_path: str | None) -> str:
+    return build_final_report_default_name(filled_marks_path)
+
+
 def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:
-    # Keep module-level shutil/os usage for compatibility with existing tests.
-    source = Path(source_path)
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temp_name = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            delete=False,
-            dir=str(output.parent),
-            prefix=f"{output.name}.",
-            suffix=".tmp",
-        ) as temp_file:
-            temp_name = temp_file.name
-        shutil.copyfile(str(source), temp_name)
-        os.replace(temp_name, output)
-    except Exception:
-        if temp_name:
-            try:
-                Path(temp_name).unlink(missing_ok=True)
-            except OSError:
-                _logger.warning("Failed to cleanup temp report file: %s", temp_name)
-        raise
-    return output
+    return _shared_atomic_copy_file(source_path, output_path, logger=_logger)
 
 
 def _validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
@@ -225,6 +208,7 @@ class InstructorModule(QWidget):
         ("instructor.links.course_details_uploaded", "step2_course_details_path"),
         ("instructor.links.marks_template_generated", "step2_path"),
         ("instructor.links.marks_template_uploaded", "step3_path"),
+        ("instructor.links.final_co_report_generated", "step4_path"),
     )
     RAIL_LINK_OPEN_FILE_KEY = "instructor.links.open_file"
     RAIL_LINK_OPEN_FOLDER_KEY = "instructor.links.open_folder"
@@ -301,6 +285,10 @@ class InstructorModule(QWidget):
 
         self._ui_log_handler: _UILogHandler | None = None
         self._step_items: list[QListWidgetItem] = []
+        self._busy_started_at: float | None = None
+        self._busy_elapsed_timer = QTimer(self)
+        self._busy_elapsed_timer.setInterval(1000)
+        self._busy_elapsed_timer.timeout.connect(self._update_busy_timer_label)
         self._build_ui()
         self._setup_ui_logging()
         self._refresh_ui()
@@ -322,6 +310,9 @@ class InstructorModule(QWidget):
         self.progress_label = QLabel()
         self.progress_label.setObjectName("progressText")
         left_layout.addWidget(self.progress_label)
+        self.busy_timer_label = QLabel()
+        self.busy_timer_label.setObjectName("hintText")
+        left_layout.addWidget(self.busy_timer_label)
 
         self.step_list = QListWidget()
         self.step_list.setObjectName("stepList")
@@ -573,6 +564,7 @@ class InstructorModule(QWidget):
         self.progress_label.setText(
             t("instructor.progress", completed=completed, total=len(self.WORKFLOW_STEPS))
         )
+        self._update_busy_timer_label()
 
         self.step_list.blockSignals(True)
         for index, item in enumerate(self._step_items, start=1):
@@ -722,11 +714,28 @@ class InstructorModule(QWidget):
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
+        if busy:
+            self._busy_started_at = time.perf_counter()
+            if not self._busy_elapsed_timer.isActive():
+                self._busy_elapsed_timer.start()
+        else:
+            if self._busy_elapsed_timer.isActive():
+                self._busy_elapsed_timer.stop()
+            self._busy_started_at = None
         host_window = self.window()
         set_switch = getattr(host_window, "set_language_switch_enabled", None)
         if callable(set_switch):
             set_switch(not busy)
         self._refresh_ui()
+
+    def _update_busy_timer_label(self) -> None:
+        if not self.state.busy or self._busy_started_at is None:
+            self.busy_timer_label.setText(t("instructor.timer.idle"))
+            return
+        elapsed_seconds = max(0, int(time.perf_counter() - self._busy_started_at))
+        minutes, seconds = divmod(elapsed_seconds, 60)
+        elapsed_text = f"{minutes:02d}:{seconds:02d}"
+        self.busy_timer_label.setText(t("instructor.timer.running", elapsed=elapsed_text))
 
     def _start_async_operation(
         self,
@@ -747,6 +756,8 @@ class InstructorModule(QWidget):
 
     def closeEvent(self, event) -> None:
         self._is_closing = True
+        if self._busy_elapsed_timer.isActive():
+            self._busy_elapsed_timer.stop()
         if self._cancel_token is not None:
             self._cancel_token.cancel()
             self._cancel_token = None

@@ -3,7 +3,8 @@
 ## Scope
 - Module: `modules/instructor_module.py`
 - Service: `services/instructor_workflow_service.py`
-- Generator: `modules/instructor/instructor_template_engine.py`
+- Engine facade: `domain/instructor_engine.py`
+- Template/report engines: `domain/instructor_template_engine.py`, `domain/instructor_report_engine.py`
 
 ## Operational SLO Baseline
 - UI responsiveness: workflow actions must run in background and must not block the Qt event loop.

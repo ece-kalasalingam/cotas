@@ -10,8 +10,8 @@ pytest.importorskip("xlsxwriter")
 
 from common.exceptions import JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from modules.instructor import instructor_template_engine as gen_mod
-from modules.instructor.instructor_template_engine import (
+from domain import instructor_template_engine as gen_mod
+from domain.instructor_template_engine import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
 )
@@ -39,6 +39,11 @@ def test_generate_marks_template_creates_expected_sheets(tmp_path: Path) -> None
         assert "S1" in workbook.sheetnames
         assert "ESP" in workbook.sheetnames
         assert "CSURVEY" in workbook.sheetnames
+        metadata_fields = [
+            str(workbook["Course_Metadata"].cell(row=row, column=1).value or "")
+            for row in range(2, 40)
+        ]
+        assert "Faculty_Name" not in metadata_fields
         assert workbook["Course_Metadata"].print_title_rows == "$1:$1"
         assert workbook["Assessment_Config"].print_title_rows == "$1:$1"
     finally:
@@ -53,28 +58,36 @@ def test_direct_co_wise_sheet_headers_formulas_and_validation(tmp_path: Path) ->
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["S1"]
+        header_row = next(
+            row for row in range(1, 80) if str(sheet.cell(row=row, column=1).value or "") == "#"
+        )
+        component_row = next(
+            row
+            for row in range(1, header_row)
+            if str(sheet.cell(row=row, column=2).value or "") == "Component name"
+        )
         assert sheet["B1"].value == "Course_Code"
         assert sheet["C1"].value == "ECE000"
-        assert sheet["B8"].value == "Component name"
-        assert sheet["C8"].value == "S1"
-        assert sheet["A10"].value == "#"
-        assert sheet["D10"].value == "Q1"
-        assert sheet["L10"].value == "Total"
-        assert sheet["C11"].value == "CO"
-        assert sheet["D11"].value == "CO1"
-        assert sheet["C12"].value == "Max."
-        assert sheet["D12"].value == 2
-        assert sheet["A13"].value == 1
-        assert sheet["B13"].value == "R101"
-        assert sheet["C13"].value == "STUD1"
-        assert sheet["L13"].value == "=SUM(D13:K13)"
-        assert sheet.print_title_rows == "$1:$12"
+        assert sheet.cell(row=component_row, column=2).value == "Component name"
+        assert sheet.cell(row=component_row, column=3).value == "S1"
+        assert sheet.cell(row=header_row, column=1).value == "#"
+        assert sheet.cell(row=header_row, column=4).value == "Q1"
+        assert sheet.cell(row=header_row, column=12).value == "Total"
+        assert sheet.cell(row=header_row + 1, column=3).value == "CO"
+        assert sheet.cell(row=header_row + 1, column=4).value == "CO1"
+        assert sheet.cell(row=header_row + 2, column=3).value == "Max."
+        assert sheet.cell(row=header_row + 2, column=4).value == 2
+        assert sheet.cell(row=header_row + 3, column=1).value == 1
+        assert sheet.cell(row=header_row + 3, column=2).value == "R101"
+        assert sheet.cell(row=header_row + 3, column=3).value == "STUD1"
+        assert sheet.cell(row=header_row + 3, column=12).value == f"=SUM(D{header_row + 3}:K{header_row + 3})"
+        assert sheet.print_title_rows == f"$1:${header_row + 2}"
         active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
-        assert "D13" in active_cells
+        assert f"D{header_row + 3}" in active_cells
         assert sheet.protection.sheet is True
-        assert sheet["A13"].protection.locked is True
-        assert sheet["D13"].protection.locked is False
-        assert sheet["C13"].alignment.wrap_text is True
+        assert sheet.cell(row=header_row + 3, column=1).protection.locked is True
+        assert sheet.cell(row=header_row + 3, column=4).protection.locked is False
+        assert sheet.cell(row=header_row + 3, column=3).alignment.wrap_text is True
         assert sheet.page_setup.orientation == "landscape"
         assert sheet.page_setup.paperSize == 9
         assert sheet.page_margins.left == pytest.approx(0.25)
@@ -86,7 +99,7 @@ def test_direct_co_wise_sheet_headers_formulas_and_validation(tmp_path: Path) ->
         assert sheet.column_dimensions["B"].width >= len("Component name") + 2
         validations = list(sheet.data_validations.dataValidation)
         assert validations
-        assert any("D$12" in (validation.formula1 or "") for validation in validations)
+        assert any(f"D${header_row + 2}" in (validation.formula1 or "") for validation in validations)
         assert any("between 0 and 2" in (validation.error or "") for validation in validations)
     finally:
         workbook.close()
@@ -100,32 +113,42 @@ def test_direct_non_co_wise_sheet_layout_and_formulas(tmp_path: Path) -> None:
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["ESP"]
+        header_row = next(
+            row for row in range(1, 80) if str(sheet.cell(row=row, column=1).value or "") == "#"
+        )
+        component_row = next(
+            row
+            for row in range(1, header_row)
+            if str(sheet.cell(row=row, column=2).value or "") == "Component name"
+        )
         assert sheet["B1"].value == "Course_Code"
         assert sheet["C1"].value == "ECE000"
-        assert sheet["B8"].value == "Component name"
-        assert sheet["C8"].value == "ESP"
-        assert sheet["D10"].value == "Total"
-        assert sheet["E10"].value == "Marks for CO1"
-        assert sheet["C11"].value == "CO"
-        assert sheet["D11"].value in (None, "")
-        assert sheet["E11"].value == "CO1"
-        assert sheet["C12"].value == "Max."
-        assert sheet["D12"].value == 100
-        assert sheet.print_title_rows == "$1:$12"
-        co_marks = [sheet.cell(12, col).value for col in range(5, sheet.max_column + 1)]
+        assert sheet.cell(row=component_row, column=2).value == "Component name"
+        assert sheet.cell(row=component_row, column=3).value == "ESP"
+        assert sheet.cell(row=header_row, column=4).value == "Total"
+        assert sheet.cell(row=header_row, column=5).value == "Marks for CO1"
+        assert sheet.cell(row=header_row + 1, column=3).value == "CO"
+        assert sheet.cell(row=header_row + 1, column=4).value in (None, "")
+        assert sheet.cell(row=header_row + 1, column=5).value == "CO1"
+        assert sheet.cell(row=header_row + 2, column=3).value == "Max."
+        assert sheet.cell(row=header_row + 2, column=4).value == 100
+        assert sheet.print_title_rows == f"$1:${header_row + 2}"
+        co_marks = [sheet.cell(header_row + 2, col).value for col in range(5, sheet.max_column + 1)]
         assert co_marks
-        assert sum(float(value) for value in co_marks) == pytest.approx(float(sheet["D12"].value), abs=0.01)
-        assert sheet["A13"].value == 0
+        assert sum(float(value) for value in co_marks) == pytest.approx(
+            float(sheet.cell(row=header_row + 2, column=4).value), abs=0.01
+        )
+        assert sheet.cell(row=header_row + 3, column=1).value == 0
         active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
-        assert "D13" in active_cells
+        assert f"D{header_row + 3}" in active_cells
         assert sheet.protection.sheet is True
-        assert sheet["D13"].protection.locked is False
-        assert sheet["C13"].alignment.wrap_text is True
-        assert sheet["E13"].protection.locked is True
-        assert "ROUND" in str(sheet["E13"].value)
+        assert sheet.cell(row=header_row + 3, column=4).protection.locked is False
+        assert sheet.cell(row=header_row + 3, column=3).alignment.wrap_text is True
+        assert sheet.cell(row=header_row + 3, column=5).protection.locked is True
+        assert "ROUND" in str(sheet.cell(row=header_row + 3, column=5).value)
         validations = list(sheet.data_validations.dataValidation)
         assert validations
-        assert any("D$12" in (validation.formula1 or "") for validation in validations)
+        assert any(f"D${header_row + 2}" in (validation.formula1 or "") for validation in validations)
         assert any("between 0 and 100" in (validation.error or "") for validation in validations)
     finally:
         workbook.close()
@@ -139,21 +162,29 @@ def test_indirect_sheet_uses_total_outcomes_and_likert_validation(tmp_path: Path
     workbook = openpyxl.load_workbook(output)
     try:
         sheet = workbook["CSURVEY"]
+        header_row = next(
+            row for row in range(1, 80) if str(sheet.cell(row=row, column=1).value or "") == "#"
+        )
+        component_row = next(
+            row
+            for row in range(1, header_row)
+            if str(sheet.cell(row=row, column=2).value or "") == "Component name"
+        )
         assert sheet["B1"].value == "Course_Code"
         assert sheet["C1"].value == "ECE000"
-        assert sheet["B8"].value == "Component name"
-        assert sheet["C8"].value == "CSURVEY"
-        assert sheet["A10"].value == "#"
-        assert sheet["D10"].value == "CO1"
-        assert sheet["I10"].value == "CO6"
-        assert sheet["A11"].value == 1
-        assert sheet.print_title_rows == "$1:$10"
+        assert sheet.cell(row=component_row, column=2).value == "Component name"
+        assert sheet.cell(row=component_row, column=3).value == "CSURVEY"
+        assert sheet.cell(row=header_row, column=1).value == "#"
+        assert sheet.cell(row=header_row, column=4).value == "CO1"
+        assert sheet.cell(row=header_row, column=9).value == "CO6"
+        assert sheet.cell(row=header_row + 1, column=1).value == 1
+        assert sheet.print_title_rows == f"$1:${header_row}"
         active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
-        assert "D11" in active_cells
+        assert f"D{header_row + 1}" in active_cells
         assert sheet.protection.sheet is True
-        assert sheet["C11"].protection.locked is True
-        assert sheet["D11"].protection.locked is False
-        assert sheet["C11"].alignment.wrap_text is True
+        assert sheet.cell(row=header_row + 1, column=3).protection.locked is True
+        assert sheet.cell(row=header_row + 1, column=4).protection.locked is False
+        assert sheet.cell(row=header_row + 1, column=3).alignment.wrap_text is True
         validations = list(sheet.data_validations.dataValidation)
         assert validations
         formulas = [validation.formula1 or "" for validation in validations]

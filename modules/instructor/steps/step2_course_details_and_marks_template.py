@@ -3,6 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from common.constants import (
+    LOG_EXTRA_KEY_JOB_ID,
+    LOG_EXTRA_KEY_STEP_ID,
+    LOG_EXTRA_KEY_USER_MESSAGE,
+    PROCESS_MESSAGE_CANCELLED_TEMPLATE,
+    PROCESS_MESSAGE_SUCCESS_SUFFIX,
+    WORKFLOW_PAYLOAD_KEY_OUTPUT,
+    WORKFLOW_PAYLOAD_KEY_PATH,
+    WORKFLOW_PAYLOAD_KEY_SOURCE,
+    WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE,
+    WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS,
+)
 
 
 def upload_course_details_async(module: object, *, ns: dict[str, object]) -> None:
@@ -28,8 +40,8 @@ def upload_course_details_async(module: object, *, ns: dict[str, object]) -> Non
     token = ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
-            step_id="step2_validate_course_details",
-            payload={"path": open_path},
+            step_id=WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS,
+            payload={WORKFLOW_PAYLOAD_KEY_PATH: open_path},
         )
         if workflow_service is not None
         else None
@@ -57,7 +69,7 @@ def upload_course_details_async(module: object, *, ns: dict[str, object]) -> Non
         ns["log_process_message"](
             process_name,
             logger=ns["_logger"],
-            success_message=f"{process_name} completed successfully.",
+            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
@@ -69,12 +81,12 @@ def upload_course_details_async(module: object, *, ns: dict[str, object]) -> Non
             user_message = t("instructor.status.operation_cancelled")
             ns["_publish_status_compat"](module, user_message)
             ns["_logger"].info(
-                "%s cancelled by user/system request.",
+                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
                 extra={
-                    "user_message": user_message,
-                    "job_id": job_context.job_id if job_context else None,
-                    "step_id": job_context.step_id if job_context else None,
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message,
+                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
+                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
                 },
             )
             return
@@ -170,8 +182,8 @@ def prepare_marks_template_async(module: object, *, ns: dict[str, object]) -> No
     token = ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
-            step_id="step2_generate_marks_template",
-            payload={"source": source_path, "output": save_path},
+            step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE,
+            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path},
         )
         if workflow_service is not None
         else None
@@ -186,7 +198,7 @@ def prepare_marks_template_async(module: object, *, ns: dict[str, object]) -> No
         ns["log_process_message"](
             process_name,
             logger=ns["_logger"],
-            success_message=f"{process_name} completed successfully.",
+            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
@@ -198,12 +210,12 @@ def prepare_marks_template_async(module: object, *, ns: dict[str, object]) -> No
             user_message = t("instructor.status.operation_cancelled")
             ns["_publish_status_compat"](module, user_message)
             ns["_logger"].info(
-                "%s cancelled by user/system request.",
+                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
                 extra={
-                    "user_message": user_message,
-                    "job_id": job_context.job_id if job_context else None,
-                    "step_id": job_context.step_id if job_context else None,
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message,
+                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
+                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
                 },
             )
             return

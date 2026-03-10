@@ -13,12 +13,12 @@ pytest.importorskip("PySide6")
 from common.constants import WORKBOOK_PASSWORD
 from common.exceptions import ValidationError
 from common.workbook_signing import sign_payload
-from modules import instructor_module as instructor_ui
-from modules.instructor.instructor_template_engine import (
+from domain.instructor_template_engine import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
+from modules import instructor_module as instructor_ui
 
 
 def _build_course_details(tmp_path: Path) -> Path:

@@ -12,6 +12,20 @@ from common.constants import (
     COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+    LAYOUT_MANIFEST_KEY_SHEET_ORDER,
+    LAYOUT_MANIFEST_KEY_SHEETS,
+    LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
+    LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
+    LAYOUT_SHEET_KIND_INDIRECT,
+    LAYOUT_SHEET_SPEC_KEY_ANCHORS,
+    LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS,
+    LAYOUT_SHEET_SPEC_KEY_HEADER_ROW,
+    LAYOUT_SHEET_SPEC_KEY_HEADERS,
+    LAYOUT_SHEET_SPEC_KEY_KIND,
+    LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE,
+    LAYOUT_SHEET_SPEC_KEY_NAME,
+    LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT,
+    LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH,
     LIKERT_MAX,
     LIKERT_MIN,
     MIN_MARK_VALUE,
@@ -30,29 +44,13 @@ from common.workbook_signing import sign_payload
 
 _logger = logging.getLogger(__name__)
 _MAX_DECIMAL_PLACES = 2
-
-
-def extract_marks_template_context(workbook: Any) -> dict[str, Any]:
-    from modules.instructor import instructor_template_engine as generator
-
-    return generator._extract_marks_template_context(workbook)
-
-
-def write_marks_template_workbook(
-    workbook: Any,
-    context: dict[str, Any],
-    *,
-    template_id: str,
-    cancel_token: Any = None,
-) -> dict[str, Any]:
-    from modules.instructor import instructor_template_engine as generator
-
-    return generator._write_marks_template_workbook(
-        workbook,
-        context,
-        template_id=template_id,
-        cancel_token=cancel_token,
-    )
+_CO_TOKEN_SPLIT_SEPARATOR = ","
+_CO_TOKEN_PATTERN = r"(?:co)?\s*(\d+)"
+_FORMULA_SUM_TEMPLATE = "=SUM({start}:{end})"
+_LOG_STEP3_HIGH_ABSENCE = "Step3 anomaly: high absence ratio sheet=%s col=%s absent=%s total=%s"
+_LOG_STEP3_NEAR_CONSTANT = (
+    "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s"
+)
 
 
 def validate_course_details_rules(workbook: Any) -> None:
@@ -71,8 +69,8 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     if not isinstance(manifest, dict):
         raise ValidationError(t("instructor.validation.step3.manifest_root_invalid"))
 
-    sheet_order = manifest.get("sheet_order")
-    sheet_specs = manifest.get("sheets")
+    sheet_order = manifest.get(LAYOUT_MANIFEST_KEY_SHEET_ORDER)
+    sheet_specs = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS)
     if not isinstance(sheet_order, list) or not isinstance(sheet_specs, list):
         raise ValidationError(t("instructor.validation.step3.manifest_structure_invalid"))
 
@@ -91,11 +89,11 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     for spec in sheet_specs:
         if not isinstance(spec, dict):
             raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
-        sheet_name = spec.get("name")
-        header_row = spec.get("header_row")
-        headers = spec.get("headers")
-        anchors = spec.get("anchors", [])
-        formula_anchors = spec.get("formula_anchors", [])
+        sheet_name = spec.get(LAYOUT_SHEET_SPEC_KEY_NAME)
+        header_row = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADER_ROW)
+        headers = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADERS)
+        anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_ANCHORS, [])
+        formula_anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS, [])
         if not isinstance(sheet_name, str) or sheet_name not in workbook.sheetnames:
             raise ValidationError(
                 t("instructor.validation.step3.sheet_missing", sheet_name=sheet_name)
@@ -183,18 +181,18 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             _validate_component_structure_snapshot(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get("kind"),
+                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
                 header_row=header_row,
-                structure=spec.get("mark_structure"),
+                structure=spec.get(LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE),
                 header_count=len(expected_headers),
             )
             actual_student_hash = _validate_component_student_identity(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get("kind"),
+                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
                 header_row=header_row,
-                expected_student_count=spec.get("student_count"),
-                expected_student_hash=spec.get("student_identity_hash"),
+                expected_student_count=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT),
+                expected_student_hash=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH),
             )
             if baseline_student_hash is None:
                 baseline_student_hash = actual_student_hash
@@ -210,14 +208,14 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             _validate_non_empty_marks_entries(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get("kind"),
+                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
                 header_count=len(expected_headers),
                 header_row=header_row,
             )
             _log_marks_anomaly_warnings(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get("kind"),
+                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
                 header_count=len(expected_headers),
                 header_row=header_row,
             )
@@ -450,11 +448,11 @@ def _co_tokens(value: Any) -> list[int]:
         return []
 
     numbers: list[int] = []
-    for item in token.split(","):
+    for item in token.split(_CO_TOKEN_SPLIT_SEPARATOR):
         part = item.strip()
         if not part:
             return []
-        match = re.fullmatch(r"(?:co)?\s*(\d+)", part, flags=re.IGNORECASE)
+        match = re.fullmatch(_CO_TOKEN_PATTERN, part, flags=re.IGNORECASE)
         if not match:
             return []
         numbers.append(int(match.group(1)))
@@ -743,7 +741,7 @@ def _validate_non_empty_marks_entries(
                         decimals=_MAX_DECIMAL_PLACES,
                     )
                 )
-            if sheet_kind == "indirect" and not _is_integer_value(float(numeric_value)):
+            if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT and not _is_integer_value(float(numeric_value)):
                 raise ValidationError(
                     t(
                         "instructor.validation.step3.indirect_mark_must_be_integer",
@@ -784,35 +782,35 @@ def _validate_non_empty_marks_entries(
 
 
 def _marks_data_start_row(sheet_kind: Any, header_row: int) -> int:
-    if sheet_kind == "indirect":
+    if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return header_row + 1
     return header_row + 3
 
 
 def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
     # Column 4 is "D" and the first mark-entry column across all component sheets.
-    if sheet_kind == "direct_non_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         return range(4, 5)
-    if sheet_kind == "direct_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         # Direct CO-wise sheets append "Total" as the last header; mark cells are before it.
         return range(4, header_count)
-    if sheet_kind == "indirect":
+    if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return range(4, header_count + 1)
     raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
 
 
 def _mark_min_for_sheet(sheet_kind: Any) -> float:
-    if sheet_kind == "indirect":
+    if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return float(max(MIN_MARK_VALUE, LIKERT_MIN))
     return float(MIN_MARK_VALUE)
 
 
 def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) -> float:
-    if sheet_kind == "indirect":
+    if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return float(LIKERT_MAX)
-    if sheet_kind == "direct_non_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         max_value = coerce_excel_number(worksheet.cell(row=max_row, column=4).value)
-    elif sheet_kind == "direct_co_wise":
+    elif sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         max_value = coerce_excel_number(worksheet.cell(row=max_row, column=col).value)
     else:
         raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
@@ -854,7 +852,7 @@ def _validate_absence_policy_for_row(
                 range=f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
             )
         )
-    if sheet_kind == "direct_non_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         return
 
 
@@ -872,13 +870,16 @@ def _validate_row_total_consistency(
     if last_row < first_row:
         return
 
-    if sheet_kind == "direct_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         total_col = header_count
         first_mark_col = 4
         last_mark_col = header_count - 1
         for row in range(first_row, last_row + 1):
             actual = worksheet.cell(row=row, column=total_col).value
-            expected = f"=SUM({_excel_col_name(first_mark_col)}{row}:{_excel_col_name(last_mark_col)}{row})"
+            expected = _FORMULA_SUM_TEMPLATE.format(
+                start=f"{_excel_col_name(first_mark_col)}{row}",
+                end=f"{_excel_col_name(last_mark_col)}{row}",
+            )
             if _normalized_formula(actual) != _normalized_formula(expected):
                 raise ValidationError(
                     t(
@@ -889,7 +890,7 @@ def _validate_row_total_consistency(
                 )
         return
 
-    if sheet_kind == "direct_non_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         # CO split columns should remain formula-driven for every student row.
         for row in range(first_row, last_row + 1):
             for col in range(5, header_count + 1):
@@ -919,7 +920,7 @@ def _validate_component_structure_snapshot(
             t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
         )
     max_row = header_row + 2
-    if sheet_kind == "direct_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
             raise ValidationError(
@@ -936,7 +937,7 @@ def _validate_component_structure_snapshot(
                     )
                 )
         return
-    if sheet_kind == "direct_non_co_wise":
+    if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
             raise ValidationError(
@@ -953,7 +954,7 @@ def _validate_component_structure_snapshot(
                     )
                 )
         return
-    if sheet_kind == "indirect":
+    if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         likert_range = structure.get("likert_range")
         if likert_range != [LIKERT_MIN, LIKERT_MAX]:
             raise ValidationError(
@@ -1011,7 +1012,7 @@ def _log_marks_anomaly_warnings(
                 frequency_by_value[number] = frequency_by_value.get(number, 0) + 1
         if absent_count / student_count >= 0.9:
             _logger.warning(
-                "Step3 anomaly: high absence ratio sheet=%s col=%s absent=%s total=%s",
+                _LOG_STEP3_HIGH_ABSENCE,
                 sheet_name,
                 _excel_col_name(col),
                 absent_count,
@@ -1021,7 +1022,7 @@ def _log_marks_anomaly_warnings(
             same = max(frequency_by_value.values())
             if same / numeric_count >= 0.95:
                 _logger.warning(
-                    "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s",
+                    _LOG_STEP3_NEAR_CONSTANT,
                     sheet_name,
                     _excel_col_name(col),
                     same,

@@ -16,7 +16,7 @@ FOCUS is an enterprise-grade course operations management desktop application (Q
 ## 1. Core Workflow Operations
 
 ### 1.1 Generate Course Details Template
-**Operation:** [generate_course_details_template](modules/instructor/instructor_template_engine.py#L75)
+**Operation:** [generate_course_details_template](domain/instructor_template_engine.py)
 
 **Time Complexity: O(S + R)**
 - Iterates through sheets: O(1) - fixed number of sheets (5-6)
@@ -38,7 +38,7 @@ FOCUS is an enterprise-grade course operations management desktop application (Q
 ---
 
 ### 1.2 Validate Course Details Workbook
-**Operation:** [validate_course_details_workbook](modules/instructor/instructor_template_engine.py#L1314)
+**Operation:** [validate_course_details_workbook](domain/instructor_template_engine.py)
 
 **Time Complexity: O(R × C + H × S)**
 - Load workbook: O(R) via openpyxl
@@ -57,7 +57,7 @@ FOCUS is an enterprise-grade course operations management desktop application (Q
 ---
 
 ### 1.3 Generate Marks Template from Course Details
-**Operation:** [generate_marks_template_from_course_details](modules/instructor/instructor_template_engine.py#L188)
+**Operation:** [generate_marks_template_from_course_details](domain/instructor_template_engine.py)
 
 **Time Complexity: O(C × Q × S + R + O)**
 

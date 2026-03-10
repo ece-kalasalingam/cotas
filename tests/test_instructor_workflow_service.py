@@ -31,25 +31,42 @@ def test_service_honors_pre_cancel_before_generation(monkeypatch: pytest.MonkeyP
     assert called["count"] == 0
 
 
-def test_service_generate_final_report_copies_file(tmp_path: Path) -> None:
+def test_service_generate_final_report_copies_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = service_mod.InstructorWorkflowService()
     context = service.create_job_context(step_id="step3")
-    src = tmp_path / "filled.xlsx"
+    src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
+
+    called: dict[str, object] = {}
+
+    def _fake_generate_final_report(source: str | Path, output: str | Path) -> Path:
+        called["source"] = source
+        called["output"] = output
+        Path(output).write_text("generated", encoding="utf-8")
+        return Path(output)
+
+    monkeypatch.setattr(service_mod, "generate_final_co_report", _fake_generate_final_report)
 
     result = service.generate_final_report(src, dst, context=context)
 
     assert result == dst
-    assert dst.read_text(encoding="utf-8") == "data"
+    assert called["source"] == src
+    assert called["output"] == dst
+    assert dst.read_text(encoding="utf-8") == "generated"
 
 
-def test_service_logs_step_lifecycle(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+def test_service_logs_step_lifecycle(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = service_mod.InstructorWorkflowService()
     context = service.create_job_context(step_id="step3")
-    src = tmp_path / "filled.xlsx"
+    src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
+    monkeypatch.setattr(service_mod, "generate_final_co_report", lambda *_args, **_kwargs: dst)
 
     caplog.set_level(logging.INFO, logger=service_mod.__name__)
     service.generate_final_report(src, dst, context=context)
@@ -79,56 +96,35 @@ def test_service_generate_final_report_keeps_existing_dest_on_copy_failure(
 ) -> None:
     service = service_mod.InstructorWorkflowService()
     context = service.create_job_context(step_id="step3")
-    src = tmp_path / "filled.xlsx"
+    src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("fresh", encoding="utf-8")
     dst.write_text("stable", encoding="utf-8")
 
-    def _failing_copy(_src: str, dst_path: str) -> None:
-        Path(dst_path).write_text("partial", encoding="utf-8")
-        raise OSError("copy interrupted")
+    def _failing_generate(_src: str, _dst_path: str) -> Path:
+        raise OSError("generation interrupted")
 
-    monkeypatch.setattr(service_mod.shutil, "copyfile", _failing_copy)
+    monkeypatch.setattr(service_mod, "generate_final_co_report", _failing_generate)
 
     with pytest.raises(OSError):
         service.generate_final_report(src, dst, context=context)
 
     assert dst.read_text(encoding="utf-8") == "stable"
-    assert list(tmp_path.glob("report.xlsx.*.tmp")) == []
-
-
-def test_service_generate_final_report_cleans_temp_when_replace_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
-    src = tmp_path / "filled.xlsx"
-    dst = tmp_path / "report.xlsx"
-    src.write_text("fresh", encoding="utf-8")
-    dst.write_text("stable", encoding="utf-8")
-
-    monkeypatch.setattr(service_mod.os, "replace", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("replace failed")))
-
-    with pytest.raises(OSError):
-        service.generate_final_report(src, dst, context=context)
-
-    assert dst.read_text(encoding="utf-8") == "stable"
-    assert list(tmp_path.glob("report.xlsx.*.tmp")) == []
 
 
 def test_service_enforces_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     service = service_mod.InstructorWorkflowService()
     context = service.create_job_context(step_id="step3")
-    src = tmp_path / "filled.xlsx"
+    src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
     monkeypatch.setenv("FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS", "1")
 
-    def _slow_copy(*_args, **_kwargs):
+    def _slow_generate(*_args, **_kwargs):
         time.sleep(2)
-        return None
+        return dst
 
-    monkeypatch.setattr(service_mod.shutil, "copyfile", _slow_copy)
+    monkeypatch.setattr(service_mod, "generate_final_co_report", _slow_generate)
 
     with pytest.raises(AppSystemError, match="exceeded timeout"):
         service.generate_final_report(src, dst, context=context)

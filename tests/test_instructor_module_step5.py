@@ -6,6 +6,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from common.exceptions import ValidationError
 from modules import instructor_module as instructor_ui
 
 
@@ -43,6 +44,9 @@ class _DummyModule:
     def _show_system_error_toast(self, step: int) -> None:
         self._toasts.append(("system", str(step)))
 
+    def _show_validation_error_toast(self, message: str) -> None:
+        self._toasts.append(("validation", message))
+
     def _show_step_success_toast(self, step: int) -> None:
         self._toasts.append(("success", str(step)))
 
@@ -63,6 +67,11 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _app, _default=None: "D:/tmp/co_report.xlsx",
     )
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: None,
+    )
 
 
 def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
@@ -157,6 +166,33 @@ def test_step5_copy_failure_shows_error(monkeypatch: pytest.MonkeyPatch, tmp_pat
     instructor_ui.InstructorModule._generate_final_report(dummy)
 
     assert dummy._toasts == [("system", "3")]
+    assert dummy.step4_done is False
+    assert not dst.exists()
+
+
+def test_step5_validation_failure_shows_validation_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    src = tmp_path / "filled.xlsx"
+    src.write_text("data", encoding="utf-8")
+    dst = tmp_path / "report.xlsx"
+    dummy = _DummyModule(step3_path=str(src))
+
+    monkeypatch.setattr(
+        instructor_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(dst), ""),
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "_validate_uploaded_filled_marks_workbook",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValidationError("bad workbook")),
+    )
+
+    instructor_ui.InstructorModule._generate_final_report(dummy)
+
+    assert any(kind == "validation" for kind, _ in dummy._toasts)
     assert dummy.step4_done is False
     assert not dst.exists()
 

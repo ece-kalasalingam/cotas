@@ -9,17 +9,20 @@ from common.constants import (
     WORKBOOK_PASSWORD,
     WORKBOOK_PASSWORD_PREVIOUS,
     WORKBOOK_SIGNATURE_VERSION,
+    ensure_workbook_secret_policy,
 )
 
 _SIGNATURE_DELIMITER = ":"
 
 
 def sign_payload(payload: str) -> str:
+    ensure_workbook_secret_policy()
     digest = _hmac_digest(payload, WORKBOOK_PASSWORD)
     return f"{WORKBOOK_SIGNATURE_VERSION}{_SIGNATURE_DELIMITER}{digest}"
 
 
 def verify_payload_signature(payload: str, signature: str) -> bool:
+    ensure_workbook_secret_policy()
     token = str(signature or "").strip()
     if not token:
         return False

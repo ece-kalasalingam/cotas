@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("xlsxwriter")
 openpyxl = pytest.importorskip("openpyxl")
 
-from modules.instructor.instructor_template_engine import (
+from domain.instructor_template_engine import (
     _compute_template_hash,
     generate_course_details_template,
 )

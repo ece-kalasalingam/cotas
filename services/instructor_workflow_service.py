@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import tempfile
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -13,10 +11,26 @@ from inspect import Signature, signature
 from pathlib import Path
 from typing import Any, Callable, Mapping, TypeVar
 
+from common.constants import (
+    LOG_EXTRA_KEY_JOB_ID,
+    LOG_EXTRA_KEY_STEP_ID,
+    LOG_EXTRA_KEY_USER_MESSAGE,
+    WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
+    WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
+    WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
+    WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
+    WORKFLOW_TIMEOUT_ERROR_TEMPLATE,
+    WORKFLOW_USER_MESSAGE_CANCELLED_TEMPLATE,
+    WORKFLOW_USER_MESSAGE_COMPLETED_TEMPLATE,
+    WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
+    WORKFLOW_USER_MESSAGE_STARTED_SUFFIX,
+    WORKFLOW_STEP_TIMEOUT_ENV_VAR,
+)
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken, JobContext
-from modules.instructor import (
+from domain.instructor_engine import (
     generate_course_details_template,
+    generate_final_co_report,
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
@@ -24,6 +38,19 @@ from modules.instructor import (
 _logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 DEFAULT_WORKFLOW_STEP_TIMEOUT_SECONDS = 120
+_WORKFLOW_STEP_STARTED = "Instructor workflow step started."
+_WORKFLOW_STEP_COMPLETED = "Instructor workflow step completed."
+_WORKFLOW_STEP_CANCELLED = "Instructor workflow step cancelled."
+_WORKFLOW_STEP_FAILED = "Instructor workflow step failed."
+_EVENT_STEP_STARTED = "workflow_step_started"
+_EVENT_STEP_COMPLETED = "workflow_step_completed"
+_EVENT_STEP_CANCELLED = "workflow_step_cancelled"
+_EVENT_STEP_FAILED = "workflow_step_failed"
+_ERROR_NONE = "NONE"
+_ERROR_JOB_CANCELLED = "JOB_CANCELLED"
+_ERROR_APP_SYSTEM = "APP_SYSTEM_ERROR"
+_ERROR_UNEXPECTED = "UNEXPECTED_ERROR"
+_ERROR_VALIDATION_DEFAULT = "VALIDATION_ERROR"
 
 
 class WorkflowMetrics:
@@ -60,7 +87,7 @@ class InstructorWorkflowService:
     ) -> Path:
         return self._execute_with_telemetry(
             context=context,
-            operation="generate_course_details_template",
+            operation=WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
             cancel_token=cancel_token,
             work=lambda: self._call_with_optional_cancel_token(
                 generate_course_details_template,
@@ -78,7 +105,7 @@ class InstructorWorkflowService:
     ) -> str:
         return self._execute_with_telemetry(
             context=context,
-            operation="validate_course_details_workbook",
+            operation=WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
             cancel_token=cancel_token,
             work=lambda: validate_course_details_workbook(workbook_path),
         )
@@ -93,7 +120,7 @@ class InstructorWorkflowService:
     ) -> Path:
         return self._execute_with_telemetry(
             context=context,
-            operation="generate_marks_template",
+            operation=WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
             cancel_token=cancel_token,
             work=lambda: self._call_with_optional_cancel_token(
                 generate_marks_template_from_course_details,
@@ -113,9 +140,14 @@ class InstructorWorkflowService:
     ) -> Path:
         return self._execute_with_telemetry(
             context=context,
-            operation="generate_final_report",
+            operation=WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
             cancel_token=cancel_token,
-            work=lambda: self._atomic_copy_file(filled_marks_path, output_path),
+            work=lambda: self._call_with_optional_cancel_token(
+                generate_final_co_report,
+                filled_marks_path,
+                output_path,
+                cancel_token=cancel_token,
+            ),
         )
 
     @staticmethod
@@ -134,15 +166,15 @@ class InstructorWorkflowService:
         started_at = time.perf_counter()
         timeout_seconds = self._resolve_timeout_seconds()
         _logger.info(
-            "Instructor workflow step started.",
+            _WORKFLOW_STEP_STARTED,
             extra={
-                "user_message": f"{operation} started.",
-                "event": "workflow_step_started",
-                "error_code": "NONE",
+                LOG_EXTRA_KEY_USER_MESSAGE: f"{operation}{WORKFLOW_USER_MESSAGE_STARTED_SUFFIX}",
+                "event": _EVENT_STEP_STARTED,
+                "error_code": _ERROR_NONE,
                 "operation": operation,
                 "timeout_seconds": timeout_seconds,
-                "job_id": context.job_id,
-                "step_id": context.step_id,
+                LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                LOG_EXTRA_KEY_STEP_ID: context.step_id,
             },
         )
         try:
@@ -157,16 +189,18 @@ class InstructorWorkflowService:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="success", duration_ms=duration_ms)
             _logger.info(
-                "Instructor workflow step completed.",
+                _WORKFLOW_STEP_COMPLETED,
                 extra={
-                    "user_message": f"{operation} completed in {duration_ms} ms.",
-                    "event": "workflow_step_completed",
-                    "error_code": "NONE",
+                    LOG_EXTRA_KEY_USER_MESSAGE: (
+                        f"{operation}{WORKFLOW_USER_MESSAGE_COMPLETED_TEMPLATE.format(duration_ms=duration_ms)}"
+                    ),
+                    "event": _EVENT_STEP_COMPLETED,
+                    "error_code": _ERROR_NONE,
                     "operation": operation,
                     "duration_ms": duration_ms,
                     "metrics": _workflow_metrics.snapshot(),
-                    "job_id": context.job_id,
-                    "step_id": context.step_id,
+                    LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                    LOG_EXTRA_KEY_STEP_ID: context.step_id,
                 },
             )
             return result
@@ -174,16 +208,18 @@ class InstructorWorkflowService:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="cancelled", duration_ms=duration_ms)
             _logger.info(
-                "Instructor workflow step cancelled.",
+                _WORKFLOW_STEP_CANCELLED,
                 extra={
-                    "user_message": f"{operation} cancelled after {duration_ms} ms.",
-                    "event": "workflow_step_cancelled",
-                    "error_code": "JOB_CANCELLED",
+                    LOG_EXTRA_KEY_USER_MESSAGE: (
+                        f"{operation}{WORKFLOW_USER_MESSAGE_CANCELLED_TEMPLATE.format(duration_ms=duration_ms)}"
+                    ),
+                    "event": _EVENT_STEP_CANCELLED,
+                    "error_code": _ERROR_JOB_CANCELLED,
                     "operation": operation,
                     "duration_ms": duration_ms,
                     "metrics": _workflow_metrics.snapshot(),
-                    "job_id": context.job_id,
-                    "step_id": context.step_id,
+                    LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                    LOG_EXTRA_KEY_STEP_ID: context.step_id,
                 },
             )
             raise
@@ -191,16 +227,18 @@ class InstructorWorkflowService:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="system_error", duration_ms=duration_ms)
             _logger.error(
-                "Instructor workflow step failed.",
+                _WORKFLOW_STEP_FAILED,
                 extra={
-                    "user_message": f"{operation} failed after {duration_ms} ms.",
-                    "event": "workflow_step_failed",
-                    "error_code": "APP_SYSTEM_ERROR",
+                    LOG_EXTRA_KEY_USER_MESSAGE: (
+                        f"{operation}{WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE.format(duration_ms=duration_ms)}"
+                    ),
+                    "event": _EVENT_STEP_FAILED,
+                    "error_code": _ERROR_APP_SYSTEM,
                     "operation": operation,
                     "duration_ms": duration_ms,
                     "metrics": _workflow_metrics.snapshot(),
-                    "job_id": context.job_id,
-                    "step_id": context.step_id,
+                    LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                    LOG_EXTRA_KEY_STEP_ID: context.step_id,
                 },
             )
             raise
@@ -208,16 +246,18 @@ class InstructorWorkflowService:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="validation_error", duration_ms=duration_ms)
             _logger.warning(
-                "Instructor workflow step failed.",
+                _WORKFLOW_STEP_FAILED,
                 extra={
-                    "user_message": f"{operation} failed after {duration_ms} ms.",
-                    "event": "workflow_step_failed",
-                    "error_code": str(getattr(exc, "code", "VALIDATION_ERROR")),
+                    LOG_EXTRA_KEY_USER_MESSAGE: (
+                        f"{operation}{WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE.format(duration_ms=duration_ms)}"
+                    ),
+                    "event": _EVENT_STEP_FAILED,
+                    "error_code": str(getattr(exc, "code", _ERROR_VALIDATION_DEFAULT)),
                     "operation": operation,
                     "duration_ms": duration_ms,
                     "metrics": _workflow_metrics.snapshot(),
-                    "job_id": context.job_id,
-                    "step_id": context.step_id,
+                    LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                    LOG_EXTRA_KEY_STEP_ID: context.step_id,
                 },
             )
             raise
@@ -225,24 +265,26 @@ class InstructorWorkflowService:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="unexpected_error", duration_ms=duration_ms)
             _logger.exception(
-                "Instructor workflow step failed.",
+                _WORKFLOW_STEP_FAILED,
                 exc_info=exc,
                 extra={
-                    "user_message": f"{operation} failed after {duration_ms} ms.",
-                    "event": "workflow_step_failed",
-                    "error_code": "UNEXPECTED_ERROR",
+                    LOG_EXTRA_KEY_USER_MESSAGE: (
+                        f"{operation}{WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE.format(duration_ms=duration_ms)}"
+                    ),
+                    "event": _EVENT_STEP_FAILED,
+                    "error_code": _ERROR_UNEXPECTED,
                     "operation": operation,
                     "duration_ms": duration_ms,
                     "metrics": _workflow_metrics.snapshot(),
-                    "job_id": context.job_id,
-                    "step_id": context.step_id,
+                    LOG_EXTRA_KEY_JOB_ID: context.job_id,
+                    LOG_EXTRA_KEY_STEP_ID: context.step_id,
                 },
             )
             raise
 
     @staticmethod
     def _resolve_timeout_seconds() -> int:
-        raw = os.getenv("FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS", "").strip()
+        raw = os.getenv(WORKFLOW_STEP_TIMEOUT_ENV_VAR, "").strip()
         if not raw:
             return DEFAULT_WORKFLOW_STEP_TIMEOUT_SECONDS
         try:
@@ -270,37 +312,14 @@ class InstructorWorkflowService:
             if cancel_token is not None:
                 cancel_token.cancel()
             raise AppSystemError(
-                f"{operation} exceeded timeout of {timeout_seconds} seconds."
+                WORKFLOW_TIMEOUT_ERROR_TEMPLATE.format(
+                    operation=operation,
+                    timeout_seconds=timeout_seconds,
+                )
             ) from exc
         finally:
             # Avoid blocking on timeout; the worker thread may continue in background.
             executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
-
-    @staticmethod
-    def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:
-        source = Path(source_path)
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        temp_name = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                delete=False,
-                dir=str(output.parent),
-                prefix=f"{output.name}.",
-                suffix=".tmp",
-            ) as temp_file:
-                temp_name = temp_file.name
-            shutil.copyfile(str(source), temp_name)
-            os.replace(temp_name, output)
-        except Exception:
-            if temp_name:
-                try:
-                    Path(temp_name).unlink(missing_ok=True)
-                except OSError:
-                    pass
-            raise
-        return output
 
     @staticmethod
     def _call_with_optional_cancel_token(fn, *args: object, cancel_token: CancellationToken | None):

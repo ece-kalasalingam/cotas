@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from common.texts import t
 
+_STEP_RUN_ALWAYS = (1, 2, 3)
+_EMPTY_REASON = ""
+_STEP_LIST_SEPARATOR = ". "
+_STEP_LIST_STATE_GAP = "  "
+
 
 class InstructorWorkflowController:
     def __init__(self, module: object) -> None:
@@ -29,16 +34,16 @@ class InstructorWorkflowController:
     def step_list_text(self, step: int) -> str:
         title = t(self._m.STEP_TITLE_KEYS[step])
         state = self.step_state_text(step)
-        return f"{step}. {title}  {state}"
+        return f"{step}{_STEP_LIST_SEPARATOR}{title}{_STEP_LIST_STATE_GAP}{state}"
 
     def action_text_for_step(self, step: int) -> str:
         key = self._m.ACTION_REDO_KEYS[step] if self.step_done(step) else self._m.ACTION_DEFAULT_KEYS[step]
         return t(key)
 
     def can_run_step(self, step: int) -> tuple[bool, str]:
-        if step in (1, 2, 3):
-            return True, ""
-        return True, ""
+        if step in _STEP_RUN_ALWAYS:
+            return True, _EMPTY_REASON
+        return True, _EMPTY_REASON
 
     def on_step_selected(self, step: int) -> None:
         self._m.current_step = step

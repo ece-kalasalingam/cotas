@@ -19,6 +19,8 @@ dist/
 .pytest_*/
 .tmp_runtime_*/
 pytest-cache-files-*/
+.perf*
+.perf*/
 .coverage
 .coverage.*
 htmlcov/
