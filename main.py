@@ -4,7 +4,7 @@ import sys
 import logging
 from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import QApplication, QSplashScreen
+from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 
 try:
@@ -31,6 +31,7 @@ from common.constants import (
     THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
+    WORKBOOK_PASSWORD_ENV_VAR,
 )
 from common.contracts import validate_blueprint_registry_contracts
 from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
@@ -224,6 +225,34 @@ def _notify_and_wait(app: QApplication, *, title: str, message: str, level: Toas
     return app.exec()
 
 
+def _show_startup_error_dialog(*, title: str, message: str) -> None:
+    QMessageBox.critical(None, title, message)
+
+
+def _validate_startup_workbook_password(app: QApplication) -> int | None:
+    if os.getenv(WORKBOOK_PASSWORD_ENV_VAR, "").strip():
+        return None
+    if getattr(sys, "frozen", False):
+        message = (
+            f"{WORKBOOK_PASSWORD_ENV_VAR} is missing. "
+            "Please install the software properly using the EXE installer."
+        )
+    else:
+        message = (
+            f"{WORKBOOK_PASSWORD_ENV_VAR} is missing. "
+            "Set this environment variable manually before running in dev mode."
+        )
+    _logger.error(
+        "Startup blocked: required workbook password environment variable is missing.",
+        extra={
+            "user_message": message,
+            "error_code": "MISSING_WORKBOOK_PASSWORD",
+        },
+    )
+    _show_startup_error_dialog(title=APP_NAME, message=message)
+    return 1
+
+
 def main() -> int:
     os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = QT_ADAPTIVE_STRUCTURE_SENSITIVITY
     validate_blueprint_registry_contracts()
@@ -241,6 +270,9 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
     _install_excepthook()
+    startup_validation_error = _validate_startup_workbook_password(app)
+    if startup_validation_error is not None:
+        return startup_validation_error
 
     single_instance_lock = _acquire_exe_single_instance_lock()
     if getattr(sys, "frozen", False) and single_instance_lock is None:
