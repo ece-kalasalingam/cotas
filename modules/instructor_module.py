@@ -9,7 +9,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFont
+from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -443,6 +443,11 @@ class InstructorModule(QWidget):
         self.info_tabs.addTab(links_tab, t(self.RAIL_LINK_TITLE_KEY))
         right_layout.addWidget(self.info_tabs)
 
+        self.shortcut_open_workbook = QShortcut(QKeySequence("Ctrl+O"), self)
+        self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
+        self.shortcut_save_output = QShortcut(QKeySequence("Ctrl+S"), self)
+        self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
+
         root.addWidget(left)
         root.addWidget(right, 1)
 
@@ -668,6 +673,27 @@ class InstructorModule(QWidget):
     def _on_step3_generate_clicked(self) -> None:
         self._generate_final_report_async()
         self._refresh_ui()
+
+    def _on_open_shortcut_activated(self) -> None:
+        if self.state.busy:
+            return
+        if self.current_step == 2 and self.step2_upload_action.isEnabled():
+            self._on_step2_upload_clicked()
+            return
+        if self.current_step == 3 and self.step3_upload_action.isEnabled():
+            self._on_step3_upload_clicked()
+
+    def _on_save_shortcut_activated(self) -> None:
+        if self.state.busy:
+            return
+        if self.current_step == 1 and self.primary_action.isVisible() and self.primary_action.isEnabled():
+            self._run_current_step_action()
+            return
+        if self.current_step == 2 and self.step2_prepare_action.isEnabled():
+            self._on_step2_prepare_clicked()
+            return
+        if self.current_step == 3 and self.step3_generate_action.isEnabled():
+            self._on_step3_generate_clicked()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         try:
