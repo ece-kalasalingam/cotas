@@ -6,7 +6,6 @@ import logging
 import importlib
 import time
 from html import escape
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
@@ -56,6 +55,7 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
+from common.ui_logging import UILogHandler, format_log_line
 from domain import InstructorWorkflowState
 from modules.instructor import (
     generate_course_details_template,
@@ -114,22 +114,6 @@ _STEP_RUNTIME_GLOBALS = (
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
-
-
-class _UILogHandler(logging.Handler):
-    """Forward logger messages to the in-panel user log view."""
-
-    def __init__(self, sink):
-        super().__init__(level=logging.INFO)
-        self._sink = sink
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            user_message = getattr(record, "user_message", None)
-            message = f"{record.levelname}: {user_message or record.getMessage()}"
-            self._sink(message)
-        except Exception:
-            self.handleError(record)
 
 
 def _publish_status_compat(target: object, message: str) -> None:
@@ -283,7 +267,7 @@ class InstructorModule(QWidget):
         self._workflow_controller = InstructorWorkflowController(self)
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
 
-        self._ui_log_handler: _UILogHandler | None = None
+        self._ui_log_handler: UILogHandler | None = None
         self._step_items: list[QListWidgetItem] = []
         self._busy_started_at: float | None = None
         self._busy_elapsed_timer = QTimer(self)
@@ -380,6 +364,7 @@ class InstructorModule(QWidget):
         step2_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
 
         self.step2_upload_action = QPushButton()
+        self.step2_upload_action.setObjectName("primaryAction")
         self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
         step2_action_layout.addWidget(self.step2_upload_action)
 
@@ -401,6 +386,7 @@ class InstructorModule(QWidget):
         step3_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
 
         self.step3_upload_action = QPushButton()
+        self.step3_upload_action.setObjectName("primaryAction")
         self.step3_upload_action.clicked.connect(self._on_step3_upload_clicked)
         step3_action_layout.addWidget(self.step3_upload_action)
 
@@ -551,6 +537,12 @@ class InstructorModule(QWidget):
     def _on_info_tab_changed(self, _index: int) -> None:
         self._clear_info_text_selection()
 
+    def set_shared_activity_log_mode(self, enabled: bool) -> None:
+        self.info_tabs.setVisible(not enabled)
+
+    def get_shared_outputs_html(self) -> str:
+        return self._quick_links_html()
+
     def _refresh_ui(self) -> None:
         completed = sum(
             1
@@ -690,23 +682,15 @@ class InstructorModule(QWidget):
     def _setup_ui_logging(self) -> None:
         if self._ui_log_handler is not None:
             return
-        self._ui_log_handler = _UILogHandler(self._append_user_log)
+        self._ui_log_handler = UILogHandler(self._append_user_log)
         _logger.addHandler(self._ui_log_handler)
         self._append_user_log(t("instructor.log.ready"))
 
     def _append_user_log(self, message: str) -> None:
-        if not message or not message.strip():
+        line = format_log_line(message)
+        if line is None:
             return
-        text = message.strip()
-        if not (
-            len(text) >= 10
-            and text[0] == "["
-            and text[3] == ":"
-            and text[6] == ":"
-            and text[9] == "]"
-        ):
-            text = f"[{datetime.now().strftime('%H:%M:%S')}] {text}"
-        self.user_log_view.appendPlainText(text)
+        self.user_log_view.appendPlainText(line)
 
     def _publish_status(self, message: str) -> None:
         self._append_user_log(message)

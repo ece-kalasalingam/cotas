@@ -271,27 +271,37 @@ TEXTS = {
     "instructor.status.step5_selected": "இறுதி CO அறிக்கைப் பாதை தேர்வு செய்யப்பட்டது.",
     # Coordinator module
     "coordinator.title": "ஒருங்கிணைப்பாளர் கோப்பு சேகரிப்பான்",
-    "coordinator.drop_hint": "ஒருங்கிணைப்பாளர் பணிச்சுற்றுக்காக Excel கோப்புகளை சேர்க்க இங்கே இழுத்து விடுங்கள்.",
+    "coordinator.drop_hint": "பயிற்றுநர் தொகுதியின் இறுதி படியில் உருவாக்கப்பட்ட Final CO report workbook-களை சேகரிக்கவும்.",
+    "coordinator.list_placeholder": "Final CO report workbook-களை இங்கே இழுத்து விடுங்கள்",
+    "coordinator.add_file": "கோப்பை சேர்",
+    "coordinator.calculate": "CO அடைவை கணக்கிடு",
+    "coordinator.browse_drop": "Final CO Report கோப்புகளை உலாவு அல்லது இங்கே இழுத்து விடுங்கள்",
+    "coordinator.dialog.title": "Excel கோப்புகளை தேர்வு செய்ய",
+    "coordinator.dialog.filter": "Excel கோப்புகள் (*.xlsx *.xlsm *.xls)",
+    "coordinator.links.uploaded_report": "பதிவேற்றப்பட்ட Final CO Report",
+    "coordinator.links.downloaded_output": "பதிவிறக்கப்பட்ட வெளியீடு",
+    "coordinator.summary": "சேர்க்கப்பட்ட கோப்புகள்: {count}",
     "coordinator.empty": "இன்னும் எந்த Excel கோப்புகளும் சேர்க்கப்படவில்லை.",
     "coordinator.remove_selected": "தேர்வை நீக்கு",
     "coordinator.clear_all": "அனைத்தையும் நீக்கு",
     "coordinator.status.added": "{added} கோப்பு(கள்) சேர்க்கப்பட்டது. மொத்தம்: {total}.",
     "coordinator.duplicate.title": "கோப்பு ஏற்கனவே உள்ளது",
     "coordinator.duplicate.body": "பட்டியலில் ஏற்கனவே உள்ளதால் {count} நகல் கோப்பு(கள்) தவிர்க்கப்பட்டன.",
-    "coordinator.invalid_register.title": "பதிவு எண் தலைப்பு இல்லை",
-    "coordinator.invalid_register.body": (
-        "கோப்பில் பதிவு எண் தலைப்பு இருக்க வேண்டும்.\n\n{files}"
+    "coordinator.invalid_final_report.title": "தவறான Final CO Report",
+    "coordinator.invalid_final_report.body": (
+        "பயிற்றுநர் படி 3 மூலம் உருவாக்கப்பட்ட Final CO report workbook-கள் மட்டுமே அனுமதிக்கப்படும்.\n\n{files}"
     ),
     "coordinator.status.ignored": (
         "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன (ஆதரிக்காத வகை, இல்லை, நகல், "
-        "அல்லது பதிவு எண் தலைப்பு இல்லை)."
+        "அல்லது தவறான final report workbook)."
     ),
     "coordinator.status.removed": "{count} கோப்பு(கள்) நீக்கப்பட்டன.",
     "coordinator.status.cleared": "{count} கோப்பு(கள்) அழிக்கப்பட்டன.",
     "coordinator.cancel_processing": "செயலாக்கத்தை ரத்து செய்",
-    "coordinator.status.processing_started": "இழுத்து விடப்பட்ட கோப்புகள் செயலாக்கப்படுகின்றன...",
+    "coordinator.status.processing_started": "தேர்ந்தெடுக்கப்பட்ட கோப்புகள் செயலாக்கப்படுகின்றன...",
     "coordinator.status.queued": "நடப்பு செயலாக்கம் நடைபெறுவதால் {count} கோப்பு(கள்) வரிசைப்படுத்தப்பட்டன.",
     "coordinator.status.cancelling": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்படுகிறது...",
     "coordinator.status.operation_cancelled": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்பட்டது.",
     "coordinator.status.processing_failed": "ஒருங்கிணைப்பாளர் செயலாக்கம் தோல்வியடைந்தது.",
+    "coordinator.status.calculate_pending": "இந்த தொகுதியில் CO அடைவு கணக்கீடு இன்னும் செயல்படுத்தப்படவில்லை.",
 }

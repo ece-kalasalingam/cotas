@@ -271,27 +271,37 @@ TEXTS = {
     "instructor.marks.cos_label": "COs",
     # Coordinator module
     "coordinator.title": "Coordinator File Collector",
-    "coordinator.drop_hint": "Drag and drop Excel files here to collect them for coordinator workflow.",
+    "coordinator.drop_hint": "Collect Final CO report workbooks generated from the Instructor module.",
+    "coordinator.list_placeholder": "Drag and drop Final CO report workbooks here",
+    "coordinator.add_file": "Add File",
+    "coordinator.calculate": "Calculate CO Attainment",
+    "coordinator.browse_drop": "Browse Final CO Reports or Drag and Drop Here",
+    "coordinator.dialog.title": "Select Excel Files",
+    "coordinator.dialog.filter": "Excel Files (*.xlsx *.xlsm *.xls)",
+    "coordinator.links.uploaded_report": "Uploaded Final CO Report",
+    "coordinator.links.downloaded_output": "Downloaded Output",
+    "coordinator.summary": "Files added: {count}",
     "coordinator.empty": "No Excel files added yet.",
     "coordinator.remove_selected": "Remove Selected",
     "coordinator.clear_all": "Clear All",
     "coordinator.status.added": "{added} file(s) added. Total: {total}.",
     "coordinator.duplicate.title": "File Already Exists",
     "coordinator.duplicate.body": "{count} duplicate file(s) were skipped because they already exist in the list.",
-    "coordinator.invalid_register.title": "Missing Register Header",
-    "coordinator.invalid_register.body": (
-        "File must contain Register Number.\n\n{files}"
+    "coordinator.invalid_final_report.title": "Invalid Final CO Report",
+    "coordinator.invalid_final_report.body": (
+        "Only Final CO report workbooks generated from Instructor Step 3 are allowed.\n\n{files}"
     ),
     "coordinator.status.ignored": (
         "{count} file(s) were ignored (unsupported type, missing, duplicate, "
-        "or missing register header)."
+        "or invalid final report workbook)."
     ),
     "coordinator.status.removed": "{count} file(s) removed.",
     "coordinator.status.cleared": "{count} file(s) cleared.",
     "coordinator.cancel_processing": "Cancel Processing",
-    "coordinator.status.processing_started": "Processing dropped files...",
+    "coordinator.status.processing_started": "Processing selected files...",
     "coordinator.status.queued": "{count} file(s) queued while current processing is running.",
     "coordinator.status.cancelling": "Cancelling coordinator processing...",
     "coordinator.status.operation_cancelled": "Coordinator processing cancelled.",
     "coordinator.status.processing_failed": "Coordinator processing failed.",
+    "coordinator.status.calculate_pending": "CO attainment calculation is not yet implemented in this module.",
 }

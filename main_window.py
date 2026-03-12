@@ -1,13 +1,14 @@
-﻿import logging
+import logging
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QScrollArea, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton
+    QApplication, QMainWindow, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
+    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton, QFrame, QPlainTextEdit, QTabWidget, QTextBrowser
 )
 
-from PySide6.QtGui import QAction, QActionGroup, QIcon
-from PySide6.QtCore import QSize, QTimer, Qt
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
+from PySide6.QtCore import QSize, QTimer, Qt, QUrl
 
 # Import modules
 from common.constants import (
@@ -30,6 +31,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
+from common.ui_logging import format_log_line
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 
@@ -80,19 +82,9 @@ class MainWindow(QMainWindow):
         # ----------------------------
         # Central Container
         # ----------------------------
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        container = QWidget()
-        central_layout = QVBoxLayout(container)
-        scroll.setWidget(container)
-        self.setCentralWidget(scroll)
-
-        #central_container = QWidget()
-        #self.setCentralWidget(central_container)
-
-        #central_layout = QVBoxLayout(central_container)
+        central_container = QWidget()
+        self.setCentralWidget(central_container)
+        central_layout = QVBoxLayout(central_container)
         central_layout.setContentsMargins(*MAIN_WINDOW_CONTENT_MARGINS)
 
         self.work_area = QWidget()
@@ -105,6 +97,48 @@ class MainWindow(QMainWindow):
         self.modules = {}
 
         central_layout.addWidget(self.work_area)
+
+        self.shared_activity_frame = QFrame()
+        self.shared_activity_frame.setObjectName("sharedActivityFrame")
+        shared_layout = QVBoxLayout(self.shared_activity_frame)
+        shared_layout.setContentsMargins(8, 8, 8, 8)
+        shared_layout.setSpacing(6)
+
+        self.shared_info_tabs = QTabWidget()
+        self.shared_info_tabs.setObjectName("sharedInfoTabs")
+        self.shared_info_tabs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.shared_info_tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        shared_log_tab = QWidget()
+        shared_log_layout = QVBoxLayout(shared_log_tab)
+        shared_log_layout.setContentsMargins(0, 0, 0, 0)
+        shared_log_layout.setSpacing(0)
+        self.shared_activity_log = QPlainTextEdit()
+        self.shared_activity_log.setObjectName("sharedActivityLog")
+        self.shared_activity_log.setReadOnly(True)
+        self.shared_activity_log.setMaximumHeight(150)
+        self.shared_activity_log.setFrameShape(QFrame.Shape.NoFrame)
+        shared_log_layout.addWidget(self.shared_activity_log)
+
+        shared_outputs_tab = QWidget()
+        shared_outputs_layout = QVBoxLayout(shared_outputs_tab)
+        shared_outputs_layout.setContentsMargins(0, 0, 0, 0)
+        shared_outputs_layout.setSpacing(0)
+        self.shared_generated_outputs = QTextBrowser()
+        self.shared_generated_outputs.setObjectName("sharedGeneratedOutputs")
+        self.shared_generated_outputs.setOpenExternalLinks(False)
+        self.shared_generated_outputs.setOpenLinks(False)
+        self.shared_generated_outputs.setFrameShape(QFrame.Shape.NoFrame)
+        self.shared_generated_outputs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.shared_generated_outputs.anchorClicked.connect(
+            lambda url: self._on_shared_output_link_activated(url.toString())
+        )
+        shared_outputs_layout.addWidget(self.shared_generated_outputs)
+
+        self.shared_info_tabs.addTab(shared_log_tab, t("instructor.log.title"))
+        self.shared_info_tabs.addTab(shared_outputs_tab, t("instructor.links.title"))
+        shared_layout.addWidget(self.shared_info_tabs)
+        central_layout.addWidget(self.shared_activity_frame)
 
         self.current_module = None
 
@@ -175,6 +209,30 @@ class MainWindow(QMainWindow):
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.action_co_section.setChecked(True)
 
+        self.setStyleSheet(
+            """
+            QFrame#sharedActivityFrame {
+                border: 1px solid palette(mid);
+                border-radius: 8px;
+                background: palette(base);
+            }
+            QTabWidget#sharedInfoTabs::pane {
+                border: none;
+                background: palette(base);
+            }
+            QTabWidget#sharedInfoTabs QTabBar::tab:first {
+                margin-left: 8px;
+            }
+            QPlainTextEdit#sharedActivityLog,
+            QTextBrowser#sharedGeneratedOutputs {
+                border: 1px solid palette(mid);
+                border-radius: 8px;
+                background: palette(base);
+                padding: 8px;
+            }
+            """
+        )
+
         self.language_menu = QMenu(self)
         self.language_action_group = QActionGroup(self.language_menu)
         self.language_action_group.setExclusive(True)
@@ -211,6 +269,9 @@ class MainWindow(QMainWindow):
         )
 
         self._refresh_language_switcher()
+        self._refresh_shared_activity_texts()
+        self._append_shared_activity_log(t("instructor.log.ready"))
+        self._refresh_shared_outputs_html()
 
         # Load default module
         self.load_module(InstructorModule)
@@ -243,9 +304,16 @@ class MainWindow(QMainWindow):
             # Connect signals if they exist
             signal = getattr(new_module, "status_changed", None)
             if signal:
-                signal.connect(lambda msg: self.flash_status(msg))
+                signal.connect(self._on_module_status_changed)
         # Switch the visible widget
-        self.stack.setCurrentWidget(self.modules[module_key])
+        current_module = self.modules[module_key]
+        self.stack.setCurrentWidget(current_module)
+        shared_enabled = module_key not in {"HelpModule", "AboutModule"}
+        self.shared_activity_frame.setVisible(shared_enabled)
+        set_shared_mode = getattr(current_module, "set_shared_activity_log_mode", None)
+        if callable(set_shared_mode):
+            set_shared_mode(shared_enabled)
+        self._refresh_shared_outputs_html()
         self.statusBar().showMessage(t("status.ready"))
     
     def flash_status(self, message: str, timeout: int = STATUS_FLASH_TIMEOUT_MS):
@@ -333,6 +401,7 @@ class MainWindow(QMainWindow):
         self.action_help.setText(t("nav.help"))
         self.action_about.setText(t("nav.about"))
         self._refresh_language_switcher()
+        self._refresh_shared_activity_texts()
 
         for module in self.modules.values():
             retranslate = getattr(module, "retranslate_ui", None)
@@ -343,9 +412,53 @@ class MainWindow(QMainWindow):
             if callable(refresh):
                 refresh()
 
+        self._refresh_shared_outputs_html()
         self.statusBar().showMessage(t("status.ready"))
+
+    def _refresh_shared_activity_texts(self) -> None:
+        self.shared_info_tabs.setTabText(0, t("instructor.log.title"))
+        self.shared_info_tabs.setTabText(1, t("instructor.links.title"))
+
+    def _on_module_status_changed(self, message: str) -> None:
+        self.flash_status(message)
+        self._append_shared_activity_log(message)
+        self._refresh_shared_outputs_html()
+
+    def _append_shared_activity_log(self, message: str) -> None:
+        line = format_log_line(message)
+        if line is None:
+            return
+        self.shared_activity_log.appendPlainText(line)
+
+    def _refresh_shared_outputs_html(self) -> None:
+        widget = self.stack.currentWidget()
+        if widget is None:
+            self.shared_generated_outputs.setHtml("")
+            return
+        provider = getattr(widget, "get_shared_outputs_html", None)
+        if callable(provider):
+            self.shared_generated_outputs.setHtml(provider())
+            return
+        self.shared_generated_outputs.setHtml("")
+
+    def _on_shared_output_link_activated(self, href: str) -> None:
+        mode, _, raw_path = href.partition("::")
+        path = raw_path.strip()
+        if not path:
+            return
+        target = Path(path).parent if mode == "folder" else Path(path)
+        opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+        if opened:
+            return
+        show_toast(
+            self,
+            t("instructor.links.open_failed"),
+            title=t("instructor.msg.error_title"),
+            level="error",
+        )
 
     def set_language_switch_enabled(self, enabled: bool) -> None:
         self.language_status_button.setEnabled(enabled)
         self.language_menu.setEnabled(enabled)
+
 
