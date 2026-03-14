@@ -282,6 +282,7 @@ TEXTS = {
     "coordinator.links.downloaded_output": "பதிவிறக்கப்பட்ட வெளியீடு",
     "coordinator.summary": "சேர்க்கப்பட்ட கோப்புகள்: {count}",
     "coordinator.empty": "இன்னும் எந்த Excel கோப்புகளும் சேர்க்கப்படவில்லை.",
+    "coordinator.file.remove_fallback": "நீக்கு",
     "coordinator.remove_selected": "தேர்வை நீக்கு",
     "coordinator.clear_all": "அனைத்தையும் நீக்கு",
     "coordinator.status.added": "{added} கோப்பு(கள்) சேர்க்கப்பட்டது. மொத்தம்: {total}.",

@@ -282,6 +282,7 @@ TEXTS = {
     "coordinator.links.downloaded_output": "Downloaded Output",
     "coordinator.summary": "Files added: {count}",
     "coordinator.empty": "No Excel files added yet.",
+    "coordinator.file.remove_fallback": "Remove",
     "coordinator.remove_selected": "Remove Selected",
     "coordinator.clear_all": "Clear All",
     "coordinator.status.added": "{added} file(s) added. Total: {total}.",

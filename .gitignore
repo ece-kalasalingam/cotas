@@ -33,6 +33,7 @@ htmlcov/
 # Logs and local runtime files
 *.log
 settings.json
+crash_reports/
 .tmp/
 .tmp/*.env
 

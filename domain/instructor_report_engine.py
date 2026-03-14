@@ -11,10 +11,6 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from common.constants import (
-    ALLOW_FILTER,
-    ALLOW_SELECT_LOCKED,
-    ALLOW_SELECT_UNLOCKED,
-    ALLOW_SORT,
     ASSESSMENT_CONFIG_HEADERS,
     ASSESSMENT_CONFIG_SHEET,
     ASSESSMENT_VALIDATION_YES_NO_OPTIONS,
@@ -40,7 +36,6 @@ from common.constants import (
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     DIRECT_RATIO,
-    ID_COURSE_SETUP,
     INDIRECT_RATIO,
     LIKERT_MAX,
     LIKERT_MIN,
@@ -61,12 +56,16 @@ from common.constants import (
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
     WORKBOOK_TEMP_SUFFIX,
-    WORKBOOK_PASSWORD,
-    ensure_workbook_secret_policy,
+)
+from common.excel_sheet_layout import (
+    apply_sheet_layout_and_protection as _apply_sheet_layout_and_protection,
+    color_without_hash as _color_without_hash,
+    excel_col_name as _excel_col_name,
+    style_registry_for_setup as _style_registry_for_setup,
+    thin_border as _thin_border,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from common.registry import BLUEPRINT_REGISTRY
 from common.texts import t
 from common.utils import coerce_excel_number, normalize
 from common.workbook_signing import sign_payload, verify_payload_signature
@@ -92,18 +91,10 @@ _STYLE_KEY_BG_COLOR = "bg_color"
 _STYLE_KEY_ALIGN = "align"
 _STYLE_KEY_VALIGN = "valign"
 _STYLE_KEY_BOLD = "bold"
-_STYLE_REGISTRY_HEADER = "header"
-_STYLE_REGISTRY_BODY = "body"
 _ALIGN_CENTER = "center"
 _ALIGN_VCENTER = "vcenter"
 _PATTERN_SOLID = "solid"
-_BORDER_THIN = "thin"
-_BORDER_COLOR_BLACK = "000000"
 _SHEET_STATE_HIDDEN = "hidden"
-_COLUMN_MIN_WIDTH = 8
-_COLUMN_MAX_WIDTH = 60
-_COLUMN_WIDTH_PADDING = 2
-_HEADER_ACTIVE_COLUMN = "A"
 _STYLE_CACHE_ATTR = "_focus_report_style_cache"
 _INTEGRITY_SCHEMA_VERSION = 1
 _LOG_FINAL_REPORT_READY = "Final CO report prepared with direct and indirect sheets."
@@ -1059,87 +1050,6 @@ def _style_cache_for_sheet(ws: Any) -> dict[str, Any]:
     }
     setattr(ws, _STYLE_CACHE_ATTR, style_cache)
     return style_cache
-
-
-def _excel_col_name(col_index_1_based: int) -> str:
-    index = col_index_1_based
-    label = ""
-    while index > 0:
-        index, rem = divmod(index - 1, 26)
-        label = chr(65 + rem) + label
-    return label
-
-
-def _autosize_columns(ws: Any, max_col: int) -> None:
-    for col in range(1, max_col + 1):
-        col_label = _excel_col_name(col)
-        max_len = 0
-        for row in range(1, ws.max_row + 1):
-            value = ws.cell(row=row, column=col).value
-            if value is None:
-                continue
-            length = len(str(value))
-            if length > max_len:
-                max_len = length
-        ws.column_dimensions[col_label].width = min(
-            _COLUMN_MAX_WIDTH,
-            max(_COLUMN_MIN_WIDTH, max_len + _COLUMN_WIDTH_PADDING),
-        )
-
-
-def _set_header_selected_cell(ws: Any, header_row: int) -> None:
-    # Keep focus on header row for immediate editing/navigation.
-    active = f"{_HEADER_ACTIVE_COLUMN}{header_row}"
-    ws.sheet_view.selection[0].activeCell = active
-    ws.sheet_view.selection[0].sqref = active
-
-
-def _apply_sheet_layout_and_protection(
-    *,
-    ws: Any,
-    header_row: int,
-    header_count: int,
-    paper_size: Any,
-    orientation: Any,
-) -> None:
-    from openpyxl.worksheet.properties import PageSetupProperties
-
-    ensure_workbook_secret_policy()
-    ws.freeze_panes = ws.cell(row=header_row + 1, column=4)
-    _set_header_selected_cell(ws, header_row)
-    _autosize_columns(ws, header_count)
-    ws.page_setup.paperSize = paper_size
-    ws.page_setup.orientation = orientation
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-    ws.protection.sheet = True
-    ws.protection.password = WORKBOOK_PASSWORD
-    ws.protection.sort = ALLOW_SORT
-    ws.protection.autoFilter = ALLOW_FILTER
-    ws.protection.selectLockedCells = ALLOW_SELECT_LOCKED
-    ws.protection.selectUnlockedCells = ALLOW_SELECT_UNLOCKED
-
-
-def _style_registry_for_setup() -> tuple[dict[str, Any], dict[str, Any]]:
-    blueprint = BLUEPRINT_REGISTRY.get(ID_COURSE_SETUP)
-    if blueprint is None:
-        return ({}, {})
-    return (
-        dict(blueprint.style_registry.get(_STYLE_REGISTRY_HEADER, {})),
-        dict(blueprint.style_registry.get(_STYLE_REGISTRY_BODY, {})),
-    )
-
-
-def _thin_border():
-    from openpyxl.styles import Border, Side
-
-    thin = Side(style=_BORDER_THIN, color=_BORDER_COLOR_BLACK)
-    return Border(left=thin, right=thin, top=thin, bottom=thin)
-
-
-def _color_without_hash(color: str) -> str:
-    return color[1:] if color.startswith("#") else color
 
 
 def _ratio_total_header(ratio: float) -> str:

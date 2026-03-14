@@ -40,10 +40,6 @@ from PySide6.QtWidgets import (
 )
 
 from common.constants import (
-    ALLOW_FILTER,
-    ALLOW_SELECT_LOCKED,
-    ALLOW_SELECT_UNLOCKED,
-    ALLOW_SORT,
     APP_NAME,
     CO_REPORT_ABSENT_TOKEN,
     CO_REPORT_HEADER_REG_NO,
@@ -61,7 +57,6 @@ from common.constants import (
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     DIRECT_RATIO,
-    ID_COURSE_SETUP,
     INDIRECT_RATIO,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
@@ -76,13 +71,16 @@ from common.constants import (
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
     UI_FONT_FAMILY,
-    WORKBOOK_PASSWORD,
-    ensure_workbook_secret_policy,
+)
+from common.excel_sheet_layout import (
+    apply_sheet_layout_and_protection as _apply_sheet_layout_and_protection,
+    color_without_hash as _color_without_hash,
+    style_registry_for_setup as _style_registry_for_setup,
+    thin_border as _thin_border,
 )
 from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken, generate_job_id
 from common.qt_jobs import run_in_background
-from common.registry import BLUEPRINT_REGISTRY
 from common.texts import t
 from common.toast import show_toast
 from common.utils import (
@@ -107,17 +105,9 @@ _STYLE_KEY_BG_COLOR = "bg_color"
 _STYLE_KEY_ALIGN = "align"
 _STYLE_KEY_VALIGN = "valign"
 _STYLE_KEY_BOLD = "bold"
-_STYLE_REGISTRY_HEADER = "header"
-_STYLE_REGISTRY_BODY = "body"
 _ALIGN_CENTER = "center"
 _ALIGN_VCENTER = "vcenter"
 _PATTERN_SOLID = "solid"
-_BORDER_THIN = "thin"
-_BORDER_COLOR_BLACK = "000000"
-_COLUMN_MIN_WIDTH = 8
-_COLUMN_MAX_WIDTH = 60
-_COLUMN_WIDTH_PADDING = 2
-_HEADER_ACTIVE_COLUMN = "A"
 _CO_REPORT_NAME_TOKEN_RE = re.compile(r"(?:[_\-\s]*co[_\-\s]*report)+$", re.IGNORECASE)
 
 
@@ -591,84 +581,6 @@ def _style_cache_for_sheet(ws: Any) -> dict[str, Any]:
     return style_cache
 
 
-def _excel_col_name(col_index_1_based: int) -> str:
-    index = col_index_1_based
-    label = ""
-    while index > 0:
-        index, rem = divmod(index - 1, 26)
-        label = chr(65 + rem) + label
-    return label
-
-
-def _autosize_columns(ws: Any, max_col: int) -> None:
-    for col in range(1, max_col + 1):
-        col_label = _excel_col_name(col)
-        max_len = 0
-        for row in range(1, ws.max_row + 1):
-            value = ws.cell(row=row, column=col).value
-            if value is None:
-                continue
-            max_len = max(max_len, len(str(value)))
-        ws.column_dimensions[col_label].width = min(
-            _COLUMN_MAX_WIDTH,
-            max(_COLUMN_MIN_WIDTH, max_len + _COLUMN_WIDTH_PADDING),
-        )
-
-
-def _set_header_selected_cell(ws: Any, header_row: int) -> None:
-    active = f"{_HEADER_ACTIVE_COLUMN}{header_row}"
-    ws.sheet_view.selection[0].activeCell = active
-    ws.sheet_view.selection[0].sqref = active
-
-
-def _apply_sheet_layout_and_protection(
-    *,
-    ws: Any,
-    header_row: int,
-    header_count: int,
-    paper_size: Any,
-    orientation: Any,
-) -> None:
-    from openpyxl.worksheet.properties import PageSetupProperties
-
-    ensure_workbook_secret_policy()
-    ws.freeze_panes = ws.cell(row=header_row + 1, column=4)
-    _set_header_selected_cell(ws, header_row)
-    _autosize_columns(ws, header_count)
-    ws.page_setup.paperSize = paper_size
-    ws.page_setup.orientation = orientation
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-    ws.protection.sheet = True
-    ws.protection.password = WORKBOOK_PASSWORD
-    ws.protection.sort = ALLOW_SORT
-    ws.protection.autoFilter = ALLOW_FILTER
-    ws.protection.selectLockedCells = ALLOW_SELECT_LOCKED
-    ws.protection.selectUnlockedCells = ALLOW_SELECT_UNLOCKED
-
-
-def _style_registry_for_setup() -> tuple[dict[str, Any], dict[str, Any]]:
-    blueprint = BLUEPRINT_REGISTRY.get(ID_COURSE_SETUP)
-    if blueprint is None:
-        return ({}, {})
-    return (
-        dict(blueprint.style_registry.get(_STYLE_REGISTRY_HEADER, {})),
-        dict(blueprint.style_registry.get(_STYLE_REGISTRY_BODY, {})),
-    )
-
-
-def _thin_border() -> Any:
-    from openpyxl.styles import Border, Side
-
-    thin = Side(style=_BORDER_THIN, color=_BORDER_COLOR_BLACK)
-    return Border(left=thin, right=thin, top=thin, bottom=thin)
-
-
-def _color_without_hash(color: str) -> str:
-    return color[1:] if color.startswith("#") else color
-
-
 def _generate_co_attainment_workbook(
     source_paths: list[Path],
     output_path: Path,
@@ -813,7 +725,7 @@ class _CoordinatorFileItemWidget(QWidget):
             self.remove_btn.setIcon(icon)
             self.remove_btn.setIconSize(QSize(16, 16))
         else:
-            self.remove_btn.setText("X")
+            self.remove_btn.setText(t("coordinator.file.remove_fallback"))
         self.remove_btn.setStyleSheet(
             """
             QPushButton {

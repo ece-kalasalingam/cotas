@@ -6,6 +6,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAX_TEMPLATE_ENGINE_LINES = 900
+_MAX_COORDINATOR_MODULE_LINES = 1425
+_MAX_INSTRUCTOR_REPORT_ENGINE_LINES = 1075
 
 
 def _imports_for(path: Path) -> list[str]:
@@ -41,6 +43,18 @@ def test_template_engine_stays_within_size_budget() -> None:
     engine_file = REPO_ROOT / "domain" / "instructor_template_engine.py"
     line_count = len(engine_file.read_text(encoding="utf-8").splitlines())
     assert line_count <= _MAX_TEMPLATE_ENGINE_LINES
+
+
+def test_coordinator_module_stays_within_size_budget() -> None:
+    coordinator_file = REPO_ROOT / "modules" / "coordinator_module.py"
+    line_count = len(coordinator_file.read_text(encoding="utf-8").splitlines())
+    assert line_count <= _MAX_COORDINATOR_MODULE_LINES
+
+
+def test_instructor_report_engine_stays_within_size_budget() -> None:
+    report_engine_file = REPO_ROOT / "domain" / "instructor_report_engine.py"
+    line_count = len(report_engine_file.read_text(encoding="utf-8").splitlines())
+    assert line_count <= _MAX_INSTRUCTOR_REPORT_ENGINE_LINES
 
 
 def test_sheetops_module_does_not_import_ui_or_service_layers() -> None:
