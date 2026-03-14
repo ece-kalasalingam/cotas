@@ -89,10 +89,10 @@ class InstructorWorkflowService:
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
             cancel_token=cancel_token,
-            work=lambda: self._call_with_optional_cancel_token(
+            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
                 generate_course_details_template,
                 output_path,
-                cancel_token=cancel_token,
+                cancel_token=effective_cancel_token,
             ),
         )
 
@@ -107,7 +107,7 @@ class InstructorWorkflowService:
             context=context,
             operation=WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
             cancel_token=cancel_token,
-            work=lambda: validate_course_details_workbook(workbook_path),
+            work=lambda _effective_cancel_token: validate_course_details_workbook(workbook_path),
         )
 
     def generate_marks_template(
@@ -122,11 +122,11 @@ class InstructorWorkflowService:
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
             cancel_token=cancel_token,
-            work=lambda: self._call_with_optional_cancel_token(
+            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
                 generate_marks_template_from_course_details,
                 course_details_path,
                 output_path,
-                cancel_token=cancel_token,
+                cancel_token=effective_cancel_token,
             ),
         )
 
@@ -142,11 +142,11 @@ class InstructorWorkflowService:
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
             cancel_token=cancel_token,
-            work=lambda: self._call_with_optional_cancel_token(
+            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
                 generate_final_co_report,
                 filled_marks_path,
                 output_path,
-                cancel_token=cancel_token,
+                cancel_token=effective_cancel_token,
             ),
         )
 
@@ -161,8 +161,9 @@ class InstructorWorkflowService:
         context: JobContext,
         operation: str,
         cancel_token: CancellationToken | None,
-        work: Callable[[], _T],
+        work: Callable[[CancellationToken], _T],
     ) -> _T:
+        effective_cancel_token = cancel_token or CancellationToken()
         started_at = time.perf_counter()
         timeout_seconds = self._resolve_timeout_seconds()
         _logger.info(
@@ -178,14 +179,14 @@ class InstructorWorkflowService:
             },
         )
         try:
-            self._raise_if_cancelled(cancel_token)
+            self._raise_if_cancelled(effective_cancel_token)
             result = self._run_with_timeout(
                 operation=operation,
-                work=work,
+                work=lambda: work(effective_cancel_token),
                 timeout_seconds=timeout_seconds,
-                cancel_token=cancel_token,
+                cancel_token=effective_cancel_token,
             )
-            self._raise_if_cancelled(cancel_token)
+            self._raise_if_cancelled(effective_cancel_token)
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             _workflow_metrics.record(operation=operation, outcome="success", duration_ms=duration_ms)
             _logger.info(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from threading import Event
 from pathlib import Path
 
 import pytest
@@ -128,6 +129,43 @@ def test_service_enforces_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
     with pytest.raises(AppSystemError, match="exceeded timeout"):
         service.generate_final_report(src, dst, context=context)
+
+
+def test_service_timeout_prevents_post_timeout_output_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    service = service_mod.InstructorWorkflowService()
+    context = service.create_job_context(step_id="step3")
+    src = tmp_path / "filled.txt"
+    dst = tmp_path / "report.xlsx"
+    src.write_text("data", encoding="utf-8")
+    dst.write_text("stable", encoding="utf-8")
+    monkeypatch.setenv("FOCUS_WORKFLOW_STEP_TIMEOUT_SECONDS", "1")
+
+    state = {"token_seen": False}
+    worker_done = Event()
+
+    def _slow_generate_with_cancel(
+        _source: str | Path, output: str | Path, *, cancel_token: CancellationToken | None = None
+    ) -> Path:
+        state["token_seen"] = cancel_token is not None
+        try:
+            time.sleep(1.2)
+            if cancel_token is not None:
+                cancel_token.raise_if_cancelled()
+            Path(output).write_text("late-write", encoding="utf-8")
+            return Path(output)
+        finally:
+            worker_done.set()
+
+    monkeypatch.setattr(service_mod, "generate_final_co_report", _slow_generate_with_cancel)
+
+    with pytest.raises(AppSystemError, match="exceeded timeout"):
+        service.generate_final_report(src, dst, context=context)
+
+    assert worker_done.wait(timeout=2.5)
+    assert state["token_seen"] is True
+    assert dst.read_text(encoding="utf-8") == "stable"
 
 
 def test_service_logs_stable_error_code_for_validation_errors(

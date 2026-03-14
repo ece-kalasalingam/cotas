@@ -6,9 +6,13 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 
 # Keep tests deterministic and aligned with production config contract.
 os.environ.setdefault("FOCUS_WORKBOOK_PASSWORD", "test-workbook-password-2026")
+WINDOWS_ACL_COMPAT_MARK = "windows_acl_compat"
+WINDOWS_ACL_COMPAT_ENV = "FOCUS_TEST_ENABLE_WINDOWS_ACL_COMPAT"
 
 
 def _pytest_tmp_env_root() -> Path:
@@ -61,33 +65,24 @@ def _apply_windows_pytest_tempdir_compat() -> None:
     pytest_pathlib.make_numbered_dir = _patched_make_numbered_dir
 
 
-def _patch_windows_pytest_fs_calls() -> None:
-    """Patch FS calls used by pytest tempdir handling under sandboxed ACL behavior."""
+def _is_pytest_temp_path(path_value: object) -> bool:
+    text = str(path_value).replace("/", "\\").lower()
+    return "pytest-of-" in text or "\\.pytest_" in text or "\\pytest-" in text
+
+
+def _patch_windows_pytest_temp_mkdir_mode() -> None:
+    """Keep pytest temp paths writable on Windows sandboxed ACL setups."""
     if not sys.platform.startswith("win"):
         return
 
     original_mkdir = Path.mkdir
-    original_chmod = os.chmod
-
-    def _is_pytest_temp_path(path_value: object) -> bool:
-        text = str(path_value).replace("/", "\\").lower()
-        return "pytest-of-" in text or "\\.pytest_" in text or "\\pytest-" in text
 
     def _patched_mkdir(self, mode=0o777, parents=False, exist_ok=False):  # type: ignore[no-untyped-def]
         if mode == 0o700 and _is_pytest_temp_path(self):
             mode = 0o777
         return original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
 
-    def _patched_chmod(path, mode, *args, **kwargs):  # type: ignore[no-untyped-def]
-        try:
-            return original_chmod(path, mode, *args, **kwargs)
-        except PermissionError:
-            if _is_pytest_temp_path(path):
-                return None
-            raise
-
     Path.mkdir = _patched_mkdir
-    os.chmod = _patched_chmod
 
 
 def _patch_windows_tempfile_mkdtemp() -> None:
@@ -112,8 +107,44 @@ def _patch_windows_tempfile_mkdtemp() -> None:
     tempfile.mkdtemp = _patched_mkdtemp  # type: ignore[assignment]
 
 
+def _patch_windows_pytest_chmod_compat(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Suppress known tempdir chmod PermissionError only for explicitly opted-in tests."""
+    if not sys.platform.startswith("win"):
+        return
+
+    original_chmod = os.chmod
+
+    def _patched_chmod(path, mode, *args, **kwargs):  # type: ignore[no-untyped-def]
+        try:
+            return original_chmod(path, mode, *args, **kwargs)
+        except PermissionError:
+            if _is_pytest_temp_path(path):
+                return None
+            raise
+
+    monkeypatch.setattr(os, "chmod", _patched_chmod)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        f"{WINDOWS_ACL_COMPAT_MARK}: enable scoped Windows ACL compatibility patches for tempdir operations.",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _windows_acl_compat_patches(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    if not sys.platform.startswith("win"):
+        return
+    marker_enabled = request.node.get_closest_marker(WINDOWS_ACL_COMPAT_MARK) is not None
+    env_enabled = os.getenv(WINDOWS_ACL_COMPAT_ENV, "").strip() == "1"
+    if not (marker_enabled or env_enabled):
+        return
+    _patch_windows_pytest_chmod_compat(monkeypatch)
+
+
 _apply_windows_pytest_tempdir_compat()
 _set_fresh_process_temp_root()
 _set_fresh_pytest_temp_root()
-_patch_windows_pytest_fs_calls()
+_patch_windows_pytest_temp_mkdir_mode()
 _patch_windows_tempfile_mkdtemp()

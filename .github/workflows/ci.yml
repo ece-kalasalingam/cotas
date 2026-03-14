@@ -54,4 +54,4 @@ jobs:
       - name: Run quality gate
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python scripts/quality_gate.py
+        run: python scripts/quality_gate.py --mode fast

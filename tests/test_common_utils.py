@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
 from common.exceptions import AppSystemError, ValidationError
 from common.utils import (
     app_settings_path,
@@ -113,6 +115,7 @@ class TestCoerceExcelNumber(unittest.TestCase):
         self.assertEqual(coerce_excel_number("  A12 "), "A12")
 
 
+@pytest.mark.windows_acl_compat
 class TestSettingsHelpers(unittest.TestCase):
     @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=False)
