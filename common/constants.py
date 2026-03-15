@@ -291,7 +291,10 @@ def _read_workbook_password_from_store() -> str:
         raw = _unprotect_secret_bytes(protected)
     except Exception as exc:
         raise ConfigurationError("Unable to decrypt workbook secret store.") from exc
-    return raw.decode("utf-8").strip()
+    try:
+        return raw.decode("utf-8").strip()
+    except UnicodeDecodeError as exc:
+        raise ConfigurationError("Unable to decrypt workbook secret store.") from exc
 
 
 def _write_workbook_password_to_store(secret: str) -> None:
