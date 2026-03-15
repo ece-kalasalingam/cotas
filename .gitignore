@@ -27,6 +27,8 @@ htmlcov/
 .pytest_tmp_env/
 .pip_audit_cache/
 .localappdata/
+.audit_cache_new/
+.tmp_audit_run/
 
 # Type checker / linter caches
 .mypy_cache/
