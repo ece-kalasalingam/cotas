@@ -23,6 +23,7 @@ _COLUMN_MIN_WIDTH = 8
 _COLUMN_MAX_WIDTH = 60
 _COLUMN_WIDTH_PADDING = 2
 _HEADER_ACTIVE_COLUMN = "A"
+_AUTOSIZE_SAMPLE_ROWS = 300
 
 
 def style_registry_for_setup() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -56,14 +57,27 @@ def excel_col_name(col_index_1_based: int) -> str:
 
 
 def autosize_columns(ws: Any, max_col: int) -> None:
+    sampled_max_row = min(int(ws.max_row), _AUTOSIZE_SAMPLE_ROWS)
+    if sampled_max_row <= 0:
+        for col in range(1, max_col + 1):
+            col_label = excel_col_name(col)
+            ws.column_dimensions[col_label].width = _COLUMN_MIN_WIDTH
+        return
     for col in range(1, max_col + 1):
         col_label = excel_col_name(col)
         max_len = 0
-        for row in range(1, ws.max_row + 1):
-            value = ws.cell(row=row, column=col).value
-            if value is None:
-                continue
-            max_len = max(max_len, len(str(value)))
+        for values in ws.iter_cols(
+            min_col=col,
+            max_col=col,
+            min_row=1,
+            max_row=sampled_max_row,
+            values_only=True,
+        ):
+            for value in values:
+                if value is None:
+                    continue
+                max_len = max(max_len, len(str(value)))
+            break
         ws.column_dimensions[col_label].width = min(
             _COLUMN_MAX_WIDTH,
             max(_COLUMN_MIN_WIDTH, max_len + _COLUMN_WIDTH_PADDING),

@@ -627,17 +627,19 @@ class InstructorModule(QWidget):
         self.info_tabs.setTabText(1, t(self.RAIL_LINK_TITLE_KEY))
         self._refresh_quick_links()
         can_run, reason = self._can_run_step(self.current_step)
-        if self.current_step == 2:
-            self.primary_action.setVisible(False)
-            self.step2_action_row.setVisible(True)
-            self.step3_action_row.setVisible(False)
+        is_step2 = self.current_step == 2
+        is_step3 = self.current_step == 3
+        is_default_step = not (is_step2 or is_step3)
+
+        self.primary_action.setVisible(is_default_step)
+        self.step2_action_row.setVisible(is_step2)
+        self.step3_action_row.setVisible(is_step3)
+
+        if is_step2:
             self.step2_upload_action.setText(t("instructor.action.step2.upload"))
             self.step2_prepare_action.setText(t("instructor.action.step2.prepare"))
             self.step2_prepare_action.setEnabled(self.step2_upload_ready)
-        elif self.current_step == 3:
-            self.primary_action.setVisible(False)
-            self.step2_action_row.setVisible(False)
-            self.step3_action_row.setVisible(True)
+        elif is_step3:
             self.step3_upload_action.setText(
                 t("instructor.action.step4.redo")
                 if self.step3_done and not self.step3_outdated
@@ -653,16 +655,10 @@ class InstructorModule(QWidget):
                 self.step3_done and not self.step3_outdated
             )
         else:
-            self.primary_action.setVisible(True)
             self.primary_action.setText(self._action_text_for_step(self.current_step))
-            self.step2_action_row.setVisible(False)
-            self.step3_action_row.setVisible(False)
 
-        if self.current_step == 2:
-            self.step2_upload_action.setEnabled(True)
-        elif self.current_step == 3:
-            pass
-        else:
+        self.step2_upload_action.setEnabled(is_step2)
+        if is_default_step:
             self.primary_action.setEnabled(can_run)
         if not can_run:
             self.active_note.setText(reason)

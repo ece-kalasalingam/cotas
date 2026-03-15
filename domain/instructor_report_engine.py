@@ -661,10 +661,11 @@ def _compute_component_marks(
             raise ValidationError(
                 t("instructor.validation.final_report.direct_component_marks_shape_invalid", component=component.name)
             )
+        active_cos = [co for co in range(1, total_outcomes + 1) if max_by_co[co] > 0]
         for idx in range(expected_students):
             row = first_data_row + idx
             absent = False
-            co_totals = {co: 0.0 for co in range(1, total_outcomes + 1)}
+            co_totals = {co: 0.0 for co in active_cos}
             for col, co_value in co_by_col.items():
                 cell_value = ws.cell(row=row, column=col).value
                 if _is_absent(cell_value):
@@ -676,13 +677,11 @@ def _compute_component_marks(
                 if 1 <= co_value <= total_outcomes:
                     co_totals[co_value] += numeric
             if absent:
-                for co in range(1, total_outcomes + 1):
-                    if max_by_co[co] > 0:
-                        marks_by_co[co][idx] = CO_REPORT_ABSENT_TOKEN
+                for co in active_cos:
+                    marks_by_co[co][idx] = CO_REPORT_ABSENT_TOKEN
             else:
-                for co in range(1, total_outcomes + 1):
-                    if max_by_co[co] > 0:
-                        marks_by_co[co][idx] = _round2(co_totals[co])
+                for co in active_cos:
+                    marks_by_co[co][idx] = _round2(co_totals[co])
     else:
         covered_cos: list[int] = []
         for col in range(_EXCEL_COL_FIRST_MARK + 1, len(headers) + 1):
@@ -747,10 +746,10 @@ def _compute_indirect_component_marks(
     expected_students = len(students)
 
     marks_by_co = {co: [0.0] * expected_students for co in range(1, total_outcomes + 1)}
-    for co in range(1, total_outcomes + 1):
-        col = _EXCEL_COL_STUDENT_NAME + co
-        for idx in range(expected_students):
-            row = first_data_row + idx
+    for idx in range(expected_students):
+        row = first_data_row + idx
+        for co in range(1, total_outcomes + 1):
+            col = _EXCEL_COL_STUDENT_NAME + co
             cell_value = ws.cell(row=row, column=col).value
             if _is_absent(cell_value):
                 marks_by_co[co][idx] = CO_REPORT_ABSENT_TOKEN
@@ -831,15 +830,22 @@ def _write_direct_co_sheet(
     headers.append(CO_REPORT_HEADER_TOTAL_100)
     headers.append(_ratio_total_header(DIRECT_RATIO))
     _write_row(ws, header_row, headers, bold=True)
+    wrapped_name_alignment = Alignment(wrap_text=True, vertical=_ALIGN_CENTER)
+    centered_value_alignment = Alignment(horizontal=_ALIGN_CENTER, vertical=_ALIGN_CENTER, wrap_text=False)
+    student_count = len(students)
+    marks_by_component: list[list[Any]] = [
+        component.marks_by_co.get(co_index, [0.0] * student_count)
+        for component in active_components
+    ]
 
     for idx, (reg_no, student_name) in enumerate(students, start=1):
         row_idx = header_row + idx
         row_values: list[Any] = [idx, reg_no, student_name]
         absent = False
         weighted_total = 0.0
-        for component in active_components:
+        for component, component_marks in zip(active_components, marks_by_component):
             max_marks = component.max_by_co.get(co_index, 0.0)
-            raw = component.marks_by_co.get(co_index, [0.0] * len(students))[idx - 1]
+            raw = component_marks[idx - 1]
             if isinstance(raw, str) and _is_absent(raw):
                 absent = True
                 row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
@@ -857,13 +863,9 @@ def _write_direct_co_sheet(
             total_ratio = _round2(total_100 * DIRECT_RATIO)
             row_values.extend([_round2(weighted_total), total_100, total_ratio])
         _write_row(ws, row_idx, row_values, bold=False)
-        ws.cell(row=row_idx, column=3).alignment = Alignment(wrap_text=True, vertical=_ALIGN_CENTER)
+        ws.cell(row=row_idx, column=3).alignment = wrapped_name_alignment
         for col_idx in range(4, len(headers) + 1):
-            ws.cell(row=row_idx, column=col_idx).alignment = Alignment(
-                horizontal=_ALIGN_CENTER,
-                vertical=_ALIGN_CENTER,
-                wrap_text=False,
-            )
+            ws.cell(row=row_idx, column=col_idx).alignment = centered_value_alignment
 
     _apply_sheet_layout_and_protection(
         ws=ws,
@@ -919,6 +921,13 @@ def _write_indirect_co_sheet(
     headers.append(CO_REPORT_HEADER_TOTAL_100)
     headers.append(_ratio_total_header(INDIRECT_RATIO))
     _write_row(ws, header_row, headers, bold=True)
+    wrapped_name_alignment = Alignment(wrap_text=True, vertical=_ALIGN_CENTER)
+    centered_value_alignment = Alignment(horizontal=_ALIGN_CENTER, vertical=_ALIGN_CENTER, wrap_text=False)
+    student_count = len(students)
+    marks_by_component: list[list[Any]] = [
+        component.marks_by_co.get(co_index, [0.0] * student_count)
+        for component in active_components
+    ]
 
     denominator = float(max(1, scaled_max_value))
     for idx, (reg_no, student_name) in enumerate(students, start=1):
@@ -926,8 +935,8 @@ def _write_indirect_co_sheet(
         row_values: list[Any] = [idx, reg_no, student_name]
         absent = False
         total_weighted = 0.0
-        for component in active_components:
-            raw = component.marks_by_co.get(co_index, [0.0] * len(students))[idx - 1]
+        for component, component_marks in zip(active_components, marks_by_component):
+            raw = component_marks[idx - 1]
             if isinstance(raw, str) and _is_absent(raw):
                 absent = True
                 row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
@@ -954,13 +963,9 @@ def _write_indirect_co_sheet(
             total_ratio = _round2(total_100 * INDIRECT_RATIO)
             row_values.extend([total_100, total_ratio])
         _write_row(ws, row_idx, row_values, bold=False)
-        ws.cell(row=row_idx, column=3).alignment = Alignment(wrap_text=True, vertical=_ALIGN_CENTER)
+        ws.cell(row=row_idx, column=3).alignment = wrapped_name_alignment
         for col_idx in range(4, len(headers) + 1):
-            ws.cell(row=row_idx, column=col_idx).alignment = Alignment(
-                horizontal=_ALIGN_CENTER,
-                vertical=_ALIGN_CENTER,
-                wrap_text=False,
-            )
+            ws.cell(row=row_idx, column=col_idx).alignment = centered_value_alignment
 
     _apply_sheet_layout_and_protection(
         ws=ws,

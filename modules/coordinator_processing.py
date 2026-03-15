@@ -59,6 +59,15 @@ _ALIGN_CENTER = "center"
 _ALIGN_VCENTER = "vcenter"
 _PATTERN_SOLID = "solid"
 _CO_REPORT_NAME_TOKEN_RE = re.compile(r"(?:[_\-\s]*co[_\-\s]*report)+$", re.IGNORECASE)
+_HEADER_SCAN_MAX_ROWS = 200
+_NORM_SYSTEM_HASH_TEMPLATE_ID_HEADER = normalize(SYSTEM_HASH_TEMPLATE_ID_HEADER)
+_NORM_SYSTEM_HASH_TEMPLATE_HASH_HEADER = normalize(SYSTEM_HASH_TEMPLATE_HASH_HEADER)
+_NORM_SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER = normalize(SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
+_NORM_SYSTEM_REPORT_INTEGRITY_HASH_HEADER = normalize(SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
+_NORM_COURSE_SETUP_ID = normalize(ID_COURSE_SETUP)
+_NORM_COURSE_CODE_KEY = normalize(COURSE_METADATA_COURSE_CODE_KEY)
+_NORM_TOTAL_OUTCOMES_KEY = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
+_NORM_SECTION_KEY = normalize(COURSE_METADATA_SECTION_KEY)
 
 
 @dataclass(slots=True, frozen=True)
@@ -117,6 +126,103 @@ def _has_valid_final_co_report(path: Path) -> bool:
     return _extract_final_report_signature(path) is not None
 
 
+def _read_template_id_from_hash_sheet(workbook: Any) -> str | None:
+    if SYSTEM_HASH_SHEET not in workbook.sheetnames:
+        return None
+    hash_sheet = workbook[SYSTEM_HASH_SHEET]
+    if normalize(hash_sheet["A1"].value) != _NORM_SYSTEM_HASH_TEMPLATE_ID_HEADER:
+        return None
+    if normalize(hash_sheet["B1"].value) != _NORM_SYSTEM_HASH_TEMPLATE_HASH_HEADER:
+        return None
+    template_id_raw = hash_sheet["A2"].value
+    template_hash_raw = hash_sheet["B2"].value
+    template_id = str(template_id_raw).strip() if template_id_raw is not None else ""
+    template_hash = str(template_hash_raw).strip() if template_hash_raw is not None else ""
+    if not template_id or not template_hash:
+        return None
+    if not verify_payload_signature(template_id, template_hash):
+        return None
+    if normalize(template_id) != _NORM_COURSE_SETUP_ID:
+        return None
+    return template_id
+
+
+def _read_report_sheet_counts(workbook: Any) -> tuple[int, int] | None:
+    if SYSTEM_REPORT_INTEGRITY_SHEET not in workbook.sheetnames:
+        return None
+    integrity_sheet = workbook[SYSTEM_REPORT_INTEGRITY_SHEET]
+    if normalize(integrity_sheet["A1"].value) != _NORM_SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER:
+        return None
+    if normalize(integrity_sheet["B1"].value) != _NORM_SYSTEM_REPORT_INTEGRITY_HASH_HEADER:
+        return None
+    manifest_text_raw = integrity_sheet["A2"].value
+    manifest_hash_raw = integrity_sheet["B2"].value
+    manifest_text = str(manifest_text_raw).strip() if manifest_text_raw is not None else ""
+    manifest_hash = str(manifest_hash_raw).strip() if manifest_hash_raw is not None else ""
+    if not manifest_text or not manifest_hash:
+        return None
+    if not verify_payload_signature(manifest_text, manifest_hash):
+        return None
+
+    manifest = json.loads(manifest_text)
+    if not isinstance(manifest, dict):
+        return None
+    sheet_order = manifest.get("sheet_order")
+    if not isinstance(sheet_order, list):
+        return None
+    sheet_names = [str(name).strip() for name in sheet_order if isinstance(name, str)]
+    if not sheet_names:
+        return None
+    direct_sheet_count = sum(1 for name in sheet_names if name.endswith(CO_REPORT_DIRECT_SHEET_SUFFIX))
+    indirect_sheet_count = sum(1 for name in sheet_names if name.endswith(CO_REPORT_INDIRECT_SHEET_SUFFIX))
+    if direct_sheet_count <= 0 or indirect_sheet_count <= 0:
+        return None
+    if direct_sheet_count != indirect_sheet_count:
+        return None
+    return direct_sheet_count, indirect_sheet_count
+
+
+def _read_signature_metadata(workbook: Any) -> tuple[str, int, str] | None:
+    if COURSE_METADATA_SHEET not in workbook.sheetnames:
+        return None
+    metadata_sheet = workbook[COURSE_METADATA_SHEET]
+    course_code = ""
+    total_outcomes_text = ""
+    section = ""
+    row = 2
+    while True:
+        key = metadata_sheet.cell(row=row, column=1).value
+        value = metadata_sheet.cell(row=row, column=2).value
+        if normalize(key) == "" and normalize(value) == "":
+            break
+        key_text = str(key).strip() if key is not None else ""
+        value_text = str(value).strip() if value is not None else ""
+        if key_text:
+            normalized_key = normalize(key_text)
+            if normalized_key == _NORM_COURSE_CODE_KEY:
+                course_code = value_text
+            elif normalized_key == _NORM_TOTAL_OUTCOMES_KEY:
+                total_outcomes_text = value_text
+            elif normalized_key == _NORM_SECTION_KEY:
+                section = value_text
+            if course_code and total_outcomes_text and section:
+                break
+        row += 1
+
+    course_code = course_code.strip()
+    total_outcomes_text = total_outcomes_text.strip()
+    section = section.strip()
+    if not course_code or not total_outcomes_text or not section:
+        return None
+    try:
+        total_outcomes = int(float(total_outcomes_text))
+    except (TypeError, ValueError):
+        return None
+    if total_outcomes <= 0:
+        return None
+    return course_code, total_outcomes, section
+
+
 def _extract_final_report_signature(path: Path) -> _FinalReportSignature | None:
     if path.suffix.lower() == ".xls":
         return None
@@ -128,87 +234,17 @@ def _extract_final_report_signature(path: Path) -> _FinalReportSignature | None:
     try:
         workbook = load_workbook(filename=path, read_only=True, data_only=True)
         try:
-            if SYSTEM_HASH_SHEET not in workbook.sheetnames:
+            template_id = _read_template_id_from_hash_sheet(workbook)
+            if template_id is None:
                 return None
-            if SYSTEM_REPORT_INTEGRITY_SHEET not in workbook.sheetnames:
+            sheet_counts = _read_report_sheet_counts(workbook)
+            if sheet_counts is None:
                 return None
-            if COURSE_METADATA_SHEET not in workbook.sheetnames:
+            metadata = _read_signature_metadata(workbook)
+            if metadata is None:
                 return None
-
-            hash_sheet = workbook[SYSTEM_HASH_SHEET]
-            if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_HEADER):
-                return None
-            if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_HEADER):
-                return None
-
-            template_id_raw = hash_sheet["A2"].value
-            template_hash_raw = hash_sheet["B2"].value
-            template_id = str(template_id_raw).strip() if template_id_raw is not None else ""
-            template_hash = str(template_hash_raw).strip() if template_hash_raw is not None else ""
-            if not template_id or not template_hash:
-                return None
-            if not verify_payload_signature(template_id, template_hash):
-                return None
-            if normalize(template_id) != normalize(ID_COURSE_SETUP):
-                return None
-
-            integrity_sheet = workbook[SYSTEM_REPORT_INTEGRITY_SHEET]
-            if normalize(integrity_sheet["A1"].value) != normalize(SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER):
-                return None
-            if normalize(integrity_sheet["B1"].value) != normalize(SYSTEM_REPORT_INTEGRITY_HASH_HEADER):
-                return None
-
-            manifest_text_raw = integrity_sheet["A2"].value
-            manifest_hash_raw = integrity_sheet["B2"].value
-            manifest_text = str(manifest_text_raw).strip() if manifest_text_raw is not None else ""
-            manifest_hash = str(manifest_hash_raw).strip() if manifest_hash_raw is not None else ""
-            if not manifest_text or not manifest_hash:
-                return None
-            if not verify_payload_signature(manifest_text, manifest_hash):
-                return None
-
-            manifest = json.loads(manifest_text)
-            if not isinstance(manifest, dict):
-                return None
-            sheet_order = manifest.get("sheet_order")
-            if not isinstance(sheet_order, list):
-                return None
-            sheet_names = [str(name).strip() for name in sheet_order if isinstance(name, str)]
-            if not sheet_names:
-                return None
-
-            direct_sheet_count = sum(1 for name in sheet_names if name.endswith(CO_REPORT_DIRECT_SHEET_SUFFIX))
-            indirect_sheet_count = sum(1 for name in sheet_names if name.endswith(CO_REPORT_INDIRECT_SHEET_SUFFIX))
-            if direct_sheet_count <= 0 or indirect_sheet_count <= 0:
-                return None
-            if direct_sheet_count != indirect_sheet_count:
-                return None
-
-            metadata_sheet = workbook[COURSE_METADATA_SHEET]
-            metadata: dict[str, str] = {}
-            row = 2
-            while True:
-                key = metadata_sheet.cell(row=row, column=1).value
-                value = metadata_sheet.cell(row=row, column=2).value
-                if normalize(key) == "" and normalize(value) == "":
-                    break
-                key_text = str(key).strip() if key is not None else ""
-                value_text = str(value).strip() if value is not None else ""
-                if key_text:
-                    metadata[normalize(key_text)] = value_text
-                row += 1
-
-            course_code = metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "").strip()
-            total_outcomes_text = metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "").strip()
-            section = metadata.get(normalize(COURSE_METADATA_SECTION_KEY), "").strip()
-            if not course_code or not total_outcomes_text or not section:
-                return None
-            try:
-                total_outcomes = int(float(total_outcomes_text))
-            except (TypeError, ValueError):
-                return None
-            if total_outcomes <= 0:
-                return None
+            direct_sheet_count, indirect_sheet_count = sheet_counts
+            course_code, total_outcomes, section = metadata
 
             return _FinalReportSignature(
                 template_id=template_id,
@@ -240,10 +276,17 @@ def _analyze_dropped_files(
     existing_resolved = [Path(path).resolve() for path in existing_paths if path]
     baseline_signature: _FinalReportSignature | None = None
     seen_sections: set[str] = set()
+    signature_cache: dict[str, _FinalReportSignature | None] = {}
+
+    def _cached_signature(path: Path) -> _FinalReportSignature | None:
+        key = _path_key(path)
+        if key not in signature_cache:
+            signature_cache[key] = _extract_final_report_signature(path)
+        return signature_cache[key]
 
     for path in existing_resolved:
         token.raise_if_cancelled()
-        signature = _extract_final_report_signature(path)
+        signature = _cached_signature(path)
         if signature is None:
             continue
         if baseline_signature is None:
@@ -258,7 +301,7 @@ def _analyze_dropped_files(
         if key in seen:
             duplicates += 1
             continue
-        signature = _extract_final_report_signature(path)
+        signature = _cached_signature(path)
         if signature is None:
             invalid_final_report.append(str(path))
             continue
@@ -345,16 +388,29 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
     }
     header_row = 0
     column_map: dict[str, int] = {}
-    for row_idx in range(1, int(sheet.max_row) + 1):
-        row_map: dict[str, int] = {}
-        for col_idx in range(1, int(sheet.max_column) + 1):
-            key = normalize(sheet.cell(row=row_idx, column=col_idx).value)
-            if key and key not in row_map:
-                row_map[key] = col_idx
-        if required_headers.issubset(row_map.keys()):
-            header_row = row_idx
-            column_map = row_map
-            break
+    max_row = int(sheet.max_row)
+    max_col = int(sheet.max_column)
+    header_scan_limit = min(max_row, _HEADER_SCAN_MAX_ROWS)
+
+    def _find_header_row(start_row: int, end_row: int) -> tuple[int, dict[str, int]]:
+        for row_idx in range(start_row, end_row + 1):
+            row_map: dict[str, int] = {}
+            missing = set(required_headers)
+            for col_idx in range(1, max_col + 1):
+                key = normalize(sheet.cell(row=row_idx, column=col_idx).value)
+                if key and key not in row_map:
+                    row_map[key] = col_idx
+                    if key in missing:
+                        missing.remove(key)
+                        if not missing:
+                            return row_idx, row_map
+            if not missing:
+                return row_idx, row_map
+        return 0, {}
+
+    header_row, column_map = _find_header_row(1, header_scan_limit)
+    if header_row <= 0 and header_scan_limit < max_row:
+        header_row, column_map = _find_header_row(header_scan_limit + 1, max_row)
     if header_row <= 0:
         raise ValueError(f"Required headers are missing in sheet '{sheet.title}'.")
 
@@ -363,7 +419,7 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
     score_col = column_map[normalize(_ratio_total_header(ratio))]
 
     rows: dict[str, tuple[str, str, float | str]] = {}
-    for row_idx in range(header_row + 1, int(sheet.max_row) + 1):
+    for row_idx in range(header_row + 1, max_row + 1):
         reg_raw = sheet.cell(row=row_idx, column=reg_col).value
         reg_value = coerce_excel_number(reg_raw)
         reg_no = str(reg_value).strip() if reg_value is not None else ""
