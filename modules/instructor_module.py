@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import importlib
 import time
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
@@ -55,7 +56,13 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
-from common.ui_logging import UILogHandler, format_log_line
+from common.ui_logging import (
+    UILogHandler,
+    build_i18n_log_message,
+    format_log_line_at,
+    parse_i18n_log_message,
+    resolve_i18n_log_message,
+)
 from domain import InstructorWorkflowState
 from modules.instructor import (
     generate_course_details_template,
@@ -100,6 +107,20 @@ from services import InstructorWorkflowService
 
 _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")
+_INSTRUCTOR_STATUS_KEYS = (
+    "instructor.status.step1_selected",
+    "instructor.status.step2_validated",
+    "instructor.status.step2_uploaded",
+    "instructor.status.step2_changed",
+    "instructor.status.step3_selected",
+    "instructor.status.step3_uploaded",
+    "instructor.status.step3_changed",
+    "instructor.status.step4_selected",
+    "instructor.status.step4_changed",
+    "instructor.status.step5_selected",
+    "instructor.status.operation_in_progress",
+    "instructor.status.operation_cancelled",
+)
 
 # Step handlers receive `ns=globals()`, so these names must stay module-visible.
 _STEP_RUNTIME_GLOBALS = (
@@ -113,11 +134,19 @@ _STEP_RUNTIME_GLOBALS = (
     generate_course_details_template,
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
+    build_i18n_log_message,
 )
 
 
 def _publish_status_compat(target: object, message: str) -> None:
-    _publish_status_compat_impl(target=target, message=message, logger=_logger)
+    payload = message
+    supports_payload = bool(getattr(target, "_supports_i18n_status_payload", False))
+    if supports_payload:
+        for key in _INSTRUCTOR_STATUS_KEYS:
+            if message == t(key):
+                payload = build_i18n_log_message(key, fallback=message)
+                break
+    _publish_status_compat_impl(target=target, message=payload, logger=_logger)
 
 
 def _set_busy_compat(target: object, busy: bool, *, job_id: str | None = None) -> None:
@@ -241,6 +270,7 @@ class InstructorModule(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._supports_i18n_status_payload = True
         self.current_step = 1
 
         self.step1_path: str | None = None
@@ -268,6 +298,7 @@ class InstructorModule(QWidget):
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
 
         self._ui_log_handler: UILogHandler | None = None
+        self._user_log_entries: list[dict[str, object]] = []
         self._step_items: list[QListWidgetItem] = []
         self._busy_started_at: float | None = None
         self._busy_elapsed_timer = QTimer(self)
@@ -292,11 +323,11 @@ class InstructorModule(QWidget):
         left_layout = QVBoxLayout(left)
         
 
-        rail_title = QLabel(t("instructor.workflow_title"))
-        rail_title.setFont(
+        self.rail_title = QLabel(t("instructor.workflow_title"))
+        self.rail_title.setFont(
             QFont(UI_FONT_FAMILY, INSTRUCTOR_RAIL_TITLE_FONT_SIZE, QFont.Weight.Bold)
         )
-        left_layout.addWidget(rail_title)
+        left_layout.addWidget(self.rail_title)
 
         self.progress_label = QLabel()
         self.progress_label.setObjectName("progressText")
@@ -563,6 +594,7 @@ class InstructorModule(QWidget):
         return self._quick_links_html()
 
     def _refresh_ui(self) -> None:
+        self.rail_title.setText(t("instructor.workflow_title"))
         completed = sum(
             1
             for done, outdated in (
@@ -650,6 +682,7 @@ class InstructorModule(QWidget):
             self.step3_generate_action.setEnabled(False)
 
     def retranslate_ui(self) -> None:
+        self._rerender_user_log()
         self._refresh_ui()
         self._clear_info_text_selection()
 
@@ -720,10 +753,31 @@ class InstructorModule(QWidget):
             return
         self._ui_log_handler = UILogHandler(self._append_user_log)
         _logger.addHandler(self._ui_log_handler)
-        self._append_user_log(t("instructor.log.ready"))
+        self._append_user_log(
+            build_i18n_log_message(
+                "instructor.log.ready",
+                fallback=t("instructor.log.ready"),
+            )
+        )
 
     def _append_user_log(self, message: str) -> None:
-        line = format_log_line(message)
+        parsed = parse_i18n_log_message(message)
+        localized = resolve_i18n_log_message(message)
+        timestamp = datetime.now()
+        if parsed is None:
+            self._user_log_entries.append({"timestamp": timestamp, "message": localized})
+        else:
+            key, kwargs, fallback = parsed
+            self._user_log_entries.append(
+                {
+                    "timestamp": timestamp,
+                    "message": localized,
+                    "text_key": key,
+                    "kwargs": kwargs,
+                    "fallback": fallback,
+                }
+            )
+        line = format_log_line_at(localized, timestamp=timestamp)
         if line is None:
             return
         self.user_log_view.appendPlainText(line)
@@ -731,6 +785,28 @@ class InstructorModule(QWidget):
     def _publish_status(self, message: str) -> None:
         self._append_user_log(message)
         emit_user_status(getattr(self, "status_changed", None), message, logger=_logger)
+
+    def _rerender_user_log(self) -> None:
+        self.user_log_view.clear()
+        for entry in self._user_log_entries:
+            timestamp = entry.get("timestamp")
+            text_key = entry.get("text_key")
+            fallback = entry.get("fallback")
+            kwargs = entry.get("kwargs")
+            message = entry.get("message")
+            if isinstance(text_key, str):
+                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
+                try:
+                    resolved = t(text_key, **safe_kwargs)
+                except Exception:
+                    resolved = fallback if isinstance(fallback, str) else str(message or "")
+            else:
+                resolved = str(message or "")
+            ts = timestamp if isinstance(timestamp, datetime) else None
+            line = format_log_line_at(resolved, timestamp=ts)
+            if line is None:
+                continue
+            self.user_log_view.appendPlainText(line)
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)

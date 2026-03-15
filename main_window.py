@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -32,7 +33,12 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
-from common.ui_logging import format_log_line
+from common.ui_logging import (
+    build_i18n_log_message,
+    format_log_line_at,
+    parse_i18n_log_message,
+    resolve_i18n_log_message,
+)
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
 
@@ -149,6 +155,7 @@ class MainWindow(QMainWindow):
         central_layout.addLayout(shared_row)
 
         self.current_module = None
+        self._shared_activity_entries: list[dict[str, object]] = []
 
         # ----------------------------
         # Activity Bar
@@ -277,7 +284,12 @@ class MainWindow(QMainWindow):
 
         self._refresh_language_switcher()
         self._refresh_shared_activity_texts()
-        self._append_shared_activity_log(t("instructor.log.ready"))
+        self._append_shared_activity_log(
+            build_i18n_log_message(
+                "instructor.log.ready",
+                fallback=t("instructor.log.ready"),
+            )
+        )
         self._refresh_shared_outputs_html()
 
         # Load default module
@@ -409,6 +421,7 @@ class MainWindow(QMainWindow):
         self.action_about.setText(t("nav.about"))
         self._refresh_language_switcher()
         self._refresh_shared_activity_texts()
+        self._rerender_shared_activity_log()
 
         for module in self.modules.values():
             retranslate = getattr(module, "retranslate_ui", None)
@@ -427,15 +440,59 @@ class MainWindow(QMainWindow):
         self.shared_info_tabs.setTabText(1, t("instructor.links.title"))
 
     def _on_module_status_changed(self, message: str) -> None:
-        self.flash_status(message)
+        self.flash_status(resolve_i18n_log_message(message))
         self._append_shared_activity_log(message)
         self._refresh_shared_outputs_html()
 
     def _append_shared_activity_log(self, message: str) -> None:
-        line = format_log_line(message)
+        parsed = parse_i18n_log_message(message)
+        localized = resolve_i18n_log_message(message)
+        timestamp = datetime.now()
+        if parsed is None:
+            self._shared_activity_entries.append(
+                {
+                    "timestamp": timestamp,
+                    "message": localized,
+                }
+            )
+        else:
+            key, kwargs, fallback = parsed
+            self._shared_activity_entries.append(
+                {
+                    "timestamp": timestamp,
+                    "message": localized,
+                    "text_key": key,
+                    "kwargs": kwargs,
+                    "fallback": fallback,
+                }
+            )
+        line = format_log_line_at(localized, timestamp=timestamp)
         if line is None:
             return
         self.shared_activity_log.appendPlainText(line)
+
+    def _rerender_shared_activity_log(self) -> None:
+        self.shared_activity_log.clear()
+        for entry in self._shared_activity_entries:
+            timestamp = entry.get("timestamp")
+            text_key = entry.get("text_key")
+            fallback = entry.get("fallback")
+            kwargs = entry.get("kwargs")
+            message = entry.get("message")
+            if isinstance(text_key, str):
+                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
+                try:
+                    resolved = t(text_key, **safe_kwargs)
+                except Exception:
+                    resolved = fallback if isinstance(fallback, str) else str(message or "")
+            else:
+                resolved = str(message or "")
+
+            ts = timestamp if isinstance(timestamp, datetime) else None
+            line = format_log_line_at(resolved, timestamp=ts)
+            if line is None:
+                continue
+            self.shared_activity_log.appendPlainText(line)
 
     def _refresh_shared_outputs_html(self) -> None:
         widget = self.stack.currentWidget()

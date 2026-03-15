@@ -4,13 +4,22 @@ from __future__ import annotations
 
 from common.texts import t
 from common.toast import show_toast
+from common.ui_logging import build_i18n_log_message
 
 
 def localized_log_messages(process_key: str) -> tuple[str, str]:
     user_process_name = t(process_key)
     return (
-        t("instructor.log.completed_process", process=user_process_name),
-        t("instructor.log.error_while_process", process=user_process_name),
+        build_i18n_log_message(
+            "instructor.log.completed_process",
+            kwargs={"process": {"__t_key__": process_key}},
+            fallback=t("instructor.log.completed_process", process=user_process_name),
+        ),
+        build_i18n_log_message(
+            "instructor.log.error_while_process",
+            kwargs={"process": {"__t_key__": process_key}},
+            fallback=t("instructor.log.error_while_process", process=user_process_name),
+        ),
     )
 
 

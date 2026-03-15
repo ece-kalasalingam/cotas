@@ -304,6 +304,7 @@ TEXTS = {
     "coordinator.status.cancelling": "Cancelling coordinator processing...",
     "coordinator.status.operation_cancelled": "Coordinator processing cancelled.",
     "coordinator.status.processing_failed": "Coordinator processing failed.",
+    "coordinator.status.processing_completed": "Coordinator processing completed.",
     "coordinator.status.calculate_pending": "CO attainment calculation is not yet implemented in this module.",
     "coordinator.status.calculate_completed": "CO attainment calculation completed and output workbook generated.",
 }

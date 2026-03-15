@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from common.constants import APP_NAME, HELP_LAYOUT_CONTENT_MARGINS
 from common.texts import t
+from common.ui_logging import build_i18n_log_message
 from common.toast import show_toast
 from common.utils import (
     emit_user_status,
@@ -56,6 +57,14 @@ class HelpModule(QWidget):
         layout.addWidget(self.pdf_view)
         self._load_pdf()
 
+    def _emit_status_key(self, key: str, **kwargs: object) -> None:
+        localized = t(key, **kwargs)
+        emit_user_status(
+            self.status_changed,
+            build_i18n_log_message(key, kwargs=kwargs, fallback=localized),
+            logger=self._logger,
+        )
+
     # -----------------------------------------------------
     # PDF Load
     # -----------------------------------------------------
@@ -71,7 +80,10 @@ class HelpModule(QWidget):
             )
             emit_user_status(
                 self.status_changed,
-                t("help.status.doc_missing"),
+                build_i18n_log_message(
+                    "help.status.doc_missing",
+                    fallback=t("help.status.doc_missing"),
+                ),
                 logger=self._logger,
             )
             return
@@ -81,12 +93,12 @@ class HelpModule(QWidget):
             "loading help PDF",
             logger=self._logger,
             success_message="loading help PDF completed successfully.",
+            user_success_message=build_i18n_log_message(
+                "help.status.doc_loaded",
+                fallback=t("help.status.doc_loaded"),
+            ),
         )
-        emit_user_status(
-            self.status_changed,
-            t("help.status.doc_loaded"),
-            logger=self._logger,
-        )
+        self._emit_status_key("help.status.doc_loaded")
 
     def _on_pdf_status_changed(self, status: QPdfDocument.Status) -> None:
         if status == QPdfDocument.Status.Ready:
@@ -104,7 +116,10 @@ class HelpModule(QWidget):
             )
             emit_user_status(
                 self.status_changed,
-                t("help.status.doc_error"),
+                build_i18n_log_message(
+                    "help.status.doc_error",
+                    fallback=t("help.status.doc_error"),
+                ),
                 logger=self._logger,
             )
 
@@ -146,7 +161,10 @@ class HelpModule(QWidget):
             )
             emit_user_status(
                 self.status_changed,
-                t("help.status.file_missing"),
+                build_i18n_log_message(
+                    "help.status.file_missing",
+                    fallback=t("help.status.file_missing"),
+                ),
                 logger=self._logger,
             )
             return
@@ -171,6 +189,10 @@ class HelpModule(QWidget):
                     process_name,
                     logger=self._logger,
                     error=exc,
+                    user_error_message=build_i18n_log_message(
+                        "help.status.save_failed",
+                        fallback=t("help.status.save_failed"),
+                    ),
                 )
                 show_toast(
                     self,
@@ -178,17 +200,17 @@ class HelpModule(QWidget):
                     title=t("help.save_failed_title"),
                     level="error",
                 )
-                emit_user_status(
-                    self.status_changed,
-                    t("help.status.save_failed"),
-                    logger=self._logger,
-                )
+                self._emit_status_key("help.status.save_failed")
                 return
 
             log_process_message(
                 process_name,
                 logger=self._logger,
                 success_message=f"{process_name} completed successfully.",
+                user_success_message=build_i18n_log_message(
+                    "help.status.save_success",
+                    fallback=t("help.status.save_success"),
+                ),
             )
             show_toast(
                 self,
@@ -196,11 +218,7 @@ class HelpModule(QWidget):
                 title=t("help.save_success_title"),
                 level="success",
             )
-            emit_user_status(
-                self.status_changed,
-                t("help.status.save_success"),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.save_success")
 
     # -----------------------------------------------------
     # Open in System Viewer
@@ -218,7 +236,10 @@ class HelpModule(QWidget):
             )
             emit_user_status(
                 self.status_changed,
-                t("help.status.file_missing"),
+                build_i18n_log_message(
+                    "help.status.file_missing",
+                    fallback=t("help.status.file_missing"),
+                ),
                 logger=self._logger,
             )
             return
@@ -229,6 +250,10 @@ class HelpModule(QWidget):
                 process_name,
                 logger=self._logger,
                 error=RuntimeError("Desktop service returned openUrl=False"),
+                user_error_message=build_i18n_log_message(
+                    "help.status.open_failed",
+                    fallback=t("help.status.open_failed"),
+                ),
             )
             show_toast(
                 self,
@@ -236,17 +261,17 @@ class HelpModule(QWidget):
                 title=t("help.open_failed_title"),
                 level="warning",
             )
-            emit_user_status(
-                self.status_changed,
-                t("help.status.open_failed"),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.open_failed")
             return
 
         log_process_message(
             process_name,
             logger=self._logger,
             success_message=f"{process_name} completed successfully.",
+            user_success_message=build_i18n_log_message(
+                "help.status.open_success",
+                fallback=t("help.status.open_success"),
+            ),
         )
         show_toast(
             self,
@@ -254,8 +279,4 @@ class HelpModule(QWidget):
             title=t("help.open_success_title"),
             level="success",
         )
-        emit_user_status(
-            self.status_changed,
-            t("help.status.open_success"),
-            logger=self._logger,
-        )
+        self._emit_status_key("help.status.open_success")

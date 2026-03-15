@@ -304,6 +304,7 @@ TEXTS = {
     "coordinator.status.cancelling": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்படுகிறது...",
     "coordinator.status.operation_cancelled": "ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்பட்டது.",
     "coordinator.status.processing_failed": "ஒருங்கிணைப்பாளர் செயலாக்கம் தோல்வியடைந்தது.",
+    "coordinator.status.processing_completed": "ஒருங்கிணைப்பாளர் செயலாக்கம் முடிந்தது.",
     "coordinator.status.calculate_pending": "இந்த தொகுதியில் CO அடைவு கணக்கீடு இன்னும் செயல்படுத்தப்படவில்லை.",
     "coordinator.status.calculate_completed": "CO அடைவு கணக்கீடு நிறைவடைந்து வெளியீட்டு workbook உருவாக்கப்பட்டது.",
 }

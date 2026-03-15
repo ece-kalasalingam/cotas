@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import json
 import re
+from datetime import datetime
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -96,7 +97,13 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
-from common.ui_logging import UILogHandler, format_log_line
+from common.ui_logging import (
+    UILogHandler,
+    build_i18n_log_message,
+    format_log_line_at,
+    parse_i18n_log_message,
+    resolve_i18n_log_message,
+)
 from common.workbook_signing import verify_payload_signature
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -846,6 +853,7 @@ class CoordinatorModule(QWidget):
         self._active_jobs: list[object] = []
         self._pending_drop_batches: list[list[str]] = []
         self._ui_log_handler: UILogHandler | None = None
+        self._user_log_entries: list[dict[str, object]] = []
         self._build_ui()
         self._setup_ui_logging()
         self.retranslate_ui()
@@ -982,6 +990,7 @@ class CoordinatorModule(QWidget):
         self.setStyleSheet(panel_style)
 
     def retranslate_ui(self) -> None:
+        self._rerender_user_log()
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
         self.drop_list.set_placeholder_text(t("coordinator.list_placeholder"))
@@ -995,6 +1004,12 @@ class CoordinatorModule(QWidget):
     def _publish_status(self, message: str) -> None:
         self._append_user_log(message)
         emit_user_status(self.status_changed, message, logger=self._logger)
+
+    def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
+        localized = t(text_key, **kwargs)
+        payload = build_i18n_log_message(text_key, kwargs=kwargs, fallback=localized)
+        self._append_user_log(payload)
+        emit_user_status(self.status_changed, payload, logger=self._logger)
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
@@ -1036,7 +1051,7 @@ class CoordinatorModule(QWidget):
         job_id = generate_job_id()
         self._cancel_token = token
         self._set_busy(True, job_id=job_id)
-        self._publish_status(t("coordinator.status.processing_started"))
+        self._publish_status_key("coordinator.status.processing_started")
 
         def _finalize(job: object) -> None:
             if job in self._active_jobs:
@@ -1051,11 +1066,15 @@ class CoordinatorModule(QWidget):
                 if all(_path_key(path) != _path_key(output_path) for path in self._downloaded_outputs):
                     self._downloaded_outputs.append(output_path)
                 self._remember_dialog_dir_safe(str(output_path))
-                self._publish_status(t("coordinator.status.calculate_completed"))
+                self._publish_status_key("coordinator.status.calculate_completed")
                 log_process_message(
                     process_name,
                     logger=self._logger,
                     success_message=f"{process_name} completed successfully. output={output_path}",
+                    user_success_message=build_i18n_log_message(
+                        "coordinator.status.calculate_completed",
+                        fallback=t("coordinator.status.calculate_completed"),
+                    ),
                     job_id=job_id,
                     step_id="coordinator_calculate_attainment",
                 )
@@ -1071,12 +1090,15 @@ class CoordinatorModule(QWidget):
         def _on_failed(exc: Exception) -> None:
             try:
                 if isinstance(exc, JobCancelledError):
-                    self._publish_status(t("coordinator.status.operation_cancelled"))
+                    self._publish_status_key("coordinator.status.operation_cancelled")
                     self._logger.info(
                         "%s cancelled by user/system request.",
                         process_name,
                         extra={
-                            "user_message": t("coordinator.status.operation_cancelled"),
+                            "user_message": build_i18n_log_message(
+                                "coordinator.status.operation_cancelled",
+                                fallback=t("coordinator.status.operation_cancelled"),
+                            ),
                             "job_id": job_id,
                             "step_id": "coordinator_calculate_attainment",
                         },
@@ -1086,7 +1108,10 @@ class CoordinatorModule(QWidget):
                     process_name,
                     logger=self._logger,
                     error=exc,
-                    user_error_message=t("coordinator.status.processing_failed"),
+                    user_error_message=build_i18n_log_message(
+                        "coordinator.status.processing_failed",
+                        fallback=t("coordinator.status.processing_failed"),
+                    ),
                     job_id=job_id,
                     step_id="coordinator_calculate_attainment",
                 )
@@ -1126,7 +1151,7 @@ class CoordinatorModule(QWidget):
             return
         if self.state.busy:
             self._pending_drop_batches.append(dropped_files)
-            self._publish_status(t("coordinator.status.queued", count=len(dropped_files)))
+            self._publish_status_key("coordinator.status.queued", count=len(dropped_files))
             return
 
         process_name = "collecting coordinator files"
@@ -1136,7 +1161,7 @@ class CoordinatorModule(QWidget):
         existing_paths = [str(path) for path in self._files]
         self._cancel_token = token
         self._set_busy(True, job_id=job_id)
-        self._publish_status(t("coordinator.status.processing_started"))
+        self._publish_status_key("coordinator.status.processing_started")
 
         def _finalize(job: object) -> None:
             if job in self._active_jobs:
@@ -1166,8 +1191,10 @@ class CoordinatorModule(QWidget):
                     self.drop_list.setItemWidget(item, row_widget)
 
                 if added_paths:
-                    self._publish_status(
-                        t("coordinator.status.added", added=len(added_paths), total=len(self._files))
+                    self._publish_status_key(
+                        "coordinator.status.added",
+                        added=len(added_paths),
+                        total=len(self._files),
                     )
                 if duplicates:
                     show_toast(
@@ -1189,7 +1216,7 @@ class CoordinatorModule(QWidget):
                         level="warning",
                     )
                 if ignored:
-                    self._publish_status(t("coordinator.status.ignored", count=ignored))
+                    self._publish_status_key("coordinator.status.ignored", count=ignored)
 
                 log_process_message(
                     process_name,
@@ -1198,6 +1225,10 @@ class CoordinatorModule(QWidget):
                         f"{process_name} completed successfully. "
                         f"added={len(added_paths)}, duplicates={duplicates}, "
                         f"invalid={len(invalid_paths)}, ignored={ignored}"
+                    ),
+                    user_success_message=build_i18n_log_message(
+                        "coordinator.status.processing_completed",
+                        fallback=t("coordinator.status.processing_completed"),
                     ),
                     job_id=job_id,
                     step_id="coordinator_collect_files",
@@ -1208,12 +1239,15 @@ class CoordinatorModule(QWidget):
         def _on_failed(exc: Exception) -> None:
             try:
                 if isinstance(exc, JobCancelledError):
-                    self._publish_status(t("coordinator.status.operation_cancelled"))
+                    self._publish_status_key("coordinator.status.operation_cancelled")
                     self._logger.info(
                         "%s cancelled by user/system request.",
                         process_name,
                         extra={
-                            "user_message": t("coordinator.status.operation_cancelled"),
+                            "user_message": build_i18n_log_message(
+                                "coordinator.status.operation_cancelled",
+                                fallback=t("coordinator.status.operation_cancelled"),
+                            ),
                             "job_id": job_id,
                             "step_id": "coordinator_collect_files",
                         },
@@ -1223,7 +1257,10 @@ class CoordinatorModule(QWidget):
                     process_name,
                     logger=self._logger,
                     error=exc,
-                    user_error_message=t("coordinator.status.processing_failed"),
+                    user_error_message=build_i18n_log_message(
+                        "coordinator.status.processing_failed",
+                        fallback=t("coordinator.status.processing_failed"),
+                    ),
                     job_id=job_id,
                     step_id="coordinator_collect_files",
                 )
@@ -1281,13 +1318,56 @@ class CoordinatorModule(QWidget):
             return
         self._ui_log_handler = UILogHandler(self._append_user_log)
         self._logger.addHandler(self._ui_log_handler)
-        self._append_user_log(t("instructor.log.ready"))
+        self._append_user_log(
+            build_i18n_log_message(
+                "instructor.log.ready",
+                fallback=t("instructor.log.ready"),
+            )
+        )
 
     def _append_user_log(self, message: str) -> None:
-        line = format_log_line(message)
+        parsed = parse_i18n_log_message(message)
+        localized = resolve_i18n_log_message(message)
+        timestamp = datetime.now()
+        if parsed is None:
+            self._user_log_entries.append({"timestamp": timestamp, "message": localized})
+        else:
+            key, kwargs, fallback = parsed
+            self._user_log_entries.append(
+                {
+                    "timestamp": timestamp,
+                    "message": localized,
+                    "text_key": key,
+                    "kwargs": kwargs,
+                    "fallback": fallback,
+                }
+            )
+        line = format_log_line_at(localized, timestamp=timestamp)
         if line is None:
             return
         self.user_log_view.appendPlainText(line)
+
+    def _rerender_user_log(self) -> None:
+        self.user_log_view.clear()
+        for entry in self._user_log_entries:
+            timestamp = entry.get("timestamp")
+            text_key = entry.get("text_key")
+            fallback = entry.get("fallback")
+            kwargs = entry.get("kwargs")
+            message = entry.get("message")
+            if isinstance(text_key, str):
+                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
+                try:
+                    resolved = t(text_key, **safe_kwargs)
+                except Exception:
+                    resolved = fallback if isinstance(fallback, str) else str(message or "")
+            else:
+                resolved = str(message or "")
+            ts = timestamp if isinstance(timestamp, datetime) else None
+            line = format_log_line_at(resolved, timestamp=ts)
+            if line is None:
+                continue
+            self.user_log_view.appendPlainText(line)
 
     def _output_link_markup(self, label: str, path: str | None) -> str:
         if not path:
@@ -1384,11 +1464,16 @@ class CoordinatorModule(QWidget):
                 break
 
         self._refresh_ui()
-        self._publish_status(t("coordinator.status.removed", count=1))
+        self._publish_status_key("coordinator.status.removed", count=1)
         log_process_message(
             "removing selected coordinator files",
             logger=self._logger,
             success_message="removing selected coordinator files completed successfully. removed=1",
+            user_success_message=build_i18n_log_message(
+                "coordinator.status.removed",
+                kwargs={"count": 1},
+                fallback=t("coordinator.status.removed", count=1),
+            ),
         )
 
     def _clear_all(self) -> None:
@@ -1400,11 +1485,16 @@ class CoordinatorModule(QWidget):
         self._files.clear()
         self.drop_list.clear()
         self._refresh_ui()
-        self._publish_status(t("coordinator.status.cleared", count=total))
+        self._publish_status_key("coordinator.status.cleared", count=total)
         log_process_message(
             "clearing coordinator files",
             logger=self._logger,
             success_message=f"clearing coordinator files completed successfully. removed={total}",
+            user_success_message=build_i18n_log_message(
+                "coordinator.status.cleared",
+                kwargs={"count": total},
+                fallback=t("coordinator.status.cleared", count=total),
+            ),
         )
 
     def closeEvent(self, event) -> None:

@@ -63,13 +63,15 @@ def download_course_template_async(module: object, *, ns: dict[str, object]) -> 
 
     def _on_failed(exc: Exception) -> None:
         if isinstance(exc, ns["JobCancelledError"]):
-            user_message = t("instructor.status.operation_cancelled")
+            status_key = "instructor.status.operation_cancelled"
+            user_message = t(status_key)
+            user_message_payload = ns["build_i18n_log_message"](status_key, fallback=user_message)
             ns["_publish_status_compat"](module, user_message)
             ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
                 extra={
-                    LOG_EXTRA_KEY_USER_MESSAGE: user_message,
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message_payload,
                     LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
                     LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
                 },
