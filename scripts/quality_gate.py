@@ -27,6 +27,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     repo_root = Path(__file__).resolve().parents[1]
+    pip_audit_cache = repo_root / ".pip_audit_cache"
     commands: list[list[str]] = [
         [sys.executable, "-m", "pyflakes", "."],
         [sys.executable, "-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services"],
@@ -34,7 +35,8 @@ def main() -> int:
         [sys.executable, "-m", "pytest", "-q"],
     ]
     if args.mode == "strict":
-        commands.insert(0, [sys.executable, "-m", "pip_audit"])
+        pip_audit_cache.mkdir(parents=True, exist_ok=True)
+        commands.insert(0, [sys.executable, "-m", "pip_audit", "--cache-dir", str(pip_audit_cache)])
     for command in commands:
         code = _run(command, repo_root=repo_root)
         if code != 0:

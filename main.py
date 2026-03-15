@@ -256,7 +256,7 @@ def _validate_startup_workbook_password(app: QApplication) -> int | None:
             )
         else:
             message = (
-                f"Workbook secret is unavailable. "
+                "Workbook secret is unavailable. "
                 "Delete the local workbook secret store and relaunch."
             )
     _logger.error(

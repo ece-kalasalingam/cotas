@@ -25,6 +25,7 @@ pytest-cache-files-*/
 .coverage.*
 htmlcov/
 .pytest_tmp_env/
+.pip_audit_cache/
 
 # Type checker / linter caches
 .mypy_cache/
