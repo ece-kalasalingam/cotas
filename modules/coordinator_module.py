@@ -20,7 +20,9 @@ from PySide6.QtGui import (
     QDragMoveEvent,
     QFont,
     QKeySequence,
+    QPalette,
     QPainter,
+    QPen,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QStyle,
     QTabWidget,
     QTextBrowser,
@@ -64,6 +67,7 @@ from common.constants import (
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
+    ID_COURSE_SETUP,
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
@@ -209,6 +213,8 @@ def _extract_final_report_signature(path: Path) -> _FinalReportSignature | None:
             if not template_id or not template_hash:
                 return None
             if not verify_payload_signature(template_id, template_hash):
+                return None
+            if normalize(template_id) != normalize(ID_COURSE_SETUP):
                 return None
 
             integrity_sheet = workbook[SYSTEM_REPORT_INTEGRITY_SHEET]
@@ -589,15 +595,34 @@ def _generate_co_attainment_workbook(
 ) -> Path:
     if not source_paths:
         raise ValueError("No source files provided for CO attainment calculation.")
+
+    first_signature = _extract_final_report_signature(source_paths[0])
+    if first_signature is None:
+        raise ValueError(f"Invalid final CO report file: {source_paths[0]}")
+    if normalize(first_signature.template_id) != normalize(ID_COURSE_SETUP):
+        raise ValueError(
+            f"Unsupported template id '{first_signature.template_id}'. Expected '{ID_COURSE_SETUP}'."
+        )
+    return _generate_co_attainment_workbook_course_setup_v1(
+        source_paths,
+        output_path,
+        token=token,
+        total_outcomes=first_signature.total_outcomes,
+    )
+
+
+def _generate_co_attainment_workbook_course_setup_v1(
+    source_paths: list[Path],
+    output_path: Path,
+    *,
+    token: CancellationToken,
+    total_outcomes: int,
+) -> Path:
     try:
         from openpyxl import Workbook, load_workbook
     except Exception as exc:  # pragma: no cover - guarded by runtime dependency availability
         raise RuntimeError("openpyxl is required for CO attainment calculation.") from exc
 
-    first_signature = _extract_final_report_signature(source_paths[0])
-    if first_signature is None:
-        raise ValueError(f"Invalid final CO report file: {source_paths[0]}")
-    total_outcomes = first_signature.total_outcomes
     if total_outcomes <= 0:
         raise ValueError("No CO outcomes available in the uploaded reports.")
 
@@ -643,6 +668,7 @@ def _generate_co_attainment_workbook(
 class _ExcelDropList(QListWidget):
     files_dropped = Signal(list)
     drag_state_changed = Signal(bool)
+    browse_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -653,6 +679,8 @@ class _ExcelDropList(QListWidget):
         self.setSpacing(2)
         self.setAlternatingRowColors(False)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def set_placeholder_text(self, text: str) -> None:
         self._placeholder_text = text
@@ -699,6 +727,58 @@ class _ExcelDropList(QListWidget):
             return
         event.ignore()
 
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.browse_requested.emit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+class _DropZoneFrame(QFrame):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("coordinatorDropZone")
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        palette = self.palette()
+        active = bool(self.property("dragActive"))
+        bg_color = palette.color(QPalette.ColorRole.AlternateBase)
+        if active:
+            bg_color.setAlpha(220)
+        border_color = palette.color(QPalette.ColorRole.Highlight) if active else palette.color(QPalette.ColorRole.Mid)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(bg_color)
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -2, -2), 12, 12)
+        pen = QPen(border_color, 2, Qt.PenStyle.DashLine)
+        pen.setDashPattern([4, 3])
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(self.rect().adjusted(6, 6, -6, -6), 10, 10)
+        painter.end()
+
+
+class _ElidedFileNameLabel(QLabel):
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = text
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(0)
+        self._apply_elided_text()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_elided_text()
+
+    def _apply_elided_text(self) -> None:
+        width = self.contentsRect().width()
+        if width <= 0:
+            return
+        super().setText(self.fontMetrics().elidedText(self._full_text, Qt.TextElideMode.ElideMiddle, width))
+
 
 class _CoordinatorFileItemWidget(QWidget):
     removed = Signal(str)
@@ -712,12 +792,13 @@ class _CoordinatorFileItemWidget(QWidget):
         layout.setSpacing(12)
 
         file_name = Path(file_path).name
-        name_label = QLabel(file_name)
+        name_label = _ElidedFileNameLabel(file_name)
         name_label.setFont(QFont(UI_FONT_FAMILY, 10))
         name_label.setToolTip(file_path)
         layout.addWidget(name_label, 1)
 
         self.remove_btn = QPushButton()
+        self.remove_btn.setObjectName("coordinatorFileRemoveButton")
         self.remove_btn.setFixedSize(24, 24)
         self.remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -730,8 +811,13 @@ class _CoordinatorFileItemWidget(QWidget):
             """
             QPushButton {
                 background-color: transparent;
-                color: #e74c3c;
                 border: none;
+                padding: 0px;
+                margin: 0px;
+                min-width: 24px;
+                min-height: 24px;
+                max-width: 24px;
+                max-height: 24px;
             }
             QPushButton:hover {
                 background-color: rgba(231, 76, 60, 0.15);
@@ -773,76 +859,64 @@ class CoordinatorModule(QWidget):
             INSTRUCTOR_CARD_MARGIN,
             INSTRUCTOR_CARD_MARGIN,
         )
-        root.setSpacing(INSTRUCTOR_CARD_SPACING)
+        root.setSpacing(max(10, INSTRUCTOR_CARD_SPACING))
 
+        header_card = QFrame()
+        header_card.setObjectName("coordinatorHeaderCard")
+        header_layout = QVBoxLayout(header_card)
+        header_layout.setContentsMargins(16, 14, 16, 14)
+        header_layout.setSpacing(6)
         self.title_label = QLabel()
         self.title_label.setObjectName("coordinatorTitle")
         self.title_label.setFont(QFont(UI_FONT_FAMILY, INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE, QFont.Weight.Bold))
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self.title_label)
-
-        divider = QFrame()
-        divider.setFrameShape(QFrame.Shape.HLine)
-        divider.setFrameShadow(QFrame.Shadow.Sunken)
-        root.addWidget(divider)
-
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header_layout.addWidget(self.title_label)
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
         self.hint_label.setFont(QFont(UI_FONT_FAMILY, 10))
         self.hint_label.setWordWrap(True)
-        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self.hint_label)
+        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        header_layout.addWidget(self.hint_label)
+        root.addWidget(header_card)
 
+        self.drop_zone = _DropZoneFrame()
+        self.drop_zone.setProperty("dragActive", False)
+        zone_layout = QVBoxLayout(self.drop_zone)
+        zone_layout.setContentsMargins(14, 14, 14, 14)
+        zone_layout.setSpacing(0)
         self.drop_list = _ExcelDropList()
         self.drop_list.setObjectName("coordinatorDropList")
-        self.drop_list.setMinimumHeight(240)
+        self.drop_list.setMinimumHeight(220)
         self.drop_list.files_dropped.connect(self._on_files_dropped)
         self.drop_list.drag_state_changed.connect(self._set_drop_active)
+        self.drop_list.browse_requested.connect(self._browse_files)
+        zone_layout.addWidget(self.drop_list)
+        root.addWidget(self.drop_zone, 1)
 
-        frame = QFrame()
-        frame.setObjectName("coordinatorDropFrame")
-        frame_layout = QVBoxLayout(frame)
-        frame_layout.setContentsMargins(14, 14, 14, 14)
-        frame_layout.setSpacing(0)
-        frame_layout.addWidget(self.drop_list)
-        root.addWidget(frame, 1)
-
-        button_row = QHBoxLayout()
-        button_row.setContentsMargins(0, 0, 0, 0)
-        button_row.setSpacing(10)
-
-        self.add_button = QPushButton()
-        self.add_button.setObjectName("primaryAction")
-        self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_button.setMinimumHeight(34)
-        self.add_button.setMinimumWidth(130)
-        self.add_button.clicked.connect(self._browse_files)
-        button_row.addWidget(self.add_button)
-
-        self.clear_button = QPushButton()
-        self.clear_button.setObjectName("coordinatorClearButton")
-        self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clear_button.setMinimumHeight(34)
-        self.clear_button.setMinimumWidth(120)
-        self.clear_button.clicked.connect(self._clear_all)
-        button_row.addWidget(self.clear_button)
-
-        button_row.addStretch(1)
-
-        self.calculate_button = QPushButton()
-        self.calculate_button.setObjectName("coordinatorCalculateButton")
-        self.calculate_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.calculate_button.setMinimumHeight(34)
-        self.calculate_button.setMinimumWidth(200)
-        self.calculate_button.clicked.connect(self._on_calculate_clicked)
-        button_row.addWidget(self.calculate_button)
-
-        root.addLayout(button_row)
-
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(6, 0, 6, 0)
+        controls_row.setSpacing(10)
         self.summary_label = QLabel()
         self.summary_label.setObjectName("coordinatorSummary")
         self.summary_label.setFont(QFont(UI_FONT_FAMILY, 9))
-        root.addWidget(self.summary_label)
+        controls_row.addWidget(self.summary_label)
+        controls_row.addStretch(1)
+        self.clear_button = QPushButton()
+        self.clear_button.setObjectName("coordinatorClearButton")
+        self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_button.setMinimumWidth(150)
+        self.clear_button.setDefault(True)
+        self.clear_button.clicked.connect(self._clear_all)
+        controls_row.addWidget(self.clear_button)
+        self.calculate_button = QPushButton()
+        self.calculate_button.setObjectName("coordinatorCalculateButton")
+        self.calculate_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.calculate_button.setMinimumWidth(150)
+        self.calculate_button.setAutoDefault(False)
+        self.calculate_button.setDefault(False)
+        self.calculate_button.clicked.connect(self._on_calculate_clicked)
+        controls_row.addWidget(self.calculate_button)
+        root.addLayout(controls_row)
 
         self.info_tabs = QTabWidget()
         self.info_tabs.setObjectName("instructorInfoTabs")
@@ -890,85 +964,19 @@ class CoordinatorModule(QWidget):
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
         panel_style = """
-        QLabel#coordinatorTitle {
-        }
-        QLabel#coordinatorHint {
-            color: palette(mid);
-        }
-        QLabel#coordinatorSummary {
-            color: palette(mid);
-            margin-top: 0px;
-        }
-        QFrame#coordinatorDropFrame {
-            border: 1px solid palette(mid);
-            border-radius: 10px;
-            background-color: palette(base);
-        }
-        QListWidget#coordinatorDropList {
-            border: 2px dashed palette(mid);
-            border-radius: 10px;
-            padding: 10px;
-            background-color: palette(alternate-base);
-        }
-        QListWidget#coordinatorDropList:hover {
-            border-color: palette(highlight);
-        }
-        QListWidget#coordinatorDropList[dragActive="true"] {
-            border-color: palette(highlight);
-            background-color: rgba(22, 160, 133, 0.10);
-        }
-        QListWidget#coordinatorDropList::item {
-            margin: 2px 0;
-        }
-        QPushButton {
-            border-radius: 6px;
-            padding: 7px 12px;
-            border: 1px solid palette(mid);
-        }
-        QPushButton#primaryAction {
-            min-width: 150px;
-            min-height: 30px;
-            border-radius: 6px;
-            border: none;
-        }
-        QPushButton#primaryAction:enabled {
-            background-color: palette(highlight);
-            color: palette(highlighted-text);
-        }
-        QPushButton#coordinatorCalculateButton {
-            background-color: palette(highlight);
-            color: palette(highlighted-text);
-            border: none;
-        }
-        QPushButton#coordinatorCalculateButton:hover {
-            opacity: 0.92;
-        }
-        QPushButton#coordinatorCalculateButton:disabled {
-            background-color: palette(button);
-            color: palette(mid);
-            border: 1px solid palette(mid);
-        }
-        QPushButton#coordinatorClearButton:hover {
-            border-color: #c0392b;
-            background-color: rgba(231, 76, 60, 0.08);
-        }
-        QPushButton#coordinatorClearButton:disabled {
-            color: palette(mid);
-        }
-        QTabWidget#instructorInfoTabs::pane {
-            border: none;
-            background: palette(base);
-        }
-        QTabWidget#instructorInfoTabs QTabBar::tab:first {
-            margin-left: 8px;
-        }
-        QTabWidget#instructorInfoTabs QPlainTextEdit,
-        QTabWidget#instructorInfoTabs QTextBrowser {
-            border: 1px solid palette(mid);
-            border-radius: 8px;
-            background: palette(base);
-            padding: 8px;
-        }
+        QFrame#coordinatorHeaderCard { border: 1px solid palette(mid); border-radius: 12px; background-color: palette(base); }
+        QLabel#coordinatorTitle { letter-spacing: 0.3px; }
+        QLabel#coordinatorSummary { padding: 5px 10px; border: 1px solid palette(mid); border-radius: 10px; background-color: palette(alternate-base); }
+        QFrame#coordinatorDropZone { border: none; background: transparent; }
+        QListWidget#coordinatorDropList { border: none; padding: 10px; background: transparent; }
+        QListWidget#coordinatorDropList::item { margin: 2px 0; }
+        QPushButton#coordinatorClearButton, QPushButton#coordinatorCalculateButton { padding: 6px 12px; min-width: 150px; min-height: 30px; border-radius: 6px; border: none; }
+        QPushButton#coordinatorClearButton:disabled, QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+        QPushButton#coordinatorCalculateButton:enabled { background-color: palette(highlight); color: palette(highlighted-text); border: none; font-weight: 600; }
+        QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+        QTabWidget#instructorInfoTabs::pane { border: none; background: palette(base); }
+        QTabWidget#instructorInfoTabs QTabBar::tab:first { margin-left: 8px; }
+        QTabWidget#instructorInfoTabs QPlainTextEdit, QTabWidget#instructorInfoTabs QTextBrowser { border: 1px solid palette(mid); border-radius: 8px; background: palette(base); padding: 8px; }
         """
 
         self.setStyleSheet(panel_style)
@@ -977,7 +985,6 @@ class CoordinatorModule(QWidget):
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
         self.drop_list.set_placeholder_text(t("coordinator.list_placeholder"))
-        self.add_button.setText(t("coordinator.add_file"))
         self.clear_button.setText(t("coordinator.clear_all"))
         self.calculate_button.setText(t("coordinator.calculate"))
         self.info_tabs.setTabText(0, t("instructor.log.title"))
@@ -995,9 +1002,9 @@ class CoordinatorModule(QWidget):
 
     def _refresh_ui(self) -> None:
         has_files = bool(self._files)
-        self.add_button.setEnabled(not self.state.busy)
         self.clear_button.setEnabled(has_files and not self.state.busy)
         self.calculate_button.setEnabled(has_files and not self.state.busy)
+        self.drop_list.setEnabled(not self.state.busy)
         for row in range(self.drop_list.count()):
             item = self.drop_list.item(row)
             widget = self.drop_list.itemWidget(item)
@@ -1351,10 +1358,8 @@ class CoordinatorModule(QWidget):
         self.summary_label.setText(t("coordinator.summary", count=len(self._files)))
 
     def _set_drop_active(self, active: bool) -> None:
-        self.drop_list.setProperty("dragActive", active)
-        self.drop_list.style().unpolish(self.drop_list)
-        self.drop_list.style().polish(self.drop_list)
-        self.drop_list.viewport().update()
+        self.drop_zone.setProperty("dragActive", active)
+        self.drop_zone.update()
 
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
         self.info_tabs.setVisible(not enabled)

@@ -202,6 +202,11 @@ def test_has_valid_final_co_report_rejects_unbalanced_direct_indirect_sheet_coun
     assert coordinator._has_valid_final_co_report(report) is False
 
 
+def test_has_valid_final_co_report_rejects_unsupported_template_id(tmp_path: Path) -> None:
+    report = _build_valid_final_report(tmp_path / "unsupported.xlsx", template_id="COURSE_SETUP_V2")
+    assert coordinator._has_valid_final_co_report(report) is False
+
+
 @pytest.mark.parametrize(
     ("input_name", "section", "expected"),
     [
@@ -346,3 +351,13 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         ]
     finally:
         wb.close()
+
+
+def test_generate_co_attainment_workbook_rejects_unsupported_template_id(tmp_path: Path) -> None:
+    report = _build_valid_final_report(tmp_path / "unsupported.xlsx", template_id="COURSE_SETUP_V2")
+    out = tmp_path / "co_attainment.xlsx"
+    with pytest.raises(
+        ValueError,
+        match=r"^Invalid final CO report file:",
+    ):
+        coordinator._generate_co_attainment_workbook([report], out, token=CancellationToken())

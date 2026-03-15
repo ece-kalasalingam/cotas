@@ -36,6 +36,7 @@ from common.constants import (
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     DIRECT_RATIO,
+    ID_COURSE_SETUP,
     INDIRECT_RATIO,
     LIKERT_MAX,
     LIKERT_MIN,
@@ -289,6 +290,14 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
         raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
     if not verify_payload_signature(template_id, template_hash):
         raise ValidationError(t("instructor.validation.system_hash_mismatch"))
+    if normalize(template_id) != normalize(ID_COURSE_SETUP):
+        raise ValidationError(
+            t(
+                "instructor.validation.unknown_template",
+                template_id=template_id,
+                available=ID_COURSE_SETUP,
+            )
+        )
 
     layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
     if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):

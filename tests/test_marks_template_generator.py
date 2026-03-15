@@ -254,5 +254,5 @@ def test_generate_marks_template_rejects_unknown_template_version(tmp_path: Path
     finally:
         workbook.close()
 
-    with pytest.raises(ValidationError, match="No validator implemented"):
+    with pytest.raises(ValidationError, match="Unknown workbook template"):
         generate_marks_template_from_course_details(source, output)

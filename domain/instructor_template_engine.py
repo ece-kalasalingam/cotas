@@ -53,7 +53,23 @@ def _ve(message: str, *, code: str, **context: object) -> ValidationError:
     return ValidationError(message, code=code, context=context)
 
 
+def _ensure_current_template_id(template_id: str) -> None:
+    if normalize(template_id) == normalize(ID_COURSE_SETUP):
+        return
+    raise _ve(
+        t(
+            "instructor.validation.unknown_template",
+            template_id=template_id,
+            available=ID_COURSE_SETUP,
+        ),
+        code="UNKNOWN_TEMPLATE",
+        template_id=template_id,
+        available=ID_COURSE_SETUP,
+    )
+
+
 def _get_blueprint(template_id: str) -> WorkbookBlueprint:
+    _ensure_current_template_id(template_id)
     blueprint = BLUEPRINT_REGISTRY.get(template_id)
     if blueprint is None:
         available = ", ".join(sorted(BLUEPRINT_REGISTRY))
@@ -696,6 +712,7 @@ def _extract_and_validate_template_id(workbook: Any) -> str:
         raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
     if not verify_payload_signature(template_id, template_hash):
         raise ValidationError(t("instructor.validation.system_hash_mismatch"))
+    _ensure_current_template_id(template_id)
     return template_id
 
 

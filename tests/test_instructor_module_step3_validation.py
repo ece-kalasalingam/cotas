@@ -9,6 +9,7 @@ pytest.importorskip("xlsxwriter")
 pytest.importorskip("PySide6")
 
 from common.exceptions import ValidationError
+from common.workbook_signing import sign_payload
 from modules import instructor_module as instructor_ui
 from domain.instructor_template_engine import (
     generate_course_details_template,
@@ -259,4 +260,18 @@ def test_step3_validation_rejects_structure_snapshot_tampering(tmp_path: Path) -
         workbook.close()
 
     with pytest.raises(ValidationError, match="invalid mark value|mark-structure cell"):
+        instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
+
+
+def test_step3_validation_rejects_unsupported_template_id(tmp_path: Path) -> None:
+    workbook_path = _build_filled_marks_template(tmp_path)
+    workbook = openpyxl.load_workbook(workbook_path)
+    try:
+        workbook["__SYSTEM_HASH__"]["A2"] = "COURSE_SETUP_V2"
+        workbook["__SYSTEM_HASH__"]["B2"] = sign_payload("COURSE_SETUP_V2")
+        workbook.save(workbook_path)
+    finally:
+        workbook.close()
+
+    with pytest.raises(ValidationError, match="Unknown workbook template"):
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)

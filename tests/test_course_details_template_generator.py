@@ -266,15 +266,11 @@ def test_apply_validation_respects_explicit_ignore_blank_false() -> None:
     assert ws.validations[0]["ignore_blank"] is False
 
 
-def test_protected_sheet_triggers_protect_call(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    created: dict[str, _FakeWorkbook] = {}
-
-    class _TrackingWorkbook(_FakeWorkbook):
-        def __init__(self, path: str, options: dict | None = None) -> None:
-            super().__init__(path, options)
-            created["wb"] = self
-
-    _install_fake_xlsxwriter(monkeypatch, _TrackingWorkbook)
+def test_generate_course_details_template_rejects_non_current_template_even_if_registered(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _install_fake_xlsxwriter(monkeypatch, _FakeWorkbook)
     test_template_id = "TEST_PROTECTED_TEMPLATE"
     mod.BLUEPRINT_REGISTRY[test_template_id] = WorkbookBlueprint(
         type_id=test_template_id,
@@ -282,12 +278,10 @@ def test_protected_sheet_triggers_protect_call(monkeypatch: pytest.MonkeyPatch, 
         sheets=[SheetSchema(name="Protected", header_matrix=[["H1"]], is_protected=True)],
     )
     try:
-        generate_course_details_template(tmp_path / "protected.xlsx", template_id=test_template_id)
+        with pytest.raises(ValidationError, match="Unknown workbook template"):
+            generate_course_details_template(tmp_path / "protected.xlsx", template_id=test_template_id)
     finally:
         del mod.BLUEPRINT_REGISTRY[test_template_id]
-
-    ws = created["wb"].worksheets[0]
-    assert len(ws.protect_calls) == 1
 
 
 def test_sample_data_rows_are_written_below_header(

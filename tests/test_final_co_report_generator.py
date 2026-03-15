@@ -10,6 +10,7 @@ pytest.importorskip("xlsxwriter")
 
 from common.constants import DIRECT_RATIO, INDIRECT_RATIO
 from common.exceptions import ValidationError
+from common.workbook_signing import sign_payload
 from domain.instructor_engine import (
     generate_course_details_template,
     generate_final_co_report,
@@ -211,6 +212,21 @@ def test_generate_final_co_report_rejects_tampered_layout_hash(tmp_path: Path) -
 
     output = tmp_path / "co_report_tampered_layout.xlsx"
     with pytest.raises(ValidationError, match="Layout hash mismatch|layout hash"):
+        generate_final_co_report(marks, output)
+
+
+def test_generate_final_co_report_rejects_unsupported_template_id(tmp_path: Path) -> None:
+    marks = _build_filled_marks_workbook(tmp_path)
+    wb = openpyxl.load_workbook(marks)
+    try:
+        wb["__SYSTEM_HASH__"]["A2"] = "COURSE_SETUP_V2"
+        wb["__SYSTEM_HASH__"]["B2"] = sign_payload("COURSE_SETUP_V2")
+        wb.save(marks)
+    finally:
+        wb.close()
+
+    output = tmp_path / "co_report_unsupported_template.xlsx"
+    with pytest.raises(ValidationError, match="Unknown workbook template"):
         generate_final_co_report(marks, output)
 
 

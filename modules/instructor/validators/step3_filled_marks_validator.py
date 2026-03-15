@@ -83,6 +83,14 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
             raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
         if not verify_payload_signature(template_id, template_hash):
             raise ValidationError(t("instructor.validation.system_hash_mismatch"))
+        if normalize(template_id) != normalize(ID_COURSE_SETUP):
+            raise ValidationError(
+                t(
+                    "instructor.validation.unknown_template",
+                    template_id=template_id,
+                    available=ID_COURSE_SETUP,
+                )
+            )
 
         if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
             raise ValidationError(
