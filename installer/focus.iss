@@ -1,6 +1,6 @@
 ; FOCUS installer for PyInstaller one-dir output (dist\focus)
 ; Build example:
-;   ISCC.exe "/DWorkbookPassword=<secret>" "/DAppVersion=1.0.0" installer\focus.iss
+;   ISCC.exe "/DAppVersion=1.0.0" installer\focus.iss
 
 #define MyAppName "Focus"
 #define MyAppPublisher "Focus"
@@ -9,14 +9,6 @@
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"
-#endif
-
-#ifndef WorkbookPassword
-  #error "WorkbookPassword define is required. Pass /DWorkbookPassword=<secret>."
-#endif
-
-#if Len(WorkbookPassword) < 12
-  #error "WorkbookPassword must be at least 12 characters."
 #endif
 
 [Setup]
@@ -53,43 +45,5 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent unchecked
 
-[Registry]
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "FOCUS_WORKBOOK_PASSWORD"; ValueData: "{#WorkbookPassword}"; Flags: uninsdeletevalue; Check: IsAdminInstallMode
-Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "FOCUS_WORKBOOK_PASSWORD"; ValueData: "{#WorkbookPassword}"; Flags: uninsdeletevalue; Check: not IsAdminInstallMode
-
-[Code]
-const
-  WM_SETTINGCHANGE = $001A;
-  SMTO_ABORTIFHUNG = $0002;
-
-function SendMessageTimeout(
-  hWnd: LongWord;
-  Msg: LongWord;
-  wParam: LongWord;
-  lParam: string;
-  fuFlags: LongWord;
-  uTimeout: LongWord;
-  var lpdwResult: LongWord
-): LongWord;
-  external 'SendMessageTimeoutW@user32.dll stdcall';
-
-procedure RefreshEnvironment;
-var
-  ResultCode: LongWord;
-begin
-  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 'Environment', SMTO_ABORTIFHUNG, 5000, ResultCode);
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-    RefreshEnvironment;
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  if CurUninstallStep = usPostUninstall then
-    RefreshEnvironment;
-end;

@@ -272,10 +272,10 @@ TEXTS = {
     # Coordinator module
     "coordinator.title": "ஒருங்கிணைப்பாளர் கோப்பு சேகரிப்பான்",
     "coordinator.drop_hint": "பயிற்றுநர் தொகுதியின் இறுதி படியில் உருவாக்கப்பட்ட Final CO report workbook-களை சேகரிக்கவும்.",
-    "coordinator.list_placeholder": "Final CO report workbook-களை இங்கே இழுத்து விடுங்கள்",
+    "coordinator.list_placeholder": "Final CO report workbook-களை இங்கே இழுத்து விடுங்கள் அல்லது இருமுறை கிளிக் செய்து தேர்வு செய்யுங்கள்",
     "coordinator.add_file": "கோப்பை சேர்",
     "coordinator.calculate": "CO அடைவை கணக்கிடு",
-    "coordinator.browse_drop": "Final CO Report கோப்புகளை உலாவு அல்லது இங்கே இழுத்து விடுங்கள்",
+    "coordinator.browse_drop": "Final CO Report கோப்புகளை இருமுறை கிளிக் செய்து தேர்வு செய்யுங்கள் அல்லது இங்கே இழுத்து விடுங்கள்",
     "coordinator.dialog.title": "Excel கோப்புகளை தேர்வு செய்ய",
     "coordinator.dialog.filter": "Excel கோப்புகள் (*.xlsx *.xlsm *.xls)",
     "coordinator.links.uploaded_report": "பதிவேற்றப்பட்ட Final CO Report",

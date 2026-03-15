@@ -279,6 +279,13 @@ class InstructorModule(QWidget):
 
     def _build_ui(self) -> None:
         root = QHBoxLayout(self)
+        root.setContentsMargins(
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+            INSTRUCTOR_CARD_MARGIN,
+        )
+        root.setSpacing(INSTRUCTOR_CARD_SPACING)
 
         left = QFrame()
         left.setObjectName("stepRail")
@@ -349,7 +356,8 @@ class InstructorModule(QWidget):
         top_layout.addWidget(self.active_note)
 
         self.primary_action = QPushButton()
-        self.primary_action.setObjectName("primaryAction")
+        self.primary_action.setObjectName("secondaryAction")
+        self.primary_action.setDefault(True)
         self.primary_action.clicked.connect(self._run_current_step_action)
         top_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -364,12 +372,15 @@ class InstructorModule(QWidget):
         step2_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
 
         self.step2_upload_action = QPushButton()
-        self.step2_upload_action.setObjectName("primaryAction")
+        self.step2_upload_action.setObjectName("secondaryAction")
+        self.step2_upload_action.setDefault(True)
         self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
         step2_action_layout.addWidget(self.step2_upload_action)
 
         self.step2_prepare_action = QPushButton()
         self.step2_prepare_action.setObjectName("primaryAction")
+        self.step2_prepare_action.setAutoDefault(False)
+        self.step2_prepare_action.setDefault(False)
         self.step2_prepare_action.clicked.connect(self._on_step2_prepare_clicked)
         step2_action_layout.addWidget(self.step2_prepare_action)
         step2_action_layout.addStretch(1)
@@ -386,12 +397,15 @@ class InstructorModule(QWidget):
         step3_action_layout.setSpacing(INSTRUCTOR_STEP2_ACTION_SPACING)
 
         self.step3_upload_action = QPushButton()
-        self.step3_upload_action.setObjectName("primaryAction")
+        self.step3_upload_action.setObjectName("secondaryAction")
+        self.step3_upload_action.setDefault(True)
         self.step3_upload_action.clicked.connect(self._on_step3_upload_clicked)
         step3_action_layout.addWidget(self.step3_upload_action)
 
         self.step3_generate_action = QPushButton()
         self.step3_generate_action.setObjectName("primaryAction")
+        self.step3_generate_action.setAutoDefault(False)
+        self.step3_generate_action.setDefault(False)
         self.step3_generate_action.clicked.connect(self._on_step3_generate_clicked)
         step3_action_layout.addWidget(self.step3_generate_action)
         step3_action_layout.addStretch(1)
@@ -588,8 +602,6 @@ class InstructorModule(QWidget):
             self.step2_upload_action.setText(t("instructor.action.step2.upload"))
             self.step2_prepare_action.setText(t("instructor.action.step2.prepare"))
             self.step2_prepare_action.setEnabled(self.step2_upload_ready)
-            self.step2_upload_action.setDefault(not self.step2_upload_ready)
-            self.step2_prepare_action.setDefault(self.step2_upload_ready)
         elif self.current_step == 3:
             self.primary_action.setVisible(False)
             self.step2_action_row.setVisible(False)
@@ -608,8 +620,6 @@ class InstructorModule(QWidget):
             self.step3_generate_action.setEnabled(
                 self.step3_done and not self.step3_outdated
             )
-            self.step3_upload_action.setDefault(not (self.step3_done and not self.step3_outdated))
-            self.step3_generate_action.setDefault(self.step3_done and not self.step3_outdated)
         else:
             self.primary_action.setVisible(True)
             self.primary_action.setText(self._action_text_for_step(self.current_step))

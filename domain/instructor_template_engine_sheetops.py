@@ -46,8 +46,8 @@ from common.constants import (
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_SHEET,
-    WORKBOOK_PASSWORD,
     ensure_workbook_secret_policy,
+    get_workbook_password,
 )
 from common.exceptions import ValidationError
 from common.sheet_schema import ValidationRule
@@ -710,10 +710,14 @@ def _build_direct_non_co_formula(
 ) -> str:
     total_ref = f"${total_col_name}{row_1_based}"
     if is_last_residual:
+        sum_expr = _FORMULA_SUM_TEMPLATE.format(
+            start=f"{first_co_col_name}{row_1_based}",
+            end=f"{prev_co_col_name}{row_1_based}",
+        ).lstrip("=")
         return (
             f'=IF(OR({total_ref}="A",{total_ref}="a"),'
             f'"A",IF({total_ref}="","",{total_ref}-'
-            f'{_FORMULA_SUM_TEMPLATE.format(start=f"{first_co_col_name}{row_1_based}", end=f"{prev_co_col_name}{row_1_based}")}))'
+            f"{sum_expr}))"
         )
     return (
         f'=IF(OR({total_ref}="A",{total_ref}="a"),'
@@ -909,7 +913,7 @@ def _protect_sheet(worksheet: Any) -> None:
     # Keep locked-cell selection disabled and unlocked-cell selection enabled so
     # keyboard navigation (Tab) jumps between mark-entry cells.
     worksheet.protect(
-        WORKBOOK_PASSWORD,
+        get_workbook_password(),
         {
             "sort": ALLOW_SORT,
             "autofilter": ALLOW_FILTER,

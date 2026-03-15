@@ -20,9 +20,7 @@ Initial triage target: 7 business days.
 ## Security Controls in This Repository
 
 - Required runtime secret:
-  `FOCUS_WORKBOOK_PASSWORD` must be set and at least 12 characters.
-- Secret rotation support:
-  `FOCUS_WORKBOOK_PASSWORD_PREVIOUS` can hold comma-separated previous secrets for verification during rotation.
+  workbook secret is auto-provisioned and stored per machine/user.
 - Signature versioning:
   `FOCUS_WORKBOOK_SIGNATURE_VERSION` controls active signature format version.
 - CI quality gate:
@@ -37,6 +35,5 @@ Initial triage target: 7 business days.
 ## Operational Requirements
 
 - Never commit secrets to git.
-- Set `FOCUS_WORKBOOK_PASSWORD` in deployment environment, not in source files.
-- Rotate workbook password on team/offboarding events.
-- During rotation, keep old secret in `FOCUS_WORKBOOK_PASSWORD_PREVIOUS` until old templates are retired.
+- Protect the host profile where app secrets are stored.
+- Rotate workbook password by controlled app data reset and template regeneration when required.

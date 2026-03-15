@@ -8,7 +8,7 @@
   - `ubuntu-latest`
 - No dependency vulnerabilities in CI `pip-audit`.
 - SAST gate is green (`bandit`).
-- `FOCUS_WORKBOOK_PASSWORD` is provisioned in target environment.
+- Workbook secret store initialization is verified on target environment.
 
 ## Build
 

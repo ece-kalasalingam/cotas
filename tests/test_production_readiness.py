@@ -10,7 +10,7 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 pytest.importorskip("PySide6")
 
-from common.constants import WORKBOOK_PASSWORD
+from common.constants import get_workbook_password
 from common.exceptions import ValidationError
 from common.workbook_signing import sign_payload
 from domain.instructor_template_engine import (
@@ -201,7 +201,7 @@ def test_backward_compat_accepts_legacy_unsigned_hash_format(tmp_path: Path) -> 
     wb = openpyxl.load_workbook(details)
     try:
         template_id = str(wb["__SYSTEM_HASH__"]["A2"].value)
-        legacy_hash = sha256(f"{template_id}|{WORKBOOK_PASSWORD}".encode("utf-8")).hexdigest()
+        legacy_hash = sha256(f"{template_id}|{get_workbook_password()}".encode("utf-8")).hexdigest()
         wb["__SYSTEM_HASH__"]["B2"] = legacy_hash
         wb.save(details)
     finally:
@@ -215,10 +215,23 @@ def test_backward_compat_accepts_legacy_layout_hash_in_step3(tmp_path: Path) -> 
     wb = openpyxl.load_workbook(marks)
     try:
         manifest_text = str(wb["__SYSTEM_LAYOUT__"]["A2"].value)
-        legacy_layout_hash = sha256(f"{manifest_text}|{WORKBOOK_PASSWORD}".encode("utf-8")).hexdigest()
+        legacy_layout_hash = sha256(f"{manifest_text}|{get_workbook_password()}".encode("utf-8")).hexdigest()
         wb["__SYSTEM_LAYOUT__"]["B2"] = legacy_layout_hash
         wb.save(marks)
     finally:
         wb.close()
 
     instructor_ui._validate_uploaded_filled_marks_workbook(marks)
+
+
+def test_marks_template_has_no_invalid_minus_equal_formulas(tmp_path: Path) -> None:
+    marks = _build_marks_template(tmp_path)
+    wb = openpyxl.load_workbook(marks, data_only=False)
+    try:
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        assert "-=" not in cell.value
+    finally:
+        wb.close()

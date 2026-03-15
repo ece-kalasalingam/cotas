@@ -31,9 +31,10 @@ from common.constants import (
     THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
-    WORKBOOK_PASSWORD_ENV_VAR,
+    ensure_workbook_secret_policy,
 )
 from common.contracts import validate_blueprint_registry_contracts
+from common.exceptions import ConfigurationError
 from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
 from common.texts import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
@@ -167,8 +168,18 @@ def _setup_system_theme() -> None:
     _theme_apply_in_progress = True
     try:
         qdarktheme.setup_theme("auto")
-    except Exception:
-        _logger.exception("Failed to apply qdarktheme.")
+    except (RuntimeError, AttributeError, TypeError, ValueError) as exc:
+        _logger.warning(
+            "Failed to apply qdarktheme.",
+            exc_info=exc,
+            extra={"error_code": "THEME_APPLY_FAILED"},
+        )
+    except Exception as exc:
+        _logger.exception(
+            "Unexpected error while applying qdarktheme.",
+            exc_info=exc,
+            extra={"error_code": "THEME_APPLY_UNEXPECTED"},
+        )
     finally:
         _theme_apply_in_progress = False
 
@@ -212,8 +223,12 @@ def _install_excepthook() -> None:
                 )
         try:
             show_toast(None, t("app.unexpected_error"), title=APP_NAME, level="error")
-        except Exception:
-            pass
+        except (RuntimeError, AttributeError, TypeError) as toast_exc:
+            _logger.warning(
+                "Unable to display unhandled-exception toast.",
+                exc_info=toast_exc,
+                extra={"error_code": "UNHANDLED_TOAST_FAILED"},
+            )
         previous_hook(exc_type, exc_value, exc_traceback)
 
     sys.excepthook = _hook
@@ -230,20 +245,22 @@ def _show_startup_error_dialog(*, title: str, message: str) -> None:
 
 
 def _validate_startup_workbook_password(app: QApplication) -> int | None:
-    if os.getenv(WORKBOOK_PASSWORD_ENV_VAR, "").strip():
+    try:
+        ensure_workbook_secret_policy()
         return None
-    if getattr(sys, "frozen", False):
-        message = (
-            f"{WORKBOOK_PASSWORD_ENV_VAR} is missing. "
-            "Please install the software properly using the EXE installer."
-        )
-    else:
-        message = (
-            f"{WORKBOOK_PASSWORD_ENV_VAR} is missing. "
-            "Set this environment variable manually before running in dev mode."
-        )
+    except ConfigurationError:
+        if getattr(sys, "frozen", False):
+            message = (
+                "Workbook secret is unavailable. "
+                "Please reinstall the software or contact support."
+            )
+        else:
+            message = (
+                f"Workbook secret is unavailable. "
+                "Delete the local workbook secret store and relaunch."
+            )
     _logger.error(
-        "Startup blocked: required workbook password environment variable is missing.",
+        "Startup blocked: workbook secret is unavailable.",
         extra={
             "user_message": message,
             "error_code": "MISSING_WORKBOOK_PASSWORD",
@@ -327,7 +344,6 @@ def main() -> int:
         window.show()
         splash.finish(window)
         # Defer theme setup until after first paint for faster perceived startup.
-        app.setStyle("Fusion")
         QTimer.singleShot(THEME_SETUP_DEFER_MS, _setup_system_theme)
 
     # Keep splash visible long enough to be noticeable on fast systems.

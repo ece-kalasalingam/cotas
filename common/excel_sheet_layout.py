@@ -10,8 +10,8 @@ from common.constants import (
     ALLOW_SELECT_UNLOCKED,
     ALLOW_SORT,
     ID_COURSE_SETUP,
-    WORKBOOK_PASSWORD,
     ensure_workbook_secret_policy,
+    get_workbook_password,
 )
 from common.registry import BLUEPRINT_REGISTRY
 
@@ -96,7 +96,7 @@ def apply_sheet_layout_and_protection(
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.protection.sheet = True
-    ws.protection.password = WORKBOOK_PASSWORD
+    ws.protection.password = get_workbook_password()
     ws.protection.sort = ALLOW_SORT
     ws.protection.autoFilter = ALLOW_FILTER
     ws.protection.selectLockedCells = ALLOW_SELECT_LOCKED

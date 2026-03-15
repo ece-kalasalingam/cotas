@@ -9,8 +9,10 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QMenu,
+    QStyleFactory,
     QVBoxLayout,
     QWidget,
 )
@@ -111,7 +113,12 @@ class HelpModule(QWidget):
     # -----------------------------------------------------
 
     def show_context_menu(self, position):
-        menu = QMenu(self)
+        # Use a top-level menu instance so parent widget stylesheets do not
+        # flatten native context-menu rendering.
+        menu = QMenu()
+        menu.setStyleSheet("")
+        native_menu_style = QStyleFactory.create("windowsvista") or QStyleFactory.create("windows")
+        menu.setStyle(native_menu_style if native_menu_style is not None else QApplication.style())
 
         download_action = menu.addAction(t("help.download_pdf"))
         open_action = menu.addAction(t("help.open_default_viewer"))

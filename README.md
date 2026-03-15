@@ -30,5 +30,5 @@ conda run -n obe python scripts/quality_gate.py
 ```
 
 ## Notes
-- Workbook signing/protection uses `FOCUS_WORKBOOK_PASSWORD` and related signature settings.
+- Workbook signing/protection uses an app-managed local secret store and signature settings.
 - Runtime signing/protection paths enforce workbook secret policy.

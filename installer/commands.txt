@@ -1,6 +1,4 @@
 # Quality gate (lint + UI string checks + tests)
-# Required once per shell:
-#   $env:FOCUS_WORKBOOK_PASSWORD="your-strong-password"
 conda run -n obe python scripts/quality_gate.py
 
 # Windows build (PyInstaller data separator is ;)

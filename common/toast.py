@@ -24,11 +24,17 @@ from common.constants import (
 
 ToastLevel = Literal["info", "success", "warning", "error"]
 
-_LEVEL_COLORS: dict[str, tuple[str, str, str]] = {
-    "info": ("#E6F0FF", "#1E3A8A", "#93C5FD"),
-    "success": ("#E7F8EF", "#14532D", "#86EFAC"),
-    "warning": ("#FFF7E8", "#7C2D12", "#FCD34D"),
-    "error": ("#FDECEC", "#7F1D1D", "#FCA5A5"),
+_LEVEL_COLORS_LIGHT: dict[str, tuple[str, str, str]] = {
+    "info": ("#E6F0FF", "#1E3A8A", "#3B82F6"),
+    "success": ("#E7F8EF", "#14532D", "#22C55E"),
+    "warning": ("#FFF7E8", "#7C2D12", "#F59E0B"),
+    "error": ("#FDECEC", "#7F1D1D", "#EF4444"),
+}
+_LEVEL_COLORS_DARK: dict[str, tuple[str, str, str]] = {
+    "info": ("#1D2635", "#DCEBFF", "#5C7FB3"),
+    "success": ("#1E2B24", "#DCF7E8", "#5A9A77"),
+    "warning": ("#30271B", "#FFEED2", "#B99052"),
+    "error": ("#322123", "#FFE4E8", "#B67279"),
 }
 _IS_WINDOWS = platform.system().lower().startswith("win")
 
@@ -50,7 +56,9 @@ class _ToastWidget(QFrame):
         if not _IS_WINDOWS:
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        bg, fg, border = _LEVEL_COLORS[level]
+        is_dark = QApplication.palette().window().color().lightness() < 128
+        palette_map = _LEVEL_COLORS_DARK if is_dark else _LEVEL_COLORS_LIGHT
+        bg, fg, border = palette_map[level]
         self.setStyleSheet(
             f"#toastFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 10px; }}"
             f"#toastTitle, #toastBody {{ color: {fg}; border: none; background: transparent; margin: 0; padding: 0; }}"

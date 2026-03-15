@@ -13,6 +13,7 @@ from PySide6.QtCore import QSize, QTimer, Qt, QUrl
 # Import modules
 from common.constants import (
     APP_NAME,
+    INSTRUCTOR_CARD_MARGIN,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_ACTIVITYBAR_STYLESHEET,
     MAIN_WINDOW_TITLE_TEXT_KEY,
@@ -100,12 +101,15 @@ class MainWindow(QMainWindow):
 
         self.shared_activity_frame = QFrame()
         self.shared_activity_frame.setObjectName("sharedActivityFrame")
+        shared_tabs_height = 150
+        self.shared_activity_frame.setFixedHeight(shared_tabs_height + 16)
         shared_layout = QVBoxLayout(self.shared_activity_frame)
-        shared_layout.setContentsMargins(8, 8, 8, 8)
+        shared_layout.setContentsMargins(0, 8, 0, 8)
         shared_layout.setSpacing(6)
 
         self.shared_info_tabs = QTabWidget()
         self.shared_info_tabs.setObjectName("sharedInfoTabs")
+        self.shared_info_tabs.setFixedHeight(shared_tabs_height)
         self.shared_info_tabs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.shared_info_tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
@@ -116,7 +120,6 @@ class MainWindow(QMainWindow):
         self.shared_activity_log = QPlainTextEdit()
         self.shared_activity_log.setObjectName("sharedActivityLog")
         self.shared_activity_log.setReadOnly(True)
-        self.shared_activity_log.setMaximumHeight(150)
         self.shared_activity_log.setFrameShape(QFrame.Shape.NoFrame)
         shared_log_layout.addWidget(self.shared_activity_log)
 
@@ -138,7 +141,12 @@ class MainWindow(QMainWindow):
         self.shared_info_tabs.addTab(shared_log_tab, t("instructor.log.title"))
         self.shared_info_tabs.addTab(shared_outputs_tab, t("instructor.links.title"))
         shared_layout.addWidget(self.shared_info_tabs)
-        central_layout.addWidget(self.shared_activity_frame)
+
+        shared_row = QHBoxLayout()
+        shared_row.setContentsMargins(INSTRUCTOR_CARD_MARGIN, 0, INSTRUCTOR_CARD_MARGIN, 0)
+        shared_row.setSpacing(0)
+        shared_row.addWidget(self.shared_activity_frame)
+        central_layout.addLayout(shared_row)
 
         self.current_module = None
 
@@ -212,9 +220,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(
             """
             QFrame#sharedActivityFrame {
-                border: 1px solid palette(mid);
-                border-radius: 8px;
-                background: palette(base);
+                border: none;
+                background: transparent;
             }
             QTabWidget#sharedInfoTabs::pane {
                 border: none;

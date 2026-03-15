@@ -48,14 +48,11 @@
 - Source: `services/instructor_workflow_service.py`
 
 ## Secret Handling and Rotation
-- Workbook hash secret is sourced from environment variable:
-  - `FOCUS_WORKBOOK_PASSWORD`
-- Optional previous secrets for rotation:
-  - `FOCUS_WORKBOOK_PASSWORD_PREVIOUS` (comma-separated)
+- Workbook hash secret is sourced from app-managed local secret storage.
 - Signature format version:
   - `FOCUS_WORKBOOK_SIGNATURE_VERSION`
 - Minimum policy:
-  - length >= 12
+  - keep host profile protected
   - rotate periodically (recommended: every 90 days)
   - do not commit plaintext secrets into repo
 - Rotation checklist:

@@ -1,4 +1,4 @@
-"""Workbook signature helpers with key-rotation support."""
+"""Workbook signature helpers."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ import hmac
 from hashlib import sha256
 
 from common.constants import (
-    WORKBOOK_PASSWORD,
-    WORKBOOK_PASSWORD_PREVIOUS,
     WORKBOOK_SIGNATURE_VERSION,
     ensure_workbook_secret_policy,
+    get_workbook_password,
 )
 
 _SIGNATURE_DELIMITER = ":"
@@ -17,7 +16,7 @@ _SIGNATURE_DELIMITER = ":"
 
 def sign_payload(payload: str) -> str:
     ensure_workbook_secret_policy()
-    digest = _hmac_digest(payload, WORKBOOK_PASSWORD)
+    digest = _hmac_digest(payload, get_workbook_password())
     return f"{WORKBOOK_SIGNATURE_VERSION}{_SIGNATURE_DELIMITER}{digest}"
 
 
@@ -45,7 +44,7 @@ def verify_payload_signature(payload: str, signature: str) -> bool:
 
 
 def _accepted_secrets() -> tuple[str, ...]:
-    return (WORKBOOK_PASSWORD,) + WORKBOOK_PASSWORD_PREVIOUS
+    return (get_workbook_password(),)
 
 
 def _hmac_digest(payload: str, secret: str) -> str:

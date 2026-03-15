@@ -272,10 +272,10 @@ TEXTS = {
     # Coordinator module
     "coordinator.title": "Coordinator File Collector",
     "coordinator.drop_hint": "Collect Final CO report workbooks generated from the Instructor module.",
-    "coordinator.list_placeholder": "Drag and drop Final CO report workbooks here",
+    "coordinator.list_placeholder": "Drag and drop Final CO report workbooks here or double-click to browse",
     "coordinator.add_file": "Add File",
     "coordinator.calculate": "Calculate CO Attainment",
-    "coordinator.browse_drop": "Browse Final CO Reports or Drag and Drop Here",
+    "coordinator.browse_drop": "Double-click to browse Final CO reports, or drag and drop here",
     "coordinator.dialog.title": "Select Excel Files",
     "coordinator.dialog.filter": "Excel Files (*.xlsx *.xlsm *.xls)",
     "coordinator.links.uploaded_report": "Uploaded Final CO Report",
