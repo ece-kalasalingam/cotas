@@ -138,7 +138,7 @@ def test_direct_non_co_wise_sheet_layout_and_formulas(tmp_path: Path) -> None:
         assert sum(float(value) for value in co_marks) == pytest.approx(
             float(sheet.cell(row=header_row + 2, column=4).value), abs=0.01
         )
-        assert sheet.cell(row=header_row + 3, column=1).value == 0
+        assert sheet.cell(row=header_row + 3, column=1).value == 1
         active_cells = {selection.activeCell for selection in sheet.sheet_view.selection}
         assert f"D{header_row + 3}" in active_cells
         assert sheet.protection.sheet is True

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 from common.constants import (
     ALLOW_FILTER,
@@ -82,6 +82,31 @@ def autosize_columns(ws: Any, max_col: int) -> None:
             _COLUMN_MAX_WIDTH,
             max(_COLUMN_MIN_WIDTH, max_len + _COLUMN_WIDTH_PADDING),
         )
+
+
+def compute_sampled_column_widths(
+    sample_rows: Sequence[Sequence[Any]],
+    last_col: int,
+    *,
+    min_width: int = _COLUMN_MIN_WIDTH,
+    max_width: int = _COLUMN_MAX_WIDTH,
+    padding: int = _COLUMN_WIDTH_PADDING,
+) -> dict[int, int]:
+    widths: dict[int, int] = {}
+    for col_index in range(last_col + 1):
+        max_len = 0
+        for row in sample_rows:
+            if col_index >= len(row):
+                continue
+            value = row[col_index]
+            if value is None:
+                continue
+            max_len = max(max_len, len(str(value).strip()))
+        widths[col_index] = min(
+            max_width,
+            max(min_width, max_len + padding),
+        )
+    return widths
 
 
 def set_header_selected_cell(ws: Any, header_row: int) -> None:

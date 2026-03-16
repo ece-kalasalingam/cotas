@@ -105,6 +105,18 @@ def test_generate_final_co_report_creates_direct_sheet_per_outcome(tmp_path: Pat
         assert ws.cell(row=header_row, column=1).value == "#"
         assert ws.cell(row=header_row, column=2).value == "Reg. No."
         assert ws.cell(row=header_row, column=3).value == "Student Name"
+        metadata_max_b = max(
+            len(str(ws.cell(row=row, column=2).value or "").strip())
+            for row in range(1, header_row)
+        )
+        metadata_max_c = max(
+            len(str(ws.cell(row=row, column=3).value or "").strip())
+            for row in range(1, header_row)
+        )
+        assert ws.column_dimensions["B"].width is not None
+        assert ws.column_dimensions["C"].width is not None
+        assert float(ws.column_dimensions["B"].width) >= metadata_max_b
+        assert float(ws.column_dimensions["C"].width) >= metadata_max_c
         headers = [
             str(ws.cell(row=header_row, column=col).value or "") for col in range(1, ws.max_column + 1)
         ]
@@ -122,8 +134,12 @@ def test_generate_final_co_report_creates_direct_sheet_per_outcome(tmp_path: Pat
         first_data_row = header_row + 1
         assert ws.cell(row=first_data_row, column=1).value == 1
         assert ws.cell(row=first_data_row, column=2).value == "R101"
+        assert ws.cell(row=2, column=3).alignment.wrap_text is True
+        assert ws.cell(row=2, column=3).alignment.horizontal == "left"
         assert ws.cell(row=first_data_row, column=3).alignment.wrap_text is True
+        assert ws.cell(row=first_data_row, column=3).alignment.horizontal == "left"
         assert ws.cell(row=first_data_row, column=4).alignment.horizontal == "center"
+        assert ws.cell(row=header_row + 100, column=3).border.left.style is None
         assert str(ws.cell(row=header_row, column=1).fill.fgColor.rgb or "").upper().endswith("D9EAD3")
         assert ws["A1"].value is None
         assert ws["A1"].border.left.style is None
@@ -140,6 +156,11 @@ def test_generate_final_co_report_creates_direct_sheet_per_outcome(tmp_path: Pat
             str(indirect.cell(row=indirect_header_row, column=col).value or "")
             for col in range(1, indirect.max_column + 1)
         ]
+        assert indirect.cell(row=2, column=3).alignment.wrap_text is True
+        assert indirect.cell(row=2, column=3).alignment.horizontal == "left"
+        assert indirect.cell(row=indirect_header_row + 1, column=3).alignment.wrap_text is True
+        assert indirect.cell(row=indirect_header_row + 1, column=3).alignment.horizontal == "left"
+        assert indirect.cell(row=indirect_header_row + 100, column=3).border.left.style is None
         assert any(text.startswith("CSURVEY (1-5)") for text in indirect_headers)
         assert any("scaled 0-4" in text for text in indirect_headers)
         assert not any("CSURVEY (100%)" in text for text in indirect_headers)

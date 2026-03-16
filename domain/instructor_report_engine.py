@@ -62,6 +62,7 @@ from common.constants import (
 )
 from common.excel_sheet_layout import (
     color_without_hash as _color_without_hash,
+    compute_sampled_column_widths as _compute_sampled_column_widths,
     style_registry_for_setup as _style_registry_for_setup,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
@@ -725,20 +726,21 @@ def _xlsxwriter_formats(workbook: Any) -> dict[str, Any]:
         "body": workbook.add_format(
             {
                 "border": 1 if border_enabled else 0,
-                "valign": _ALIGN_CENTER,
+                "valign": _ALIGN_VCENTER,
             }
         ),
         "body_center": workbook.add_format(
             {
                 "border": 1 if border_enabled else 0,
                 "align": _ALIGN_CENTER,
-                "valign": _ALIGN_CENTER,
+                "valign": _ALIGN_VCENTER,
             }
         ),
         "body_wrap": workbook.add_format(
             {
                 "border": 1 if border_enabled else 0,
-                "valign": _ALIGN_CENTER,
+                "align": "left",
+                "valign": _ALIGN_VCENTER,
                 "text_wrap": True,
             }
         ),
@@ -755,8 +757,21 @@ def _xlsxwriter_write_report_metadata(
     ws.write(0, 2, COURSE_METADATA_HEADERS[1], formats["header"])
     for idx, (field, value) in enumerate(metadata_rows, start=1):
         ws.write(idx, 1, field, formats["body"])
-        ws.write(idx, 2, value, formats["body"])
+        ws.write(idx, 2, value, formats["body_wrap"])
     return len(metadata_rows) + 2
+
+
+def _xlsxwriter_set_report_metadata_column_widths(
+    ws: Any,
+    *,
+    metadata_rows: list[tuple[str, Any]],
+    formats: dict[str, Any],
+) -> None:
+    sample_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
+    sample_rows.extend(["", field, value] for field, value in metadata_rows)
+    widths = _compute_sampled_column_widths(sample_rows, 2)
+    ws.set_column(1, 1, widths.get(1, 8))
+    ws.set_column(2, 2, widths.get(2, 8))
 
 
 def _xlsxwriter_apply_layout(ws: Any, *, header_row_index: int, paper_size: int, landscape: bool) -> None:
@@ -806,6 +821,7 @@ def _xlsxwriter_write_direct_sheet(
         outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE,
     )
     header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    _xlsxwriter_set_report_metadata_column_widths(ws, metadata_rows=report_metadata_rows, formats=formats)
     header_row_index = header_row_number - 1
 
     active_components = [component for component in components if component.max_by_co.get(co_index, 0.0) > 0]
@@ -877,6 +893,7 @@ def _xlsxwriter_write_indirect_sheet(
         outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE,
     )
     header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    _xlsxwriter_set_report_metadata_column_widths(ws, metadata_rows=report_metadata_rows, formats=formats)
     header_row_index = header_row_number - 1
 
     active_components = [

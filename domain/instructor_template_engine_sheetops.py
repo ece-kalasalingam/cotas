@@ -49,6 +49,7 @@ from common.constants import (
     ensure_workbook_secret_policy,
     get_workbook_password,
 )
+from common.excel_sheet_layout import compute_sampled_column_widths
 from common.exceptions import ValidationError
 from common.sheet_schema import ValidationRule
 from common.texts import t
@@ -497,7 +498,7 @@ def _write_direct_non_co_wise_sheet(
     divisor = co_total if co_total else 1
     first_co_col_name = _excel_col_name(4) if co_total > 1 else ""
     for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
-        ws.write_number(row_offset, 0, row_offset - first_data_row, body_fmt)
+        ws.write_number(row_offset, 0, row_offset - (first_data_row - 1), body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
         ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         ws.write_blank(row_offset, 3, None, unlocked_body_fmt)
@@ -558,7 +559,7 @@ def _write_direct_non_co_wise_sheet(
     ]
     preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
     for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
-        sample_rows.append([row_offset - first_data_row, reg_no, student_name, ""] + [""] * len(covered_cos))
+        sample_rows.append([row_offset - (first_data_row - 1), reg_no, student_name, ""] + [""] * len(covered_cos))
     _set_common_student_columns(ws, 3 + len(covered_cos), sample_rows, wrapped_column_fmt)
     ws.repeat_rows(0, header_start_row + 2)
     ws.freeze_panes(header_start_row + 3, 3)
@@ -739,7 +740,13 @@ def _set_common_student_columns(
     ws.set_margins(_PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN)
     ws.fit_to_pages(1, 0)
 
-    widths = _compute_sampled_column_widths(sample_rows, last_col)
+    widths = compute_sampled_column_widths(
+        sample_rows,
+        last_col,
+        min_width=_AUTO_FIT_MIN_WIDTH,
+        max_width=_AUTO_FIT_MAX_WIDTH,
+        padding=_AUTO_FIT_PADDING,
+    )
 
     for col in range(0, last_col + 1):
         width = widths.get(col, _AUTO_FIT_MIN_WIDTH)
@@ -747,28 +754,6 @@ def _set_common_student_columns(
             ws.set_column(col, col, width, wrapped_c_column_format)
         else:
             ws.set_column(col, col, width)
-
-
-def _compute_sampled_column_widths(
-    sample_rows: Sequence[Sequence[Any]],
-    last_col: int,
-) -> dict[int, int]:
-    widths: dict[int, int] = {}
-    for col_index in range(last_col + 1):
-        max_len = 0
-        for row in sample_rows:
-            if col_index >= len(row):
-                continue
-            value = row[col_index]
-            if value is None:
-                continue
-            max_len = max(max_len, len(str(value).strip()))
-        widths[col_index] = min(
-            _AUTO_FIT_MAX_WIDTH,
-            max(_AUTO_FIT_MIN_WIDTH, max_len + _AUTO_FIT_PADDING),
-        )
-    return widths
-
 
 def _excel_col_name(col_index: int) -> str:
     index = col_index + 1
