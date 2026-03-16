@@ -40,41 +40,18 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
-    COORDINATOR_CONTROLS_LAYOUT_MARGINS,
-    COORDINATOR_CONTROLS_LAYOUT_SPACING,
-    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-    COORDINATOR_DROPZONE_BORDER_WIDTH,
     COORDINATOR_DROPZONE_INNER_RADIUS,
-    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
     COORDINATOR_DROPZONE_OUTER_RADIUS,
-    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
-    COORDINATOR_DROP_LIST_ITEM_SPACING,
-    COORDINATOR_DROP_LIST_MIN_HEIGHT,
-    COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
-    COORDINATOR_FILE_ITEM_LAYOUT_MARGINS,
-    COORDINATOR_FILE_ITEM_LAYOUT_SPACING,
-    COORDINATOR_FILE_NAME_FONT_SIZE,
-    COORDINATOR_HEADER_LAYOUT_MARGINS,
-    COORDINATOR_HEADER_LAYOUT_SPACING,
     COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE,
-    COORDINATOR_LIST_PLACEHOLDER_COLOR,
-    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
-    COORDINATOR_PANEL_STYLESHEET,
     COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
     COORDINATOR_REMOVE_BUTTON_SIZE,
-    COORDINATOR_REMOVE_BUTTON_STYLESHEET,
-    COORDINATOR_ROOT_MIN_SPACING,
-    COORDINATOR_SUMMARY_FONT_SIZE,
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
-    OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX,
     OUTPUT_LINK_SEPARATOR,
     SHORTCUT_OPEN_KEY_SEQUENCE,
     SHORTCUT_SAVE_KEY_SEQUENCE,
@@ -129,6 +106,58 @@ from .coordinator_processing import (
     _has_valid_final_co_report as _processing_has_valid_final_co_report,
     _path_key,
 )
+
+
+COORDINATOR_LIST_PLACEHOLDER_COLOR = "gray"
+COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS = (16, 16, -16, -16)
+COORDINATOR_FILE_NAME_FONT_SIZE = 10
+COORDINATOR_SUMMARY_FONT_SIZE = 9
+COORDINATOR_ROOT_MIN_SPACING = 10
+COORDINATOR_DROP_LIST_ITEM_SPACING = 2
+COORDINATOR_FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
+COORDINATOR_FILE_ITEM_LAYOUT_SPACING = 12
+COORDINATOR_HEADER_LAYOUT_MARGINS = (16, 14, 16, 14)
+COORDINATOR_HEADER_LAYOUT_SPACING = 6
+COORDINATOR_DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
+COORDINATOR_DROP_LIST_MIN_HEIGHT = 220
+COORDINATOR_CONTROLS_LAYOUT_MARGINS = (6, 0, 6, 0)
+COORDINATOR_CONTROLS_LAYOUT_SPACING = 10
+COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA = 220
+COORDINATOR_DROPZONE_OUTER_RECT_ADJUST = (1, 1, -2, -2)
+COORDINATOR_DROPZONE_BORDER_WIDTH = 2
+COORDINATOR_DROPZONE_BORDER_DASH_PATTERN = (4, 3)
+COORDINATOR_DROPZONE_INNER_RECT_ADJUST = (6, 6, -6, -6)
+COORDINATOR_REMOVE_BUTTON_STYLESHEET = """
+QPushButton {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+}
+QPushButton:hover {
+    background-color: rgba(231, 76, 60, 0.15);
+    border-radius: 4px;
+}
+"""
+COORDINATOR_PANEL_STYLESHEET = """
+QFrame#coordinatorHeaderCard { border: 1px solid palette(mid); border-radius: 12px; background-color: palette(base); }
+QLabel#coordinatorTitle { letter-spacing: 0.3px; }
+QLabel#coordinatorSummary { padding: 5px 10px; border: 1px solid palette(mid); border-radius: 10px; background-color: palette(alternate-base); }
+QFrame#coordinatorDropZone { border: none; background: transparent; }
+QListWidget#coordinatorDropList { border: none; padding: 10px; background: transparent; }
+QListWidget#coordinatorDropList::item { margin: 2px 0; }
+QPushButton#coordinatorClearButton, QPushButton#coordinatorCalculateButton { padding: 6px 12px; min-width: 150px; min-height: 30px; border-radius: 6px; border: none; }
+QPushButton#coordinatorClearButton:disabled, QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+QPushButton#coordinatorCalculateButton:enabled { background-color: palette(highlight); color: palette(highlighted-text); border: none; font-weight: 600; }
+QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+QTabWidget#instructorInfoTabs::pane { border: none; background: palette(base); }
+QTabWidget#instructorInfoTabs QTabBar::tab:first { margin-left: 8px; }
+QTabWidget#instructorInfoTabs QPlainTextEdit, QTabWidget#instructorInfoTabs QTextBrowser { border: 1px solid palette(mid); border-radius: 8px; background: palette(base); padding: 8px; }
+"""
 
 _logger = logging.getLogger(__name__)
 

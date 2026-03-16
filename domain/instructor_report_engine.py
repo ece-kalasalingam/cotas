@@ -15,7 +15,7 @@ from common.constants import (
     ASSESSMENT_CONFIG_SHEET,
     ASSESSMENT_VALIDATION_YES_NO_OPTIONS,
     CO_REPORT_ABSENT_TOKEN,
-    CO_REPORT_COMPONENT_NAME_LABEL,
+    COMPONENT_NAME_LABEL,
     CO_REPORT_DIRECT_SHEET_SUFFIX,
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_HEADER_REG_NO,
@@ -487,7 +487,7 @@ def _component_name_from_spec(spec: dict[str, Any]) -> str:
             row_by_label[normalize(text)] = row_no
         elif cell_col == _ANCHOR_COL_C:
             value_by_row[row_no] = text
-    component_row = row_by_label.get(normalize(CO_REPORT_COMPONENT_NAME_LABEL))
+    component_row = row_by_label.get(normalize(COMPONENT_NAME_LABEL))
     if component_row is None:
         return ""
     return value_by_row.get(component_row, "")

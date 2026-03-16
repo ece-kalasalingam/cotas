@@ -14,20 +14,10 @@ from PySide6.QtWidgets import (
 )
 
 from common.constants import (
-    ABOUT_APP_NAME_STYLE,
     ABOUT_BODY_STYLE,
-    ABOUT_BODY_GAP_LARGE,
-    ABOUT_BODY_GAP_SMALL,
-    ABOUT_COPYRIGHT_STYLE,
-    ABOUT_HEADER_SPACING,
-    ABOUT_META_STYLE,
     ABOUT_LAYOUT_MARGIN,
-    ABOUT_LAYOUT_SPACING,
-    ABOUT_SUBTITLE_STYLE,
     ABOUT_ICON_SIZE,
-    ABOUT_TITLE_SPACING,
     APP_NAME,
-    APP_SUBTITLE,
     SYSTEM_VERSION,
 )
 from common.texts import t
@@ -45,13 +35,13 @@ class AboutModule(QWidget):
             ABOUT_LAYOUT_MARGIN,
             ABOUT_LAYOUT_MARGIN,
         )
-        root.setSpacing(ABOUT_LAYOUT_SPACING)
+        root.setSpacing(18)
 
         # -------------------------------------------------
         # Header Section (Icon + Title Block)
         # -------------------------------------------------
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(ABOUT_HEADER_SPACING)
+        header_layout.setSpacing(20)
 
         icon_label = QLabel()
         icon_label.setFixedSize(ABOUT_ICON_SIZE, ABOUT_ICON_SIZE)
@@ -63,16 +53,16 @@ class AboutModule(QWidget):
         header_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
         title_layout = QVBoxLayout()
-        title_layout.setSpacing(ABOUT_TITLE_SPACING)
+        title_layout.setSpacing(4)
 
         app_name = QLabel(APP_NAME)
-        app_name.setStyleSheet(ABOUT_APP_NAME_STYLE)
+        app_name.setStyleSheet("font-size: 24px; font-weight: 600;")
 
         self.subtitle = QLabel()
-        self.subtitle.setStyleSheet(ABOUT_SUBTITLE_STYLE)
+        self.subtitle.setStyleSheet("font-size: 15px;")
 
         self.version_label = QLabel()
-        self.version_label.setStyleSheet(ABOUT_META_STYLE)
+        self.version_label.setStyleSheet("font-size: 12px;")
 
         title_layout.addWidget(app_name)
         title_layout.addWidget(self.subtitle)
@@ -100,12 +90,12 @@ class AboutModule(QWidget):
         self.institution.setStyleSheet(ABOUT_BODY_STYLE)
 
         self.copyright_label = QLabel()
-        self.copyright_label.setStyleSheet(ABOUT_COPYRIGHT_STYLE)
+        self.copyright_label.setStyleSheet("font-size: 11px;")
 
         root.addWidget(self.description)
-        root.addSpacing(ABOUT_BODY_GAP_LARGE)
+        root.addSpacing(8)
         root.addWidget(self.institution)
-        root.addSpacing(ABOUT_BODY_GAP_SMALL)
+        root.addSpacing(4)
         root.addWidget(self.copyright_label)
 
         # Push content upward
@@ -116,7 +106,7 @@ class AboutModule(QWidget):
         self.retranslate_ui()
 
     def retranslate_ui(self) -> None:
-        self.subtitle.setText(APP_SUBTITLE)
+        self.subtitle.setText("Framework for Outcome Computation and Unification System")
         self.version_label.setText(t("about.version", version=SYSTEM_VERSION))
         self.description.setText(t("about.description", app_name=APP_NAME))
         self.institution.setText(t("about.institution"))

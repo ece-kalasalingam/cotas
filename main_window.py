@@ -16,26 +16,13 @@ from common.constants import (
     APP_NAME,
     INSTRUCTOR_CARD_MARGIN,
     MAIN_ACTIVITY_ICON_SIZE,
-    MAIN_ACTIVITYBAR_STYLESHEET,
     MAIN_HIDDEN_ACTIVITY_MODULE_KEYS,
-    MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT,
-    MAIN_SHARED_INFO_TABS_HEIGHT,
-    MAIN_SHARED_LAYOUT_MARGINS,
-    MAIN_SHARED_LAYOUT_SPACING,
-    MAIN_SHARED_ACTIVITY_STYLESHEET,
-    MAIN_SHARED_TAB_FIRST_MARGIN_LEFT,
     MAIN_SHARED_TAB_LAYOUT_MARGINS,
     MAIN_SHARED_TAB_LAYOUT_SPACING,
     MAIN_WINDOW_TITLE_TEXT_KEY,
     MAIN_WINDOW_CONTENT_MARGINS,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
-    STATUS_FLASH_TIMEOUT_MS,
-    WINDOW_HEIGHT_CAP,
-    WINDOW_MIN_HEIGHT,
-    WINDOW_MIN_WIDTH,
-    WINDOW_TARGET_HEIGHT_RATIO,
-    WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
@@ -52,6 +39,59 @@ from common.ui_logging import (
 )
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
+
+
+WINDOW_TARGET_HEIGHT_RATIO = 0.8
+WINDOW_HEIGHT_CAP = 640
+WINDOW_WIDTH_TO_HEIGHT_RATIO = 1.57
+WINDOW_MIN_WIDTH = 1005
+WINDOW_MIN_HEIGHT = 640
+STATUS_FLASH_TIMEOUT_MS = 3000
+MAIN_SHARED_INFO_TABS_HEIGHT = 150
+MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT = 16
+MAIN_SHARED_LAYOUT_MARGINS = (0, 8, 0, 8)
+MAIN_SHARED_LAYOUT_SPACING = 6
+MAIN_SHARED_TAB_FIRST_MARGIN_LEFT = 8
+MAIN_SHARED_ACTIVITY_STYLESHEET = """
+QFrame#sharedActivityFrame {
+    border: none;
+    background: transparent;
+}
+QTabWidget#sharedInfoTabs::pane {
+    border: none;
+    background: palette(base);
+}
+QTabWidget#sharedInfoTabs QTabBar::tab:first {
+    margin-left: __TAB_MARGIN__px;
+}
+QPlainTextEdit#sharedActivityLog,
+QTextBrowser#sharedGeneratedOutputs {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+    padding: 8px;
+}
+"""
+MAIN_ACTIVITYBAR_STYLESHEET = """
+QToolBar {
+    spacing: 0px;
+    padding: 5px;
+}
+QToolButton {
+    min-width: 80px;
+    max-width: 80px;
+    padding: 5px;
+    border: none;
+    border-radius: 4px;
+}
+QToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+QToolButton:checked {
+    background-color: rgba(22, 160, 133, 0.2);
+    border-bottom: 2px solid #16A085;
+}
+"""
 
 _logger = logging.getLogger(__name__)
 

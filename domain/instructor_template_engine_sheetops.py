@@ -11,10 +11,10 @@ from common.constants import (
     ALLOW_SELECT_LOCKED,
     ALLOW_SELECT_UNLOCKED,
     ALLOW_SORT,
+    CO_LABEL,
+    COMPONENT_NAME_LABEL,
     COURSE_METADATA_FACULTY_NAME_KEY,
     HEADER_PATTERNFILL_COLOR,
-    INSTRUCTOR_CO_LABEL,
-    INSTRUCTOR_COMPONENT_NAME_LABEL,
     INSTRUCTOR_MAX_LABEL,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
     LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
@@ -31,7 +31,6 @@ from common.constants import (
     LIKERT_MAX,
     LIKERT_MIN,
     MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
-    MARKS_ENTRY_CO_PREFIX,
     MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_RANGE_TEMPLATE,
     MARKS_ENTRY_QUESTION_PREFIX,
     MARKS_ENTRY_ROW_HEADERS,
@@ -60,8 +59,8 @@ _AUTO_FIT_PADDING = 2
 _AUTO_FIT_MIN_WIDTH = 8
 _AUTO_FIT_MAX_WIDTH = 60
 _PAGE_MIN_MARGIN_IN = 0.25
-_COMPONENT_NAME_LABEL = INSTRUCTOR_COMPONENT_NAME_LABEL
-_CO_LABEL = INSTRUCTOR_CO_LABEL
+_COMPONENT_NAME_LABEL = COMPONENT_NAME_LABEL
+_CO_LABEL = CO_LABEL
 _MAX_LABEL = INSTRUCTOR_MAX_LABEL
 _FORMULA_SUM_TEMPLATE = "=SUM({start}:{end})"
 _VALIDATION_KIND_CUSTOM = "custom"
@@ -324,7 +323,7 @@ def _build_indirect_sheet_spec(
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
     headers = list(MARKS_ENTRY_ROW_HEADERS) + [
-        f"{MARKS_ENTRY_CO_PREFIX}{i}" for i in range(1, total_outcomes + 1)
+        f"{CO_LABEL}{i}" for i in range(1, total_outcomes + 1)
     ]
     anchors = _component_metadata_anchor_cells(metadata_rows)
     component_row = len(metadata_rows) + 1
@@ -370,7 +369,7 @@ def _write_direct_co_wise_sheet(
     total_col = 3 + question_count
     row_headers = list(MARKS_ENTRY_ROW_HEADERS)
     question_headers = [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
-    co_labels = [f"{MARKS_ENTRY_CO_PREFIX}{question['co_values'][0]}" for question in questions]
+    co_labels = [f"{CO_LABEL}{question['co_values'][0]}" for question in questions]
     max_marks_values = [float(question["max_marks"]) for question in questions]
     sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
 
@@ -475,7 +474,7 @@ def _write_direct_non_co_wise_sheet(
     max_marks_per_co = _split_equal_with_residual(total_max, co_count)
     row_headers = list(MARKS_ENTRY_ROW_HEADERS)
     co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
-    co_prefix_labels = [f"{MARKS_ENTRY_CO_PREFIX}{co}" for co in covered_cos]
+    co_prefix_labels = [f"{CO_LABEL}{co}" for co in covered_cos]
     sheet_headers = row_headers + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
 
     ws.write_row(header_start_row, 0, row_headers + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
@@ -582,7 +581,7 @@ def _write_indirect_sheet(
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     headers = list(MARKS_ENTRY_ROW_HEADERS) + [
-        f"{MARKS_ENTRY_CO_PREFIX}{i}" for i in range(1, total_outcomes + 1)
+        f"{CO_LABEL}{i}" for i in range(1, total_outcomes + 1)
     ]
     ws.write_row(header_start_row, 0, headers, header_fmt)
 

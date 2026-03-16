@@ -32,19 +32,12 @@ from common.constants import (
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
-    INSTRUCTOR_PANEL_STYLESHEET,
-    INSTRUCTOR_RAIL_MAX_WIDTH,
-    INSTRUCTOR_RAIL_TITLE_FONT_SIZE,
     INSTRUCTOR_STEP2_ACTION_MARGIN,
     INSTRUCTOR_STEP2_ACTION_SPACING,
-    INSTRUCTOR_STEP_LIST_SPACING,
-    INSTRUCTOR_TOP_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
-    OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX,
     OUTPUT_LINK_SEPARATOR,
     SHORTCUT_OPEN_KEY_SEQUENCE,
     SHORTCUT_SAVE_KEY_SEQUENCE,
@@ -110,6 +103,70 @@ from modules.instructor.validators.step3_filled_marks_validator import (
 )
 from modules.instructor.workflow_controller import InstructorWorkflowController
 from services import InstructorWorkflowService
+
+
+INSTRUCTOR_RAIL_TITLE_FONT_SIZE = 14
+INSTRUCTOR_STEP_LIST_SPACING = 2
+INSTRUCTOR_RAIL_MAX_WIDTH = 290
+INSTRUCTOR_TOP_LAYOUT_MARGINS = (0, 0, 0, 0)
+OUTPUT_LINK_MODE_FILE = "file"
+OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX = 10
+INSTRUCTOR_PANEL_STYLESHEET = """
+QFrame#stepRail {
+    border: 1px solid palette(mid);
+    border-radius: 12px;
+    background-color: palette(base);
+}
+QFrame#activeCard {
+}
+QListWidget#stepList {
+    outline: none;
+    background-color: transparent;
+}
+QListWidget#stepList::item {
+    padding: 8px 8px;
+}
+QListWidget#stepList::item:selected,
+QListWidget#stepList::item:selected:!active {
+    border-left: 4px solid palette(highlight);
+}
+QPushButton#primaryAction {
+    padding: 6px 12px;
+    min-width: 150px;
+    min-height: 30px;
+    border-radius: 6px;
+}
+QPushButton#primaryAction:enabled {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+    border: none;
+    font-weight: 600;
+}
+QPushButton {
+    padding: 6px 12px;
+    min-width: 150px;
+    min-height: 30px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton:disabled {
+    border: 1px solid palette(mid);
+}
+QTabWidget#instructorInfoTabs::pane {
+    border: none;
+    background: palette(base);
+}
+QTabWidget#instructorInfoTabs QTabBar::tab:first {
+    margin-left: 8px;
+}
+QTabWidget#instructorInfoTabs QPlainTextEdit,
+QTabWidget#instructorInfoTabs QTextBrowser {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+    padding: 8px;
+}
+"""
 
 _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")

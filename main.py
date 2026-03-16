@@ -24,14 +24,8 @@ from common.constants import (
     SINGLE_INSTANCE_CLIENT_WRITE_TIMEOUT_MS,
     QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
     SINGLE_INSTANCE_LOCK_TIMEOUT_MS,
-    SINGLE_INSTANCE_SERVER_READ_TIMEOUT_MS,
-    SINGLE_INSTANCE_SERVER_WRITE_TIMEOUT_MS,
-    SPLASH_BG_COLOR,
-    SPLASH_HEIGHT,
+    SINGLE_INSTANCE_SERVER_IO_TIMEOUT_MS,
     SPLASH_STATUS_COLOR,
-    SPLASH_TEXT_COLOR,
-    SPLASH_TITLE_FONT_SIZE,
-    SPLASH_WIDTH,
     STARTUP_TOAST_DURATION_MS,
     STARTUP_TOAST_QUIT_DELAY_MS,
     THEME_MODE_AUTO,
@@ -63,12 +57,12 @@ _theme_refresh_pending = False
 
 
 def _build_splash_pixmap() -> QPixmap:
-    pixmap = QPixmap(SPLASH_WIDTH, SPLASH_HEIGHT)
-    pixmap.fill(QColor(SPLASH_BG_COLOR))
+    pixmap = QPixmap(520, 240)
+    pixmap.fill(QColor("#2957A4"))
 
     painter = QPainter(pixmap)
-    painter.setPen(QColor(SPLASH_TEXT_COLOR))
-    painter.setFont(QFont(UI_FONT_FAMILY, SPLASH_TITLE_FONT_SIZE, QFont.Weight.Bold))
+    painter.setPen(QColor("#ffffff"))
+    painter.setFont(QFont(UI_FONT_FAMILY, 20, QFont.Weight.Bold))
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, APP_NAME)
     painter.end()
     return pixmap
@@ -154,12 +148,12 @@ def _install_activation_server(window: MainWindow) -> QLocalServer:
         while server.hasPendingConnections():
             socket = server.nextPendingConnection()
             if socket is not None:
-                socket.waitForReadyRead(SINGLE_INSTANCE_SERVER_READ_TIMEOUT_MS)
+                socket.waitForReadyRead(SINGLE_INSTANCE_SERVER_IO_TIMEOUT_MS)
                 _ = socket.readAll().data()
                 _raise_and_activate_window(window)
                 socket.write(SINGLE_INSTANCE_ACK_PAYLOAD)
                 socket.flush()
-                socket.waitForBytesWritten(SINGLE_INSTANCE_SERVER_WRITE_TIMEOUT_MS)
+                socket.waitForBytesWritten(SINGLE_INSTANCE_SERVER_IO_TIMEOUT_MS)
                 socket.disconnectFromServer()
                 socket.deleteLater()
 
