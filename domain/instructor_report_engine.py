@@ -53,6 +53,8 @@ from common.constants import (
     SYSTEM_HASH_SHEET,
     SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
     SYSTEM_LAYOUT_MANIFEST_KEY,
+    SYSTEM_HASH_TEMPLATE_HASH_HEADER,
+    SYSTEM_HASH_TEMPLATE_ID_HEADER,
     SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
@@ -139,6 +141,10 @@ def generate_final_co_report(
         import openpyxl
     except ModuleNotFoundError as exc:
         raise ValidationError(t("instructor.validation.openpyxl_missing")) from exc
+    try:
+        import xlsxwriter
+    except ModuleNotFoundError as exc:
+        raise ValidationError(t("instructor.validation.openpyxl_missing")) from exc
 
     source = Path(filled_marks_path)
     output = Path(output_path)
@@ -158,13 +164,13 @@ def generate_final_co_report(
         raise ValidationError(t("instructor.validation.workbook_open_failed", workbook=source)) from exc
 
     tmp_path: Path | None = None
-    out_wb = openpyxl.Workbook()
-    out_wb.remove(out_wb.active)
     try:
         _raise_if_cancelled(cancel_token)
         metadata_rows, total_outcomes = _read_course_metadata(src_wb[COURSE_METADATA_SHEET])
-        _copy_course_metadata_sheet(out_wb, metadata_rows)
-        _copy_system_hash_sheet(source_workbook=src_wb, target_workbook=out_wb)
+        template_id_raw = src_wb[SYSTEM_HASH_SHEET][_CELL_SYSTEM_TEMPLATE_ID].value
+        template_hash_raw = src_wb[SYSTEM_HASH_SHEET][_CELL_SYSTEM_TEMPLATE_HASH].value
+        template_id = str(template_id_raw).strip() if template_id_raw is not None else ""
+        template_hash = str(template_hash_raw).strip() if template_hash_raw is not None else ""
         direct_components = _read_direct_components(src_wb[ASSESSMENT_CONFIG_SHEET])
         indirect_components = _read_indirect_components(src_wb[ASSESSMENT_CONFIG_SHEET])
         if not direct_components and not indirect_components:
@@ -213,24 +219,27 @@ def generate_final_co_report(
                 )
             )
 
-        for co_index in range(1, total_outcomes + 1):
-            _raise_if_cancelled(cancel_token)
-            _write_direct_co_sheet(
-                workbook=out_wb,
-                co_index=co_index,
-                metadata_rows=metadata_rows,
-                students=students,
-                components=computed_components,
-            )
-            _write_indirect_co_sheet(
-                workbook=out_wb,
-                co_index=co_index,
-                metadata_rows=metadata_rows,
-                students=students,
-                components=computed_indirect_components,
-            )
-        _add_report_integrity_sheet(out_wb)
-
+        _raise_if_cancelled(cancel_token)
+        with NamedTemporaryFile(
+            mode="wb",
+            delete=False,
+            dir=str(output.parent),
+            prefix=f"{output.name}.",
+            suffix=WORKBOOK_TEMP_SUFFIX,
+        ) as temp_file:
+            tmp_path = Path(temp_file.name)
+        _write_final_report_workbook_xlsxwriter(
+            xlsxwriter_module=xlsxwriter,
+            output_path=tmp_path,
+            metadata_rows=metadata_rows,
+            total_outcomes=total_outcomes,
+            students=students,
+            direct_components=computed_components,
+            indirect_components=computed_indirect_components,
+            template_id=template_id,
+            template_hash=template_hash,
+        )
+        _normalize_page_setup_fit(tmp_path)
         _logger.info(
             _LOG_FINAL_REPORT_READY,
             extra={
@@ -238,15 +247,6 @@ def generate_final_co_report(
                 "co_count": total_outcomes,
             },
         )
-        with NamedTemporaryFile(
-            mode="wb",
-            delete=False,
-            dir=str(output.parent),
-            prefix=f"{output.name}.",
-                suffix=WORKBOOK_TEMP_SUFFIX,
-            ) as temp_file:
-            tmp_path = Path(temp_file.name)
-        out_wb.save(tmp_path)
         _raise_if_cancelled(cancel_token)
         os.replace(tmp_path, output)
         tmp_path = None
@@ -262,7 +262,6 @@ def generate_final_co_report(
         ) from exc
     finally:
         src_wb.close()
-        out_wb.close()
         if tmp_path is not None and tmp_path.exists():
             try:
                 tmp_path.unlink()
@@ -790,6 +789,333 @@ def _to_float(value: Any) -> float | None:
 
 def _round2(value: float) -> float:
     return round(float(value), CO_REPORT_MAX_DECIMAL_PLACES)
+
+
+def _xlsxwriter_formats(workbook: Any) -> dict[str, Any]:
+    header_style, body_style = _style_registry_for_setup()
+    border_enabled = int(body_style.get(_STYLE_KEY_BORDER, 1)) > 0
+    header_border_enabled = int(header_style.get(_STYLE_KEY_BORDER, 1)) > 0
+    header_bg = _color_without_hash(str(header_style.get(_STYLE_KEY_BG_COLOR, ""))) or "D9EAD3"
+    return {
+        "header": workbook.add_format(
+            {
+                "bold": bool(header_style.get(_STYLE_KEY_BOLD, True)),
+                "border": 1 if header_border_enabled else 0,
+                "align": str(header_style.get(_STYLE_KEY_ALIGN, _ALIGN_CENTER)),
+                "valign": str(header_style.get(_STYLE_KEY_VALIGN, _ALIGN_CENTER)).replace(_ALIGN_VCENTER, _ALIGN_CENTER),
+                "text_wrap": True,
+                "fg_color": header_bg,
+                "pattern": 1,
+            }
+        ),
+        "body": workbook.add_format(
+            {
+                "border": 1 if border_enabled else 0,
+                "valign": _ALIGN_CENTER,
+            }
+        ),
+        "body_center": workbook.add_format(
+            {
+                "border": 1 if border_enabled else 0,
+                "align": _ALIGN_CENTER,
+                "valign": _ALIGN_CENTER,
+            }
+        ),
+        "body_wrap": workbook.add_format(
+            {
+                "border": 1 if border_enabled else 0,
+                "valign": _ALIGN_CENTER,
+                "text_wrap": True,
+            }
+        ),
+    }
+
+
+def _xlsxwriter_write_report_metadata(
+    ws: Any,
+    *,
+    metadata_rows: list[tuple[str, Any]],
+    formats: dict[str, Any],
+) -> int:
+    ws.write(0, 1, COURSE_METADATA_HEADERS[0], formats["header"])
+    ws.write(0, 2, COURSE_METADATA_HEADERS[1], formats["header"])
+    for idx, (field, value) in enumerate(metadata_rows, start=1):
+        ws.write(idx, 1, field, formats["body"])
+        ws.write(idx, 2, value, formats["body"])
+    return len(metadata_rows) + 2
+
+
+def _xlsxwriter_apply_layout(ws: Any, *, header_row_index: int, paper_size: int, landscape: bool) -> None:
+    if landscape:
+        ws.set_landscape()
+    else:
+        ws.set_portrait()
+    ws.set_paper(paper_size)
+    ws.fit_to_pages(1, 0)
+    ws.protect()
+    ws.set_selection(header_row_index, 0, header_row_index, 0)
+
+
+def _xlsxwriter_write_course_metadata_sheet(
+    workbook: Any,
+    *,
+    metadata_rows: list[tuple[str, Any]],
+    formats: dict[str, Any],
+) -> None:
+    ws = workbook.add_worksheet(COURSE_METADATA_SHEET)
+    ws.write(0, 0, COURSE_METADATA_HEADERS[0], formats["header"])
+    ws.write(0, 1, COURSE_METADATA_HEADERS[1], formats["header"])
+    filtered_rows = [
+        (field, value)
+        for field, value in metadata_rows
+        if normalize(field) != normalize(COURSE_METADATA_FACULTY_NAME_KEY)
+    ]
+    for idx, (field, value) in enumerate(filtered_rows, start=1):
+        ws.write(idx, 0, field, formats["body"])
+        ws.write(idx, 1, value, formats["body"])
+    _xlsxwriter_apply_layout(ws, header_row_index=0, paper_size=9, landscape=False)
+
+
+def _xlsxwriter_write_direct_sheet(
+    workbook: Any,
+    *,
+    co_index: int,
+    metadata_rows: list[tuple[str, Any]],
+    students: list[tuple[str, str]],
+    components: list[_DirectComponentComputed],
+    formats: dict[str, Any],
+) -> None:
+    ws = workbook.add_worksheet(f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}")
+    report_metadata_rows = _report_metadata_rows(
+        metadata_rows,
+        co_index=co_index,
+        outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE,
+    )
+    header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    header_row_index = header_row_number - 1
+
+    active_components = [component for component in components if component.max_by_co.get(co_index, 0.0) > 0]
+    total_weight = _round2(sum(component.weight for component in active_components))
+    headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
+    for component in active_components:
+        max_marks = _round2(component.max_by_co.get(co_index, 0.0))
+        headers.append(f"{component.name} ({max_marks:g})")
+        headers.append(f"{component.name} ({component.weight:g}{CO_REPORT_PERCENT_SYMBOL})")
+    headers.append(f"{CO_REPORT_HEADER_TOTAL} ({total_weight:g}{CO_REPORT_PERCENT_SYMBOL})")
+    headers.append(CO_REPORT_HEADER_TOTAL_100)
+    headers.append(_ratio_total_header(DIRECT_RATIO))
+    for col, value in enumerate(headers, start=0):
+        ws.write(header_row_index, col, value, formats["header"])
+
+    student_count = len(students)
+    marks_by_component: list[list[Any]] = [
+        component.marks_by_co.get(co_index, [0.0] * student_count)
+        for component in active_components
+    ]
+    for idx, (reg_no, student_name) in enumerate(students, start=1):
+        row_index = header_row_index + idx
+        row_values: list[Any] = [idx, reg_no, student_name]
+        absent = False
+        weighted_total = 0.0
+        for component, component_marks in zip(active_components, marks_by_component):
+            max_marks = component.max_by_co.get(co_index, 0.0)
+            raw = component_marks[idx - 1]
+            if isinstance(raw, str) and _is_absent(raw):
+                absent = True
+                row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
+                continue
+            raw_numeric = float(raw) if isinstance(raw, (int, float)) else 0.0
+            weighted = _round2((raw_numeric * component.weight / max_marks) if max_marks > 0 else 0.0)
+            weighted_total += weighted
+            row_values.extend([_round2(raw_numeric), weighted])
+        if absent:
+            row_values.extend([CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN])
+        else:
+            total_100 = _round2((weighted_total * 100.0 / total_weight) if total_weight > 0 else 0.0)
+            total_ratio = _round2(total_100 * DIRECT_RATIO)
+            row_values.extend([_round2(weighted_total), total_100, total_ratio])
+
+        for col, value in enumerate(row_values, start=0):
+            if col == 2:
+                fmt = formats["body_wrap"]
+            elif col >= 3:
+                fmt = formats["body_center"]
+            else:
+                fmt = formats["body"]
+            ws.write(row_index, col, value, fmt)
+
+    _xlsxwriter_apply_layout(ws, header_row_index=header_row_index, paper_size=8, landscape=True)
+
+
+def _xlsxwriter_write_indirect_sheet(
+    workbook: Any,
+    *,
+    co_index: int,
+    metadata_rows: list[tuple[str, Any]],
+    students: list[tuple[str, str]],
+    components: list[_IndirectComponentComputed],
+    formats: dict[str, Any],
+) -> None:
+    ws = workbook.add_worksheet(f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}")
+    report_metadata_rows = _report_metadata_rows(
+        metadata_rows,
+        co_index=co_index,
+        outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE,
+    )
+    header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    header_row_index = header_row_number - 1
+
+    active_components = [
+        component
+        for component in components
+        if any(not (isinstance(value, float) and value == 0.0) for value in component.marks_by_co.get(co_index, []))
+    ]
+    total_weight = _round2(sum(component.weight for component in active_components))
+    headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
+    scaled_max_value = max(0, LIKERT_MAX - LIKERT_MIN)
+    has_single_component = len(active_components) == 1
+    for component in active_components:
+        headers.append(f"{component.name} ({LIKERT_MIN}-{LIKERT_MAX})")
+        headers.append(f"{component.name} ({CO_REPORT_SCALED_LABEL_TEMPLATE.format(max_value=scaled_max_value)})")
+        if not has_single_component:
+            headers.append(f"{component.name} ({component.weight:g}{CO_REPORT_PERCENT_SYMBOL})")
+    headers.append(CO_REPORT_HEADER_TOTAL_100)
+    headers.append(_ratio_total_header(INDIRECT_RATIO))
+    for col, value in enumerate(headers, start=0):
+        ws.write(header_row_index, col, value, formats["header"])
+
+    student_count = len(students)
+    marks_by_component: list[list[Any]] = [
+        component.marks_by_co.get(co_index, [0.0] * student_count)
+        for component in active_components
+    ]
+    denominator = float(max(1, scaled_max_value))
+    for idx, (reg_no, student_name) in enumerate(students, start=1):
+        row_index = header_row_index + idx
+        row_values: list[Any] = [idx, reg_no, student_name]
+        absent = False
+        total_weighted = 0.0
+        for component, component_marks in zip(active_components, marks_by_component):
+            raw = component_marks[idx - 1]
+            if isinstance(raw, str) and _is_absent(raw):
+                absent = True
+                row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
+                if not has_single_component:
+                    row_values.append(CO_REPORT_ABSENT_TOKEN)
+                continue
+            raw_numeric = float(raw) if isinstance(raw, (int, float)) else 0.0
+            scaled_raw = _round2(raw_numeric - LIKERT_MIN)
+            scaled_raw = max(0.0, min(float(scaled_max_value), scaled_raw))
+            if has_single_component:
+                total_weighted = _round2((scaled_raw / denominator) * 100.0)
+                row_values.extend([_round2(raw_numeric), scaled_raw])
+            else:
+                weighted = _round2((scaled_raw / denominator) * component.weight)
+                total_weighted += weighted
+                row_values.extend([_round2(raw_numeric), scaled_raw, weighted])
+        if absent:
+            row_values.extend([CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN])
+        else:
+            if has_single_component:
+                total_100 = _round2(total_weighted)
+            else:
+                total_100 = _round2((total_weighted * 100.0 / total_weight) if total_weight > 0 else 0.0)
+            total_ratio = _round2(total_100 * INDIRECT_RATIO)
+            row_values.extend([total_100, total_ratio])
+
+        for col, value in enumerate(row_values, start=0):
+            if col == 2:
+                fmt = formats["body_wrap"]
+            elif col >= 3:
+                fmt = formats["body_center"]
+            else:
+                fmt = formats["body"]
+            ws.write(row_index, col, value, fmt)
+
+    _xlsxwriter_apply_layout(ws, header_row_index=header_row_index, paper_size=9, landscape=False)
+
+
+def _write_final_report_workbook_xlsxwriter(
+    *,
+    xlsxwriter_module: Any,
+    output_path: Path,
+    metadata_rows: list[tuple[str, Any]],
+    total_outcomes: int,
+    students: list[tuple[str, str]],
+    direct_components: list[_DirectComponentComputed],
+    indirect_components: list[_IndirectComponentComputed],
+    template_id: str,
+    template_hash: str,
+) -> None:
+    workbook = xlsxwriter_module.Workbook(str(output_path), {"constant_memory": True})
+    sheet_order: list[str] = []
+    try:
+        formats = _xlsxwriter_formats(workbook)
+        _xlsxwriter_write_course_metadata_sheet(workbook, metadata_rows=metadata_rows, formats=formats)
+        sheet_order.append(COURSE_METADATA_SHEET)
+        for co_index in range(1, total_outcomes + 1):
+            _xlsxwriter_write_direct_sheet(
+                workbook,
+                co_index=co_index,
+                metadata_rows=metadata_rows,
+                students=students,
+                components=direct_components,
+                formats=formats,
+            )
+            sheet_order.append(f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}")
+            _xlsxwriter_write_indirect_sheet(
+                workbook,
+                co_index=co_index,
+                metadata_rows=metadata_rows,
+                students=students,
+                components=indirect_components,
+                formats=formats,
+            )
+            sheet_order.append(f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}")
+
+        hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET)
+        hash_ws.write(0, 0, SYSTEM_HASH_TEMPLATE_ID_HEADER)
+        hash_ws.write(0, 1, SYSTEM_HASH_TEMPLATE_HASH_HEADER)
+        hash_ws.write(1, 0, template_id)
+        hash_ws.write(1, 1, template_hash)
+        hash_ws.hide()
+        sheet_order.append(SYSTEM_HASH_SHEET)
+
+        manifest = {
+            "schema_version": _INTEGRITY_SCHEMA_VERSION,
+            "template_id": template_id,
+            "template_hash": template_hash,
+            "sheet_order": sheet_order,
+            "sheets": [{"name": name, "hash": sign_payload(name)} for name in sheet_order],
+        }
+        manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        manifest_hash = sign_payload(manifest_text)
+        integrity_ws = workbook.add_worksheet(SYSTEM_REPORT_INTEGRITY_SHEET)
+        integrity_ws.write(0, 0, SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
+        integrity_ws.write(0, 1, SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
+        integrity_ws.write(1, 0, manifest_text)
+        integrity_ws.write(1, 1, manifest_hash)
+        integrity_ws.hide()
+    finally:
+        workbook.close()
+
+
+def _normalize_page_setup_fit(path: Path) -> None:
+    try:
+        import openpyxl
+    except Exception:
+        return
+    with path.open("rb") as handle:
+        wb = openpyxl.load_workbook(handle)
+    try:
+        for ws in wb.worksheets:
+            if ws.title in {SYSTEM_HASH_SHEET, SYSTEM_REPORT_INTEGRITY_SHEET}:
+                continue
+            ws.page_setup.fitToWidth = 1
+            ws.page_setup.fitToHeight = 0
+        wb.save(path)
+    finally:
+        wb.close()
 
 
 def _write_direct_co_sheet(

@@ -88,6 +88,16 @@ class _CoAttainmentRow:
     indirect_score: float | str
 
 
+@dataclass(slots=True)
+class _CoOutputSheetState:
+    sheet: Any
+    header_row_index: int
+    formats: dict[str, Any]
+    seen_registers: set[str]
+    next_row_index: int
+    next_serial: int
+
+
 def _path_key(path: Path) -> str:
     return str(path.resolve()).casefold()
 
@@ -393,11 +403,21 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
     header_scan_limit = min(max_row, _HEADER_SCAN_MAX_ROWS)
 
     def _find_header_row(start_row: int, end_row: int) -> tuple[int, dict[str, int]]:
-        for row_idx in range(start_row, end_row + 1):
+        for row_offset, values in enumerate(
+            sheet.iter_rows(
+                min_row=start_row,
+                max_row=end_row,
+                min_col=1,
+                max_col=max_col,
+                values_only=True,
+            ),
+            start=0,
+        ):
+            row_idx = start_row + row_offset
             row_map: dict[str, int] = {}
             missing = set(required_headers)
-            for col_idx in range(1, max_col + 1):
-                key = normalize(sheet.cell(row=row_idx, column=col_idx).value)
+            for col_idx, value in enumerate(values, start=1):
+                key = normalize(value)
                 if key and key not in row_map:
                     row_map[key] = col_idx
                     if key in missing:
@@ -419,8 +439,16 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
     score_col = column_map[normalize(_ratio_total_header(ratio))]
 
     rows: dict[str, tuple[str, str, float | str]] = {}
-    for row_idx in range(header_row + 1, max_row + 1):
-        reg_raw = sheet.cell(row=row_idx, column=reg_col).value
+    for values in sheet.iter_rows(
+        min_row=header_row + 1,
+        max_row=max_row,
+        min_col=1,
+        max_col=max_col,
+        values_only=True,
+    ):
+        if len(values) < max(reg_col, name_col, score_col):
+            continue
+        reg_raw = values[reg_col - 1]
         reg_value = coerce_excel_number(reg_raw)
         reg_no = str(reg_value).strip() if reg_value is not None else ""
         if not reg_no:
@@ -429,17 +457,17 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
         if reg_key in rows:
             continue
 
-        score = _coerce_numeric_score(sheet.cell(row=row_idx, column=score_col).value)
+        score = _coerce_numeric_score(values[score_col - 1])
         if score is None:
             continue
-        student_raw = sheet.cell(row=row_idx, column=name_col).value
+        student_raw = values[name_col - 1]
         student_name = str(student_raw).strip() if student_raw is not None else ""
         normalized_score = round(score, CO_REPORT_MAX_DECIMAL_PLACES) if isinstance(score, (int, float)) else score
         rows[reg_key] = (reg_no, student_name, normalized_score)
     return rows
 
 
-def _collect_co_rows_from_workbook(workbook: Any, *, co_index: int) -> list[_CoAttainmentRow]:
+def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_CoAttainmentRow]:
     direct_name = f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}"
     indirect_name = f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}"
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
@@ -447,7 +475,6 @@ def _collect_co_rows_from_workbook(workbook: Any, *, co_index: int) -> list[_CoA
 
     direct_rows = _extract_co_scores_by_reg(workbook[direct_name], ratio=DIRECT_RATIO)
     indirect_rows = _extract_co_scores_by_reg(workbook[indirect_name], ratio=INDIRECT_RATIO)
-    rows: list[_CoAttainmentRow] = []
     for reg_key, (reg_no, direct_name_value, direct_score) in direct_rows.items():
         indirect_entry = indirect_rows.get(reg_key)
         if indirect_entry is None:
@@ -459,36 +486,68 @@ def _collect_co_rows_from_workbook(workbook: Any, *, co_index: int) -> list[_CoA
         if direct_is_absent or indirect_is_absent:
             direct_score = CO_REPORT_ABSENT_TOKEN
             indirect_score = CO_REPORT_ABSENT_TOKEN
-        rows.append(
-            _CoAttainmentRow(
-                reg_no=reg_no,
-                student_name=student_name,
-                direct_score=direct_score,
-                indirect_score=indirect_score,
-            )
+        yield _CoAttainmentRow(
+            reg_no=reg_no,
+            student_name=student_name,
+            direct_score=direct_score,
+            indirect_score=indirect_score,
         )
-    return rows
 
 
-def _write_co_attainment_sheet(
+def _xlsxwriter_formats(workbook: Any) -> dict[str, Any]:
+    cached = getattr(workbook, _STYLE_CACHE_ATTR, None)
+    if isinstance(cached, dict):
+        return cached
+    header_style, body_style = _style_registry_for_setup()
+    header_bg = _color_without_hash(str(header_style.get(_STYLE_KEY_BG_COLOR, ""))) or "D9EAD3"
+    border_enabled = int(body_style.get(_STYLE_KEY_BORDER, 1)) > 0
+    header_border_enabled = int(header_style.get(_STYLE_KEY_BORDER, 1)) > 0
+    border_value = 1 if border_enabled else 0
+    header_border_value = 1 if header_border_enabled else 0
+    formats = {
+        "header": workbook.add_format(
+            {
+                "bold": bool(header_style.get(_STYLE_KEY_BOLD, True)),
+                "border": header_border_value,
+                "align": str(header_style.get(_STYLE_KEY_ALIGN, _ALIGN_CENTER)),
+                "valign": str(header_style.get(_STYLE_KEY_VALIGN, _ALIGN_CENTER)).replace(_ALIGN_VCENTER, _ALIGN_CENTER),
+                "text_wrap": True,
+                "fg_color": header_bg,
+                "pattern": 1,
+            }
+        ),
+        "body": workbook.add_format(
+            {
+                "border": border_value,
+                "valign": _ALIGN_CENTER,
+            }
+        ),
+        "body_center": workbook.add_format(
+            {
+                "border": border_value,
+                "align": _ALIGN_CENTER,
+                "valign": _ALIGN_CENTER,
+            }
+        ),
+    }
+    setattr(workbook, _STYLE_CACHE_ATTR, formats)
+    return formats
+
+
+def _create_co_attainment_sheet(
     workbook: Any,
     *,
     co_index: int,
     metadata: dict[str, str],
-    rows: list[_CoAttainmentRow],
-) -> None:
-    sheet = workbook.create_sheet(f"CO{co_index}")
-    style_cache = _style_cache_for_sheet(sheet)
+    ) -> _CoOutputSheetState:
+    sheet = workbook.add_worksheet(f"CO{co_index}")
+    formats = _xlsxwriter_formats(workbook)
     metadata_rows = _metadata_rows_for_output(metadata, co_index)
-    for row_idx, (label, value) in enumerate(metadata_rows, start=1):
-        label_cell = sheet.cell(row=row_idx, column=2, value=label)
-        value_cell = sheet.cell(row=row_idx, column=3, value=value)
-        label_cell.border = style_cache["body_border"]
-        value_cell.border = style_cache["body_border"]
-        label_cell.alignment = style_cache["body_alignment"]
-        value_cell.alignment = style_cache["body_alignment"]
+    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
+        sheet.write(row_idx, 1, label, formats["body"])
+        sheet.write(row_idx, 2, value, formats["body"])
 
-    header_row = len(metadata_rows) + 2
+    header_row_index = len(metadata_rows) + 1
     headers = [
         "#",
         "Regno",
@@ -497,32 +556,39 @@ def _write_co_attainment_sheet(
         f"Indirect ({_ratio_percent_token(INDIRECT_RATIO)}%)",
         "Total (100%)",
     ]
-    for col_idx, header in enumerate(headers, start=1):
-        cell = sheet.cell(row=header_row, column=col_idx, value=header)
-        cell.border = style_cache["header_border"]
-        cell.fill = style_cache["header_fill"]
-        cell.font = style_cache["header_font"]
-        cell.alignment = style_cache["header_alignment"]
+    for col_idx, header in enumerate(headers, start=0):
+        sheet.write(header_row_index, col_idx, header, formats["header"])
 
-    for serial, row in enumerate(rows, start=1):
-        row_idx = header_row + serial
-        if isinstance(row.direct_score, (int, float)) and isinstance(row.indirect_score, (int, float)):
-            total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
-        else:
-            total = CO_REPORT_ABSENT_TOKEN
-        values = [serial, row.reg_no, row.student_name, row.direct_score, row.indirect_score, total]
-        for col_idx, value in enumerate(values, start=1):
-            cell = sheet.cell(row=row_idx, column=col_idx, value=value)
-            cell.border = style_cache["body_border"]
-            cell.alignment = style_cache["body_alignment_center"] if col_idx >= 4 else style_cache["body_alignment"]
-
-    _apply_sheet_layout_and_protection(
-        ws=sheet,
-        header_row=header_row,
-        header_count=len(headers),
-        paper_size=sheet.PAPERSIZE_A4,
-        orientation=sheet.ORIENTATION_LANDSCAPE,
+    sheet.set_landscape()
+    sheet.set_paper(9)  # A4
+    sheet.fit_to_pages(1, 0)
+    sheet.protect()
+    sheet.set_selection(header_row_index, 0, header_row_index, 0)
+    return _CoOutputSheetState(
+        sheet=sheet,
+        header_row_index=header_row_index,
+        formats=formats,
+        seen_registers=set(),
+        next_row_index=header_row_index + 1,
+        next_serial=1,
     )
+
+
+def _append_co_attainment_row(state: _CoOutputSheetState, row: _CoAttainmentRow) -> None:
+    if isinstance(row.direct_score, (int, float)) and isinstance(row.indirect_score, (int, float)):
+        total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
+    else:
+        total = CO_REPORT_ABSENT_TOKEN
+    values = [state.next_serial, row.reg_no, row.student_name, row.direct_score, row.indirect_score, total]
+    for col_idx, value in enumerate(values, start=0):
+        state.sheet.write(
+            state.next_row_index,
+            col_idx,
+            value,
+            state.formats["body_center"] if col_idx >= 3 else state.formats["body"],
+        )
+    state.next_row_index += 1
+    state.next_serial += 1
 
 
 def _style_cache_for_sheet(ws: Any) -> dict[str, Any]:
@@ -590,46 +656,56 @@ def _generate_co_attainment_workbook_course_setup_v1(
     total_outcomes: int,
 ) -> Path:
     try:
-        from openpyxl import Workbook, load_workbook
+        import xlsxwriter
+        from openpyxl import load_workbook
     except Exception as exc:  # pragma: no cover - guarded by runtime dependency availability
-        raise RuntimeError("openpyxl is required for CO attainment calculation.") from exc
+        raise RuntimeError("openpyxl and xlsxwriter are required for CO attainment calculation.") from exc
 
     if total_outcomes <= 0:
         raise ValueError("No CO outcomes available in the uploaded reports.")
 
     metadata: dict[str, str] = {}
-    per_co: dict[int, dict[str, _CoAttainmentRow]] = {co: {} for co in range(1, total_outcomes + 1)}
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_workbook = xlsxwriter.Workbook(str(output_path), {"constant_memory": True})
+    workbook_closed = False
+    output_states: dict[int, _CoOutputSheetState] = {}
 
-    for source in source_paths:
-        token.raise_if_cancelled()
-        workbook = load_workbook(filename=source, data_only=True, read_only=True)
-        try:
-            if not metadata and COURSE_METADATA_SHEET in workbook.sheetnames:
-                metadata = _extract_course_metadata_fields(workbook[COURSE_METADATA_SHEET])
-            for co_index in range(1, total_outcomes + 1):
-                rows = _collect_co_rows_from_workbook(workbook, co_index=co_index)
-                sink = per_co[co_index]
-                for row in rows:
-                    reg_key = normalize(row.reg_no)
-                    if not reg_key or reg_key in sink:
-                        continue
-                    sink[reg_key] = row
-        finally:
-            workbook.close()
-
-    output_workbook = Workbook()
     try:
-        if output_workbook.active is not None:
-            output_workbook.remove(output_workbook.active)
-        for co_index in range(1, total_outcomes + 1):
-            _write_co_attainment_sheet(
-                output_workbook,
-                co_index=co_index,
-                metadata=metadata,
-                rows=list(per_co[co_index].values()),
-            )
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_workbook.save(output_path)
-    finally:
+        for source in source_paths:
+            token.raise_if_cancelled()
+            workbook = load_workbook(filename=source, data_only=True, read_only=True)
+            try:
+                if not metadata and COURSE_METADATA_SHEET in workbook.sheetnames:
+                    metadata = _extract_course_metadata_fields(workbook[COURSE_METADATA_SHEET])
+                    for co_index in range(1, total_outcomes + 1):
+                        output_states[co_index] = _create_co_attainment_sheet(
+                            output_workbook,
+                            co_index=co_index,
+                            metadata=metadata,
+                        )
+                if not output_states:
+                    for co_index in range(1, total_outcomes + 1):
+                        output_states[co_index] = _create_co_attainment_sheet(
+                            output_workbook,
+                            co_index=co_index,
+                            metadata=metadata,
+                        )
+                for co_index in range(1, total_outcomes + 1):
+                    state = output_states[co_index]
+                    for row in _iter_co_rows_from_workbook(workbook, co_index=co_index):
+                        reg_key = normalize(row.reg_no)
+                        if not reg_key or reg_key in state.seen_registers:
+                            continue
+                        state.seen_registers.add(reg_key)
+                        _append_co_attainment_row(state, row)
+            finally:
+                workbook.close()
         output_workbook.close()
+        workbook_closed = True
+    finally:
+        if not workbook_closed:
+            try:
+                output_workbook.close()
+            except Exception:
+                pass
     return output_path
