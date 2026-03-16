@@ -46,14 +46,13 @@ from common.constants import (
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_SHEET,
-    ensure_workbook_secret_policy,
-    get_workbook_password,
 )
 from common.excel_sheet_layout import compute_sampled_column_widths
 from common.exceptions import ValidationError
 from common.sheet_schema import ValidationRule
 from common.texts import t
 from common.utils import coerce_excel_number, normalize
+from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
 from common.workbook_signing import sign_payload
 
 _AUTO_FIT_SAMPLE_ROWS = 6

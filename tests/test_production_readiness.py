@@ -10,7 +10,7 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 pytest.importorskip("PySide6")
 
-from common.constants import get_workbook_password
+from common.workbook_secret import get_workbook_password
 from common.exceptions import ValidationError
 from common.workbook_signing import sign_payload
 from domain.instructor_template_engine import (

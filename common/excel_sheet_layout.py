@@ -10,10 +10,9 @@ from common.constants import (
     ALLOW_SELECT_UNLOCKED,
     ALLOW_SORT,
     ID_COURSE_SETUP,
-    ensure_workbook_secret_policy,
-    get_workbook_password,
 )
 from common.registry import BLUEPRINT_REGISTRY
+from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
 
 _STYLE_REGISTRY_HEADER = "header"
 _STYLE_REGISTRY_BODY = "body"

@@ -40,11 +40,11 @@ from common.constants import (
     UI_FONT_FAMILY,
     UI_LANGUAGE,
     WIN32_SHOW_WINDOW_RESTORE,
-    ensure_workbook_secret_policy,
 )
 from common.contracts import validate_blueprint_registry_contracts
 from common.exceptions import ConfigurationError
 from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
+from common.workbook_secret import ensure_workbook_secret_policy
 from common.texts import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
 from common.utils import (
