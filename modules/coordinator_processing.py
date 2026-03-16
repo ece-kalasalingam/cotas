@@ -755,6 +755,19 @@ def _append_co_attainment_row(state: _CoOutputSheetState, row: _CoAttainmentRow)
     state.next_serial += 1
 
 
+def _reg_no_sort_key(reg_no: str) -> tuple[tuple[int, int | str], ...]:
+    tokens = re.split(r"(\d+)", reg_no.strip())
+    key_parts: list[tuple[int, int | str]] = []
+    for token in tokens:
+        if not token:
+            continue
+        if token.isdigit():
+            key_parts.append((0, int(token)))
+        else:
+            key_parts.append((1, token.casefold()))
+    return tuple(key_parts)
+
+
 def _generate_co_attainment_workbook(
     source_paths: list[Path],
     output_path: Path,
@@ -798,6 +811,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
     output_workbook = xlsxwriter.Workbook(str(output_path), {"constant_memory": True})
     workbook_closed = False
     output_states: dict[int, _CoOutputSheetState] = {}
+    pending_rows: dict[int, list[_CoAttainmentRow]] = {}
     duplicate_reg_count = 0
     duplicate_entries: list[tuple[str, str, str]] = []
     dedup_store = _RegisterDedupStore(
@@ -818,6 +832,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
                             co_index=co_index,
                             metadata=metadata,
                         )
+                        pending_rows[co_index] = []
                 if not output_states:
                     for co_index in range(1, total_outcomes + 1):
                         output_states[co_index] = _create_co_attainment_sheet(
@@ -825,16 +840,23 @@ def _generate_co_attainment_workbook_course_setup_v1(
                             co_index=co_index,
                             metadata=metadata,
                         )
+                        pending_rows[co_index] = []
                 for co_index in range(1, total_outcomes + 1):
-                    state = output_states[co_index]
+                    row_bucket = pending_rows.setdefault(co_index, [])
                     for row in _iter_co_rows_from_workbook(workbook, co_index=co_index, workbook_name=source.name):
                         if not dedup_store.add_if_absent(co_index=co_index, reg_hash=row.reg_hash):
                             duplicate_reg_count += 1
                             duplicate_entries.append((row.reg_no, row.worksheet_name, row.workbook_name))
                             continue
-                        _append_co_attainment_row(state, row)
+                        row_bucket.append(row)
             finally:
                 workbook.close()
+        for co_index, state in output_states.items():
+            for row in sorted(
+                pending_rows.get(co_index, []),
+                key=lambda item: (_reg_no_sort_key(item.reg_no), item.reg_hash),
+            ):
+                _append_co_attainment_row(state, row)
         output_workbook.close()
         workbook_closed = True
     finally:
@@ -849,3 +871,4 @@ def _generate_co_attainment_workbook_course_setup_v1(
         duplicate_reg_count=duplicate_reg_count,
         duplicate_entries=tuple(duplicate_entries),
     )
+

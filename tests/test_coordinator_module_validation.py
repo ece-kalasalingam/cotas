@@ -274,26 +274,26 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         first,
         co_index=1,
         direct_rows=[
-            ("R001", "Student One", 80),
             ("R002", "Student Two", "NA"),
+            ("R001", "Student One", 80),
         ],
         indirect_rows=[
-            ("R001", "Student One", 20),
             ("R002", "Student Two", 15),
+            ("R001", "Student One", 20),
         ],
     )
     _set_co_scores(
         second,
         co_index=1,
         direct_rows=[
+            ("R004", "Student Four", 70),
             ("R001", "Student One Duplicate", 75),
             ("R003", "Student Three", 60),
-            ("R004", "Student Four", 70),
         ],
         indirect_rows=[
+            ("R004", "Student Four", 15),
             ("R001", "Student One Duplicate", 19),
             ("R003", "Student Three", "NA"),
-            ("R004", "Student Four", 15),
         ],
     )
 
@@ -358,7 +358,6 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
     finally:
         wb.close()
 
-
 def test_generate_co_attainment_workbook_rejects_unsupported_template_id(tmp_path: Path) -> None:
     report = _build_valid_final_report(tmp_path / "unsupported.xlsx", template_id="COURSE_SETUP_V2")
     out = tmp_path / "co_attainment.xlsx"
@@ -367,3 +366,4 @@ def test_generate_co_attainment_workbook_rejects_unsupported_template_id(tmp_pat
         match=r"^Invalid final CO report file:",
     ):
         coordinator._generate_co_attainment_workbook([report], out, token=CancellationToken())
+
