@@ -96,6 +96,7 @@ class CoordinatorWorkflowState:
 def _has_valid_final_co_report(path: Path) -> bool:
     return _processing_has_valid_final_co_report(path)
 
+
 class _ExcelDropList(QListWidget):
     files_dropped = Signal(list)
     drag_state_changed = Signal(bool)

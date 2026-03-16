@@ -375,35 +375,31 @@ def _write_direct_co_wise_sheet(
     sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
 
     ws.write_row(header_start_row, 0, row_headers, header_fmt)
-    for idx, question_header in enumerate(question_headers):
-        ws.write(
-            header_start_row,
-            3 + idx,
-            question_header,
-            header_fmt,
-        )
+    if question_headers:
+        ws.write_row(header_start_row, 3, question_headers, header_fmt)
     ws.write(header_start_row, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
 
     ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL], header_fmt)
-    for idx, co_label in enumerate(co_labels):
-        ws.write(header_start_row + 1, 3 + idx, co_label, header_fmt)
+    if co_labels:
+        ws.write_row(header_start_row + 1, 3, co_labels, header_fmt)
     ws.write(header_start_row + 1, total_col, "", header_fmt)
 
     ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL], header_fmt)
     component_total = sum(max_marks_values)
-    for idx, max_marks in enumerate(max_marks_values):
-        ws.write_number(header_start_row + 2, 3 + idx, max_marks, header_num_fmt)
+    if max_marks_values:
+        ws.write_row(header_start_row + 2, 3, max_marks_values, header_num_fmt)
     ws.write_number(header_start_row + 2, total_col, component_total, header_num_fmt)
 
     first_data_row = header_start_row + 3
     first_mark_col = _excel_col_name(3)
     last_mark_col = _excel_col_name(total_col - 1)
+    blank_marks_row = [None] * question_count
     for row_offset, (reg_no, student_name) in enumerate(students, start=first_data_row):
         ws.write_number(row_offset, 0, row_offset - (first_data_row - 1), body_fmt)
         ws.write(row_offset, 1, reg_no, body_fmt)
         ws.write(row_offset, 2, student_name, wrapped_body_fmt)
-        for col in range(3, total_col):
-            ws.write_blank(row_offset, col, None, unlocked_body_fmt)
+        if blank_marks_row:
+            ws.write_row(row_offset, 3, blank_marks_row, unlocked_body_fmt)
         ws.write_formula(
             row_offset,
             total_col,
@@ -483,22 +479,17 @@ def _write_direct_non_co_wise_sheet(
     sheet_headers = row_headers + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
 
     ws.write_row(header_start_row, 0, row_headers + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
-    for idx, co_header in enumerate(co_mark_headers):
-        ws.write(
-            header_start_row,
-            4 + idx,
-            co_header,
-            header_fmt,
-        )
+    if co_mark_headers:
+        ws.write_row(header_start_row, 4, co_mark_headers, header_fmt)
 
     ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL, ""], header_fmt)
-    for idx, co_prefix in enumerate(co_prefix_labels):
-        ws.write(header_start_row + 1, 4 + idx, co_prefix, header_fmt)
+    if co_prefix_labels:
+        ws.write_row(header_start_row + 1, 4, co_prefix_labels, header_fmt)
 
     ws.write_row(header_start_row + 2, 0, ["", "", _MAX_LABEL, ""], header_fmt)
     ws.write_number(header_start_row + 2, 3, total_max, header_num_fmt)
-    for idx, value in enumerate(max_marks_per_co):
-        ws.write_number(header_start_row + 2, 4 + idx, value, header_num_fmt)
+    if max_marks_per_co:
+        ws.write_row(header_start_row + 2, 4, max_marks_per_co, header_num_fmt)
 
     first_data_row = header_start_row + 3
     co_total = len(covered_cos)
@@ -510,33 +501,33 @@ def _write_direct_non_co_wise_sheet(
         ws.write(row_offset, 1, reg_no, body_fmt)
         ws.write(row_offset, 2, student_name, wrapped_body_fmt)
         ws.write_blank(row_offset, 3, None, unlocked_body_fmt)
-        for idx in range(co_total):
-            co_col = 4 + idx
-            if idx == co_total - 1 and co_total > 1:
-                prev_co_col_name = _excel_col_name(co_col - 1)
-                formula = _build_direct_non_co_formula(
-                    total_col_name=col_name_total,
-                    row_1_based=row_offset + 1,
-                    divisor=divisor,
-                    first_co_col_name=first_co_col_name,
-                    prev_co_col_name=prev_co_col_name,
-                    is_last_residual=True,
-                )
-            else:
-                formula = _build_direct_non_co_formula(
-                    total_col_name=col_name_total,
-                    row_1_based=row_offset + 1,
-                    divisor=divisor,
-                    first_co_col_name=first_co_col_name,
-                    prev_co_col_name="",
-                    is_last_residual=False,
-                )
-            ws.write_formula(
-                row_offset,
-                co_col,
-                formula,
-                num_fmt,
-            )
+        if co_total > 0:
+            formula_values: list[str] = []
+            for idx in range(co_total):
+                if idx == co_total - 1 and co_total > 1:
+                    prev_co_col_name = _excel_col_name(4 + idx - 1)
+                    formula_values.append(
+                        _build_direct_non_co_formula(
+                            total_col_name=col_name_total,
+                            row_1_based=row_offset + 1,
+                            divisor=divisor,
+                            first_co_col_name=first_co_col_name,
+                            prev_co_col_name=prev_co_col_name,
+                            is_last_residual=True,
+                        )
+                    )
+                else:
+                    formula_values.append(
+                        _build_direct_non_co_formula(
+                            total_col_name=col_name_total,
+                            row_1_based=row_offset + 1,
+                            divisor=divisor,
+                            first_co_col_name=first_co_col_name,
+                            prev_co_col_name="",
+                            is_last_residual=False,
+                        )
+                    )
+            ws.write_row(row_offset, 4, formula_values, num_fmt)
 
     if students:
         first_row = first_data_row

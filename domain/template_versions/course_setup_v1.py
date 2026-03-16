@@ -212,13 +212,6 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
                 header_count=len(expected_headers),
                 header_row=header_row,
             )
-            _log_marks_anomaly_warnings(
-                worksheet=worksheet,
-                sheet_name=sheet_name,
-                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
-                header_count=len(expected_headers),
-                header_row=header_row,
-            )
 
     if not has_marks_component:
         raise ValidationError(t("instructor.validation.step3.no_component_sheets"))
@@ -694,6 +687,9 @@ def _validate_non_empty_marks_entries(
 
     data_start_row = _marks_data_start_row(sheet_kind, header_row)
     mark_cols = _marks_entry_columns(sheet_kind, header_count)
+    absent_count_by_col: dict[int, int] = {col: 0 for col in mark_cols}
+    numeric_count_by_col: dict[int, int] = {col: 0 for col in mark_cols}
+    frequency_by_value_by_col: dict[int, dict[float, int]] = {col: {} for col in mark_cols}
     max_row = header_row + 2
     minimum = _mark_min_for_sheet(sheet_kind)
     maximum_by_col = {
@@ -717,6 +713,7 @@ def _validate_non_empty_marks_entries(
                 )
             if token == "a":
                 has_absent = True
+                absent_count_by_col[col] += 1
                 continue
             has_numeric = True
             numeric_value = coerce_excel_number(cell_value)
@@ -751,7 +748,8 @@ def _validate_non_empty_marks_entries(
                     )
                 )
             maximum = maximum_by_col[col]
-            if float(numeric_value) < minimum or float(numeric_value) > maximum:
+            numeric_float = float(numeric_value)
+            if numeric_float < minimum or numeric_float > maximum:
                 raise ValidationError(
                     t(
                         "instructor.validation.step3.mark_value_invalid",
@@ -762,6 +760,9 @@ def _validate_non_empty_marks_entries(
                         maximum=maximum,
                     )
                 )
+            numeric_count_by_col[col] += 1
+            frequency_by_value = frequency_by_value_by_col[col]
+            frequency_by_value[numeric_float] = frequency_by_value.get(numeric_float, 0) + 1
         _validate_absence_policy_for_row(
             sheet_name=sheet_name,
             worksheet=worksheet,
@@ -771,6 +772,14 @@ def _validate_non_empty_marks_entries(
             has_absent=has_absent,
             has_numeric=has_numeric,
         )
+    _log_marks_anomaly_warnings_from_stats(
+        sheet_name=sheet_name,
+        mark_cols=mark_cols,
+        student_count=student_count,
+        absent_count_by_col=absent_count_by_col,
+        numeric_count_by_col=numeric_count_by_col,
+        frequency_by_value_by_col=frequency_by_value_by_col,
+    )
     _validate_row_total_consistency(
         worksheet=worksheet,
         sheet_name=sheet_name,
@@ -995,21 +1004,43 @@ def _log_marks_anomaly_warnings(
         return
     start_row = _marks_data_start_row(sheet_kind, header_row)
     mark_cols = _marks_entry_columns(sheet_kind, header_count)
+    absent_count_by_col: dict[int, int] = {col: 0 for col in mark_cols}
+    numeric_count_by_col: dict[int, int] = {col: 0 for col in mark_cols}
+    frequency_by_value_by_col: dict[int, dict[float, int]] = {col: {} for col in mark_cols}
     for col in mark_cols:
-        absent_count = 0
-        numeric_count = 0
-        frequency_by_value: dict[float, int] = {}
         for row in range(start_row, start_row + student_count):
             cell_value = worksheet.cell(row=row, column=col).value
             token = normalize(cell_value)
             if token == "a":
-                absent_count += 1
+                absent_count_by_col[col] += 1
                 continue
             numeric = coerce_excel_number(cell_value)
             if isinstance(numeric, (int, float)) and not isinstance(numeric, bool):
-                numeric_count += 1
+                numeric_count_by_col[col] += 1
                 number = float(numeric)
+                frequency_by_value = frequency_by_value_by_col[col]
                 frequency_by_value[number] = frequency_by_value.get(number, 0) + 1
+    _log_marks_anomaly_warnings_from_stats(
+        sheet_name=sheet_name,
+        mark_cols=mark_cols,
+        student_count=student_count,
+        absent_count_by_col=absent_count_by_col,
+        numeric_count_by_col=numeric_count_by_col,
+        frequency_by_value_by_col=frequency_by_value_by_col,
+    )
+
+
+def _log_marks_anomaly_warnings_from_stats(
+    *,
+    sheet_name: str,
+    mark_cols: range,
+    student_count: int,
+    absent_count_by_col: dict[int, int],
+    numeric_count_by_col: dict[int, int],
+    frequency_by_value_by_col: dict[int, dict[float, int]],
+) -> None:
+    for col in mark_cols:
+        absent_count = absent_count_by_col.get(col, 0)
         if absent_count / student_count >= 0.9:
             _logger.warning(
                 _LOG_STEP3_HIGH_ABSENCE,
@@ -1018,8 +1049,9 @@ def _log_marks_anomaly_warnings(
                 absent_count,
                 student_count,
             )
+        numeric_count = numeric_count_by_col.get(col, 0)
         if numeric_count:
-            same = max(frequency_by_value.values())
+            same = max(frequency_by_value_by_col.get(col, {0.0: 0}).values())
             if same / numeric_count >= 0.95:
                 _logger.warning(
                     _LOG_STEP3_NEAR_CONSTANT,

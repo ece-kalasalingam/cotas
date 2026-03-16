@@ -32,7 +32,7 @@ def main() -> int:
         [sys.executable, "-m", "pyflakes", "."],
         [sys.executable, "-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services"],
         [sys.executable, "scripts/check_ui_strings.py"],
-        [sys.executable, "-m", "pytest", "-q"],
+        [sys.executable, "-m", "pytest", "-q", "tests"],
     ]
     if args.mode == "strict":
         pip_audit_cache.mkdir(parents=True, exist_ok=True)
