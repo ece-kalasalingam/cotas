@@ -111,9 +111,8 @@ def set_language_from_system(
     """Set language from OS/user locale, fallback to English (LCID 1033)."""
     global _active_lang
 
-    lcid = system_lcid if system_lcid is not None else _get_windows_ui_lcid()
-    if lcid is not None:
-        mapped = _LCID_TO_LANG.get(lcid)
+    if system_lcid is not None:
+        mapped = _LCID_TO_LANG.get(system_lcid)
         if mapped in _CATALOGS and _catalog_is_healthy(mapped):
             _active_lang = mapped
             return
@@ -126,7 +125,7 @@ def set_language_from_system(
         if normalized in _CATALOGS and _catalog_is_healthy(normalized):
             _active_lang = normalized
             return
-        # Handle language-only locales such as "ta".
+        # Handle language-only and regional variants such as "ta" / "ta-XX".
         lang_only = normalized.split("-")[0]
         if (
             lang_only == "hi"
@@ -153,6 +152,15 @@ def set_language_from_system(
             _active_lang = "en"
             return
 
+    # Auto-detected Windows LCID is fallback-only when caller did not provide locale/LCID.
+    if system_lcid is None and system_locale is None:
+        lcid = _get_windows_ui_lcid()
+        if lcid is not None:
+            mapped = _LCID_TO_LANG.get(lcid)
+            if mapped in _CATALOGS and _catalog_is_healthy(mapped):
+                _active_lang = mapped
+                return
+
     # Default to English (Windows 1033 equivalent).
     _active_lang = "en"
 
@@ -173,3 +181,5 @@ def t(key: str, **kwargs: object) -> str:
     if template is None:
         template = _CATALOGS[_DEFAULT_LANG].get(key, key)
     return template.format(**kwargs) if kwargs else template
+
+

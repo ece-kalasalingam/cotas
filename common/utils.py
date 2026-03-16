@@ -73,9 +73,9 @@ def _is_installed_exe(run_base: Path) -> bool:
     if _is_portable_forced():
         return False
 
-    run_base_text = str(run_base.resolve()).lower()
-
     if sys.platform.startswith("win"):
+        # Preserve Windows semantics even when evaluated on non-Windows hosts.
+        run_base_text = str(PureWindowsPath(str(run_base))).lower()
         install_roots = [
             os.getenv("ProgramFiles"),
             os.getenv("ProgramFiles(x86)"),
@@ -83,9 +83,13 @@ def _is_installed_exe(run_base: Path) -> bool:
             os.path.join(os.getenv("LOCALAPPDATA", ""), "Microsoft", "WindowsApps"),
         ]
         normalized_roots = [
-            str(Path(root)).lower() for root in install_roots if root and root.strip()
+            str(PureWindowsPath(root)).lower().rstrip("/\\")
+            for root in install_roots
+            if root and root.strip()
         ]
         return any(run_base_text.startswith(root) for root in normalized_roots)
+
+    run_base_text = str(run_base.resolve()).lower()
 
     if sys.platform == "darwin":
         return (
@@ -586,4 +590,8 @@ def emit_user_status(
     except Exception:
         if logger is not None:
             logger.exception("Failed to emit user status message.")
+
+
+
+
 
