@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from types import SimpleNamespace
 
 import pytest
 
@@ -144,5 +143,6 @@ def test_apply_sheet_layout_and_protection_sets_expected_flags(monkeypatch: pyte
     assert ws.protection.autoFilter == layout.ALLOW_FILTER
     assert ws.protection.selectLockedCells == layout.ALLOW_SELECT_LOCKED
     assert ws.protection.selectUnlockedCells == layout.ALLOW_SELECT_UNLOCKED
+
 
 

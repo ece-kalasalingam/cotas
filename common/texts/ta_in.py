@@ -26,6 +26,7 @@ TEXTS = {
     "language.switcher.applied_status": "மொழி {language} ஆக அமைக்கப்பட்டது.",
     # About
     "about.version": "பதிப்பு {version}",
+    "about.subtitle": "விளைவு கணக்கீடு மற்றும் ஒருங்கிணைப்பு அமைப்புக்கான கட்டமைப்பு",
     "about.description": (
         "{app_name} என்பது Course Outcome (CO) அடைவை கணக்கிடவும், "
         "நேரடி மற்றும் மறைமுக மதிப்பீடுகளை அடிப்படையாகக் கொண்டு "
@@ -253,3 +254,5 @@ TEXTS = {
     "coordinator.regno_dedup.log_detail": "பதிவு எண்: {reg_no} | பணித்தாள்: {worksheet} | பணிப்புத்தகம்: {workbook}",
     "coordinator.regno_dedup.log_detail_unavailable": "நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.",
 }
+
+

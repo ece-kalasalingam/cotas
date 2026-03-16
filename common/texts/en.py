@@ -30,6 +30,7 @@ TEXTS = {
     "language.switcher.applied_status": "Language set to {language}.",
     # About
     "about.version": "Version {version}",
+    "about.subtitle": "Framework for Outcome Computation and Unification System",
     "about.description": (
         "{app_name} is a software tool designed for computing Course Outcome (CO) "
         "attainment and performing structured outcome analysis based on direct "
@@ -265,3 +266,5 @@ TEXTS = {
     ),
     "coordinator.regno_dedup.log_detail_unavailable": "Duplicate entry details are unavailable.",
 }
+
+

@@ -107,6 +107,26 @@ from .coordinator_processing import (
     _path_key,
 )
 
+# Referenced indirectly by coordinator helper modules via ns=globals().
+_COORDINATOR_NS_EXPORTS = (
+    QListWidgetItem,
+    OUTPUT_LINK_MODE_FOLDER,
+    OUTPUT_LINK_SEPARATOR,
+    show_toast,
+    build_i18n_log_message,
+    format_log_line_at,
+    parse_i18n_log_message,
+    resolve_i18n_log_message,
+    emit_user_status,
+    log_process_message,
+    _CoAttainmentWorkbookResult,
+    _analyze_dropped_files,
+    _build_co_attainment_default_name,
+    _extract_final_report_signature,
+    _generate_co_attainment_workbook,
+    _path_key,
+)
+
 
 COORDINATOR_LIST_PLACEHOLDER_COLOR = "gray"
 COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS = (16, 16, -16, -16)
@@ -638,4 +658,7 @@ class CoordinatorModule(QWidget):
             self._logger.removeHandler(self._ui_log_handler)
             self._ui_log_handler = None
         super().closeEvent(event)
+
+
+
 

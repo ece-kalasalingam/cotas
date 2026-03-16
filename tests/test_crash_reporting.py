@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from common import crash_reporting
@@ -43,3 +42,4 @@ def test_crash_reports_dir_uses_settings_parent(monkeypatch) -> None:
     monkeypatch.setattr(crash_reporting, "app_settings_path", lambda _name: Path("C:/focus/settings.json"))
     out = crash_reporting._crash_reports_dir()
     assert out == Path("C:/focus") / crash_reporting.CRASH_REPORTS_DIR_NAME
+

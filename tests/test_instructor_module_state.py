@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 
 import pytest
 
@@ -195,3 +194,4 @@ def test_close_event_cleans_resources(monkeypatch: pytest.MonkeyPatch, qapp: QAp
     assert module._active_jobs == []
     assert removed["count"] == 1
     assert module._ui_log_handler is None
+

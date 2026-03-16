@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import pytest
 
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from modules.instructor.steps import step2_course_details_and_marks_template as step2
@@ -191,3 +190,4 @@ def test_upload_course_details_async_work_uses_service_and_fallback() -> None:
     step2.upload_course_details_async(module2, ns=ns2)
     module2.started["work"]()
     assert called["validate"] == 1
+

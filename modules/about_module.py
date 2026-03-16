@@ -106,8 +106,9 @@ class AboutModule(QWidget):
         self.retranslate_ui()
 
     def retranslate_ui(self) -> None:
-        self.subtitle.setText("Framework for Outcome Computation and Unification System")
+        self.subtitle.setText(t("about.subtitle"))
         self.version_label.setText(t("about.version", version=SYSTEM_VERSION))
         self.description.setText(t("about.description", app_name=APP_NAME))
         self.institution.setText(t("about.institution"))
         self.copyright_label.setText(t("about.copyright", year=datetime.now().year))
+

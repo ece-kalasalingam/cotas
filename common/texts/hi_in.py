@@ -22,6 +22,7 @@ TEXTS = {
     'language.switcher.button': 'भाषा: {language}',
     'language.switcher.applied_status': 'भाषा {language} पर सेट की गई।',
     'about.version': 'संस्करण {version}',
+    'about.subtitle': 'आउटकम कम्प्यूटेशन और यूनिफिकेशन सिस्टम के लिए फ्रेमवर्क',
     'about.description': "{app_name} एक सॉफ्टवेयर टूल है जिसे 'कोर्स आउटकम' (CO) की प्राप्ति की गणना करने, और प्रत्यक्ष व अप्रत्यक्ष मूल्यांकन के आधार पर संरचित परिणाम विश्लेषण करने के लिए डिज़ाइन किया गया है।",
     'about.institution': 'कलासिंगम एकेडमी ऑफ रिसर्च एंड एजुकेशन (KARE) में विकसित।',
     'about.copyright': '(c) {year} KARE. सभी अधिकार सुरक्षित।',
@@ -238,3 +239,4 @@ TEXTS = {
     'coordinator.regno_dedup.log_detail': 'रजिस्टर नंबर: {reg_no} | वर्कशीट: {worksheet} | वर्कबुक: {workbook}',
     'coordinator.regno_dedup.log_detail_unavailable': 'डुप्लीकेट प्रविष्टि का विवरण उपलब्ध नहीं है।',
 }
+

@@ -22,6 +22,7 @@ TEXTS = {
     'language.switcher.button': 'భాష: {language}',
     'language.switcher.applied_status': 'భాష {language}కి సెట్ చేయబడింది.',
     'about.version': 'వెర్షన్ {version}',
+    'about.subtitle': 'ఫలిత గణన మరియు ఏకీకరణ వ్యవస్థ కోసం ఫ్రేమ్‌వర్క్',
     'about.description': '{app_name} అనేది కోర్సు ఫలితాన్ని (CO) సాధించడం మరియు ప్రత్యక్ష మరియు పరోక్ష అంచనాల ఆధారంగా నిర్మాణాత్మక ఫలితాల విశ్లేషణను కంప్యూటింగ్ చేయడానికి రూపొందించబడిన సాఫ్ట్\u200cవేర్ సాధనం.',
     'about.institution': 'కలశలింగం అకాడమీ ఆఫ్ రీసెర్చ్ అండ్ ఎడ్యుకేషన్ (KARE)లో అభివృద్ధి చేయబడింది.',
     'about.copyright': '(సి) {year} KARE. అన్ని హక్కులు ప్రత్యేకించబడ్డాయి.',
@@ -238,3 +239,4 @@ TEXTS = {
     'coordinator.regno_dedup.log_detail': 'రెగ్ నంబర్: {reg_no} | వర్క్\u200cషీట్: {worksheet} | వర్క్\u200cబుక్: {workbook}',
     'coordinator.regno_dedup.log_detail_unavailable': 'డూప్లికేట్ ఎంట్రీ వివరాలు అందుబాటులో లేవు.',
 }
+
