@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
+import sqlite3
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -35,12 +38,7 @@ from common.constants import (
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
 )
-from common.excel_sheet_layout import (
-    apply_sheet_layout_and_protection as _apply_sheet_layout_and_protection,
-    color_without_hash as _color_without_hash,
-    style_registry_for_setup as _style_registry_for_setup,
-    thin_border as _thin_border,
-)
+from common.excel_sheet_layout import color_without_hash as _color_without_hash, style_registry_for_setup as _style_registry_for_setup
 from common.jobs import CancellationToken
 from common.utils import coerce_excel_number, normalize
 from common.workbook_signing import verify_payload_signature
@@ -57,9 +55,9 @@ _STYLE_KEY_VALIGN = "valign"
 _STYLE_KEY_BOLD = "bold"
 _ALIGN_CENTER = "center"
 _ALIGN_VCENTER = "vcenter"
-_PATTERN_SOLID = "solid"
 _CO_REPORT_NAME_TOKEN_RE = re.compile(r"(?:[_\-\s]*co[_\-\s]*report)+$", re.IGNORECASE)
 _HEADER_SCAN_MAX_ROWS = 200
+_COORDINATOR_STUDENTS_PER_SHEET = 150
 _NORM_SYSTEM_HASH_TEMPLATE_ID_HEADER = normalize(SYSTEM_HASH_TEMPLATE_ID_HEADER)
 _NORM_SYSTEM_HASH_TEMPLATE_HASH_HEADER = normalize(SYSTEM_HASH_TEMPLATE_HASH_HEADER)
 _NORM_SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER = normalize(SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
@@ -68,6 +66,9 @@ _NORM_COURSE_SETUP_ID = normalize(ID_COURSE_SETUP)
 _NORM_COURSE_CODE_KEY = normalize(COURSE_METADATA_COURSE_CODE_KEY)
 _NORM_TOTAL_OUTCOMES_KEY = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
 _NORM_SECTION_KEY = normalize(COURSE_METADATA_SECTION_KEY)
+_DEDUP_SQLITE_THRESHOLD_ENTRIES = 1
+_DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
+_DEDUP_SQLITE_SUFFIX = ".sqlite3"
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,10 +83,20 @@ class _FinalReportSignature:
 
 @dataclass(slots=True, frozen=True)
 class _CoAttainmentRow:
+    reg_hash: int
     reg_no: str
     student_name: str
     direct_score: float | str
     indirect_score: float | str
+
+
+@dataclass(slots=True, frozen=True)
+class _ParsedScoreRow:
+    reg_hash: int
+    reg_key: str
+    reg_no: str
+    student_name: str
+    score: float | str
 
 
 @dataclass(slots=True)
@@ -93,9 +104,83 @@ class _CoOutputSheetState:
     sheet: Any
     header_row_index: int
     formats: dict[str, Any]
-    seen_registers: set[str]
     next_row_index: int
     next_serial: int
+
+
+class _RegisterDedupStore:
+    def __init__(self, *, total_outcomes: int, use_sqlite: bool) -> None:
+        self._total_outcomes = total_outcomes
+        self._use_sqlite = use_sqlite
+        self._memory_sets: dict[int, set[int]] = {}
+        self._conn: sqlite3.Connection | None = None
+        self._db_path: str | None = None
+        if use_sqlite:
+            _cleanup_stale_dedup_sqlite_files()
+            fd, db_path = tempfile.mkstemp(prefix=_DEDUP_SQLITE_PREFIX, suffix=_DEDUP_SQLITE_SUFFIX)
+            self._db_path = db_path
+            self._conn = sqlite3.connect(db_path)
+            self._conn.execute("PRAGMA journal_mode=OFF")
+            self._conn.execute("PRAGMA synchronous=OFF")
+            self._conn.execute("PRAGMA temp_store=MEMORY")
+            self._conn.execute("PRAGMA secure_delete=ON")
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS dedup (co_index INTEGER NOT NULL, reg_hash INTEGER NOT NULL, PRIMARY KEY(co_index, reg_hash))"
+            )
+            self._conn.commit()
+            try:
+                import os
+
+                os.close(fd)
+            except OSError:
+                pass
+        else:
+            self._memory_sets = {co: set() for co in range(1, total_outcomes + 1)}
+
+    def add_if_absent(self, *, co_index: int, reg_hash: int) -> bool:
+        if self._use_sqlite and self._conn is not None:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO dedup (co_index, reg_hash) VALUES (?, ?)",
+                (co_index, int(reg_hash)),
+            )
+            return cursor.rowcount == 1
+        bucket = self._memory_sets.setdefault(co_index, set())
+        if reg_hash in bucket:
+            return False
+        bucket.add(reg_hash)
+        return True
+
+    def close(self) -> None:
+        if self._conn is not None:
+            try:
+                # Explicitly wipe the sqlite table before close in normal paths.
+                self._conn.execute("DELETE FROM dedup")
+                self._conn.commit()
+            except Exception:
+                _logger.debug("Failed to clear sqlite dedup table before close.", exc_info=True)
+            self._conn.close()
+            self._conn = None
+        if self._db_path:
+            try:
+                Path(self._db_path).unlink(missing_ok=True)
+            except OSError:
+                _logger.debug("Unable to remove dedup sqlite db: %s", self._db_path, exc_info=True)
+            self._db_path = None
+
+
+def _cleanup_stale_dedup_sqlite_files() -> None:
+    temp_root = Path(tempfile.gettempdir())
+    patterns = (
+        f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}",
+        f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}-wal",
+        f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}-shm",
+    )
+    for pattern in patterns:
+        for path in temp_root.glob(pattern):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                _logger.debug("Unable to remove stale dedup sqlite file: %s", path, exc_info=True)
 
 
 def _path_key(path: Path) -> str:
@@ -389,7 +474,12 @@ def _extract_course_metadata_fields(sheet: Any) -> dict[str, str]:
     return metadata
 
 
-def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[str, str, float | str]]:
+def _stable_reg_hash(reg_key: str) -> int:
+    # Use a compact, stable 48-bit ID to reduce sqlite footprint while keeping collision risk very low.
+    return int.from_bytes(hashlib.blake2b(reg_key.encode("utf-8"), digest_size=6).digest(), byteorder="big")
+
+
+def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
     required_headers = {
         normalize(CO_REPORT_HEADER_SERIAL),
         normalize(CO_REPORT_HEADER_REG_NO),
@@ -438,7 +528,7 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
     name_col = column_map[normalize(CO_REPORT_HEADER_STUDENT_NAME)]
     score_col = column_map[normalize(_ratio_total_header(ratio))]
 
-    rows: dict[str, tuple[str, str, float | str]] = {}
+    seen_in_sheet: set[int] = set()
     for values in sheet.iter_rows(
         min_row=header_row + 1,
         max_row=max_row,
@@ -454,7 +544,8 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
         if not reg_no:
             continue
         reg_key = normalize(reg_no)
-        if reg_key in rows:
+        reg_hash = _stable_reg_hash(reg_key)
+        if reg_hash in seen_in_sheet:
             continue
 
         score = _coerce_numeric_score(values[score_col - 1])
@@ -463,8 +554,14 @@ def _extract_co_scores_by_reg(sheet: Any, *, ratio: float) -> dict[str, tuple[st
         student_raw = values[name_col - 1]
         student_name = str(student_raw).strip() if student_raw is not None else ""
         normalized_score = round(score, CO_REPORT_MAX_DECIMAL_PLACES) if isinstance(score, (int, float)) else score
-        rows[reg_key] = (reg_no, student_name, normalized_score)
-    return rows
+        seen_in_sheet.add(reg_hash)
+        yield _ParsedScoreRow(
+            reg_hash=reg_hash,
+            reg_key=reg_key,
+            reg_no=reg_no,
+            student_name=student_name,
+            score=normalized_score,
+        )
 
 
 def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_CoAttainmentRow]:
@@ -473,13 +570,40 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_Co
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
         raise ValueError(f"Missing CO sheets for CO{co_index}.")
 
-    direct_rows = _extract_co_scores_by_reg(workbook[direct_name], ratio=DIRECT_RATIO)
-    indirect_rows = _extract_co_scores_by_reg(workbook[indirect_name], ratio=INDIRECT_RATIO)
-    for reg_key, (reg_no, direct_name_value, direct_score) in direct_rows.items():
-        indirect_entry = indirect_rows.get(reg_key)
-        if indirect_entry is None:
+    direct_iter = iter(_iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO))
+    indirect_iter = iter(_iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO))
+
+    lockstep = True
+    indirect_lookup: dict[tuple[int, str], _ParsedScoreRow] | None = None
+    current_indirect = next(indirect_iter, None)
+
+    for direct_row in direct_iter:
+        key = (direct_row.reg_hash, direct_row.reg_key)
+        match: _ParsedScoreRow | None = None
+        if lockstep and indirect_lookup is None:
+            if current_indirect is not None and (
+                current_indirect.reg_hash == direct_row.reg_hash and current_indirect.reg_key == direct_row.reg_key
+            ):
+                match = current_indirect
+                current_indirect = next(indirect_iter, None)
+            else:
+                lockstep = False
+                indirect_lookup = {}
+                if current_indirect is not None:
+                    indirect_lookup[(current_indirect.reg_hash, current_indirect.reg_key)] = current_indirect
+                for item in indirect_iter:
+                    indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
+                match = indirect_lookup.get(key)
+        else:
+            match = indirect_lookup.get(key)
+
+        if match is None:
             continue
-        _, indirect_name_value, indirect_score = indirect_entry
+
+        direct_name_value = direct_row.student_name
+        direct_score = direct_row.score
+        indirect_name_value = match.student_name
+        indirect_score = match.score
         student_name = direct_name_value or indirect_name_value
         direct_is_absent = isinstance(direct_score, str) and normalize(direct_score) == normalize(CO_REPORT_ABSENT_TOKEN)
         indirect_is_absent = isinstance(indirect_score, str) and normalize(indirect_score) == normalize(CO_REPORT_ABSENT_TOKEN)
@@ -487,7 +611,8 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_Co
             direct_score = CO_REPORT_ABSENT_TOKEN
             indirect_score = CO_REPORT_ABSENT_TOKEN
         yield _CoAttainmentRow(
-            reg_no=reg_no,
+            reg_hash=direct_row.reg_hash,
+            reg_no=direct_row.reg_no,
             student_name=student_name,
             direct_score=direct_score,
             indirect_score=indirect_score,
@@ -568,7 +693,6 @@ def _create_co_attainment_sheet(
         sheet=sheet,
         header_row_index=header_row_index,
         formats=formats,
-        seen_registers=set(),
         next_row_index=header_row_index + 1,
         next_serial=1,
     )
@@ -579,51 +703,12 @@ def _append_co_attainment_row(state: _CoOutputSheetState, row: _CoAttainmentRow)
         total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
     else:
         total = CO_REPORT_ABSENT_TOKEN
-    values = [state.next_serial, row.reg_no, row.student_name, row.direct_score, row.indirect_score, total]
-    for col_idx, value in enumerate(values, start=0):
-        state.sheet.write(
-            state.next_row_index,
-            col_idx,
-            value,
-            state.formats["body_center"] if col_idx >= 3 else state.formats["body"],
-        )
+    left = [state.next_serial, row.reg_no, row.student_name]
+    right = [row.direct_score, row.indirect_score, total]
+    state.sheet.write_row(state.next_row_index, 0, left, state.formats["body"])
+    state.sheet.write_row(state.next_row_index, 3, right, state.formats["body_center"])
     state.next_row_index += 1
     state.next_serial += 1
-
-
-def _style_cache_for_sheet(ws: Any) -> dict[str, Any]:
-    from openpyxl.styles import Alignment, Border, Font, PatternFill
-
-    cached = getattr(ws, _STYLE_CACHE_ATTR, None)
-    if isinstance(cached, dict):
-        return cached
-    header_style, body_style = _style_registry_for_setup()
-    border_enabled = int(body_style.get(_STYLE_KEY_BORDER, 1)) > 0
-    body_border = _thin_border() if border_enabled else Border()
-    header_border_enabled = int(header_style.get(_STYLE_KEY_BORDER, 1)) > 0
-    header_border = _thin_border() if header_border_enabled else Border()
-    header_bg = _color_without_hash(str(header_style.get(_STYLE_KEY_BG_COLOR, "")))
-    header_fill = PatternFill(fill_type=_PATTERN_SOLID, fgColor=header_bg) if header_bg else PatternFill(fill_type=None)
-    header_alignment = Alignment(
-        horizontal=str(header_style.get(_STYLE_KEY_ALIGN, _ALIGN_CENTER)),
-        vertical=str(header_style.get(_STYLE_KEY_VALIGN, _ALIGN_CENTER)).replace(_ALIGN_VCENTER, _ALIGN_CENTER),
-        wrap_text=True,
-    )
-    body_align = str(body_style.get(_STYLE_KEY_ALIGN, "")).strip()
-    body_valign = str(body_style.get(_STYLE_KEY_VALIGN, _ALIGN_CENTER)).replace(_ALIGN_VCENTER, _ALIGN_CENTER)
-    body_alignment = Alignment(horizontal=body_align if body_align else None, vertical=body_valign)
-    body_alignment_center = Alignment(horizontal=_ALIGN_CENTER, vertical=body_valign)
-    style_cache = {
-        "header_border": header_border,
-        "body_border": body_border,
-        "header_fill": header_fill,
-        "header_font": Font(bold=bool(header_style.get(_STYLE_KEY_BOLD, True))),
-        "header_alignment": header_alignment,
-        "body_alignment": body_alignment,
-        "body_alignment_center": body_alignment_center,
-    }
-    setattr(ws, _STYLE_CACHE_ATTR, style_cache)
-    return style_cache
 
 
 def _generate_co_attainment_workbook(
@@ -669,6 +754,10 @@ def _generate_co_attainment_workbook_course_setup_v1(
     output_workbook = xlsxwriter.Workbook(str(output_path), {"constant_memory": True})
     workbook_closed = False
     output_states: dict[int, _CoOutputSheetState] = {}
+    dedup_store = _RegisterDedupStore(
+        total_outcomes=total_outcomes,
+        use_sqlite=(len(source_paths) * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET) >= _DEDUP_SQLITE_THRESHOLD_ENTRIES,
+    )
 
     try:
         for source in source_paths:
@@ -693,19 +782,18 @@ def _generate_co_attainment_workbook_course_setup_v1(
                 for co_index in range(1, total_outcomes + 1):
                     state = output_states[co_index]
                     for row in _iter_co_rows_from_workbook(workbook, co_index=co_index):
-                        reg_key = normalize(row.reg_no)
-                        if not reg_key or reg_key in state.seen_registers:
+                        if not dedup_store.add_if_absent(co_index=co_index, reg_hash=row.reg_hash):
                             continue
-                        state.seen_registers.add(reg_key)
                         _append_co_attainment_row(state, row)
             finally:
                 workbook.close()
         output_workbook.close()
         workbook_closed = True
     finally:
+        dedup_store.close()
         if not workbook_closed:
             try:
                 output_workbook.close()
             except Exception:
-                pass
+                _logger.debug("Suppressing workbook close error during cleanup.", exc_info=True)
     return output_path
