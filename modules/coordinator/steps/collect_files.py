@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from common.constants import (
     COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES,
@@ -156,11 +156,16 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: dict[st
 def add_uploaded_paths(module: object, added_paths: list[Path], *, ns: dict[str, object]) -> None:
     for path in added_paths:
         module._files.append(path)
+        path_text = str(path)
+        if len(path_text) >= 2 and path_text[1] == ":":
+            path_text = str(PureWindowsPath(path_text))
         item = ns["QListWidgetItem"]()
-        item.setToolTip(str(path))
-        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        item.setToolTip(path_text)
+        item.setData(Qt.ItemDataRole.UserRole, path_text)
         module.drop_list.addItem(item)
-        row_widget = module._new_file_item_widget(str(path), parent=module.drop_list)
+        row_widget = module._new_file_item_widget(path_text, parent=module.drop_list)
         row_widget.removed.connect(module._remove_file_by_path)
         item.setSizeHint(row_widget.sizeHint())
         module.drop_list.setItemWidget(item, row_widget)
+
+
