@@ -351,8 +351,8 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
 
         assert rows == [
             (1, "R001", "Student One", 80, 20, 100),
-            (2, "R002", "Student Two", "A", "A", "A"),
-            (3, "R003", "Student Three", "A", "A", "A"),
+            (2, "R002", "Student Two", "A", 15, "A"),
+            (3, "R003", "Student Three", 60, "A", "A"),
             (4, "R004", "Student Four", 70, 15, 85),
         ]
     finally:

@@ -629,11 +629,6 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
         indirect_name_value = match.student_name
         indirect_score = match.score
         student_name = direct_name_value or indirect_name_value
-        direct_is_absent = isinstance(direct_score, str) and normalize(direct_score) == normalize(CO_REPORT_ABSENT_TOKEN)
-        indirect_is_absent = isinstance(indirect_score, str) and normalize(indirect_score) == normalize(CO_REPORT_ABSENT_TOKEN)
-        if direct_is_absent or indirect_is_absent:
-            direct_score = CO_REPORT_ABSENT_TOKEN
-            indirect_score = CO_REPORT_ABSENT_TOKEN
         yield _CoAttainmentRow(
             reg_hash=direct_row.reg_hash,
             reg_no=direct_row.reg_no,
