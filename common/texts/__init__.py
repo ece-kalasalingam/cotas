@@ -9,11 +9,15 @@ import logging
 import sys
 
 from common.texts.en import TEXTS as EN_TEXTS
+from common.texts.hi_in import TEXTS as HI_IN_TEXTS
 from common.texts.ta_in import TEXTS as TA_IN_TEXTS
+from common.texts.te_in import TEXTS as TE_IN_TEXTS
 
 _CATALOGS: dict[str, Mapping[str, str]] = {
     "en": EN_TEXTS,
+    "hi-in": HI_IN_TEXTS,
     "ta-in": TA_IN_TEXTS,
+    "te-in": TE_IN_TEXTS,
 }
 _DEFAULT_LANG = "en"
 _active_lang = _DEFAULT_LANG
@@ -22,18 +26,26 @@ _warned_bad_catalogs: set[str] = set()
 _catalog_health_cache: dict[str, bool] = {}
 _LCID_TO_LANG: dict[int, str] = {
     1033: "en",  # English (United States)
+    1081: "hi-in",  # Hindi (India)
     1097: "ta-in",  # Tamil (India)
+    1098: "te-in",  # Telugu (India)
 }
 _LANGUAGE_LABELS: dict[str, str] = {
     "en": "English",
+    "hi-in": "हिन्दी (भारत)",
     "ta-in": "தமிழ் (இந்தியா)",
+    "te-in": "తెలుగు (భారతదేశం)",
 }
 
 
 def _normalize_lang(lang: str) -> str:
     code = (lang or "").strip().replace("_", "-").lower()
+    if code == "hi":
+        return "hi-in"
     if code == "ta":
         return "ta-in"
+    if code == "te":
+        return "te-in"
     return code
 
 
@@ -117,11 +129,25 @@ def set_language_from_system(
         # Handle language-only locales such as "ta".
         lang_only = normalized.split("-")[0]
         if (
+            lang_only == "hi"
+            and "hi-in" in _CATALOGS
+            and _catalog_is_healthy("hi-in")
+        ):
+            _active_lang = "hi-in"
+            return
+        if (
             lang_only == "ta"
             and "ta-in" in _CATALOGS
             and _catalog_is_healthy("ta-in")
         ):
             _active_lang = "ta-in"
+            return
+        if (
+            lang_only == "te"
+            and "te-in" in _CATALOGS
+            and _catalog_is_healthy("te-in")
+        ):
+            _active_lang = "te-in"
             return
         if lang_only == "en" and "en" in _CATALOGS and _catalog_is_healthy("en"):
             _active_lang = "en"
