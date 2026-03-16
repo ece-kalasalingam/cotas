@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from dataclasses import dataclass
-from html import escape
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QSize, QUrl, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import (
     QColor,
-    QDesktopServices,
     QDropEvent,
     QDragEnterEvent,
     QDragLeaveEvent,
@@ -43,10 +40,6 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
-    COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
-    COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES,
-    COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
-    COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
     COORDINATOR_CONTROLS_LAYOUT_MARGINS,
     COORDINATOR_CONTROLS_LAYOUT_SPACING,
     COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
@@ -87,8 +80,7 @@ from common.constants import (
     SHORTCUT_SAVE_KEY_SEQUENCE,
     UI_FONT_FAMILY,
 )
-from common.exceptions import JobCancelledError
-from common.jobs import CancellationToken, generate_job_id
+from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -106,6 +98,27 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
+from modules.coordinator.async_runner import AsyncOperationRunner
+from modules.coordinator.file_actions import clear_all, remove_file_by_path
+from modules.coordinator.messages import (
+    append_user_log as _append_user_log_impl,
+    publish_status as _publish_status_impl,
+    publish_status_key as _publish_status_key_impl,
+    rerender_user_log as _rerender_user_log_impl,
+    setup_ui_logging as _setup_ui_logging_impl,
+)
+from modules.coordinator.output_links import (
+    on_output_link_activated as _on_output_link_activated_impl,
+    output_link_markup as _output_link_markup_impl,
+    output_links_html as _output_links_html_impl,
+    refresh_output_links as _refresh_output_links_impl,
+)
+from modules.coordinator.steps.calculate_attainment import calculate_attainment_async
+from modules.coordinator.steps.collect_files import (
+    add_uploaded_paths as _add_uploaded_paths_impl,
+    process_files_async,
+)
+from services import CoordinatorWorkflowService
 
 from .coordinator_processing import (
     _CoAttainmentWorkbookResult,
@@ -302,11 +315,13 @@ class CoordinatorModule(QWidget):
         self._downloaded_outputs: list[Path] = []
         self._logger = _logger
         self.state = CoordinatorWorkflowState()
+        self._workflow_service = CoordinatorWorkflowService()
         self._cancel_token: CancellationToken | None = None
         self._active_jobs: list[object] = []
         self._pending_drop_batches: list[list[str]] = []
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
+        self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._build_ui()
         self._setup_ui_logging()
         self.retranslate_ui()
@@ -439,14 +454,10 @@ class CoordinatorModule(QWidget):
         self._refresh_summary()
 
     def _publish_status(self, message: str) -> None:
-        self._append_user_log(message)
-        emit_user_status(self.status_changed, message, logger=self._logger)
+        _publish_status_impl(self, message, ns=globals())
 
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
-        localized = t(text_key, **kwargs)
-        payload = build_i18n_log_message(text_key, kwargs=kwargs, fallback=localized)
-        self._append_user_log(payload)
-        emit_user_status(self.status_changed, payload, logger=self._logger)
+        _publish_status_key_impl(self, text_key, ns=globals(), **kwargs)
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
@@ -466,145 +477,7 @@ class CoordinatorModule(QWidget):
         self._refresh_summary()
 
     def _on_calculate_clicked(self) -> None:
-        if self.state.busy or not self._files:
-            return
-
-        signature = _extract_final_report_signature(self._files[0])
-        default_name = _build_co_attainment_default_name(
-            self._files[0],
-            section=signature.section if signature is not None else "",
-        )
-        save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            t("coordinator.calculate"),
-            resolve_dialog_start_path(APP_NAME, default_name),
-            t("coordinator.dialog.filter"),
-        )
-        if not save_path:
-            return
-
-        process_name = COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT
-        token = CancellationToken()
-        job_id = generate_job_id()
-        self._cancel_token = token
-        self._set_busy(True, job_id=job_id)
-        self._publish_status_key("coordinator.status.processing_started")
-
-        def _finalize(job: object) -> None:
-            if job in self._active_jobs:
-                self._active_jobs.remove(job)
-            self._cancel_token = None
-            self._set_busy(False)
-            self._drain_next_batch()
-
-        def _on_finished(result: object) -> None:
-            try:
-                output_path = Path(save_path)
-                duplicate_reg_count = 0
-                duplicate_entries: tuple[tuple[str, str, str], ...] = ()
-                if isinstance(result, _CoAttainmentWorkbookResult):
-                    output_path = result.output_path
-                    duplicate_reg_count = max(0, int(result.duplicate_reg_count))
-                    duplicate_entries = result.duplicate_entries
-                elif result:
-                    output_path = Path(str(result))
-                if all(_path_key(path) != _path_key(output_path) for path in self._downloaded_outputs):
-                    self._downloaded_outputs.append(output_path)
-                self._remember_dialog_dir_safe(str(output_path))
-                self._publish_status_key("coordinator.status.calculate_completed")
-                log_process_message(
-                    process_name,
-                    logger=self._logger,
-                    success_message=(
-                        f"{process_name} completed successfully. output={output_path}, "
-                        f"duplicates_removed={duplicate_reg_count}"
-                    ),
-                    user_success_message=build_i18n_log_message(
-                        "coordinator.status.calculate_completed",
-                        fallback=t("coordinator.status.calculate_completed"),
-                    ),
-                    job_id=job_id,
-                    step_id=COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
-                )
-                show_toast(
-                    self,
-                    t("coordinator.status.calculate_completed"),
-                    title=t("coordinator.title"),
-                    level="info",
-                )
-                if duplicate_reg_count:
-                    show_toast(
-                        self,
-                        t("coordinator.regno_dedup.body", count=duplicate_reg_count),
-                        title=t("coordinator.regno_dedup.title"),
-                        level="info",
-                    )
-                    detail_lines = [
-                        t(
-                            "coordinator.regno_dedup.log_detail",
-                            reg_no=str(reg_no),
-                            worksheet=str(worksheet_name),
-                            workbook=str(workbook_name),
-                        )
-                        for reg_no, worksheet_name, workbook_name in duplicate_entries
-                    ]
-                    details_text = "\n".join(detail_lines) if detail_lines else t(
-                        "coordinator.regno_dedup.log_detail_unavailable"
-                    )
-                    self._publish_status_key(
-                        "coordinator.regno_dedup.log_body",
-                        count=duplicate_reg_count,
-                        details=details_text,
-                    )
-            finally:
-                _finalize(job)
-
-        def _on_failed(exc: Exception) -> None:
-            try:
-                if isinstance(exc, JobCancelledError):
-                    self._publish_status_key("coordinator.status.operation_cancelled")
-                    self._logger.info(
-                        "%s cancelled by user/system request.",
-                        process_name,
-                        extra={
-                            "user_message": build_i18n_log_message(
-                                "coordinator.status.operation_cancelled",
-                                fallback=t("coordinator.status.operation_cancelled"),
-                            ),
-                            "job_id": job_id,
-                            "step_id": COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
-                        },
-                    )
-                    return
-                log_process_message(
-                    process_name,
-                    logger=self._logger,
-                    error=exc,
-                    user_error_message=build_i18n_log_message(
-                        "coordinator.status.processing_failed",
-                        fallback=t("coordinator.status.processing_failed"),
-                    ),
-                    job_id=job_id,
-                    step_id=COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
-                )
-                show_toast(
-                    self,
-                    t("coordinator.status.processing_failed"),
-                    title=t("coordinator.title"),
-                    level="error",
-                )
-            finally:
-                _finalize(job)
-
-        job = run_in_background(
-            _generate_co_attainment_workbook,
-            list(self._files),
-            Path(save_path),
-            token=token,
-            on_finished=_on_finished,
-            on_failed=_on_failed,
-        )
-        self._active_jobs.append(job)
+        calculate_attainment_async(self, ns=globals())
 
     def _on_save_shortcut_activated(self) -> None:
         if self.state.busy:
@@ -619,142 +492,32 @@ class CoordinatorModule(QWidget):
         self._process_files_async(next_batch)
 
     def _process_files_async(self, dropped_files: list[str]) -> None:
-        if not dropped_files:
-            return
-        if self.state.busy:
-            self._pending_drop_batches.append(dropped_files)
-            self._publish_status_key("coordinator.status.queued", count=len(dropped_files))
-            return
+        process_files_async(self, dropped_files, ns=globals())
 
-        process_name = COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES
-        token = CancellationToken()
-        job_id = generate_job_id()
-        existing_keys = {_path_key(path) for path in self._files}
-        existing_paths = [str(path) for path in self._files]
-        self._cancel_token = token
-        self._set_busy(True, job_id=job_id)
-        self._publish_status_key("coordinator.status.processing_started")
-
-        def _finalize(job: object) -> None:
-            if job in self._active_jobs:
-                self._active_jobs.remove(job)
-            self._cancel_token = None
-            self._set_busy(False)
-            self._drain_next_batch()
-
-        def _on_finished(result: object) -> None:
-            try:
-                if not isinstance(result, dict):
-                    raise RuntimeError("Coordinator processing returned unexpected result type.")
-                added_paths = [Path(value) for value in result.get("added", [])]
-                duplicates = int(result.get("duplicates", 0))
-                invalid_paths = [Path(value) for value in result.get("invalid_final_report", [])]
-                ignored = int(result.get("ignored", 0))
-
-                for path in added_paths:
-                    self._files.append(path)
-                    item = QListWidgetItem()
-                    item.setToolTip(str(path))
-                    item.setData(Qt.ItemDataRole.UserRole, str(path))
-                    self.drop_list.addItem(item)
-                    row_widget = _CoordinatorFileItemWidget(str(path), parent=self.drop_list)
-                    row_widget.removed.connect(self._remove_file_by_path)
-                    item.setSizeHint(row_widget.sizeHint())
-                    self.drop_list.setItemWidget(item, row_widget)
-
-                if added_paths:
-                    self._publish_status_key(
-                        "coordinator.status.added",
-                        added=len(added_paths),
-                        total=len(self._files),
-                    )
-                if duplicates:
-                    show_toast(
-                        self,
-                        t("coordinator.duplicate.body", count=duplicates),
-                        title=t("coordinator.duplicate.title"),
-                        level="info",
-                    )
-                if invalid_paths:
-                    file_names = "\n".join(path.name for path in invalid_paths)
-                    show_toast(
-                        self,
-                        t(
-                            "coordinator.invalid_final_report.body",
-                            count=len(invalid_paths),
-                            files=file_names,
-                        ),
-                        title=t("coordinator.invalid_final_report.title"),
-                        level="warning",
-                    )
-                if ignored:
-                    self._publish_status_key("coordinator.status.ignored", count=ignored)
-
-                log_process_message(
-                    process_name,
-                    logger=self._logger,
-                    success_message=(
-                        f"{process_name} completed successfully. "
-                        f"added={len(added_paths)}, duplicates={duplicates}, "
-                        f"invalid={len(invalid_paths)}, ignored={ignored}"
-                    ),
-                    user_success_message=build_i18n_log_message(
-                        "coordinator.status.processing_completed",
-                        fallback=t("coordinator.status.processing_completed"),
-                    ),
-                    job_id=job_id,
-                    step_id=COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
-                )
-            finally:
-                _finalize(job)
-
-        def _on_failed(exc: Exception) -> None:
-            try:
-                if isinstance(exc, JobCancelledError):
-                    self._publish_status_key("coordinator.status.operation_cancelled")
-                    self._logger.info(
-                        "%s cancelled by user/system request.",
-                        process_name,
-                        extra={
-                            "user_message": build_i18n_log_message(
-                                "coordinator.status.operation_cancelled",
-                                fallback=t("coordinator.status.operation_cancelled"),
-                            ),
-                            "job_id": job_id,
-                            "step_id": COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
-                        },
-                    )
-                    return
-                log_process_message(
-                    process_name,
-                    logger=self._logger,
-                    error=exc,
-                    user_error_message=build_i18n_log_message(
-                        "coordinator.status.processing_failed",
-                        fallback=t("coordinator.status.processing_failed"),
-                    ),
-                    job_id=job_id,
-                    step_id=COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
-                )
-                show_toast(
-                    self,
-                    t("coordinator.status.processing_failed"),
-                    title=t("coordinator.title"),
-                    level="error",
-                )
-            finally:
-                _finalize(job)
-
-        job = run_in_background(
-            _analyze_dropped_files,
-            dropped_files,
-            existing_keys=existing_keys,
-            existing_paths=existing_paths,
+    def _start_async_operation(
+        self,
+        *,
+        token: CancellationToken,
+        job_id: str | None,
+        work,
+        on_success,
+        on_failure,
+        on_finally=None,
+    ) -> None:
+        self._async_runner.start(
             token=token,
-            on_finished=_on_finished,
-            on_failed=_on_failed,
+            job_id=job_id,
+            work=work,
+            on_success=on_success,
+            on_failure=on_failure,
+            on_finally=on_finally,
         )
-        self._active_jobs.append(job)
+
+    def _new_file_item_widget(self, file_path: str, *, parent: QWidget | None = None) -> _CoordinatorFileItemWidget:
+        return _CoordinatorFileItemWidget(file_path, parent=parent)
+
+    def _add_uploaded_paths(self, added_paths: list[Path]) -> None:
+        _add_uploaded_paths_impl(self, added_paths, ns=globals())
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
         first_path = next((value for value in dropped_files if value), "")
@@ -786,121 +549,25 @@ class CoordinatorModule(QWidget):
             )
 
     def _setup_ui_logging(self) -> None:
-        if self._ui_log_handler is not None:
-            return
-        self._ui_log_handler = UILogHandler(self._append_user_log)
-        self._logger.addHandler(self._ui_log_handler)
-        self._append_user_log(
-            build_i18n_log_message(
-                "instructor.log.ready",
-                fallback=t("instructor.log.ready"),
-            )
-        )
+        _setup_ui_logging_impl(self, ns=globals())
 
     def _append_user_log(self, message: str) -> None:
-        parsed = parse_i18n_log_message(message)
-        localized = resolve_i18n_log_message(message)
-        timestamp = datetime.now()
-        if parsed is None:
-            self._user_log_entries.append({"timestamp": timestamp, "message": localized})
-        else:
-            key, kwargs, fallback = parsed
-            self._user_log_entries.append(
-                {
-                    "timestamp": timestamp,
-                    "message": localized,
-                    "text_key": key,
-                    "kwargs": kwargs,
-                    "fallback": fallback,
-                }
-            )
-        line = format_log_line_at(localized, timestamp=timestamp)
-        if line is None:
-            return
-        self.user_log_view.appendPlainText(line)
+        _append_user_log_impl(self, message, ns=globals())
 
     def _rerender_user_log(self) -> None:
-        self.user_log_view.clear()
-        for entry in self._user_log_entries:
-            timestamp = entry.get("timestamp")
-            text_key = entry.get("text_key")
-            fallback = entry.get("fallback")
-            kwargs = entry.get("kwargs")
-            message = entry.get("message")
-            if isinstance(text_key, str):
-                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
-                try:
-                    resolved = t(text_key, **safe_kwargs)
-                except Exception:
-                    resolved = fallback if isinstance(fallback, str) else str(message or "")
-            else:
-                resolved = str(message or "")
-            ts = timestamp if isinstance(timestamp, datetime) else None
-            line = format_log_line_at(resolved, timestamp=ts)
-            if line is None:
-                continue
-            self.user_log_view.appendPlainText(line)
+        _rerender_user_log_impl(self, ns=globals())
 
     def _output_link_markup(self, label: str, path: str | None) -> str:
-        if not path:
-            return f"<b>{escape(label)}</b>: {t(self.OUTPUT_LINK_NOT_AVAILABLE_KEY)}"
-        href_path = Path(path).as_posix()
-        file_link = (
-            f'<a href="{OUTPUT_LINK_MODE_FILE}{OUTPUT_LINK_SEPARATOR}{href_path}">'
-            f"{t(self.OUTPUT_LINK_OPEN_FILE_KEY)}</a>"
-        )
-        folder_link = (
-            f'<a href="{OUTPUT_LINK_MODE_FOLDER}{OUTPUT_LINK_SEPARATOR}{href_path}">'
-            f"{t(self.OUTPUT_LINK_OPEN_FOLDER_KEY)}</a>"
-        )
-        name = escape(Path(path).name)
-        full_path = escape(str(Path(path)))
-        return (
-            f"<b>{escape(label)}</b>: {name}<br>"
-            f"<span>{full_path}</span><br>"
-            f"{file_link} | {folder_link}"
-        )
+        return _output_link_markup_impl(self, label, path, ns=globals())
 
     def _output_links_html(self) -> str:
-        rows: list[str] = []
-        for path in self._files:
-            rows.append(
-                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), str(path))}</div>"
-            )
-        if not rows:
-            rows.append(
-                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), None)}</div>"
-            )
-
-        if self._downloaded_outputs:
-            for path in self._downloaded_outputs:
-                rows.append(
-                    f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), str(path))}</div>"
-                )
-        else:
-            rows.append(
-                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), None)}</div>"
-            )
-        return "".join(rows)
+        return _output_links_html_impl(self, ns=globals())
 
     def _refresh_output_links(self) -> None:
-        self.generated_outputs_view.setHtml(self._output_links_html())
+        _refresh_output_links_impl(self, ns=globals())
 
     def _on_output_link_activated(self, href: str) -> None:
-        mode, _, raw_path = href.partition(OUTPUT_LINK_SEPARATOR)
-        path = raw_path.strip()
-        if not path:
-            return
-        target = Path(path).parent if mode == OUTPUT_LINK_MODE_FOLDER else Path(path)
-        opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
-        if opened:
-            return
-        show_toast(
-            self,
-            t(self.OUTPUT_LINK_OPEN_FAILED_KEY),
-            title=t("instructor.msg.error_title"),
-            level="error",
-        )
+        _on_output_link_activated_impl(self, href, ns=globals())
 
     def _clear_info_text_selection(self) -> None:
         for view in (self.user_log_view, self.generated_outputs_view):
@@ -926,54 +593,10 @@ class CoordinatorModule(QWidget):
         return self._output_links_html()
 
     def _remove_file_by_path(self, file_path: str) -> None:
-        if self.state.busy:
-            return
-        target_key = _path_key(Path(file_path))
-        before_count = len(self._files)
-        self._files = [path for path in self._files if _path_key(path) != target_key]
-        if len(self._files) == before_count:
-            return
-
-        for row in range(self.drop_list.count()):
-            item = self.drop_list.item(row)
-            path_value = str(item.data(Qt.ItemDataRole.UserRole) or "")
-            if _path_key(Path(path_value)) == target_key:
-                self.drop_list.takeItem(row)
-                break
-
-        self._refresh_ui()
-        self._publish_status_key("coordinator.status.removed", count=1)
-        log_process_message(
-            "removing selected coordinator files",
-            logger=self._logger,
-            success_message="removing selected coordinator files completed successfully. removed=1",
-            user_success_message=build_i18n_log_message(
-                "coordinator.status.removed",
-                kwargs={"count": 1},
-                fallback=t("coordinator.status.removed", count=1),
-            ),
-        )
+        remove_file_by_path(self, file_path, ns=globals())
 
     def _clear_all(self) -> None:
-        if self.state.busy:
-            return
-        if not self._files:
-            return
-        total = len(self._files)
-        self._files.clear()
-        self.drop_list.clear()
-        self._refresh_ui()
-        self._publish_status_key("coordinator.status.cleared", count=total)
-        log_process_message(
-            "clearing coordinator files",
-            logger=self._logger,
-            success_message=f"clearing coordinator files completed successfully. removed={total}",
-            user_success_message=build_i18n_log_message(
-                "coordinator.status.cleared",
-                kwargs={"count": total},
-                fallback=t("coordinator.status.cleared", count=total),
-            ),
-        )
+        clear_all(self, ns=globals())
 
     def closeEvent(self, event) -> None:
         if self._cancel_token is not None:
