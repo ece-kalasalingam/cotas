@@ -307,4 +307,9 @@ TEXTS = {
     "coordinator.status.processing_completed": "ஒருங்கிணைப்பாளர் செயலாக்கம் முடிந்தது.",
     "coordinator.status.calculate_pending": "இந்த தொகுதியில் CO அடைவு கணக்கீடு இன்னும் செயல்படுத்தப்படவில்லை.",
     "coordinator.status.calculate_completed": "CO அடைவு கணக்கீடு நிறைவடைந்து வெளியீட்டு workbook உருவாக்கப்பட்டது.",
+    "coordinator.regno_dedup.title": "நகல் பதிவு எண்கள் நீக்கப்பட்டன",
+    "coordinator.regno_dedup.body": "CO அடைவு உருவாக்கும்போது {count} நகல் பதிவு எண் பதிவு(கள்) நீக்கப்பட்டன.",
+    "coordinator.regno_dedup.log_body": "{count} நகல் பதிவு எண் பதிவு(கள்) நீக்கப்பட்டன:\n{details}",
+    "coordinator.regno_dedup.log_detail": "பதிவு எண்: {reg_no} | Worksheet: {worksheet} | Workbook: {workbook}",
+    "coordinator.regno_dedup.log_detail_unavailable": "நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.",
 }

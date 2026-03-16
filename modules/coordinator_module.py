@@ -72,6 +72,7 @@ from common.utils import (
 )
 
 from .coordinator_processing import (
+    _CoAttainmentWorkbookResult,
     _analyze_dropped_files,
     _build_co_attainment_default_name,
     _extract_final_report_signature,
@@ -487,7 +488,15 @@ class CoordinatorModule(QWidget):
 
         def _on_finished(result: object) -> None:
             try:
-                output_path = Path(str(result)) if result else Path(save_path)
+                output_path = Path(save_path)
+                duplicate_reg_count = 0
+                duplicate_entries: tuple[tuple[str, str, str], ...] = ()
+                if isinstance(result, _CoAttainmentWorkbookResult):
+                    output_path = result.output_path
+                    duplicate_reg_count = max(0, int(result.duplicate_reg_count))
+                    duplicate_entries = result.duplicate_entries
+                elif result:
+                    output_path = Path(str(result))
                 if all(_path_key(path) != _path_key(output_path) for path in self._downloaded_outputs):
                     self._downloaded_outputs.append(output_path)
                 self._remember_dialog_dir_safe(str(output_path))
@@ -495,7 +504,10 @@ class CoordinatorModule(QWidget):
                 log_process_message(
                     process_name,
                     logger=self._logger,
-                    success_message=f"{process_name} completed successfully. output={output_path}",
+                    success_message=(
+                        f"{process_name} completed successfully. output={output_path}, "
+                        f"duplicates_removed={duplicate_reg_count}"
+                    ),
                     user_success_message=build_i18n_log_message(
                         "coordinator.status.calculate_completed",
                         fallback=t("coordinator.status.calculate_completed"),
@@ -509,6 +521,30 @@ class CoordinatorModule(QWidget):
                     title=t("coordinator.title"),
                     level="info",
                 )
+                if duplicate_reg_count:
+                    show_toast(
+                        self,
+                        t("coordinator.regno_dedup.body", count=duplicate_reg_count),
+                        title=t("coordinator.regno_dedup.title"),
+                        level="info",
+                    )
+                    detail_lines = [
+                        t(
+                            "coordinator.regno_dedup.log_detail",
+                            reg_no=str(reg_no),
+                            worksheet=str(worksheet_name),
+                            workbook=str(workbook_name),
+                        )
+                        for reg_no, worksheet_name, workbook_name in duplicate_entries
+                    ]
+                    details_text = "\n".join(detail_lines) if detail_lines else t(
+                        "coordinator.regno_dedup.log_detail_unavailable"
+                    )
+                    self._publish_status_key(
+                        "coordinator.regno_dedup.log_body",
+                        count=duplicate_reg_count,
+                        details=details_text,
+                    )
             finally:
                 _finalize(job)
 

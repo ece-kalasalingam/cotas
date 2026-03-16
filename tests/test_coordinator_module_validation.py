@@ -304,7 +304,9 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         token=CancellationToken(),
     )
 
-    assert result == out
+    assert result.output_path == out
+    assert result.duplicate_reg_count == 1
+    assert result.duplicate_entries == (("R001", "CO1_Direct", "second.xlsx"),)
     wb = openpyxl.load_workbook(out, data_only=True)
     try:
         assert "CO1" in wb.sheetnames

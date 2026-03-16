@@ -307,4 +307,15 @@ TEXTS = {
     "coordinator.status.processing_completed": "Coordinator processing completed.",
     "coordinator.status.calculate_pending": "CO attainment calculation is not yet implemented in this module.",
     "coordinator.status.calculate_completed": "CO attainment calculation completed and output workbook generated.",
+    "coordinator.regno_dedup.title": "Duplicate Register Numbers Removed",
+    "coordinator.regno_dedup.body": (
+        "{count} duplicate register number entr(ies) were removed while generating CO attainment."
+    ),
+    "coordinator.regno_dedup.log_body": (
+        "{count} duplicate register number entr(ies) were removed:\n{details}"
+    ),
+    "coordinator.regno_dedup.log_detail": (
+        "Reg No: {reg_no} | Worksheet: {worksheet} | Workbook: {workbook}"
+    ),
+    "coordinator.regno_dedup.log_detail_unavailable": "Duplicate entry details are unavailable.",
 }

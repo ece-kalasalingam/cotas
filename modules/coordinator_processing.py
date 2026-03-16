@@ -88,6 +88,8 @@ class _CoAttainmentRow:
     student_name: str
     direct_score: float | str
     indirect_score: float | str
+    worksheet_name: str
+    workbook_name: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -106,6 +108,13 @@ class _CoOutputSheetState:
     formats: dict[str, Any]
     next_row_index: int
     next_serial: int
+
+
+@dataclass(slots=True, frozen=True)
+class _CoAttainmentWorkbookResult:
+    output_path: Path
+    duplicate_reg_count: int
+    duplicate_entries: tuple[tuple[str, str, str], ...]
 
 
 class _RegisterDedupStore:
@@ -564,7 +573,7 @@ def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
         )
 
 
-def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_CoAttainmentRow]:
+def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: str) -> Iterable[_CoAttainmentRow]:
     direct_name = f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}"
     indirect_name = f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}"
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
@@ -616,6 +625,8 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int) -> Iterable[_Co
             student_name=student_name,
             direct_score=direct_score,
             indirect_score=indirect_score,
+            worksheet_name=direct_name,
+            workbook_name=workbook_name,
         )
 
 
@@ -716,7 +727,7 @@ def _generate_co_attainment_workbook(
     output_path: Path,
     *,
     token: CancellationToken,
-) -> Path:
+) -> _CoAttainmentWorkbookResult:
     if not source_paths:
         raise ValueError("No source files provided for CO attainment calculation.")
 
@@ -739,7 +750,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
     *,
     token: CancellationToken,
     total_outcomes: int,
-) -> Path:
+) -> _CoAttainmentWorkbookResult:
     try:
         import xlsxwriter
         from openpyxl import load_workbook
@@ -754,6 +765,8 @@ def _generate_co_attainment_workbook_course_setup_v1(
     output_workbook = xlsxwriter.Workbook(str(output_path), {"constant_memory": True})
     workbook_closed = False
     output_states: dict[int, _CoOutputSheetState] = {}
+    duplicate_reg_count = 0
+    duplicate_entries: list[tuple[str, str, str]] = []
     dedup_store = _RegisterDedupStore(
         total_outcomes=total_outcomes,
         use_sqlite=(len(source_paths) * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET) >= _DEDUP_SQLITE_THRESHOLD_ENTRIES,
@@ -781,8 +794,10 @@ def _generate_co_attainment_workbook_course_setup_v1(
                         )
                 for co_index in range(1, total_outcomes + 1):
                     state = output_states[co_index]
-                    for row in _iter_co_rows_from_workbook(workbook, co_index=co_index):
+                    for row in _iter_co_rows_from_workbook(workbook, co_index=co_index, workbook_name=source.name):
                         if not dedup_store.add_if_absent(co_index=co_index, reg_hash=row.reg_hash):
+                            duplicate_reg_count += 1
+                            duplicate_entries.append((row.reg_no, row.worksheet_name, row.workbook_name))
                             continue
                         _append_co_attainment_row(state, row)
             finally:
@@ -796,4 +811,8 @@ def _generate_co_attainment_workbook_course_setup_v1(
                 output_workbook.close()
             except Exception:
                 _logger.debug("Suppressing workbook close error during cleanup.", exc_info=True)
-    return output_path
+    return _CoAttainmentWorkbookResult(
+        output_path=output_path,
+        duplicate_reg_count=duplicate_reg_count,
+        duplicate_entries=tuple(duplicate_entries),
+    )
