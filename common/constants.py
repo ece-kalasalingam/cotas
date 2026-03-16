@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from common.exceptions import ConfigurationError
+from common.utils import app_secrets_dir
 
 """
 ============================================================
@@ -313,9 +314,7 @@ def _sanitize_workbook_secret(secret: str) -> str:
 
 
 def _workbook_secret_store_path() -> Path:
-    appdata = os.getenv("APPDATA", "").strip()
-    base = Path(appdata) if appdata else (Path.home() / "AppData" / "Roaming")
-    return base / APP_NAME / "secrets" / _WORKBOOK_SECRET_STORE_FILENAME
+    return app_secrets_dir(APP_NAME) / _WORKBOOK_SECRET_STORE_FILENAME
 
 
 def _protect_secret_bytes(secret: bytes) -> bytes:

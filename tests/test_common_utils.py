@@ -10,7 +10,9 @@ import pytest
 from common.exceptions import AppSystemError, ValidationError
 from common.utils import (
     app_settings_path,
+    app_secrets_dir,
     coerce_excel_number,
+    create_app_runtime_sqlite_file,
     emit_user_status,
     from_portable_path,
     get_ui_language_preference,
@@ -22,6 +24,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
     set_last_saved_dir,
+    _reset_runtime_storage_cache_for_tests,
     to_portable_path,
 )
 
@@ -117,14 +120,19 @@ class TestCoerceExcelNumber(unittest.TestCase):
 
 @pytest.mark.windows_acl_compat
 class TestSettingsHelpers(unittest.TestCase):
+    def setUp(self) -> None:
+        _reset_runtime_storage_cache_for_tests()
+
     @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=False)
+    @patch("common.utils._is_storage_dir_usable", return_value=True)
     def test_app_settings_path_portable_or_dev(self, *_mocks) -> None:
         path = app_settings_path("FOCUS")
         self.assertEqual(path, Path(r"D:\portable\FOCUS\settings.json"))
 
     @patch("common.utils._runtime_base_dir", return_value=Path(r"C:\Program Files\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=True)
+    @patch("common.utils._is_storage_dir_usable", return_value=True)
     @patch.dict(os.environ, {"APPDATA": r"C:\Users\alice\AppData\Roaming"}, clear=False)
     @patch("common.utils.sys.platform", "win32")
     def test_app_settings_path_installed_windows(self, *_mocks) -> None:
@@ -136,6 +144,7 @@ class TestSettingsHelpers(unittest.TestCase):
 
     @patch("common.utils._runtime_base_dir", return_value=Path("/Applications/FOCUS.app/Contents/MacOS"))
     @patch("common.utils._is_installed_exe", return_value=True)
+    @patch("common.utils._is_storage_dir_usable", return_value=True)
     @patch("common.utils.sys.platform", "darwin")
     @patch("pathlib.Path.home", return_value=Path("/Users/alice"))
     def test_app_settings_path_installed_macos(self, *_mocks) -> None:
@@ -147,6 +156,7 @@ class TestSettingsHelpers(unittest.TestCase):
 
     @patch("common.utils._runtime_base_dir", return_value=Path("/usr/local/bin"))
     @patch("common.utils._is_installed_exe", return_value=True)
+    @patch("common.utils._is_storage_dir_usable", return_value=True)
     @patch("common.utils.sys.platform", "linux")
     @patch.dict(os.environ, {"XDG_CONFIG_HOME": "/home/alice/.config"}, clear=False)
     def test_app_settings_path_installed_linux(self, *_mocks) -> None:
@@ -187,6 +197,8 @@ class TestSettingsHelpers(unittest.TestCase):
 
             with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
                 "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
             ):
                 settings_path = set_last_saved_dir(str(target), app_name="FOCUS")
                 self.assertTrue(settings_path.exists())
@@ -203,6 +215,8 @@ class TestSettingsHelpers(unittest.TestCase):
             run_base = Path(tmp)
             with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
                 "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
             ):
                 self.assertEqual(get_ui_language_preference(app_name="FOCUS"), "en")
 
@@ -211,6 +225,8 @@ class TestSettingsHelpers(unittest.TestCase):
             run_base = Path(tmp)
             with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
                 "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
             ):
                 set_ui_language_preference(app_name="FOCUS", ui_language="auto")
                 self.assertEqual(get_ui_language_preference(app_name="FOCUS"), "en")
@@ -222,6 +238,8 @@ class TestSettingsHelpers(unittest.TestCase):
             target.mkdir()
             with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
                 "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
             ):
                 set_last_saved_dir(str(target), app_name="FOCUS")
                 start_path = resolve_dialog_start_path("FOCUS", "demo.xlsx")
@@ -239,6 +257,8 @@ class TestSettingsHelpers(unittest.TestCase):
 
             with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
                 "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
             ):
                 remember_dialog_dir(str(selected), "FOCUS")
                 loaded = get_last_saved_dir("FOCUS")
@@ -246,6 +266,33 @@ class TestSettingsHelpers(unittest.TestCase):
                     os.path.normcase(loaded or ""),
                     os.path.normcase(str(target)),
                 )
+
+    @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
+    @patch("common.utils._is_installed_exe", return_value=False)
+    @patch("common.utils._is_storage_dir_usable", return_value=True)
+    def test_app_secrets_dir_portable_or_dev(self, *_mocks) -> None:
+        path = app_secrets_dir("FOCUS")
+        self.assertEqual(path, Path(r"D:\portable\FOCUS\secrets"))
+
+    @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
+    @patch("common.utils._is_installed_exe", return_value=False)
+    @patch("common.utils._is_storage_dir_usable", return_value=False)
+    @patch("common.utils.tempfile.mkdtemp", return_value=r"D:\tmp\focus_runtime_123")
+    def test_app_settings_path_falls_back_to_temp_when_primary_not_usable(self, *_mocks) -> None:
+        path = app_settings_path("FOCUS")
+        self.assertEqual(path, Path(r"D:\tmp\focus_runtime_123\settings.json"))
+
+    @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
+    @patch("common.utils._is_installed_exe", return_value=False)
+    @patch("common.utils._is_storage_dir_usable", return_value=False)
+    def test_create_app_runtime_sqlite_file_uses_runtime_temp_fallback(self, *_mocks) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("common.utils.tempfile.mkdtemp", return_value=tmp):
+                expected = str(Path(tmp) / "sqlite" / "a.sqlite3")
+                with patch("common.utils.tempfile.mkstemp", return_value=(12, expected)):
+                    fd, path = create_app_runtime_sqlite_file("FOCUS", prefix="a_", suffix=".sqlite3")
+            self.assertEqual(fd, 12)
+            self.assertEqual(path, expected)
 
 
 class TestLogProcessMessage(unittest.TestCase):

@@ -40,6 +40,7 @@ settings.json
 crash_reports/
 .tmp/
 .tmp/*.env
+secrets/
 
 # IDE/editor settings
 .vscode/

@@ -3,7 +3,10 @@
 import json
 import logging
 import os
+import atexit
+import shutil
 import sys
+import tempfile
 from logging.handlers import RotatingFileHandler
 from decimal import Decimal, InvalidOperation
 from pathlib import Path, PureWindowsPath
@@ -23,6 +26,12 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [job=%(job_id)s step=%(step_i
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 DEFAULT_LOG_MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_LOG_BACKUP_COUNT = 3
+RUNTIME_MIN_FREE_BYTES_ENV_VAR = "FOCUS_RUNTIME_MIN_FREE_BYTES"
+DEFAULT_RUNTIME_MIN_FREE_BYTES = 5 * 1024 * 1024
+RuntimeStorageMode = Literal["installed", "portable", "dev"]
+_RUNTIME_STORAGE_DIR_CACHE: dict[str, Path] = {}
+_RUNTIME_TEMP_DIRS: set[Path] = set()
+_RUNTIME_TEMP_CLEANUP_REGISTERED = False
 
 
 class _SafeExtraFormatter(logging.Formatter):
@@ -96,24 +105,145 @@ def _is_installed_exe(run_base: Path) -> bool:
     return any(run_base_text.startswith(root) for root in linux_install_roots)
 
 
+def _runtime_mode(run_base: Path | None = None) -> RuntimeStorageMode:
+    base = run_base or _runtime_base_dir()
+    if _is_installed_exe(base):
+        return "installed"
+    if getattr(sys, "frozen", False):
+        return "portable"
+    return "dev"
+
+
+def _join_path(base: Path, child: str) -> Path:
+    base_text = str(base)
+    if "\\" in base_text:
+        return Path(str(PureWindowsPath(base_text) / child))
+    return base / child
+
+
+def _installed_storage_dir(app_name: str) -> Path:
+    if sys.platform.startswith("win"):
+        app_data = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
+        return Path(str(PureWindowsPath(app_data) / app_name))
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / app_name
+    xdg_config_raw = os.getenv("XDG_CONFIG_HOME")
+    xdg_config = Path(xdg_config_raw) if xdg_config_raw else (Path.home() / ".config")
+    return xdg_config / app_name
+
+
+def app_primary_storage_dir(app_name: str) -> Path:
+    """Return preferred storage root before temp fallback checks."""
+    run_base = _runtime_base_dir()
+    mode = _runtime_mode(run_base)
+    if mode == "installed":
+        return _installed_storage_dir(app_name)
+    return run_base
+
+
+def _runtime_min_free_bytes() -> int:
+    raw = os.getenv(RUNTIME_MIN_FREE_BYTES_ENV_VAR, "").strip()
+    if not raw:
+        return DEFAULT_RUNTIME_MIN_FREE_BYTES
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return DEFAULT_RUNTIME_MIN_FREE_BYTES
+    return max(parsed, 0)
+
+
+def _directory_is_writable(path: Path) -> bool:
+    probe_path = path / f".focus_write_probe_{os.getpid()}.tmp"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        with open(probe_path, "wb") as probe:
+            probe.write(b"1")
+        probe_path.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _directory_has_free_space(path: Path, *, min_free_bytes: int) -> bool:
+    try:
+        usage = shutil.disk_usage(str(path))
+    except OSError:
+        return False
+    return usage.free >= min_free_bytes
+
+
+def _is_storage_dir_usable(path: Path, *, min_free_bytes: int) -> bool:
+    return _directory_is_writable(path) and _directory_has_free_space(path, min_free_bytes=min_free_bytes)
+
+
+def _cleanup_runtime_temp_dirs() -> None:
+    for path in sorted(_RUNTIME_TEMP_DIRS, key=lambda item: len(str(item)), reverse=True):
+        shutil.rmtree(path, ignore_errors=True)
+    _RUNTIME_TEMP_DIRS.clear()
+
+
+def _register_runtime_temp_dir(path: Path) -> None:
+    global _RUNTIME_TEMP_CLEANUP_REGISTERED
+    _RUNTIME_TEMP_DIRS.add(path)
+    if not _RUNTIME_TEMP_CLEANUP_REGISTERED:
+        atexit.register(_cleanup_runtime_temp_dirs)
+        _RUNTIME_TEMP_CLEANUP_REGISTERED = True
+
+
+def _new_runtime_temp_dir(app_name: str) -> Path:
+    temp_root = Path(tempfile.mkdtemp(prefix=f"{app_name.lower()}_runtime_"))
+    _register_runtime_temp_dir(temp_root)
+    return temp_root
+
+
+def app_runtime_storage_dir(app_name: str) -> Path:
+    """Resolve effective storage root with writeability and free-space fallback."""
+    cached = _RUNTIME_STORAGE_DIR_CACHE.get(app_name)
+    if cached is not None:
+        if cached in _RUNTIME_TEMP_DIRS:
+            return cached
+        primary_now = app_primary_storage_dir(app_name)
+        if str(cached) == str(primary_now):
+            return cached
+
+    primary = app_primary_storage_dir(app_name)
+    if _is_storage_dir_usable(primary, min_free_bytes=_runtime_min_free_bytes()):
+        _RUNTIME_STORAGE_DIR_CACHE[app_name] = primary
+        return primary
+
+    fallback = _new_runtime_temp_dir(app_name)
+    _RUNTIME_STORAGE_DIR_CACHE[app_name] = fallback
+    return fallback
+
+
+def app_secrets_dir(app_name: str) -> Path:
+    """Return folder path for persisted secret material."""
+    return _join_path(app_runtime_storage_dir(app_name), "secrets")
+
+
+def create_app_runtime_sqlite_file(app_name: str, *, prefix: str, suffix: str) -> tuple[int, str]:
+    """Create a sqlite file in runtime storage; fallback to temp runtime root on errors."""
+    storage_root = app_runtime_storage_dir(app_name)
+    sqlite_dir = _join_path(storage_root, "sqlite")
+    try:
+        sqlite_dir.mkdir(parents=True, exist_ok=True)
+        return tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=str(sqlite_dir))
+    except OSError:
+        fallback_root = _new_runtime_temp_dir(app_name)
+        sqlite_dir = _join_path(fallback_root, "sqlite")
+        sqlite_dir.mkdir(parents=True, exist_ok=True)
+        return tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=str(sqlite_dir))
+
+
+def _reset_runtime_storage_cache_for_tests() -> None:
+    """Test helper for deterministic runtime storage path assertions."""
+    _RUNTIME_STORAGE_DIR_CACHE.clear()
+    _cleanup_runtime_temp_dirs()
+
+
 def app_settings_path(app_name: str, file_name: str = SETTINGS_FILE_NAME) -> Path:
     """Resolve settings json path based on installed/portable/dev mode."""
-    run_base = _runtime_base_dir()
-    if _is_installed_exe(run_base):
-        if sys.platform.startswith("win"):
-            app_data = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-            # Keep Windows separators stable in cross-platform tests.
-            return Path(str(PureWindowsPath(app_data) / app_name / file_name))
-        if sys.platform == "darwin":
-            return Path.home() / "Library" / "Application Support" / app_name / file_name
-        xdg_config_raw = os.getenv("XDG_CONFIG_HOME")
-        xdg_config = Path(xdg_config_raw) if xdg_config_raw else (Path.home() / ".config")
-        return xdg_config / app_name / file_name
-    run_base_text = str(run_base)
-    if "\\" in run_base_text:
-        # Preserve Windows-style path joins when mocked on POSIX hosts.
-        return Path(str(PureWindowsPath(run_base_text) / file_name))
-    return run_base / file_name
+    return _join_path(app_runtime_storage_dir(app_name), file_name)
 
 
 def app_log_path(app_name: str, log_file_name: str = DEFAULT_LOG_FILE_NAME) -> Path:

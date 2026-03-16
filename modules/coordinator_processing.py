@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from common.constants import (
+    APP_NAME,
     CO_REPORT_ABSENT_TOKEN,
     CO_REPORT_DIRECT_SHEET_SUFFIX,
     CO_REPORT_HEADER_REG_NO,
@@ -45,7 +46,7 @@ from common.excel_sheet_layout import (
     style_registry_for_setup as _style_registry_for_setup,
 )
 from common.jobs import CancellationToken
-from common.utils import coerce_excel_number, normalize
+from common.utils import app_runtime_storage_dir, coerce_excel_number, create_app_runtime_sqlite_file, normalize
 from common.workbook_signing import verify_payload_signature
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -131,7 +132,11 @@ class _RegisterDedupStore:
         self._db_path: str | None = None
         if use_sqlite:
             _cleanup_stale_dedup_sqlite_files()
-            fd, db_path = tempfile.mkstemp(prefix=_DEDUP_SQLITE_PREFIX, suffix=_DEDUP_SQLITE_SUFFIX)
+            fd, db_path = create_app_runtime_sqlite_file(
+                APP_NAME,
+                prefix=_DEDUP_SQLITE_PREFIX,
+                suffix=_DEDUP_SQLITE_SUFFIX,
+            )
             self._db_path = db_path
             self._conn = sqlite3.connect(db_path)
             self._conn.execute("PRAGMA journal_mode=OFF")
@@ -184,17 +189,22 @@ class _RegisterDedupStore:
 
 def _cleanup_stale_dedup_sqlite_files() -> None:
     temp_root = Path(tempfile.gettempdir())
+    storage_sqlite_root = app_runtime_storage_dir(APP_NAME) / "sqlite"
+    roots: tuple[Path, ...] = (temp_root, storage_sqlite_root)
     patterns = (
         f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}",
         f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}-wal",
         f"{_DEDUP_SQLITE_PREFIX}*{_DEDUP_SQLITE_SUFFIX}-shm",
     )
-    for pattern in patterns:
-        for path in temp_root.glob(pattern):
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                _logger.debug("Unable to remove stale dedup sqlite file: %s", path, exc_info=True)
+    for root in roots:
+        if not root.exists():
+            continue
+        for pattern in patterns:
+            for path in root.glob(pattern):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    _logger.debug("Unable to remove stale dedup sqlite file: %s", path, exc_info=True)
 
 
 def _path_key(path: Path) -> str:
