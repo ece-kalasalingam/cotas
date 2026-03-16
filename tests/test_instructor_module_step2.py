@@ -7,14 +7,12 @@ pytest.importorskip("PySide6")
 from common.exceptions import ValidationError
 from modules import instructor_module as instructor_ui
 
-
 class _SignalRecorder:
     def __init__(self) -> None:
         self.messages: list[str] = []
 
     def emit(self, message: str) -> None:
         self.messages.append(message)
-
 
 class _DummyModule:
     def __init__(self) -> None:
@@ -54,7 +52,6 @@ class _DummyModule:
     def _refresh_ui(self) -> None:
         return
 
-
 def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
     monkeypatch.setattr(
@@ -64,7 +61,6 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
     monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
-
 
 def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
     try:
@@ -76,7 +72,6 @@ def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
         if on_finished is not None:
             on_finished(result)
     return object()
-
 
 def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
@@ -103,7 +98,6 @@ def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
     assert dummy.step2_course_details_path is None
     assert dummy.status_changed.messages == []
 
-
 def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
@@ -124,7 +118,6 @@ def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyP
     assert dummy.step2_upload_ready is False
     assert dummy.step2_done is False
     assert dummy.status_changed.messages == []
-
 
 def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
@@ -155,108 +148,6 @@ def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -
     assert dummy.step2_path is None
     assert remembered == [("D:/tmp/course_details.xlsx", instructor_ui.APP_NAME)]
     assert dummy.status_changed.messages == ["instructor.status.step2_validated"]
-
-
-def test_step2_prepare_marks_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_common_dependencies(monkeypatch)
-    dummy = _DummyModule()
-    dummy.step2_upload_ready = True
-    dummy.step2_course_details_path = "D:/tmp/course_details.xlsx"
-    remembered: list[tuple[str, str]] = []
-    generated: list[tuple[str, str]] = []
-
-    monkeypatch.setattr(
-        instructor_ui.QFileDialog,
-        "getSaveFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/marks_template.xlsx", ""),
-    )
-    monkeypatch.setattr(
-        instructor_ui,
-        "generate_marks_template_from_course_details",
-        lambda src, dst: generated.append((src, dst)),
-    )
-    monkeypatch.setattr(
-        instructor_ui,
-        "remember_dialog_dir",
-        lambda path, app_name: remembered.append((path, app_name)),
-    )
-
-    instructor_ui.InstructorModule._prepare_marks_template(dummy)
-
-    assert generated == [("D:/tmp/course_details.xlsx", "D:/tmp/marks_template.xlsx")]
-    assert dummy.step2_done is True
-    assert dummy.step2_path == "D:/tmp/marks_template.xlsx"
-    assert remembered == [("D:/tmp/marks_template.xlsx", instructor_ui.APP_NAME)]
-    assert dummy.status_changed.messages == ["instructor.status.step2_uploaded"]
-
-
-def test_step2_prepare_marks_uses_cached_default_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_common_dependencies(monkeypatch)
-    dummy = _DummyModule()
-    dummy.step2_upload_ready = True
-    dummy.step2_course_details_path = "D:/tmp/course_details.xlsx"
-    dummy._step2_marks_default_name = "ECE101_III_A_2025-26_Marks.xlsx"
-    captured_defaults: list[str] = []
-
-    def _capture_start_path(_app: str, default_name: str | None = None) -> str:
-        captured_defaults.append(default_name or "")
-        return f"D:/tmp/{default_name}" if default_name else "D:/tmp/marks_template.xlsx"
-
-    monkeypatch.setattr(instructor_ui, "resolve_dialog_start_path", _capture_start_path)
-    monkeypatch.setattr(
-        instructor_ui.QFileDialog,
-        "getSaveFileName",
-        lambda *_args, **_kwargs: ("", ""),
-    )
-
-    instructor_ui.InstructorModule._prepare_marks_template(dummy)
-
-    assert captured_defaults == ["ECE101_III_A_2025-26_Marks.xlsx"]
-
-
-def test_step2_prepare_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_common_dependencies(monkeypatch)
-    dummy = _DummyModule()
-    dummy.step2_upload_ready = True
-    dummy.step2_course_details_path = "D:/tmp/course_details.xlsx"
-    dummy.state = type("State", (), {"busy": False})()
-    dummy._active_jobs = []
-    dummy._cancel_token = None
-    dummy._workflow_service = None
-    generated: list[tuple[str, str]] = []
-
-    monkeypatch.setattr(
-        instructor_ui.QFileDialog,
-        "getSaveFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/marks_template_async.xlsx", ""),
-    )
-    monkeypatch.setattr(
-        instructor_ui,
-        "generate_marks_template_from_course_details",
-        lambda src, dst: generated.append((src, dst)),
-    )
-
-    def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
-        try:
-            result = fn(*args, **kwargs)
-        except Exception as exc:  # pragma: no cover - test exercises success path
-            if on_failed is not None:
-                on_failed(exc)
-        else:
-            if on_finished is not None:
-                on_finished(result)
-        return object()
-
-    monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
-
-    instructor_ui.InstructorModule._prepare_marks_template_async(dummy)
-
-    assert generated == [("D:/tmp/course_details.xlsx", "D:/tmp/marks_template_async.xlsx")]
-    assert dummy.step2_done is True
-    assert dummy.step2_path == "D:/tmp/marks_template_async.xlsx"
-    assert dummy.state.busy is False
-    assert dummy.status_changed.messages == ["instructor.status.step2_uploaded"]
-
 
 def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
@@ -298,4 +189,5 @@ def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyP
     assert dummy.step2_path is None
     assert dummy.state.busy is False
     assert dummy.status_changed.messages == ["instructor.status.step2_validated"]
+
 

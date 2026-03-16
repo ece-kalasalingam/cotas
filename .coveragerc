@@ -1,0 +1,21 @@
+[run]
+source =
+    common
+    domain
+    modules
+    services
+omit =
+    tests/*
+    */site-packages/*
+    */shibokensupport/*
+    */pyscript*
+
+[report]
+ignore_errors = True
+show_missing = True
+skip_covered = False
+omit =
+    tests/*
+    */site-packages/*
+    */shibokensupport/*
+    */pyscript*

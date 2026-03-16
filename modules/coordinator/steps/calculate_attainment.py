@@ -28,7 +28,7 @@ def calculate_attainment_async(module: object, *, ns: dict[str, object]) -> None
         module,
         t("coordinator.calculate"),
         ns["resolve_dialog_start_path"](ns["APP_NAME"], default_name),
-        t("coordinator.dialog.filter"),
+        t("instructor.dialog.filter.excel_open"),
     )
     if not save_path:
         return

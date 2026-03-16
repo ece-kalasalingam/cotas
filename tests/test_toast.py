@@ -1,0 +1,219 @@
+from __future__ import annotations
+
+from common.constants import TOAST_DEFAULT_DURATION_MS, TOAST_ERROR_DURATION_MS, TOAST_MARGIN
+from common import toast
+
+
+class _FakeWidget:
+    def __init__(self, *, visible: bool = True, minimized: bool = False, width: int = 300, origin=(50, 40)) -> None:
+        self._visible = visible
+        self._minimized = minimized
+        self._width = width
+        self._origin = origin
+
+    def window(self):
+        return self
+
+    def isVisible(self) -> bool:  # noqa: N802 - Qt-style API
+        return self._visible
+
+    def isMinimized(self) -> bool:  # noqa: N802 - Qt-style API
+        return self._minimized
+
+    def width(self) -> int:
+        return self._width
+
+    def mapToGlobal(self, _point):  # noqa: N802 - Qt-style API
+        class _P:
+            def __init__(self, x: int, y: int) -> None:
+                self._x = x
+                self._y = y
+
+            def x(self) -> int:
+                return self._x
+
+            def y(self) -> int:
+                return self._y
+
+        return _P(*self._origin)
+
+
+class _FakeRect:
+    def __init__(self, x: int, y: int, w: int, h: int) -> None:
+        self._x, self._y, self._w, self._h = x, y, w, h
+
+    def x(self) -> int:
+        return self._x
+
+    def y(self) -> int:
+        return self._y
+
+    def width(self) -> int:
+        return self._w
+
+    def height(self) -> int:
+        return self._h
+
+
+class _FakeScreen:
+    def __init__(self, rect: _FakeRect) -> None:
+        self._rect = rect
+
+    def availableGeometry(self):  # noqa: N802
+        return self._rect
+
+
+class _FakeApp:
+    _instance = None
+    _active = None
+    _top = []
+    _screen = None
+
+    @staticmethod
+    def instance():
+        return _FakeApp._instance
+
+    @staticmethod
+    def activeWindow():  # noqa: N802
+        return _FakeApp._active
+
+    @staticmethod
+    def topLevelWidgets():  # noqa: N802
+        return list(_FakeApp._top)
+
+    @staticmethod
+    def primaryScreen():  # noqa: N802
+        return _FakeApp._screen
+
+
+class _FakeToastWidget:
+    instances = []
+
+    def __init__(self, host, *, title: str, message: str, level: str) -> None:
+        self.host = host
+        self.title = title
+        self.message = message
+        self.level = level
+        self._width = 180
+        self.fit_width_calls = []
+        self.adjust_size_calls = 0
+        self.moves = []
+        self.shown = False
+        self.closed = False
+        _FakeToastWidget.instances.append(self)
+
+    def width(self) -> int:
+        return self._width
+
+    def fit_width(self, value: int) -> None:
+        self.fit_width_calls.append(value)
+
+    def adjustSize(self) -> None:  # noqa: N802
+        self.adjust_size_calls += 1
+
+    def move(self, x: int, y: int) -> None:
+        self.moves.append((x, y))
+
+    def show(self) -> None:
+        self.shown = True
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_resolve_parent_prefers_explicit_parent_window() -> None:
+    parent = _FakeWidget()
+    assert toast._resolve_parent(parent) is parent
+
+
+def test_resolve_parent_uses_active_visible_window(monkeypatch) -> None:
+    monkeypatch.setattr(toast, "QApplication", _FakeApp)
+    _FakeApp._instance = _FakeApp()
+    active = _FakeWidget(visible=True, minimized=False)
+    _FakeApp._active = active
+    _FakeApp._top = []
+
+    assert toast._resolve_parent(None) is active
+
+
+def test_resolve_parent_falls_back_to_first_visible_toplevel(monkeypatch) -> None:
+    monkeypatch.setattr(toast, "QApplication", _FakeApp)
+    _FakeApp._instance = _FakeApp()
+    _FakeApp._active = _FakeWidget(visible=False, minimized=False)
+    visible_top = _FakeWidget(visible=True, minimized=False)
+    _FakeApp._top = [_FakeWidget(visible=False), visible_top]
+
+    assert toast._resolve_parent(None) is visible_top
+
+
+def test_show_toast_returns_early_for_hidden_host(monkeypatch) -> None:
+    hidden = _FakeWidget(visible=False)
+    monkeypatch.setattr(toast, "_resolve_parent", lambda _p: hidden)
+    monkeypatch.setattr(toast, "_ToastWidget", _FakeToastWidget)
+
+    calls = []
+    monkeypatch.setattr(toast.QTimer, "singleShot", lambda ttl, cb: calls.append((ttl, cb)))
+
+    _FakeToastWidget.instances.clear()
+    toast.show_toast(None, "hello")
+
+    assert _FakeToastWidget.instances == []
+    assert calls == []
+
+
+def test_show_toast_uses_error_default_ttl_and_host_positioning(monkeypatch) -> None:
+    host = _FakeWidget(visible=True, minimized=False, width=320, origin=(100, 80))
+    monkeypatch.setattr(toast, "_resolve_parent", lambda _p: host)
+    monkeypatch.setattr(toast, "_ToastWidget", _FakeToastWidget)
+
+    _FakeApp._screen = _FakeScreen(_FakeRect(0, 0, 1200, 800))
+    monkeypatch.setattr(toast, "QApplication", _FakeApp)
+
+    timer_calls = []
+    monkeypatch.setattr(toast.QTimer, "singleShot", lambda ttl, cb: timer_calls.append((ttl, cb)))
+
+    _FakeToastWidget.instances.clear()
+    toast.show_toast(None, "err", level="error")
+
+    created = _FakeToastWidget.instances[-1]
+    assert created.fit_width_calls, "fit_width should be used when host width is available"
+    expected_x = host.mapToGlobal(None).x() + host.width() - created.width() - TOAST_MARGIN
+    expected_y = host.mapToGlobal(None).y() + TOAST_MARGIN
+    assert created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))
+    assert created.shown is True
+    assert timer_calls and timer_calls[-1][0] == TOAST_ERROR_DURATION_MS
+
+
+def test_show_toast_prefers_custom_duration_over_defaults(monkeypatch) -> None:
+    host = _FakeWidget(visible=True, minimized=False)
+    monkeypatch.setattr(toast, "_resolve_parent", lambda _p: host)
+    monkeypatch.setattr(toast, "_ToastWidget", _FakeToastWidget)
+    _FakeApp._screen = _FakeScreen(_FakeRect(0, 0, 1200, 800))
+    monkeypatch.setattr(toast, "QApplication", _FakeApp)
+
+    timer_calls = []
+    monkeypatch.setattr(toast.QTimer, "singleShot", lambda ttl, cb: timer_calls.append((ttl, cb)))
+
+    _FakeToastWidget.instances.clear()
+    toast.show_toast(None, "info", level="info", duration_ms=1234)
+
+    assert timer_calls[-1][0] == 1234
+
+
+def test_show_toast_uses_global_screen_position_when_no_host(monkeypatch) -> None:
+    monkeypatch.setattr(toast, "_resolve_parent", lambda _p: None)
+    monkeypatch.setattr(toast, "_ToastWidget", _FakeToastWidget)
+    _FakeApp._screen = _FakeScreen(_FakeRect(10, 20, 900, 700))
+    monkeypatch.setattr(toast, "QApplication", _FakeApp)
+
+    timer_calls = []
+    monkeypatch.setattr(toast.QTimer, "singleShot", lambda ttl, cb: timer_calls.append((ttl, cb)))
+
+    _FakeToastWidget.instances.clear()
+    toast.show_toast(None, "hello")
+
+    created = _FakeToastWidget.instances[-1]
+    expected_x = 10 + 900 - created.width() - TOAST_MARGIN
+    expected_y = 20 + TOAST_MARGIN
+    assert created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))
+    assert timer_calls[-1][0] == TOAST_DEFAULT_DURATION_MS

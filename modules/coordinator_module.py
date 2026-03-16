@@ -143,6 +143,8 @@ QPushButton:hover {
     border-radius: 4px;
 }
 """
+OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX = 10
+OUTPUT_LINK_MODE_FILE = "file"
 COORDINATOR_PANEL_STYLESHEET = """
 QFrame#coordinatorHeaderCard { border: 1px solid palette(mid); border-radius: 12px; background-color: palette(base); }
 QLabel#coordinatorTitle { letter-spacing: 0.3px; }
@@ -561,7 +563,7 @@ class CoordinatorModule(QWidget):
             self,
             t("coordinator.dialog.title"),
             resolve_dialog_start_path(APP_NAME),
-            t("coordinator.dialog.filter"),
+            t("instructor.dialog.filter.excel_open"),
         )
         if selected_files:
             self._remember_dialog_dir_safe(selected_files[0])

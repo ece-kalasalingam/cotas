@@ -155,7 +155,7 @@ class HelpModule(QWidget):
             self._logger.warning("Help PDF save requested but source file is missing.")
             show_toast(
                 self,
-                t("help.missing_file_body"),
+                t("help.status.file_missing"),
                 title=t("help.missing_file_title"),
                 level="warning",
             )
@@ -196,7 +196,7 @@ class HelpModule(QWidget):
                 )
                 show_toast(
                     self,
-                    t("help.save_failed_body", error=""),
+                    t("help.status.save_failed"),
                     title=t("help.save_failed_title"),
                     level="error",
                 )
@@ -214,7 +214,7 @@ class HelpModule(QWidget):
             )
             show_toast(
                 self,
-                t("help.save_success_body"),
+                t("help.status.save_success"),
                 title=t("help.save_success_title"),
                 level="success",
             )
@@ -230,7 +230,7 @@ class HelpModule(QWidget):
             self._logger.warning("Help PDF open requested but source file is missing.")
             show_toast(
                 self,
-                t("help.missing_file_body"),
+                t("help.status.file_missing"),
                 title=t("help.missing_file_title"),
                 level="warning",
             )

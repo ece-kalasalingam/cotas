@@ -419,3 +419,203 @@ class TestEmitUserStatus(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_runtime_min_free_bytes_handles_invalid_and_negative_env() -> None:
+    from common import utils
+
+    with patch.dict(os.environ, {utils.RUNTIME_MIN_FREE_BYTES_ENV_VAR: 'not-a-number'}, clear=False):
+        assert utils._runtime_min_free_bytes() == utils.DEFAULT_RUNTIME_MIN_FREE_BYTES
+
+    with patch.dict(os.environ, {utils.RUNTIME_MIN_FREE_BYTES_ENV_VAR: '-5'}, clear=False):
+        assert utils._runtime_min_free_bytes() == 0
+
+
+def test_directory_helpers_return_false_on_oserror() -> None:
+    from common import utils
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp)
+        with patch('builtins.open', side_effect=OSError('blocked')):
+            assert utils._directory_is_writable(path) is False
+
+    with patch('common.utils.shutil.disk_usage', side_effect=OSError('denied')):
+        assert utils._directory_has_free_space(Path('.'), min_free_bytes=1) is False
+
+
+def test_remember_dialog_dir_safe_logs_warning_on_oserror() -> None:
+    from common import utils
+
+    logger = Mock()
+    with patch('common.utils.remember_dialog_dir', side_effect=OSError('cannot write')):
+        utils.remember_dialog_dir_safe('C:/tmp/out.xlsx', app_name='FOCUS', logger=logger)
+
+    logger.warning.assert_called_once()
+
+
+def test_safe_extra_formatter_backfills_job_and_step_fields() -> None:
+    from common import utils
+    import logging
+
+    formatter = utils._SafeExtraFormatter(fmt=utils.LOG_FORMAT, datefmt=utils.LOG_DATE_FORMAT)
+    record = logging.LogRecord(
+        name='test.logger',
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='hello',
+        args=(),
+        exc_info=None,
+    )
+
+    rendered = formatter.format(record)
+
+    assert 'job=-' in rendered
+    assert 'step=-' in rendered
+
+
+def test_emit_user_status_ignores_blank_and_none_signal_and_logs_emit_failures() -> None:
+    logger = Mock()
+
+    signal = Mock()
+    emit_user_status(signal, '   ', logger=logger)
+    signal.emit.assert_not_called()
+
+    emit_user_status(None, 'hello', logger=logger)
+
+    class _BadSignal:
+        def emit(self, _message: str) -> None:
+            raise RuntimeError('emit failed')
+
+    emit_user_status(_BadSignal(), 'hello', logger=logger)
+
+    logger.exception.assert_called_once()
+
+
+def test_is_installed_exe_windows_and_unix_roots() -> None:
+    from common import utils
+
+    with patch('common.utils.sys.frozen', True, create=True), patch('common.utils.sys.platform', 'win32'), patch.dict(
+        os.environ,
+        {
+            'ProgramFiles': r'C:\\Program Files',
+            'ProgramFiles(x86)': r'C:\\Program Files (x86)',
+            'LOCALAPPDATA': r'C:\\Users\\alice\\AppData\\Local',
+            'FOCUS_PORTABLE': '0',
+        },
+        clear=False,
+    ):
+        assert utils._is_installed_exe(Path(r'C:\\Program Files\\FOCUS')) is True
+        assert utils._is_installed_exe(Path(r'D:\\portable\\FOCUS')) is False
+
+    with patch('common.utils.sys.frozen', True, create=True), patch('common.utils.sys.platform', 'darwin'), patch.dict(
+        os.environ,
+        {'FOCUS_PORTABLE': '0'},
+        clear=False,
+    ):
+        assert utils._is_installed_exe(Mock(resolve=lambda: '/Applications/FOCUS.app/Contents/MacOS')) is True
+        assert utils._is_installed_exe(Mock(resolve=lambda: '/Users/alice/FOCUS')) is False
+
+    with patch('common.utils.sys.frozen', True, create=True), patch('common.utils.sys.platform', 'linux'), patch.dict(
+        os.environ,
+        {'FOCUS_PORTABLE': '0'},
+        clear=False,
+    ):
+        assert utils._is_installed_exe(Mock(resolve=lambda: '/usr/bin/focus')) is True
+        assert utils._is_installed_exe(Mock(resolve=lambda: '/home/alice/focus')) is False
+
+def test_runtime_mode_portable_branch() -> None:
+    from common import utils
+
+    with patch('common.utils._is_installed_exe', return_value=False), patch('common.utils.sys.frozen', True, create=True):
+        assert utils._runtime_mode(Path('C:/portable')) == 'portable'
+
+
+def test_join_path_posix_branch() -> None:
+    from common import utils
+
+    assert utils._join_path(Path('/tmp/base'), 'child').as_posix().endswith('/tmp/base/child')
+
+
+def test_app_runtime_storage_dir_returns_cached_temp_dir_directly() -> None:
+    from common import utils
+
+    utils._reset_runtime_storage_cache_for_tests()
+    temp_path = Path('C:/tmp/focus_runtime_cached')
+    utils._RUNTIME_STORAGE_DIR_CACHE['FOCUS'] = temp_path
+    utils._RUNTIME_TEMP_DIRS.add(temp_path)
+
+    with patch('common.utils.app_primary_storage_dir', side_effect=AssertionError('should not be called')):
+        assert utils.app_runtime_storage_dir('FOCUS') == temp_path
+
+    utils._reset_runtime_storage_cache_for_tests()
+
+
+def test_create_app_runtime_sqlite_file_falls_back_when_primary_mkstemp_fails() -> None:
+    from common import utils
+
+    with tempfile.TemporaryDirectory() as tmp1, tempfile.TemporaryDirectory() as tmp2:
+        primary = Path(tmp1)
+        fallback = Path(tmp2)
+
+        def _mkstemp_side_effect(*_args, **kwargs):
+            if str(kwargs.get('dir', '')).endswith('sqlite') and str(primary / 'sqlite') in str(kwargs['dir']):
+                raise OSError('primary fail')
+            return (44, str(Path(kwargs['dir']) / 'ok.sqlite3'))
+
+        with patch('common.utils.app_runtime_storage_dir', return_value=primary), patch(
+            'common.utils._new_runtime_temp_dir', return_value=fallback
+        ), patch('common.utils.tempfile.mkstemp', side_effect=_mkstemp_side_effect):
+            fd, out = utils.create_app_runtime_sqlite_file('FOCUS', prefix='x_', suffix='.sqlite3')
+
+        assert fd == 44
+        assert str(fallback / 'sqlite') in out.replace('\\', '/') or str((fallback / 'sqlite')).replace('\\', '/') in out.replace('\\', '/')
+
+
+def test_app_log_path_uses_settings_parent() -> None:
+    from common import utils
+
+    with patch('common.utils.app_settings_path', return_value=Path('C:/base/settings.json')):
+        assert str(utils.app_log_path('FOCUS')).replace('\\', '/').endswith('C:/base/focus.log')
+
+
+def test_configure_app_logging_configures_once_and_reuses_guard() -> None:
+    from common import utils
+    import logging
+
+    if hasattr(utils.configure_app_logging, '_configured'):
+        delattr(utils.configure_app_logging, '_configured')
+
+    log_path = Path('C:/tmp/focus.log')
+
+    class _FakeHandler:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.level = None
+            self.formatter = None
+
+        def setLevel(self, level: int) -> None:  # noqa: N802
+            self.level = level
+
+        def setFormatter(self, formatter) -> None:  # noqa: N802
+            self.formatter = formatter
+
+    root_logger = Mock()
+
+    with patch('common.utils.app_log_path', return_value=log_path), patch('common.utils.RotatingFileHandler', _FakeHandler), patch(
+        'common.utils.logging.getLogger', return_value=root_logger
+    ):
+        returned = utils.configure_app_logging('FOCUS', level=logging.INFO, max_bytes=123, backup_count=2)
+
+    assert returned == log_path
+    root_logger.setLevel.assert_called_once_with(logging.INFO)
+    root_logger.addHandler.assert_called_once()
+
+    with patch('common.utils.app_log_path', return_value=log_path), patch('common.utils.RotatingFileHandler', side_effect=AssertionError('should not construct handler')):
+        returned_again = utils.configure_app_logging('FOCUS')
+
+    assert returned_again == log_path
+
+    if hasattr(utils.configure_app_logging, '_configured'):
+        delattr(utils.configure_app_logging, '_configured')
+
+

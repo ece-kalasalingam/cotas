@@ -146,3 +146,16 @@ _set_fresh_process_temp_root()
 _set_fresh_pytest_temp_root()
 _patch_windows_pytest_temp_mkdir_mode()
 _patch_windows_tempfile_mkdtemp()
+
+@pytest.fixture(autouse=True)
+def _disable_native_file_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent native OS file dialogs from appearing during automated tests."""
+    try:
+        from PySide6.QtWidgets import QFileDialog
+    except Exception:
+        return
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *_a, **_k: ("", "")), raising=False)
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *_a, **_k: ("", "")), raising=False)
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(lambda *_a, **_k: ([], "")), raising=False)
+

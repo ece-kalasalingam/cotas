@@ -175,12 +175,9 @@ _INSTRUCTOR_STATUS_KEYS = (
     "instructor.status.step2_validated",
     "instructor.status.step2_uploaded",
     "instructor.status.step2_changed",
-    "instructor.status.step3_selected",
     "instructor.status.step3_uploaded",
     "instructor.status.step3_changed",
     "instructor.status.step4_selected",
-    "instructor.status.step4_changed",
-    "instructor.status.step5_selected",
     "instructor.status.operation_in_progress",
     "instructor.status.operation_cancelled",
 )
