@@ -17,8 +17,15 @@ from common.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     MAIN_SPLASH_MS,
+    SINGLE_INSTANCE_ACK_PAYLOAD,
+    SINGLE_INSTANCE_ACTIVATE_PAYLOAD,
+    SINGLE_INSTANCE_CLIENT_ACK_TIMEOUT_MS,
+    SINGLE_INSTANCE_CLIENT_CONNECT_TIMEOUT_MS,
+    SINGLE_INSTANCE_CLIENT_WRITE_TIMEOUT_MS,
     QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
     SINGLE_INSTANCE_LOCK_TIMEOUT_MS,
+    SINGLE_INSTANCE_SERVER_READ_TIMEOUT_MS,
+    SINGLE_INSTANCE_SERVER_WRITE_TIMEOUT_MS,
     SPLASH_BG_COLOR,
     SPLASH_HEIGHT,
     SPLASH_STATUS_COLOR,
@@ -27,10 +34,12 @@ from common.constants import (
     SPLASH_WIDTH,
     STARTUP_TOAST_DURATION_MS,
     STARTUP_TOAST_QUIT_DELAY_MS,
+    THEME_MODE_AUTO,
     THEME_SETUP_DEFER_MS,
     THEME_REFRESH_DEBOUNCE_MS,
     UI_FONT_FAMILY,
     UI_LANGUAGE,
+    WIN32_SHOW_WINDOW_RESTORE,
     ensure_workbook_secret_policy,
 )
 from common.contracts import validate_blueprint_registry_contracts
@@ -94,14 +103,14 @@ def _activation_server_name() -> str:
 def _signal_existing_instance_to_activate() -> bool:
     socket = QLocalSocket()
     socket.connectToServer(_activation_server_name())
-    connected = socket.waitForConnected(500)
+    connected = socket.waitForConnected(SINGLE_INSTANCE_CLIENT_CONNECT_TIMEOUT_MS)
     if connected:
-        socket.write(b"ACTIVATE")
+        socket.write(SINGLE_INSTANCE_ACTIVATE_PAYLOAD)
         socket.flush()
-        socket.waitForBytesWritten(300)
+        socket.waitForBytesWritten(SINGLE_INSTANCE_CLIENT_WRITE_TIMEOUT_MS)
         ack_ok = (
-            socket.waitForReadyRead(700)
-            and bytes(socket.readAll().data()).strip() == b"OK"
+            socket.waitForReadyRead(SINGLE_INSTANCE_CLIENT_ACK_TIMEOUT_MS)
+            and bytes(socket.readAll().data()).strip() == SINGLE_INSTANCE_ACK_PAYLOAD
         )
         socket.disconnectFromServer()
         socket.deleteLater()
@@ -126,8 +135,7 @@ def _raise_and_activate_window(window: MainWindow) -> None:
 
             hwnd = int(window.winId())
             user32 = ctypes.windll.user32
-            SW_RESTORE = 9
-            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.ShowWindow(hwnd, WIN32_SHOW_WINDOW_RESTORE)
             user32.BringWindowToTop(hwnd)
             user32.SetForegroundWindow(hwnd)
         except Exception:
@@ -146,12 +154,12 @@ def _install_activation_server(window: MainWindow) -> QLocalServer:
         while server.hasPendingConnections():
             socket = server.nextPendingConnection()
             if socket is not None:
-                socket.waitForReadyRead(150)
+                socket.waitForReadyRead(SINGLE_INSTANCE_SERVER_READ_TIMEOUT_MS)
                 _ = socket.readAll().data()
                 _raise_and_activate_window(window)
-                socket.write(b"OK")
+                socket.write(SINGLE_INSTANCE_ACK_PAYLOAD)
                 socket.flush()
-                socket.waitForBytesWritten(150)
+                socket.waitForBytesWritten(SINGLE_INSTANCE_SERVER_WRITE_TIMEOUT_MS)
                 socket.disconnectFromServer()
                 socket.deleteLater()
 
@@ -167,7 +175,7 @@ def _setup_system_theme() -> None:
         return
     _theme_apply_in_progress = True
     try:
-        qdarktheme.setup_theme("auto")
+        qdarktheme.setup_theme(THEME_MODE_AUTO)
     except (RuntimeError, AttributeError, TypeError, ValueError) as exc:
         _logger.warning(
             "Failed to apply qdarktheme.",
@@ -250,15 +258,9 @@ def _validate_startup_workbook_password(app: QApplication) -> int | None:
         return None
     except ConfigurationError:
         if getattr(sys, "frozen", False):
-            message = (
-                "Workbook secret is unavailable. "
-                "Please reinstall the software or contact support."
-            )
+            message = t("app.startup.workbook_secret_missing_frozen")
         else:
-            message = (
-                "Workbook secret is unavailable. "
-                "Delete the local workbook secret store and relaunch."
-            )
+            message = t("app.startup.workbook_secret_missing_dev")
     _logger.error(
         "Startup blocked: workbook secret is unavailable.",
         extra={

@@ -4,6 +4,12 @@ TEXTS = {
     # Startup / main
     "app.already_running": "Application is already running.",
     "app.unexpected_error": "An unexpected error occurred. Please check the log file.",
+    "app.startup.workbook_secret_missing_frozen": (
+        "Workbook secret is unavailable. Please reinstall the software or contact support."
+    ),
+    "app.startup.workbook_secret_missing_dev": (
+        "Workbook secret is unavailable. Delete the local workbook secret store and relaunch."
+    ),
     "app.main_window_title": "FOCUS",
     "splash.starting": "Starting application...",
     "splash.loading_main_window": "Loading main window...",

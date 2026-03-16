@@ -33,8 +33,16 @@ MAIN_WINDOW_TITLE_TEXT_KEY = "app.main_window_title"
 APP_ORGANIZATION = "FOCUS"
 MAIN_SPLASH_MS = 1500
 SINGLE_INSTANCE_LOCK_TIMEOUT_MS = 0
+SINGLE_INSTANCE_CLIENT_CONNECT_TIMEOUT_MS = 500
+SINGLE_INSTANCE_CLIENT_WRITE_TIMEOUT_MS = 300
+SINGLE_INSTANCE_CLIENT_ACK_TIMEOUT_MS = 700
+SINGLE_INSTANCE_SERVER_READ_TIMEOUT_MS = 150
+SINGLE_INSTANCE_SERVER_WRITE_TIMEOUT_MS = 150
+SINGLE_INSTANCE_ACTIVATE_PAYLOAD = b"ACTIVATE"
+SINGLE_INSTANCE_ACK_PAYLOAD = b"OK"
 THEME_REFRESH_DEBOUNCE_MS = 120
 THEME_SETUP_DEFER_MS = 0
+THEME_MODE_AUTO = "auto"
 UI_STANDARD_TIMEOUT_MS = 3000
 STARTUP_TOAST_DURATION_MS = 2200
 STARTUP_TOAST_QUIT_DELAY_MS = 2300
@@ -63,6 +71,41 @@ WINDOW_MIN_HEIGHT = WINDOW_STANDARD_HEIGHT
 MAIN_ACTIVITY_ICON_SIZE = 30
 STATUS_FLASH_TIMEOUT_MS = UI_STANDARD_TIMEOUT_MS
 MAIN_WINDOW_CONTENT_MARGINS = (0, 0, 0, 0)
+MAIN_SHARED_INFO_TABS_HEIGHT = 150
+MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT = 16
+MAIN_SHARED_LAYOUT_MARGINS = (0, 8, 0, 8)
+MAIN_SHARED_LAYOUT_SPACING = 6
+MAIN_SHARED_TAB_LAYOUT_MARGINS = (0, 0, 0, 0)
+MAIN_SHARED_TAB_LAYOUT_SPACING = 0
+MAIN_SHARED_TAB_FIRST_MARGIN_LEFT = 8
+MAIN_SHARED_ACTIVITY_STYLESHEET = """
+QFrame#sharedActivityFrame {
+    border: none;
+    background: transparent;
+}
+QTabWidget#sharedInfoTabs::pane {
+    border: none;
+    background: palette(base);
+}
+QTabWidget#sharedInfoTabs QTabBar::tab:first {
+    margin-left: __TAB_MARGIN__px;
+}
+QPlainTextEdit#sharedActivityLog,
+QTextBrowser#sharedGeneratedOutputs {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+    padding: 8px;
+}
+"""
+MAIN_HIDDEN_ACTIVITY_MODULE_KEYS = ("HelpModule", "AboutModule")
+OUTPUT_LINK_SEPARATOR = "::"
+OUTPUT_LINK_MODE_FILE = "file"
+OUTPUT_LINK_MODE_FOLDER = "folder"
+OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX = 10
+SHORTCUT_OPEN_KEY_SEQUENCE = "Ctrl+O"
+SHORTCUT_SAVE_KEY_SEQUENCE = "Ctrl+S"
+WIN32_SHOW_WINDOW_RESTORE = 9
 
 ABOUT_ICON_SIZE = 72
 ABOUT_LAYOUT_MARGIN = 40
@@ -84,6 +127,61 @@ INSTRUCTOR_INFO_TAB_FIXED_HEIGHT = 220
 INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS = (0, 0, 0, 0)
 INSTRUCTOR_INFO_TAB_LAYOUT_SPACING = 0
 HELP_LAYOUT_CONTENT_MARGINS = (0, 0, 0, 0)
+COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE = 10
+COORDINATOR_LIST_PLACEHOLDER_COLOR = "gray"
+COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS = (16, 16, -16, -16)
+COORDINATOR_FILE_NAME_FONT_SIZE = 10
+COORDINATOR_SUMMARY_FONT_SIZE = 9
+COORDINATOR_ROOT_MIN_SPACING = 10
+COORDINATOR_DROP_LIST_ITEM_SPACING = 2
+COORDINATOR_FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
+COORDINATOR_FILE_ITEM_LAYOUT_SPACING = 12
+COORDINATOR_REMOVE_BUTTON_SIZE = 24
+COORDINATOR_REMOVE_BUTTON_ICON_SIZE = 16
+COORDINATOR_HEADER_LAYOUT_MARGINS = (16, 14, 16, 14)
+COORDINATOR_HEADER_LAYOUT_SPACING = 6
+COORDINATOR_DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
+COORDINATOR_DROP_LIST_MIN_HEIGHT = 220
+COORDINATOR_CONTROLS_LAYOUT_MARGINS = (6, 0, 6, 0)
+COORDINATOR_CONTROLS_LAYOUT_SPACING = 10
+COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA = 220
+COORDINATOR_DROPZONE_OUTER_RECT_ADJUST = (1, 1, -2, -2)
+COORDINATOR_DROPZONE_OUTER_RADIUS = 12
+COORDINATOR_DROPZONE_BORDER_WIDTH = 2
+COORDINATOR_DROPZONE_BORDER_DASH_PATTERN = (4, 3)
+COORDINATOR_DROPZONE_INNER_RECT_ADJUST = (6, 6, -6, -6)
+COORDINATOR_DROPZONE_INNER_RADIUS = 10
+COORDINATOR_REMOVE_BUTTON_STYLESHEET = """
+QPushButton {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+}
+QPushButton:hover {
+    background-color: rgba(231, 76, 60, 0.15);
+    border-radius: 4px;
+}
+"""
+COORDINATOR_PANEL_STYLESHEET = """
+QFrame#coordinatorHeaderCard { border: 1px solid palette(mid); border-radius: 12px; background-color: palette(base); }
+QLabel#coordinatorTitle { letter-spacing: 0.3px; }
+QLabel#coordinatorSummary { padding: 5px 10px; border: 1px solid palette(mid); border-radius: 10px; background-color: palette(alternate-base); }
+QFrame#coordinatorDropZone { border: none; background: transparent; }
+QListWidget#coordinatorDropList { border: none; padding: 10px; background: transparent; }
+QListWidget#coordinatorDropList::item { margin: 2px 0; }
+QPushButton#coordinatorClearButton, QPushButton#coordinatorCalculateButton { padding: 6px 12px; min-width: 150px; min-height: 30px; border-radius: 6px; border: none; }
+QPushButton#coordinatorClearButton:disabled, QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+QPushButton#coordinatorCalculateButton:enabled { background-color: palette(highlight); color: palette(highlighted-text); border: none; font-weight: 600; }
+QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
+QTabWidget#instructorInfoTabs::pane { border: none; background: palette(base); }
+QTabWidget#instructorInfoTabs QTabBar::tab:first { margin-left: 8px; }
+QTabWidget#instructorInfoTabs QPlainTextEdit, QTabWidget#instructorInfoTabs QTextBrowser { border: 1px solid palette(mid); border-radius: 8px; background: palette(base); padding: 8px; }
+"""
 
 # Shared UI style snippets
 ABOUT_APP_NAME_STYLE = "font-size: 24px; font-weight: 600;"
@@ -397,6 +495,10 @@ WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS = "step2_validate_course_details"
 WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE = "step2_generate_marks_template"
 WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS = "step3_upload_filled_marks"
 WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT = "step3_generate_final_report"
+COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES = "collecting coordinator files"
+COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT = "calculating coordinator co attainment"
+COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES = "coordinator_collect_files"
+COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT = "coordinator_calculate_attainment"
 WORKFLOW_PAYLOAD_KEY_TEMPLATE_ID = "template_id"
 WORKFLOW_PAYLOAD_KEY_OUTPUT = "output"
 WORKFLOW_PAYLOAD_KEY_SOURCE = "source"

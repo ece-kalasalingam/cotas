@@ -43,12 +43,48 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
+    COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
+    COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES,
+    COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
+    COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
+    COORDINATOR_CONTROLS_LAYOUT_MARGINS,
+    COORDINATOR_CONTROLS_LAYOUT_SPACING,
+    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
+    COORDINATOR_DROPZONE_BORDER_WIDTH,
+    COORDINATOR_DROPZONE_INNER_RADIUS,
+    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
+    COORDINATOR_DROPZONE_OUTER_RADIUS,
+    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
+    COORDINATOR_DROP_LIST_ITEM_SPACING,
+    COORDINATOR_DROP_LIST_MIN_HEIGHT,
+    COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
+    COORDINATOR_FILE_ITEM_LAYOUT_MARGINS,
+    COORDINATOR_FILE_ITEM_LAYOUT_SPACING,
+    COORDINATOR_FILE_NAME_FONT_SIZE,
+    COORDINATOR_HEADER_LAYOUT_MARGINS,
+    COORDINATOR_HEADER_LAYOUT_SPACING,
+    COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE,
+    COORDINATOR_LIST_PLACEHOLDER_COLOR,
+    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
+    COORDINATOR_PANEL_STYLESHEET,
+    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
+    COORDINATOR_REMOVE_BUTTON_SIZE,
+    COORDINATOR_REMOVE_BUTTON_STYLESHEET,
+    COORDINATOR_ROOT_MIN_SPACING,
+    COORDINATOR_SUMMARY_FONT_SIZE,
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
+    OUTPUT_LINK_MODE_FILE,
+    OUTPUT_LINK_MODE_FOLDER,
+    OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX,
+    OUTPUT_LINK_SEPARATOR,
+    SHORTCUT_OPEN_KEY_SEQUENCE,
+    SHORTCUT_SAVE_KEY_SEQUENCE,
     UI_FONT_FAMILY,
 )
 from common.exceptions import JobCancelledError
@@ -109,7 +145,7 @@ class _ExcelDropList(QListWidget):
         self.setAcceptDrops(True)
         self.setDragEnabled(False)
         self.setDropIndicatorShown(False)
-        self.setSpacing(2)
+        self.setSpacing(COORDINATOR_DROP_LIST_ITEM_SPACING)
         self.setAlternatingRowColors(False)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -124,10 +160,10 @@ class _ExcelDropList(QListWidget):
         if self.count() != 0 or not self._placeholder_text:
             return
         painter = QPainter(self.viewport())
-        painter.setPen(QColor("gray"))
-        painter.setFont(QFont(UI_FONT_FAMILY, 10))
+        painter.setPen(QColor(COORDINATOR_LIST_PLACEHOLDER_COLOR))
+        painter.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE))
         painter.drawText(
-            self.viewport().rect().adjusted(16, 16, -16, -16),
+            self.viewport().rect().adjusted(*COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS),
             Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
             self._placeholder_text,
         )
@@ -179,18 +215,26 @@ class _DropZoneFrame(QFrame):
         active = bool(self.property("dragActive"))
         bg_color = palette.color(QPalette.ColorRole.AlternateBase)
         if active:
-            bg_color.setAlpha(220)
+            bg_color.setAlpha(COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA)
         border_color = palette.color(QPalette.ColorRole.Highlight) if active else palette.color(QPalette.ColorRole.Mid)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(bg_color)
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -2, -2), 12, 12)
-        pen = QPen(border_color, 2, Qt.PenStyle.DashLine)
-        pen.setDashPattern([4, 3])
+        painter.drawRoundedRect(
+            self.rect().adjusted(*COORDINATOR_DROPZONE_OUTER_RECT_ADJUST),
+            COORDINATOR_DROPZONE_OUTER_RADIUS,
+            COORDINATOR_DROPZONE_OUTER_RADIUS,
+        )
+        pen = QPen(border_color, COORDINATOR_DROPZONE_BORDER_WIDTH, Qt.PenStyle.DashLine)
+        pen.setDashPattern(list(COORDINATOR_DROPZONE_BORDER_DASH_PATTERN))
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(self.rect().adjusted(6, 6, -6, -6), 10, 10)
+        painter.drawRoundedRect(
+            self.rect().adjusted(*COORDINATOR_DROPZONE_INNER_RECT_ADJUST),
+            COORDINATOR_DROPZONE_INNER_RADIUS,
+            COORDINATOR_DROPZONE_INNER_RADIUS,
+        )
         painter.end()
 
 
@@ -221,43 +265,26 @@ class _CoordinatorFileItemWidget(QWidget):
         self.file_path = file_path
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 4, 12, 4)
-        layout.setSpacing(12)
+        layout.setContentsMargins(*COORDINATOR_FILE_ITEM_LAYOUT_MARGINS)
+        layout.setSpacing(COORDINATOR_FILE_ITEM_LAYOUT_SPACING)
 
         file_name = Path(file_path).name
         name_label = _ElidedFileNameLabel(file_name)
-        name_label.setFont(QFont(UI_FONT_FAMILY, 10))
+        name_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_FILE_NAME_FONT_SIZE))
         name_label.setToolTip(file_path)
         layout.addWidget(name_label, 1)
 
         self.remove_btn = QPushButton()
         self.remove_btn.setObjectName("coordinatorFileRemoveButton")
-        self.remove_btn.setFixedSize(24, 24)
+        self.remove_btn.setFixedSize(COORDINATOR_REMOVE_BUTTON_SIZE, COORDINATOR_REMOVE_BUTTON_SIZE)
         self.remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
         if not icon.isNull():
             self.remove_btn.setIcon(icon)
-            self.remove_btn.setIconSize(QSize(16, 16))
+            self.remove_btn.setIconSize(QSize(COORDINATOR_REMOVE_BUTTON_ICON_SIZE, COORDINATOR_REMOVE_BUTTON_ICON_SIZE))
         else:
             self.remove_btn.setText(t("coordinator.file.remove_fallback"))
-        self.remove_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                padding: 0px;
-                margin: 0px;
-                min-width: 24px;
-                min-height: 24px;
-                max-width: 24px;
-                max-height: 24px;
-            }
-            QPushButton:hover {
-                background-color: rgba(231, 76, 60, 0.15);
-                border-radius: 4px;
-            }
-            """
-        )
+        self.remove_btn.setStyleSheet(COORDINATOR_REMOVE_BUTTON_STYLESHEET)
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self.file_path))
         layout.addWidget(self.remove_btn, 0)
 
@@ -293,13 +320,13 @@ class CoordinatorModule(QWidget):
             INSTRUCTOR_CARD_MARGIN,
             INSTRUCTOR_CARD_MARGIN,
         )
-        root.setSpacing(max(10, INSTRUCTOR_CARD_SPACING))
+        root.setSpacing(max(COORDINATOR_ROOT_MIN_SPACING, INSTRUCTOR_CARD_SPACING))
 
         header_card = QFrame()
         header_card.setObjectName("coordinatorHeaderCard")
         header_layout = QVBoxLayout(header_card)
-        header_layout.setContentsMargins(16, 14, 16, 14)
-        header_layout.setSpacing(6)
+        header_layout.setContentsMargins(*COORDINATOR_HEADER_LAYOUT_MARGINS)
+        header_layout.setSpacing(COORDINATOR_HEADER_LAYOUT_SPACING)
         self.title_label = QLabel()
         self.title_label.setObjectName("coordinatorTitle")
         self.title_label.setFont(QFont(UI_FONT_FAMILY, INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE, QFont.Weight.Bold))
@@ -307,7 +334,7 @@ class CoordinatorModule(QWidget):
         header_layout.addWidget(self.title_label)
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
-        self.hint_label.setFont(QFont(UI_FONT_FAMILY, 10))
+        self.hint_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE))
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         header_layout.addWidget(self.hint_label)
@@ -316,11 +343,11 @@ class CoordinatorModule(QWidget):
         self.drop_zone = _DropZoneFrame()
         self.drop_zone.setProperty("dragActive", False)
         zone_layout = QVBoxLayout(self.drop_zone)
-        zone_layout.setContentsMargins(14, 14, 14, 14)
+        zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
         zone_layout.setSpacing(0)
         self.drop_list = _ExcelDropList()
         self.drop_list.setObjectName("coordinatorDropList")
-        self.drop_list.setMinimumHeight(220)
+        self.drop_list.setMinimumHeight(COORDINATOR_DROP_LIST_MIN_HEIGHT)
         self.drop_list.files_dropped.connect(self._on_files_dropped)
         self.drop_list.drag_state_changed.connect(self._set_drop_active)
         self.drop_list.browse_requested.connect(self._browse_files)
@@ -328,11 +355,11 @@ class CoordinatorModule(QWidget):
         root.addWidget(self.drop_zone, 1)
 
         controls_row = QHBoxLayout()
-        controls_row.setContentsMargins(6, 0, 6, 0)
-        controls_row.setSpacing(10)
+        controls_row.setContentsMargins(*COORDINATOR_CONTROLS_LAYOUT_MARGINS)
+        controls_row.setSpacing(COORDINATOR_CONTROLS_LAYOUT_SPACING)
         self.summary_label = QLabel()
         self.summary_label.setObjectName("coordinatorSummary")
-        self.summary_label.setFont(QFont(UI_FONT_FAMILY, 9))
+        self.summary_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_SUMMARY_FONT_SIZE))
         controls_row.addWidget(self.summary_label)
         controls_row.addStretch(1)
         self.clear_button = QPushButton()
@@ -392,28 +419,12 @@ class CoordinatorModule(QWidget):
         self.info_tabs.addTab(links_tab, t("instructor.links.title"))
         root.addWidget(self.info_tabs)
 
-        self.shortcut_add_file = QShortcut(QKeySequence("Ctrl+O"), self)
+        self.shortcut_add_file = QShortcut(QKeySequence(SHORTCUT_OPEN_KEY_SEQUENCE), self)
         self.shortcut_add_file.activated.connect(self._browse_files)
-        self.shortcut_save_output = QShortcut(QKeySequence("Ctrl+S"), self)
+        self.shortcut_save_output = QShortcut(QKeySequence(SHORTCUT_SAVE_KEY_SEQUENCE), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
-        panel_style = """
-        QFrame#coordinatorHeaderCard { border: 1px solid palette(mid); border-radius: 12px; background-color: palette(base); }
-        QLabel#coordinatorTitle { letter-spacing: 0.3px; }
-        QLabel#coordinatorSummary { padding: 5px 10px; border: 1px solid palette(mid); border-radius: 10px; background-color: palette(alternate-base); }
-        QFrame#coordinatorDropZone { border: none; background: transparent; }
-        QListWidget#coordinatorDropList { border: none; padding: 10px; background: transparent; }
-        QListWidget#coordinatorDropList::item { margin: 2px 0; }
-        QPushButton#coordinatorClearButton, QPushButton#coordinatorCalculateButton { padding: 6px 12px; min-width: 150px; min-height: 30px; border-radius: 6px; border: none; }
-        QPushButton#coordinatorClearButton:disabled, QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
-        QPushButton#coordinatorCalculateButton:enabled { background-color: palette(highlight); color: palette(highlighted-text); border: none; font-weight: 600; }
-        QPushButton#coordinatorCalculateButton:disabled { border: 1px solid palette(mid); }
-        QTabWidget#instructorInfoTabs::pane { border: none; background: palette(base); }
-        QTabWidget#instructorInfoTabs QTabBar::tab:first { margin-left: 8px; }
-        QTabWidget#instructorInfoTabs QPlainTextEdit, QTabWidget#instructorInfoTabs QTextBrowser { border: 1px solid palette(mid); border-radius: 8px; background: palette(base); padding: 8px; }
-        """
-
-        self.setStyleSheet(panel_style)
+        self.setStyleSheet(COORDINATOR_PANEL_STYLESHEET)
 
     def retranslate_ui(self) -> None:
         self._rerender_user_log()
@@ -472,7 +483,7 @@ class CoordinatorModule(QWidget):
         if not save_path:
             return
 
-        process_name = "calculating coordinator co attainment"
+        process_name = COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT
         token = CancellationToken()
         job_id = generate_job_id()
         self._cancel_token = token
@@ -513,7 +524,7 @@ class CoordinatorModule(QWidget):
                         fallback=t("coordinator.status.calculate_completed"),
                     ),
                     job_id=job_id,
-                    step_id="coordinator_calculate_attainment",
+                    step_id=COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
                 )
                 show_toast(
                     self,
@@ -561,7 +572,7 @@ class CoordinatorModule(QWidget):
                                 fallback=t("coordinator.status.operation_cancelled"),
                             ),
                             "job_id": job_id,
-                            "step_id": "coordinator_calculate_attainment",
+                            "step_id": COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
                         },
                     )
                     return
@@ -574,7 +585,7 @@ class CoordinatorModule(QWidget):
                         fallback=t("coordinator.status.processing_failed"),
                     ),
                     job_id=job_id,
-                    step_id="coordinator_calculate_attainment",
+                    step_id=COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
                 )
                 show_toast(
                     self,
@@ -615,7 +626,7 @@ class CoordinatorModule(QWidget):
             self._publish_status_key("coordinator.status.queued", count=len(dropped_files))
             return
 
-        process_name = "collecting coordinator files"
+        process_name = COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES
         token = CancellationToken()
         job_id = generate_job_id()
         existing_keys = {_path_key(path) for path in self._files}
@@ -692,7 +703,7 @@ class CoordinatorModule(QWidget):
                         fallback=t("coordinator.status.processing_completed"),
                     ),
                     job_id=job_id,
-                    step_id="coordinator_collect_files",
+                    step_id=COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
                 )
             finally:
                 _finalize(job)
@@ -710,7 +721,7 @@ class CoordinatorModule(QWidget):
                                 fallback=t("coordinator.status.operation_cancelled"),
                             ),
                             "job_id": job_id,
-                            "step_id": "coordinator_collect_files",
+                            "step_id": COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
                         },
                     )
                     return
@@ -723,7 +734,7 @@ class CoordinatorModule(QWidget):
                         fallback=t("coordinator.status.processing_failed"),
                     ),
                     job_id=job_id,
-                    step_id="coordinator_collect_files",
+                    step_id=COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
                 )
                 show_toast(
                     self,
@@ -834,8 +845,14 @@ class CoordinatorModule(QWidget):
         if not path:
             return f"<b>{escape(label)}</b>: {t(self.OUTPUT_LINK_NOT_AVAILABLE_KEY)}"
         href_path = Path(path).as_posix()
-        file_link = f'<a href="file::{href_path}">{t(self.OUTPUT_LINK_OPEN_FILE_KEY)}</a>'
-        folder_link = f'<a href="folder::{href_path}">{t(self.OUTPUT_LINK_OPEN_FOLDER_KEY)}</a>'
+        file_link = (
+            f'<a href="{OUTPUT_LINK_MODE_FILE}{OUTPUT_LINK_SEPARATOR}{href_path}">'
+            f"{t(self.OUTPUT_LINK_OPEN_FILE_KEY)}</a>"
+        )
+        folder_link = (
+            f'<a href="{OUTPUT_LINK_MODE_FOLDER}{OUTPUT_LINK_SEPARATOR}{href_path}">'
+            f"{t(self.OUTPUT_LINK_OPEN_FOLDER_KEY)}</a>"
+        )
         name = escape(Path(path).name)
         full_path = escape(str(Path(path)))
         return (
@@ -848,21 +865,21 @@ class CoordinatorModule(QWidget):
         rows: list[str] = []
         for path in self._files:
             rows.append(
-                f"<div style='margin-bottom:10px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), str(path))}</div>"
+                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), str(path))}</div>"
             )
         if not rows:
             rows.append(
-                f"<div style='margin-bottom:10px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), None)}</div>"
+                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.uploaded_report'), None)}</div>"
             )
 
         if self._downloaded_outputs:
             for path in self._downloaded_outputs:
                 rows.append(
-                    f"<div style='margin-bottom:10px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), str(path))}</div>"
+                    f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), str(path))}</div>"
                 )
         else:
             rows.append(
-                f"<div style='margin-bottom:10px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), None)}</div>"
+                f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._output_link_markup(t('coordinator.links.downloaded_output'), None)}</div>"
             )
         return "".join(rows)
 
@@ -870,11 +887,11 @@ class CoordinatorModule(QWidget):
         self.generated_outputs_view.setHtml(self._output_links_html())
 
     def _on_output_link_activated(self, href: str) -> None:
-        mode, _, raw_path = href.partition("::")
+        mode, _, raw_path = href.partition(OUTPUT_LINK_SEPARATOR)
         path = raw_path.strip()
         if not path:
             return
-        target = Path(path).parent if mode == "folder" else Path(path)
+        target = Path(path).parent if mode == OUTPUT_LINK_MODE_FOLDER else Path(path)
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
         if opened:
             return

@@ -24,6 +24,7 @@ from common.constants import (
     CO_REPORT_NOT_APPLICABLE_TOKEN,
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_HEADERS,
     COURSE_METADATA_SECTION_KEY,
     COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_SHEET,
@@ -38,7 +39,11 @@ from common.constants import (
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
 )
-from common.excel_sheet_layout import color_without_hash as _color_without_hash, style_registry_for_setup as _style_registry_for_setup
+from common.excel_sheet_layout import (
+    color_without_hash as _color_without_hash,
+    compute_sampled_column_widths as _compute_sampled_column_widths,
+    style_registry_for_setup as _style_registry_for_setup,
+)
 from common.jobs import CancellationToken
 from common.utils import coerce_excel_number, normalize
 from common.workbook_signing import verify_payload_signature
@@ -646,7 +651,7 @@ def _xlsxwriter_formats(workbook: Any) -> dict[str, Any]:
                 "bold": bool(header_style.get(_STYLE_KEY_BOLD, True)),
                 "border": header_border_value,
                 "align": str(header_style.get(_STYLE_KEY_ALIGN, _ALIGN_CENTER)),
-                "valign": str(header_style.get(_STYLE_KEY_VALIGN, _ALIGN_CENTER)).replace(_ALIGN_VCENTER, _ALIGN_CENTER),
+                "valign": str(header_style.get(_STYLE_KEY_VALIGN, _ALIGN_VCENTER)),
                 "text_wrap": True,
                 "fg_color": header_bg,
                 "pattern": 1,
@@ -655,14 +660,29 @@ def _xlsxwriter_formats(workbook: Any) -> dict[str, Any]:
         "body": workbook.add_format(
             {
                 "border": border_value,
-                "valign": _ALIGN_CENTER,
+                "valign": _ALIGN_VCENTER,
             }
         ),
         "body_center": workbook.add_format(
             {
                 "border": border_value,
                 "align": _ALIGN_CENTER,
-                "valign": _ALIGN_CENTER,
+                "valign": _ALIGN_VCENTER,
+            }
+        ),
+        "body_wrap": workbook.add_format(
+            {
+                "border": border_value,
+                "align": "left",
+                "valign": _ALIGN_VCENTER,
+                "text_wrap": True,
+            }
+        ),
+        "column_wrap": workbook.add_format(
+            {
+                "align": "left",
+                "valign": _ALIGN_VCENTER,
+                "text_wrap": True,
             }
         ),
     }
@@ -681,7 +701,7 @@ def _create_co_attainment_sheet(
     metadata_rows = _metadata_rows_for_output(metadata, co_index)
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
         sheet.write(row_idx, 1, label, formats["body"])
-        sheet.write(row_idx, 2, value, formats["body"])
+        sheet.write(row_idx, 2, value, formats["body_wrap"])
 
     header_row_index = len(metadata_rows) + 1
     headers = [
@@ -694,6 +714,13 @@ def _create_co_attainment_sheet(
     ]
     for col_idx, header in enumerate(headers, start=0):
         sheet.write(header_row_index, col_idx, header, formats["header"])
+
+    sampled_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
+    sampled_rows.extend(["", field, value] for field, value in metadata_rows)
+    sampled_rows.append(["", headers[1], headers[2]])
+    widths = _compute_sampled_column_widths(sampled_rows, 2)
+    sheet.set_column(1, 1, widths.get(1, 8))
+    sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
 
     sheet.set_landscape()
     sheet.set_paper(9)  # A4
@@ -714,9 +741,10 @@ def _append_co_attainment_row(state: _CoOutputSheetState, row: _CoAttainmentRow)
         total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
     else:
         total = CO_REPORT_ABSENT_TOKEN
-    left = [state.next_serial, row.reg_no, row.student_name]
+    left = [state.next_serial, row.reg_no]
     right = [row.direct_score, row.indirect_score, total]
     state.sheet.write_row(state.next_row_index, 0, left, state.formats["body"])
+    state.sheet.write(state.next_row_index, 2, row.student_name, state.formats["body_wrap"])
     state.sheet.write_row(state.next_row_index, 3, right, state.formats["body_center"])
     state.next_row_index += 1
     state.next_serial += 1

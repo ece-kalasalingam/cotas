@@ -328,6 +328,10 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert ws["D7"].value == "Direct (80%)"
         assert ws["E7"].value == "Indirect (20%)"
         assert ws["F7"].value == "Total (100%)"
+        assert ws.column_dimensions["B"].width is not None
+        assert ws.column_dimensions["C"].width is not None
+        assert ws["C2"].alignment.wrap_text is True
+        assert ws["C8"].alignment.wrap_text is True
         assert ws.protection.sheet is True
 
         rows = []

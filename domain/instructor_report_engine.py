@@ -100,12 +100,10 @@ _INTEGRITY_SCHEMA_VERSION = 1
 _LOG_FINAL_REPORT_READY = "Final CO report prepared with direct and indirect sheets."
 _LOG_FINAL_REPORT_FAILED = "Final CO report generation failed unexpectedly."
 
-
 @dataclass(frozen=True)
 class _DirectComponent:
     name: str
     weight: float
-
 
 @dataclass
 class _DirectComponentComputed:
@@ -114,12 +112,10 @@ class _DirectComponentComputed:
     max_by_co: dict[int, float]
     marks_by_co: dict[int, list[float | str]]
 
-
 @dataclass(frozen=True)
 class _IndirectComponent:
     name: str
     weight: float
-
 
 @dataclass
 class _IndirectComponentComputed:
@@ -965,7 +961,6 @@ def _xlsxwriter_write_indirect_sheet(
 
     _xlsxwriter_apply_layout(ws, header_row_index=header_row_index, paper_size=9, landscape=False)
 
-
 def _write_final_report_workbook_xlsxwriter(
     *,
     xlsxwriter_module: Any,
@@ -1030,7 +1025,6 @@ def _write_final_report_workbook_xlsxwriter(
     finally:
         workbook.close()
 
-
 def _normalize_page_setup_fit(path: Path) -> None:
     try:
         import openpyxl
@@ -1047,7 +1041,6 @@ def _normalize_page_setup_fit(path: Path) -> None:
         wb.save(path)
     finally:
         wb.close()
-
 
 def _report_metadata_rows(
     metadata_rows: list[tuple[str, Any]],
@@ -1071,7 +1064,6 @@ def _report_metadata_rows(
         )
     )
     return filtered
-
 
 def _ratio_total_header(ratio: float) -> str:
     percent = ratio * 100.0

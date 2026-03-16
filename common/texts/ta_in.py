@@ -4,6 +4,8 @@ TEXTS = {
     # Startup / main
     "app.already_running": "பயன்பாடு ஏற்கனவே இயங்கிக்கொண்டிருக்கிறது.",
     "app.unexpected_error": "எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.",
+    "app.startup.workbook_secret_missing_frozen": "Workbook secret is unavailable. Please reinstall the software or contact support.",
+    "app.startup.workbook_secret_missing_dev": "Workbook secret is unavailable. Delete the local workbook secret store and relaunch.",
     "app.main_window_title": "FOCUS",
     "splash.starting": "பயன்பாடு தொடங்குகிறது...",
     "splash.loading_main_window": "முதன்மை சாளரம் ஏற்றப்படுகிறது...",

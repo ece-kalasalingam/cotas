@@ -42,6 +42,12 @@ from common.constants import (
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
+    OUTPUT_LINK_MODE_FILE,
+    OUTPUT_LINK_MODE_FOLDER,
+    OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX,
+    OUTPUT_LINK_SEPARATOR,
+    SHORTCUT_OPEN_KEY_SEQUENCE,
+    SHORTCUT_SAVE_KEY_SEQUENCE,
     UI_FONT_FAMILY,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
@@ -488,9 +494,9 @@ class InstructorModule(QWidget):
         self.info_tabs.addTab(links_tab, t(self.RAIL_LINK_TITLE_KEY))
         right_layout.addWidget(self.info_tabs)
 
-        self.shortcut_open_workbook = QShortcut(QKeySequence("Ctrl+O"), self)
+        self.shortcut_open_workbook = QShortcut(QKeySequence(SHORTCUT_OPEN_KEY_SEQUENCE), self)
         self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
-        self.shortcut_save_output = QShortcut(QKeySequence("Ctrl+S"), self)
+        self.shortcut_save_output = QShortcut(QKeySequence(SHORTCUT_SAVE_KEY_SEQUENCE), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
         root.addWidget(left)
@@ -505,8 +511,14 @@ class InstructorModule(QWidget):
         label = t(label_key)
         if not path:
             return f"{label}: {t(self.RAIL_LINK_NOT_AVAILABLE_KEY)}"
-        file_link = f'<a href="file::{path}">{t(self.RAIL_LINK_OPEN_FILE_KEY)}</a>'
-        folder_link = f'<a href="folder::{path}">{t(self.RAIL_LINK_OPEN_FOLDER_KEY)}</a>'
+        file_link = (
+            f'<a href="{OUTPUT_LINK_MODE_FILE}{OUTPUT_LINK_SEPARATOR}{path}">'
+            f"{t(self.RAIL_LINK_OPEN_FILE_KEY)}</a>"
+        )
+        folder_link = (
+            f'<a href="{OUTPUT_LINK_MODE_FOLDER}{OUTPUT_LINK_SEPARATOR}{path}">'
+            f"{t(self.RAIL_LINK_OPEN_FOLDER_KEY)}</a>"
+        )
         name = escape(Path(path).name)
         full_path = escape(str(Path(path)))
         return (
@@ -517,17 +529,17 @@ class InstructorModule(QWidget):
 
     def _quick_links_html(self) -> str:
         rows = [
-            f"<div style='margin-bottom:10px'>{self._quick_link_markup(link_key, path)}</div>"
+            f"<div style='margin-bottom:{OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX}px'>{self._quick_link_markup(link_key, path)}</div>"
             for link_key, path in self._quick_link_items()
         ]
         return "".join(rows)
 
     def _on_quick_link_activated(self, href: str) -> None:
-        mode, _, raw_path = href.partition("::")
+        mode, _, raw_path = href.partition(OUTPUT_LINK_SEPARATOR)
         path = raw_path.strip()
         if not path:
             return
-        target = Path(path).parent if mode == "folder" else Path(path)
+        target = Path(path).parent if mode == OUTPUT_LINK_MODE_FOLDER else Path(path)
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
         if opened:
             return

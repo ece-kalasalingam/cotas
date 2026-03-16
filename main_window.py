@@ -17,8 +17,19 @@ from common.constants import (
     INSTRUCTOR_CARD_MARGIN,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_ACTIVITYBAR_STYLESHEET,
+    MAIN_HIDDEN_ACTIVITY_MODULE_KEYS,
+    MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT,
+    MAIN_SHARED_INFO_TABS_HEIGHT,
+    MAIN_SHARED_LAYOUT_MARGINS,
+    MAIN_SHARED_LAYOUT_SPACING,
+    MAIN_SHARED_ACTIVITY_STYLESHEET,
+    MAIN_SHARED_TAB_FIRST_MARGIN_LEFT,
+    MAIN_SHARED_TAB_LAYOUT_MARGINS,
+    MAIN_SHARED_TAB_LAYOUT_SPACING,
     MAIN_WINDOW_TITLE_TEXT_KEY,
     MAIN_WINDOW_CONTENT_MARGINS,
+    OUTPUT_LINK_MODE_FOLDER,
+    OUTPUT_LINK_SEPARATOR,
     STATUS_FLASH_TIMEOUT_MS,
     WINDOW_HEIGHT_CAP,
     WINDOW_MIN_HEIGHT,
@@ -107,11 +118,11 @@ class MainWindow(QMainWindow):
 
         self.shared_activity_frame = QFrame()
         self.shared_activity_frame.setObjectName("sharedActivityFrame")
-        shared_tabs_height = 150
-        self.shared_activity_frame.setFixedHeight(shared_tabs_height + 16)
+        shared_tabs_height = MAIN_SHARED_INFO_TABS_HEIGHT
+        self.shared_activity_frame.setFixedHeight(shared_tabs_height + MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT)
         shared_layout = QVBoxLayout(self.shared_activity_frame)
-        shared_layout.setContentsMargins(0, 8, 0, 8)
-        shared_layout.setSpacing(6)
+        shared_layout.setContentsMargins(*MAIN_SHARED_LAYOUT_MARGINS)
+        shared_layout.setSpacing(MAIN_SHARED_LAYOUT_SPACING)
 
         self.shared_info_tabs = QTabWidget()
         self.shared_info_tabs.setObjectName("sharedInfoTabs")
@@ -121,8 +132,8 @@ class MainWindow(QMainWindow):
 
         shared_log_tab = QWidget()
         shared_log_layout = QVBoxLayout(shared_log_tab)
-        shared_log_layout.setContentsMargins(0, 0, 0, 0)
-        shared_log_layout.setSpacing(0)
+        shared_log_layout.setContentsMargins(*MAIN_SHARED_TAB_LAYOUT_MARGINS)
+        shared_log_layout.setSpacing(MAIN_SHARED_TAB_LAYOUT_SPACING)
         self.shared_activity_log = QPlainTextEdit()
         self.shared_activity_log.setObjectName("sharedActivityLog")
         self.shared_activity_log.setReadOnly(True)
@@ -131,8 +142,8 @@ class MainWindow(QMainWindow):
 
         shared_outputs_tab = QWidget()
         shared_outputs_layout = QVBoxLayout(shared_outputs_tab)
-        shared_outputs_layout.setContentsMargins(0, 0, 0, 0)
-        shared_outputs_layout.setSpacing(0)
+        shared_outputs_layout.setContentsMargins(*MAIN_SHARED_TAB_LAYOUT_MARGINS)
+        shared_outputs_layout.setSpacing(MAIN_SHARED_TAB_LAYOUT_SPACING)
         self.shared_generated_outputs = QTextBrowser()
         self.shared_generated_outputs.setObjectName("sharedGeneratedOutputs")
         self.shared_generated_outputs.setOpenExternalLinks(False)
@@ -225,26 +236,10 @@ class MainWindow(QMainWindow):
         self.action_co_section.setChecked(True)
 
         self.setStyleSheet(
-            """
-            QFrame#sharedActivityFrame {
-                border: none;
-                background: transparent;
-            }
-            QTabWidget#sharedInfoTabs::pane {
-                border: none;
-                background: palette(base);
-            }
-            QTabWidget#sharedInfoTabs QTabBar::tab:first {
-                margin-left: 8px;
-            }
-            QPlainTextEdit#sharedActivityLog,
-            QTextBrowser#sharedGeneratedOutputs {
-                border: 1px solid palette(mid);
-                border-radius: 8px;
-                background: palette(base);
-                padding: 8px;
-            }
-            """
+            MAIN_SHARED_ACTIVITY_STYLESHEET.replace(
+                "__TAB_MARGIN__",
+                str(MAIN_SHARED_TAB_FIRST_MARGIN_LEFT),
+            )
         )
 
         self.language_menu = QMenu(self)
@@ -327,7 +322,7 @@ class MainWindow(QMainWindow):
         # Switch the visible widget
         current_module = self.modules[module_key]
         self.stack.setCurrentWidget(current_module)
-        shared_enabled = module_key not in {"HelpModule", "AboutModule"}
+        shared_enabled = module_key not in MAIN_HIDDEN_ACTIVITY_MODULE_KEYS
         self.shared_activity_frame.setVisible(shared_enabled)
         set_shared_mode = getattr(current_module, "set_shared_activity_log_mode", None)
         if callable(set_shared_mode):
@@ -506,11 +501,11 @@ class MainWindow(QMainWindow):
         self.shared_generated_outputs.setHtml("")
 
     def _on_shared_output_link_activated(self, href: str) -> None:
-        mode, _, raw_path = href.partition("::")
+        mode, _, raw_path = href.partition(OUTPUT_LINK_SEPARATOR)
         path = raw_path.strip()
         if not path:
             return
-        target = Path(path).parent if mode == "folder" else Path(path)
+        target = Path(path).parent if mode == OUTPUT_LINK_MODE_FOLDER else Path(path)
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
         if opened:
             return
