@@ -2,7 +2,7 @@ import os
 import re
 import sys
 import logging
-from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QLockFile, Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
@@ -43,6 +43,7 @@ from common.texts import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
 from common.utils import (
     UI_LANGUAGE_AUTO_ALIASES,
+    app_runtime_storage_dir,
     configure_app_logging,
     get_ui_language_preference,
     resource_path,
@@ -73,12 +74,10 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
     if not getattr(sys, "frozen", False):
         return None
 
-    app_data = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.AppDataLocation
-    )
-    os.makedirs(app_data, exist_ok=True)
+    app_data = app_runtime_storage_dir(APP_NAME)
+    app_data.mkdir(parents=True, exist_ok=True)
 
-    lock_path = os.path.join(app_data, f"{APP_NAME}.lock")
+    lock_path = str(app_data / f"{APP_NAME}.lock")
     lock = QLockFile(lock_path)
 
     # Immediate check; if already locked, another instance is running.
