@@ -225,14 +225,23 @@ TEXTS = {
     "instructor.validation.final_report.no_direct_components": "Final report generation failed: no direct components found.",
     # Instructor template headers / labels
     # Coordinator module
-    "coordinator.title": "Coordinator File Collector",
+    "coordinator.title": "Course Attainment",
     "coordinator.drop_hint": "Collect Final CO report workbooks generated from the Instructor module.",
     "coordinator.list_placeholder": "Drag and drop Final CO report workbooks here or double-click to browse",
     "coordinator.calculate": "Calculate CO Attainment",
+    "coordinator.thresholds.title": "CO Attainment Thresholds",
+    "coordinator.thresholds.description": (
+        "- L1 Threshold means pass mark of the course or course average for the 3 batches offered in the previous regulation.\n"
+        "- L2 Threshold means First Class.\n"
+        "- L3 Threshold means Distinction Class."
+    ),
+    "coordinator.thresholds.l1.label": "L1 Threshold:",
+    "coordinator.thresholds.l2.label": "L2 Threshold:",
+    "coordinator.thresholds.l3.label": "L3 Threshold:",
     "coordinator.dialog.title": "Select Excel Files",
     "coordinator.links.uploaded_report": "Uploaded Final CO Report",
     "coordinator.links.downloaded_output": "Downloaded Output",
-    "coordinator.summary": "Files added: {count}",
+    "coordinator.summary": "Files: {count}",
     "coordinator.file.remove_fallback": "Remove",
     "coordinator.clear_all": "Clear All",
     "coordinator.status.added": "{added} file(s) added. Total: {total}.",

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -413,6 +414,14 @@ class InstructorModule(QWidget):
         self.step_list.currentRowChanged.connect(self._on_step_row_changed)
         left_layout.addWidget(self.step_list, 1)
         left.setMaximumWidth(INSTRUCTOR_RAIL_MAX_WIDTH)
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("instructorLeftScroll")
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.setFixedWidth(INSTRUCTOR_RAIL_MAX_WIDTH)
+        left_scroll.setWidget(left)
 
         right = QFrame()
         right.setObjectName("activeCard")
@@ -553,7 +562,7 @@ class InstructorModule(QWidget):
         self.shortcut_save_output = QShortcut(QKeySequence(SHORTCUT_SAVE_KEY_SEQUENCE), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
-        root.addWidget(left)
+        root.addWidget(left_scroll)
         root.addWidget(right, 1)
 
         self.setStyleSheet(INSTRUCTOR_PANEL_STYLESHEET)

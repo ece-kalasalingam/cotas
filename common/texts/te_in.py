@@ -209,14 +209,23 @@ TEXTS = {
     'instructor.validation.final_report.direct_component_sheet_missing': "తుది నివేదిక రూపొందించడం విఫలమైంది: '{component}' కోసం డైరెక్ట్ కాంపోనెంట్ షీట్ లేదు.",
     'instructor.validation.final_report.direct_component_marks_shape_invalid': "తుది నివేదిక రూపొందించడం విఫలమైంది: '{component}' భాగం కోసం చెల్లని మార్కుల ఆకారం.",
     'instructor.validation.final_report.no_direct_components': 'తుది నివేదిక రూపొందించడం విఫలమైంది: ప్రత్యక్ష భాగాలు ఏవీ కనుగొనబడలేదు.',
-    'coordinator.title': 'కోఆర్డినేటర్ ఫైల్ కలెక్టర్',
+    'coordinator.title': 'కోర్సు అటైన్‌మెంట్',
     'coordinator.drop_hint': 'ఇన్\u200cస్ట్రక్టర్ మాడ్యూల్ నుంచి రూపొందించిన తుది CO రిపోర్ట్ వర్క్\u200cబుక్\u200cలను ఇక్కడ సేకరించండి.',
     'coordinator.list_placeholder': 'తుది CO రిపోర్ట్ వర్క్\u200cబుక్\u200cలను ఇక్కడికి లాగి వదలండి లేదా బ్రౌజ్ చేయడానికి డబుల్-క్లిక్ చేయండి.',
     'coordinator.calculate': 'CO సాధనను లెక్కించండి',
+    'coordinator.thresholds.title': 'CO సాధన పరిమితులు',
+    'coordinator.thresholds.description': (
+        '- L1 పరిమితి అంటే కోర్సు పాస్ మార్క్ లేదా గత నియమావళిలో ఆఫర్ చేసిన 3 బ్యాచ్‌ల కోర్సు సగటు.\n'
+        '- L2 పరిమితి అంటే ఫస్ట్ క్లాస్.\n'
+        '- L3 పరిమితి అంటే డిస్టింక్షన్ క్లాస్.'
+    ),
+    'coordinator.thresholds.l1.label': 'L1 పరిమితి:',
+    'coordinator.thresholds.l2.label': 'L2 పరిమితి:',
+    'coordinator.thresholds.l3.label': 'L3 పరిమితి:',
     'coordinator.dialog.title': 'ఎక్సెల్ ఫైల్స్ ఎంచుకోండి',
     'coordinator.links.uploaded_report': 'తుది CO నివేదిక అప్\\u200cలోడ్ చేయబడింది',
     'coordinator.links.downloaded_output': 'డౌన్\u200cలోడ్ చేసిన అవుట్\u200cపుట్',
-    'coordinator.summary': 'ఫైల్\\u200cలు జోడించబడ్డాయి: {count}',
+    'coordinator.summary': 'ఫైల్\\u200cలు: {count}',
     'coordinator.file.remove_fallback': 'తొలగించు',
     'coordinator.clear_all': 'అన్నీ క్లియర్ చేయండి',
     'coordinator.status.added': '{added} ఫైల్(లు) జోడించబడ్డాయి. మొత్తం: {total}.',

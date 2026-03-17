@@ -221,14 +221,23 @@ TEXTS = {
     "instructor.validation.final_report.no_direct_components": "இறுதி அறிக்கை உருவாக்குதல் தோல்வியடைந்தது: நேரடி கூறுகள் எதுவும் இல்லை.",
     # Instructor template headers / labels
     # Coordinator module
-    "coordinator.title": "ஒருங்கிணைப்பாளர் கோப்பு சேகரிப்பான்",
+    "coordinator.title": "பாட அடைவு",
     "coordinator.drop_hint": "பயிற்றுநர் தொகுதியின் இறுதி படியில் உருவாக்கப்பட்ட Final CO report பணிப்புத்தகம்-களை சேகரிக்கவும்.",
     "coordinator.list_placeholder": "இறுதி CO report பணிப்புத்தகங்களை இங்கே இழுத்து விடுங்கள் அல்லது தேர்வு செய்ய இருமுறை சொடுக்குங்கள்.",
     "coordinator.calculate": "CO அடைவை கணக்கிடு",
+    "coordinator.thresholds.title": "CO அடைவு வரம்புகள்",
+    "coordinator.thresholds.description": (
+        "- L1 வரம்பு என்பது பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய விதிமுறையில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.\n"
+        "- L2 வரம்பு என்பது முதல் வகுப்பு.\n"
+        "- L3 வரம்பு என்பது சிறப்புத் தரம்."
+    ),
+    "coordinator.thresholds.l1.label": "L1 வரம்பு:",
+    "coordinator.thresholds.l2.label": "L2 வரம்பு:",
+    "coordinator.thresholds.l3.label": "L3 வரம்பு:",
     "coordinator.dialog.title": "Excel கோப்புகளை தேர்வு செய்ய",
     "coordinator.links.uploaded_report": "பதிவேற்றப்பட்ட Final CO Report",
     "coordinator.links.downloaded_output": "பதிவிறக்கப்பட்ட வெளியீடு",
-    "coordinator.summary": "சேர்க்கப்பட்ட கோப்புகள்: {count}",
+    "coordinator.summary": "கோப்புகள்: {count}",
     "coordinator.file.remove_fallback": "நீக்கு",
     "coordinator.clear_all": "அனைத்தையும் நீக்கு",
     "coordinator.status.added": "{added} கோப்பு(கள்) சேர்க்கப்பட்டது. மொத்தம்: {total}.",

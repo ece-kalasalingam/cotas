@@ -209,14 +209,23 @@ TEXTS = {
     'instructor.validation.final_report.direct_component_sheet_missing': "अंतिम रिपोर्ट तैयार नहीं हो सकी: '{component}' के लिए प्रत्यक्ष घटक शीट मौजूद नहीं है।",
     'instructor.validation.final_report.direct_component_marks_shape_invalid': "अंतिम रिपोर्ट तैयार नहीं हो सकी: घटक '{component}' के लिए अंकों का आकार अमान्य है।",
     'instructor.validation.final_report.no_direct_components': 'अंतिम रिपोर्ट तैयार नहीं हो सकी: कोई प्रत्यक्ष घटक (प्रत्यक्ष घटक) नहीं मिला।',
-    'coordinator.title': 'कोऑर्डिनेटर फ़ाइल कलेक्टर',
+    'coordinator.title': 'कोर्स अटेनमेंट',
     'coordinator.drop_hint': 'इंस्ट्रक्टर मॉड्यूल से तैयार की गई अंतिम CO रिपोर्ट वर्कबुक्स इकट्ठा करें।',
     'coordinator.list_placeholder': 'अंतिम CO रिपोर्ट वर्कबुक्स यहाँ खींचकर छोड़ें या ब्राउज़ करने के लिए डबल-क्लिक करें।',
     'coordinator.calculate': 'CO प्राप्ति की गणना करें',
+    'coordinator.thresholds.title': 'CO प्राप्ति सीमाएँ',
+    'coordinator.thresholds.description': (
+        '- L1 सीमा का अर्थ है पाठ्यक्रम का पास अंक या पिछली विनियमन में चलाए गए 3 बैचों का पाठ्यक्रम औसत।\n'
+        '- L2 सीमा का अर्थ है प्रथम श्रेणी।\n'
+        '- L3 सीमा का अर्थ है विशिष्ट श्रेणी।'
+    ),
+    'coordinator.thresholds.l1.label': 'L1 सीमा:',
+    'coordinator.thresholds.l2.label': 'L2 सीमा:',
+    'coordinator.thresholds.l3.label': 'L3 सीमा:',
     'coordinator.dialog.title': 'Excel फ़ाइलें चुनें',
     'coordinator.links.uploaded_report': 'अपलोड की गई फ़ाइनल CO रिपोर्ट',
     'coordinator.links.downloaded_output': 'डाउनलोड किया गया आउटपुट',
-    'coordinator.summary': 'जोड़ी गई फ़ाइलें: {count}',
+    'coordinator.summary': 'फ़ाइलें: {count}',
     'coordinator.file.remove_fallback': 'हटाएँ',
     'coordinator.clear_all': 'सभी साफ़ करें',
     'coordinator.status.added': '{added} फ़ाइल(ें) जोड़ी गईं। कुल: {total}।',

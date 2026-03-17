@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton, QFrame, QPlainTextEdit, QTabWidget, QTextBrowser
+    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton, QFrame, QPlainTextEdit, QTabWidget, QTextBrowser,
 )
 
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
@@ -361,6 +361,7 @@ class MainWindow(QMainWindow):
                 signal.connect(self._on_module_status_changed)
         # Switch the visible widget
         current_module = self.modules[module_key]
+        self.current_module = current_module
         self.stack.setCurrentWidget(current_module)
         shared_enabled = module_key not in MAIN_HIDDEN_ACTIVITY_MODULE_KEYS
         self.shared_activity_frame.setVisible(shared_enabled)
