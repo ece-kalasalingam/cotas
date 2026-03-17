@@ -15,6 +15,7 @@
 AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#AppVersion}
+AppVerName={#MyAppName} - {#AppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
@@ -28,6 +29,7 @@ SolidCompression=yes
 WizardStyle=modern
 OutputDir=dist
 OutputBaseFilename=Focus-installer
+UninstallDisplayName={#MyAppName} - {#AppVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\assets\kare-logo.ico
 
@@ -45,5 +47,5 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent unchecked
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
