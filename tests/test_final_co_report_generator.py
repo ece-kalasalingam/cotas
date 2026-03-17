@@ -130,7 +130,7 @@ def test_generate_final_co_report_creates_direct_sheet_per_outcome(tmp_path: Pat
         assert headers[-2] == "Total (100%)"
         assert headers[-1] == _ratio_header(DIRECT_RATIO)
         assert ws.auto_filter.ref is None
-        assert ws.sheet_view.selection[0].activeCell == f"A{header_row}"
+        assert ws.freeze_panes == f"D{header_row + 1}"
         first_data_row = header_row + 1
         assert ws.cell(row=first_data_row, column=1).value == 1
         assert ws.cell(row=first_data_row, column=2).value == "R101"
@@ -166,6 +166,7 @@ def test_generate_final_co_report_creates_direct_sheet_per_outcome(tmp_path: Pat
         assert not any("CSURVEY (100%)" in text for text in indirect_headers)
         assert indirect_headers[-2] == "Total (100%)"
         assert indirect_headers[-1] == _ratio_header(INDIRECT_RATIO)
+        assert indirect.freeze_panes == f"D{indirect_header_row + 1}"
     finally:
         wb.close()
 

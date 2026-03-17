@@ -816,10 +816,10 @@ def _xlsxwriter_write_direct_sheet(
         co_index=co_index,
         outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE,
     )
-    header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    header_row_index = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats) - 1
     _xlsxwriter_set_report_metadata_column_widths(ws, metadata_rows=report_metadata_rows, formats=formats)
-    header_row_index = header_row_number - 1
-
+    ws.repeat_rows(0, header_row_index)
+    ws.freeze_panes(header_row_index + 1, _EXCEL_COL_FIRST_MARK - 1)
     active_components = [component for component in components if component.max_by_co.get(co_index, 0.0) > 0]
     total_weight = _round2(sum(component.weight for component in active_components))
     headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
@@ -888,9 +888,10 @@ def _xlsxwriter_write_indirect_sheet(
         co_index=co_index,
         outcome_value_template=CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE,
     )
-    header_row_number = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats)
+    header_row_index = _xlsxwriter_write_report_metadata(ws, metadata_rows=report_metadata_rows, formats=formats) - 1
     _xlsxwriter_set_report_metadata_column_widths(ws, metadata_rows=report_metadata_rows, formats=formats)
-    header_row_index = header_row_number - 1
+    ws.repeat_rows(0, header_row_index)
+    ws.freeze_panes(header_row_index + 1, _EXCEL_COL_FIRST_MARK - 1)
 
     active_components = [
         component
