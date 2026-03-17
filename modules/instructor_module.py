@@ -33,6 +33,10 @@ from common.constants import (
     INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
+    LEFT_PANE_LAYOUT_MARGINS,
+    LEFT_PANE_LAYOUT_SPACING,
+    LEFT_PANE_MAX_WIDTH,
+    LEFT_PANE_TITLE_FONT_SIZE,
     INSTRUCTOR_STEP2_ACTION_MARGIN,
     INSTRUCTOR_STEP2_ACTION_SPACING,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
@@ -106,9 +110,7 @@ from modules.instructor.workflow_controller import InstructorWorkflowController
 from services import InstructorWorkflowService
 
 
-INSTRUCTOR_RAIL_TITLE_FONT_SIZE = 14
 INSTRUCTOR_STEP_LIST_SPACING = 2
-INSTRUCTOR_RAIL_MAX_WIDTH = 290
 INSTRUCTOR_TOP_LAYOUT_MARGINS = (0, 0, 0, 0)
 OUTPUT_LINK_MODE_FILE = "file"
 OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX = 10
@@ -382,11 +384,12 @@ class InstructorModule(QWidget):
         left = QFrame()
         left.setObjectName("stepRail")
         left_layout = QVBoxLayout(left)
-        
+        left_layout.setContentsMargins(*LEFT_PANE_LAYOUT_MARGINS)
+        left_layout.setSpacing(LEFT_PANE_LAYOUT_SPACING)
 
         self.rail_title = QLabel(t("instructor.workflow_title"))
         self.rail_title.setFont(
-            QFont(UI_FONT_FAMILY, INSTRUCTOR_RAIL_TITLE_FONT_SIZE, QFont.Weight.Bold)
+            QFont(UI_FONT_FAMILY, LEFT_PANE_TITLE_FONT_SIZE, QFont.Weight.Bold)
         )
         left_layout.addWidget(self.rail_title)
 
@@ -413,14 +416,14 @@ class InstructorModule(QWidget):
             self._step_items.append(item)
         self.step_list.currentRowChanged.connect(self._on_step_row_changed)
         left_layout.addWidget(self.step_list, 1)
-        left.setMaximumWidth(INSTRUCTOR_RAIL_MAX_WIDTH)
+        left.setMaximumWidth(LEFT_PANE_MAX_WIDTH)
         left_scroll = QScrollArea()
         left_scroll.setObjectName("instructorLeftScroll")
         left_scroll.setFrameShape(QFrame.Shape.NoFrame)
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        left_scroll.setFixedWidth(INSTRUCTOR_RAIL_MAX_WIDTH)
+        left_scroll.setFixedWidth(LEFT_PANE_MAX_WIDTH)
         left_scroll.setWidget(left)
 
         right = QFrame()

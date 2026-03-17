@@ -48,11 +48,14 @@ from common.constants import (
     COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE,
     COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
     COORDINATOR_REMOVE_BUTTON_SIZE,
-    INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE,
     INSTRUCTOR_CARD_MARGIN,
     INSTRUCTOR_CARD_SPACING,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
+    LEFT_PANE_LAYOUT_MARGINS,
+    LEFT_PANE_LAYOUT_SPACING,
+    LEFT_PANE_MAX_WIDTH,
+    LEFT_PANE_TITLE_FONT_SIZE,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
@@ -141,9 +144,6 @@ COORDINATOR_ROOT_MIN_SPACING = 10
 COORDINATOR_DROP_LIST_ITEM_SPACING = 2
 COORDINATOR_FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
 COORDINATOR_FILE_ITEM_LAYOUT_SPACING = 12
-COORDINATOR_HEADER_LAYOUT_MARGINS = (16, 14, 16, 14)
-COORDINATOR_HEADER_LAYOUT_SPACING = 6
-COORDINATOR_LEFT_CARD_MAX_WIDTH = 290
 COORDINATOR_DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
 COORDINATOR_DROP_LIST_MIN_HEIGHT = 220
 COORDINATOR_CONTROLS_LAYOUT_MARGINS = (6, 0, 6, 0)
@@ -401,27 +401,31 @@ class CoordinatorModule(QWidget):
         left = QFrame()
         left.setObjectName("coordinatorLeftCard")
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(*COORDINATOR_HEADER_LAYOUT_MARGINS)
-        left_layout.setSpacing(COORDINATOR_HEADER_LAYOUT_SPACING)
+        left_layout.setContentsMargins(*LEFT_PANE_LAYOUT_MARGINS)
+        left_layout.setSpacing(LEFT_PANE_LAYOUT_SPACING)
+        left_content_font = QFont(UI_FONT_FAMILY)
         self.title_label = QLabel()
         self.title_label.setObjectName("coordinatorTitle")
-        self.title_label.setFont(QFont(UI_FONT_FAMILY, INSTRUCTOR_ACTIVE_TITLE_FONT_SIZE, QFont.Weight.Bold))
+        self.title_label.setFont(QFont(UI_FONT_FAMILY, LEFT_PANE_TITLE_FONT_SIZE, QFont.Weight.Bold))
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         left_layout.addWidget(self.title_label)
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
-        self.hint_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_LIST_PLACEHOLDER_FONT_SIZE))
+        self.hint_label.setFont(left_content_font)
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         left_layout.addWidget(self.hint_label)
         thresholds_layout = QVBoxLayout()
         thresholds_layout.setContentsMargins(0, 4, 0, 0)
-        thresholds_layout.setSpacing(COORDINATOR_HEADER_LAYOUT_SPACING)
+        thresholds_layout.setSpacing(LEFT_PANE_LAYOUT_SPACING)
         self.threshold_title_label = QLabel()
         self.threshold_title_label.setObjectName("coordinatorThresholdTitle")
-        self.threshold_title_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_SUMMARY_FONT_SIZE, QFont.Weight.Bold))
+        threshold_title_font = QFont(left_content_font)
+        threshold_title_font.setBold(True)
+        self.threshold_title_label.setFont(threshold_title_font)
         thresholds_layout.addWidget(self.threshold_title_label)
         self.threshold_description_label = QLabel()
+        self.threshold_description_label.setFont(left_content_font)
         self.threshold_description_label.setWordWrap(True)
         thresholds_layout.addWidget(self.threshold_description_label)
 
@@ -433,7 +437,9 @@ class CoordinatorModule(QWidget):
         threshold_rows.setColumnStretch(1, 1)
 
         self.threshold_l1_label = QLabel()
+        self.threshold_l1_label.setFont(left_content_font)
         self.threshold_l1_input = QDoubleSpinBox()
+        self.threshold_l1_input.setFont(left_content_font)
         self.threshold_l1_input.setRange(0.0, 100.0)
         self.threshold_l1_input.setDecimals(2)
         self.threshold_l1_input.setSingleStep(0.5)
@@ -448,7 +454,9 @@ class CoordinatorModule(QWidget):
         )
 
         self.threshold_l2_label = QLabel()
+        self.threshold_l2_label.setFont(left_content_font)
         self.threshold_l2_input = QDoubleSpinBox()
+        self.threshold_l2_input.setFont(left_content_font)
         self.threshold_l2_input.setRange(0.0, 100.0)
         self.threshold_l2_input.setDecimals(2)
         self.threshold_l2_input.setSingleStep(0.5)
@@ -463,7 +471,9 @@ class CoordinatorModule(QWidget):
         )
 
         self.threshold_l3_label = QLabel()
+        self.threshold_l3_label.setFont(left_content_font)
         self.threshold_l3_input = QDoubleSpinBox()
+        self.threshold_l3_input.setFont(left_content_font)
         self.threshold_l3_input.setRange(0.0, 100.0)
         self.threshold_l3_input.setDecimals(2)
         self.threshold_l3_input.setSingleStep(0.5)
@@ -483,14 +493,14 @@ class CoordinatorModule(QWidget):
         thresholds_layout.addLayout(threshold_rows)
         left_layout.addLayout(thresholds_layout)
         left_layout.addStretch(1)
-        left.setMaximumWidth(COORDINATOR_LEFT_CARD_MAX_WIDTH)
+        left.setMaximumWidth(LEFT_PANE_MAX_WIDTH)
         left_scroll = QScrollArea()
         left_scroll.setObjectName("coordinatorLeftScroll")
         left_scroll.setFrameShape(QFrame.Shape.NoFrame)
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        left_scroll.setFixedWidth(COORDINATOR_LEFT_CARD_MAX_WIDTH)
+        left_scroll.setFixedWidth(LEFT_PANE_MAX_WIDTH)
         left_scroll.setWidget(left)
 
         right = QFrame()
