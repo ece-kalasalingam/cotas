@@ -162,12 +162,14 @@ def calculate_attainment_async(module: object, *, ns: dict[str, object]) -> None
                 generate_co_attainment_workbook=ns["_generate_co_attainment_workbook"],
                 context=job_context,
                 cancel_token=token,
+                thresholds=thresholds,
             )
             if workflow_service is not None and job_context is not None
             else ns["_generate_co_attainment_workbook"](
                 list(module._files),
                 Path(save_path),
                 token=token,
+                thresholds=thresholds,
             )
         ),
         on_success=_on_finished,

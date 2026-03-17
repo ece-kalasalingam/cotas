@@ -33,6 +33,9 @@ from common.constants import (
     DIRECT_RATIO,
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
+    LEVEL_1_THRESHOLD,
+    LEVEL_2_THRESHOLD,
+    LEVEL_3_THRESHOLD,
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
@@ -114,6 +117,9 @@ class _CoOutputSheetState:
     formats: dict[str, Any]
     next_row_index: int
     next_serial: int
+    on_roll: int
+    attended: int
+    level_counts: dict[int, int]
 
 
 @dataclass(slots=True, frozen=True)
@@ -716,6 +722,7 @@ def _create_co_attainment_sheet(
         f"Direct ({_ratio_percent_token(DIRECT_RATIO)}%)",
         f"Indirect ({_ratio_percent_token(INDIRECT_RATIO)}%)",
         "Total (100%)",
+        "Level",
     ]
     for col_idx, header in enumerate(headers, start=0):
         sheet.write(header_row_index, col_idx, header, formats["header"])
@@ -730,6 +737,7 @@ def _create_co_attainment_sheet(
     sheet.set_landscape()
     sheet.set_paper(9)  # A4
     sheet.fit_to_pages(1, 0)
+    sheet.repeat_rows(0, header_row_index)
     sheet.protect()
     sheet.set_selection(header_row_index, 0, header_row_index, 0)
     return _CoOutputSheetState(
@@ -738,21 +746,187 @@ def _create_co_attainment_sheet(
         formats=formats,
         next_row_index=header_row_index + 1,
         next_serial=1,
+        on_roll=0,
+        attended=0,
+        level_counts={0: 0, 1: 0, 2: 0, 3: 0},
     )
 
 
-def _append_co_attainment_row(state: _CoOutputSheetState, row: _CoAttainmentRow) -> None:
+def _append_co_attainment_row(
+    state: _CoOutputSheetState,
+    row: _CoAttainmentRow,
+    *,
+    thresholds: tuple[float, float, float],
+) -> None:
     if isinstance(row.direct_score, (int, float)) and isinstance(row.indirect_score, (int, float)):
         total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
     else:
         total = CO_REPORT_ABSENT_TOKEN
+    level = _score_to_attainment_level(total, thresholds=thresholds)
     left = [state.next_serial, row.reg_no]
-    right = [row.direct_score, row.indirect_score, total]
+    right = [row.direct_score, row.indirect_score, total, level]
     state.sheet.write_row(state.next_row_index, 0, left, state.formats["body"])
     state.sheet.write(state.next_row_index, 2, row.student_name, state.formats["body_wrap"])
     state.sheet.write_row(state.next_row_index, 3, right, state.formats["body_center"])
+    state.on_roll += 1
+    if total != CO_REPORT_ABSENT_TOKEN:
+        state.attended += 1
+    if isinstance(level, int) and level in state.level_counts:
+        state.level_counts[level] += 1
     state.next_row_index += 1
     state.next_serial += 1
+
+
+def _append_co_attainment_summary(state: _CoOutputSheetState) -> None:
+    # Keep one visual spacer row after data and then write label/value summary rows.
+    state.next_row_index += 1
+    summary_rows = [
+        ("On Roll:", state.on_roll),
+        ("Attended:", state.attended),
+        ("Level 0:", state.level_counts.get(0, 0)),
+        ("Level 1:", state.level_counts.get(1, 0)),
+        ("Level 2:", state.level_counts.get(2, 0)),
+        ("Level 3:", state.level_counts.get(3, 0)),
+    ]
+    for label, value in summary_rows:
+        state.sheet.write(state.next_row_index, 1, label, state.formats["body"])
+        state.sheet.write(state.next_row_index, 2, value, state.formats["body_center"])
+        state.next_row_index += 1
+
+
+def _co_percentage(*, level_2: int, level_3: int, attended: int) -> float | str:
+    if attended <= 0:
+        return CO_REPORT_NOT_APPLICABLE_TOKEN
+    return round(((level_2 + level_3) / float(attended)) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
+
+
+def _create_summary_sheet(
+    workbook: Any,
+    *,
+    metadata: dict[str, str],
+    output_states: dict[int, _CoOutputSheetState],
+    total_outcomes: int,
+) -> tuple[int, int]:
+    sheet = workbook.add_worksheet("Summary")
+    formats = _xlsxwriter_formats(workbook)
+    metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
+        display_value = "All COs" if label == "CO Number" else value
+        sheet.write(row_idx, 1, label, formats["body"])
+        sheet.write(row_idx, 2, display_value, formats["body_wrap"])
+
+    header_row_index = len(metadata_rows) + 1
+    headers = ["CO", "Level 0", "Level 1", "Level 2", "Level 3", "Attended", "CO%"]
+    for col_idx, header in enumerate(headers, start=0):
+        sheet.write(header_row_index, col_idx, header, formats["header"])
+
+    first_data_row = header_row_index + 1
+    for co_index in range(1, total_outcomes + 1):
+        state = output_states.get(co_index)
+        level_counts = state.level_counts if state is not None else {0: 0, 1: 0, 2: 0, 3: 0}
+        attended = state.attended if state is not None else 0
+        row_values: list[Any] = [
+            f"CO{co_index}",
+            level_counts.get(0, 0),
+            level_counts.get(1, 0),
+            level_counts.get(2, 0),
+            level_counts.get(3, 0),
+            attended,
+            _co_percentage(level_2=level_counts.get(2, 0), level_3=level_counts.get(3, 0), attended=attended),
+        ]
+        row_index = header_row_index + co_index
+        sheet.write_row(row_index, 0, row_values, formats["body_center"])
+
+    sampled_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
+    sampled_rows.extend(["", field, value] for field, value in metadata_rows)
+    sampled_rows.append(headers)
+    widths = _compute_sampled_column_widths(sampled_rows, len(headers))
+    for col_idx in range(len(headers)):
+        sheet.set_column(col_idx, col_idx, widths.get(col_idx, 10))
+    sheet.set_column(1, 1, widths.get(1, 8))
+    sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
+
+    sheet.set_landscape()
+    sheet.set_paper(9)  # A4
+    sheet.fit_to_pages(1, 0)
+    sheet.repeat_rows(0, header_row_index)
+    sheet.protect()
+    sheet.set_selection(header_row_index, 0, header_row_index, 0)
+    return first_data_row, first_data_row + max(0, total_outcomes - 1)
+
+
+def _create_graph_sheet(
+    workbook: Any,
+    *,
+    metadata: dict[str, str],
+    summary_first_data_row: int,
+    summary_last_data_row: int,
+) -> None:
+    graph_sheet = workbook.add_worksheet("Graph")
+    formats = _xlsxwriter_formats(workbook)
+    metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
+        display_value = "All COs" if label == "CO Number" else value
+        graph_sheet.write(row_idx, 1, label, formats["body"])
+        graph_sheet.write(row_idx, 2, display_value, formats["body_wrap"])
+    sampled_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
+    sampled_rows.extend(["", field, value] for field, value in metadata_rows)
+    widths = _compute_sampled_column_widths(sampled_rows, 2)
+    graph_sheet.set_column(1, 1, widths.get(1, 8))
+    graph_sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
+
+    chart = workbook.add_chart({"type": "column"})
+    chart.add_series(
+        {
+            "name": "CO%",
+            "categories": ["Summary", summary_first_data_row, 0, summary_last_data_row, 0],
+            "values": ["Summary", summary_first_data_row, 6, summary_last_data_row, 6],
+            "data_labels": {"value": True},
+        }
+    )
+    x_axis_name = "CO"
+    y_axis_name = "% Attainment"
+    chart.set_title({"name": f"{x_axis_name} {y_axis_name}"})
+    chart.set_x_axis({"name": x_axis_name})
+    chart.set_y_axis({"name": y_axis_name, "min": 0, "max": 100, "major_unit": 10})
+    chart.set_legend({"none": True})
+    chart_anchor_row = len(metadata_rows) + 2
+    graph_sheet.insert_chart(f"B{chart_anchor_row + 1}", chart, {"x_scale": 1.4, "y_scale": 1.4})
+    graph_sheet.set_landscape()
+    graph_sheet.set_paper(9)  # A4
+    graph_sheet.fit_to_pages(1, 0)
+    graph_sheet.repeat_rows(0, max(0, len(metadata_rows) - 1))
+    graph_sheet.protect()
+
+
+def _attainment_thresholds(
+    thresholds: tuple[float, float, float] | None = None,
+) -> tuple[float, float, float]:
+    if thresholds is None:
+        return (float(LEVEL_1_THRESHOLD), float(LEVEL_2_THRESHOLD), float(LEVEL_3_THRESHOLD))
+    l1, l2, l3 = thresholds
+    return (float(l1), float(l2), float(l3))
+
+
+def _score_to_attainment_level(
+    score: float | str,
+    *,
+    thresholds: tuple[float, float, float],
+) -> int | str:
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
+        return CO_REPORT_NOT_APPLICABLE_TOKEN
+
+    total = float(score)
+    l1, l2, l3 = thresholds
+    if 0.0 <= total < l1:
+        return 0
+    if l1 <= total < l2:
+        return 1
+    if l2 <= total < l3:
+        return 2
+    if l3 <= total <= 100.0:
+        return 3
+    return CO_REPORT_NOT_APPLICABLE_TOKEN
 
 
 def _reg_no_sort_key(reg_no: str) -> tuple[tuple[int, int | str], ...]:
@@ -773,6 +947,7 @@ def _generate_co_attainment_workbook(
     output_path: Path,
     *,
     token: CancellationToken,
+    thresholds: tuple[float, float, float] | None = None,
 ) -> _CoAttainmentWorkbookResult:
     if not source_paths:
         raise ValueError("No source files provided for CO attainment calculation.")
@@ -787,6 +962,7 @@ def _generate_co_attainment_workbook(
         output_path,
         token=token,
         total_outcomes=first_signature.total_outcomes,
+        thresholds=thresholds,
     )
 
 
@@ -796,6 +972,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
     *,
     token: CancellationToken,
     total_outcomes: int,
+    thresholds: tuple[float, float, float] | None = None,
 ) -> _CoAttainmentWorkbookResult:
     try:
         import xlsxwriter
@@ -814,6 +991,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
     pending_rows: dict[int, list[_CoAttainmentRow]] = {}
     duplicate_reg_count = 0
     duplicate_entries: list[tuple[str, str, str]] = []
+    level_thresholds = _attainment_thresholds(thresholds)
     dedup_store = _RegisterDedupStore(
         total_outcomes=total_outcomes,
         use_sqlite=(len(source_paths) * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET) >= _DEDUP_SQLITE_THRESHOLD_ENTRIES,
@@ -856,7 +1034,20 @@ def _generate_co_attainment_workbook_course_setup_v1(
                 pending_rows.get(co_index, []),
                 key=lambda item: (_reg_no_sort_key(item.reg_no), item.reg_hash),
             ):
-                _append_co_attainment_row(state, row)
+                _append_co_attainment_row(state, row, thresholds=level_thresholds)
+            _append_co_attainment_summary(state)
+        summary_first_data_row, summary_last_data_row = _create_summary_sheet(
+            output_workbook,
+            metadata=metadata,
+            output_states=output_states,
+            total_outcomes=total_outcomes,
+        )
+        _create_graph_sheet(
+            output_workbook,
+            metadata=metadata,
+            summary_first_data_row=summary_first_data_row,
+            summary_last_data_row=summary_last_data_row,
+        )
         output_workbook.close()
         workbook_closed = True
     finally:
