@@ -274,6 +274,28 @@ class TestSettingsHelpers(unittest.TestCase):
         path = app_secrets_dir("FOCUS")
         self.assertEqual(path, Path(r"D:\portable\FOCUS\secrets"))
 
+    @patch("common.utils._runtime_base_dir", return_value=Path(r"C:\Program Files\FOCUS"))
+    @patch("common.utils._is_installed_exe", return_value=True)
+    @patch.dict(os.environ, {"PROGRAMDATA": r"C:\ProgramData"}, clear=False)
+    @patch("common.utils.sys.platform", "win32")
+    def test_app_secrets_dir_installed_windows_uses_programdata(self, *_mocks) -> None:
+        path = app_secrets_dir("FOCUS")
+        self.assertEqual(path, Path(r"C:\ProgramData\FOCUS\secrets"))
+
+    @patch("common.utils._runtime_base_dir", return_value=Path("/Applications/FOCUS.app/Contents/MacOS"))
+    @patch("common.utils._is_installed_exe", return_value=True)
+    @patch("common.utils.sys.platform", "darwin")
+    def test_app_secrets_dir_installed_macos_uses_users_shared(self, *_mocks) -> None:
+        path = app_secrets_dir("FOCUS")
+        self.assertEqual(str(path).replace("\\", "/"), "/Users/Shared/FOCUS/secrets")
+
+    @patch("common.utils._runtime_base_dir", return_value=Path("/usr/local/bin"))
+    @patch("common.utils._is_installed_exe", return_value=True)
+    @patch("common.utils.sys.platform", "linux")
+    def test_app_secrets_dir_installed_linux_uses_var_tmp(self, *_mocks) -> None:
+        path = app_secrets_dir("FOCUS")
+        self.assertEqual(str(path).replace("\\", "/"), "/var/tmp/FOCUS/secrets")
+
     @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=False)
     @patch("common.utils._is_storage_dir_usable", return_value=False)

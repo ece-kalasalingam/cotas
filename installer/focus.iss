@@ -42,6 +42,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\dist\focus\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[Dirs]
+; Shared workbook secret store (machine scope)
+Name: "{commonappdata}\FOCUS\secrets"; Permissions: users-modify
+
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
@@ -53,6 +57,9 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Remove per-user app data created at runtime
 Type: filesandordirs; Name: "{userappdata}\FOCUS"
 Type: filesandordirs; Name: "{userappdata}\Focus"
+; Remove shared machine-wide secret store
+Type: filesandordirs; Name: "{commonappdata}\FOCUS"
+Type: filesandordirs; Name: "{commonappdata}\Focus"
 
 [Code]
 procedure DeleteFocusRoamingDir(const Dir: string);

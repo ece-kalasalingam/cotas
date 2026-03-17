@@ -55,13 +55,15 @@ def _protect_secret_bytes(secret: bytes) -> bytes:
     input_blob = _DataBlob(len(secret), ctypes.cast(input_buffer, ctypes.POINTER(ctypes.c_char)))
     output_blob = _DataBlob()
 
+    # Machine-scoped protection keeps the secret readable across local users.
+    cryptprotect_local_machine = 0x4
     ok = crypt32.CryptProtectData(
         ctypes.byref(input_blob),
         None,
         None,
         None,
         None,
-        0,
+        cryptprotect_local_machine,
         ctypes.byref(output_blob),
     )
     if not ok:
