@@ -20,7 +20,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -53,4 +53,53 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Remove per-user app data created at runtime
 Type: filesandordirs; Name: "{userappdata}\FOCUS"
 Type: filesandordirs; Name: "{userappdata}\Focus"
+
+[Code]
+procedure DeleteFocusRoamingDir(const Dir: string);
+begin
+  if DirExists(Dir) then
+  begin
+    DelTree(Dir, True, True, True);
+  end;
+end;
+
+procedure DeleteFocusForAllUsers;
+var
+  UsersRoot: string;
+  FindRec: TFindRec;
+  UserDir: string;
+begin
+  UsersRoot := ExpandConstant('{sd}\Users');
+  if not DirExists(UsersRoot) then
+    Exit;
+
+  if FindFirst(UsersRoot + '\*', FindRec) then
+  try
+    repeat
+      if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+         (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+      begin
+        if (CompareText(FindRec.Name, 'Public') <> 0) and
+           (CompareText(FindRec.Name, 'Default') <> 0) and
+           (CompareText(FindRec.Name, 'Default User') <> 0) and
+           (CompareText(FindRec.Name, 'All Users') <> 0) then
+        begin
+          UserDir := UsersRoot + '\' + FindRec.Name;
+          DeleteFocusRoamingDir(UserDir + '\AppData\Roaming\FOCUS');
+          DeleteFocusRoamingDir(UserDir + '\AppData\Roaming\Focus');
+        end;
+      end;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    DeleteFocusForAllUsers;
+  end;
+end;
 
