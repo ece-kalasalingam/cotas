@@ -222,3 +222,57 @@ def test_generate_co_attainment_workbook_input_guards(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(cp, "_extract_final_report_signature", lambda _p: None)
     with pytest.raises(ValueError, match="Invalid final CO report"):
         cp._generate_co_attainment_workbook([src], tmp_path / "out.xlsx", token=token)
+
+
+class _FreezeSheet:
+    def __init__(self) -> None:
+        self.freeze_calls: list[tuple[int, int]] = []
+
+    def write(self, *_args, **_kwargs) -> None:
+        return None
+
+    def write_row(self, *_args, **_kwargs) -> None:
+        return None
+
+    def set_column(self, *_args, **_kwargs) -> None:
+        return None
+
+    def set_landscape(self) -> None:
+        return None
+
+    def set_paper(self, *_args, **_kwargs) -> None:
+        return None
+
+    def fit_to_pages(self, *_args, **_kwargs) -> None:
+        return None
+
+    def repeat_rows(self, *_args, **_kwargs) -> None:
+        return None
+
+    def freeze_panes(self, row: int, col: int) -> None:
+        self.freeze_calls.append((row, col))
+
+    def protect(self) -> None:
+        return None
+
+    def set_selection(self, *_args, **_kwargs) -> None:
+        return None
+
+
+class _FreezeWorkbook:
+    def __init__(self) -> None:
+        self.sheet = _FreezeSheet()
+
+    def add_worksheet(self, _name: str) -> _FreezeSheet:
+        return self.sheet
+
+    def add_format(self, payload: dict[str, object]) -> dict[str, object]:
+        return payload
+
+
+def test_create_co_attainment_sheet_freezes_headers_and_student_columns() -> None:
+    workbook = _FreezeWorkbook()
+
+    state = cp._create_co_attainment_sheet(workbook, co_index=1, metadata={})
+
+    assert workbook.sheet.freeze_calls == [(state.header_row_index + 1, 3)]

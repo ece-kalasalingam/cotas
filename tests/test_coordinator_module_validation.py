@@ -312,6 +312,40 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert "CO1" in wb.sheetnames
         assert "Summary" in wb.sheetnames
         assert "Graph" in wb.sheetnames
+        assert SYSTEM_HASH_SHEET in wb.sheetnames
+        assert SYSTEM_REPORT_INTEGRITY_SHEET in wb.sheetnames
+        assert wb[SYSTEM_HASH_SHEET].sheet_state == "hidden"
+        assert wb[SYSTEM_REPORT_INTEGRITY_SHEET].sheet_state == "hidden"
+
+        hash_sheet = wb[SYSTEM_HASH_SHEET]
+        assert hash_sheet["A1"].value == SYSTEM_HASH_TEMPLATE_ID_HEADER
+        assert hash_sheet["B1"].value == SYSTEM_HASH_TEMPLATE_HASH_HEADER
+        template_id = str(hash_sheet["A2"].value or "")
+        template_hash = str(hash_sheet["B2"].value or "")
+        assert template_id
+        assert template_hash == sign_payload(template_id)
+
+        integrity_ws = wb[SYSTEM_REPORT_INTEGRITY_SHEET]
+        assert integrity_ws["A1"].value == SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER
+        assert integrity_ws["B1"].value == SYSTEM_REPORT_INTEGRITY_HASH_HEADER
+        manifest_text = integrity_ws["A2"].value
+        manifest_hash = integrity_ws["B2"].value
+        assert isinstance(manifest_text, str) and manifest_text
+        assert isinstance(manifest_hash, str) and manifest_hash
+        assert sign_payload(manifest_text) == manifest_hash
+        manifest = json.loads(manifest_text)
+        assert manifest.get("schema_version") == 1
+        assert manifest.get("template_id") == template_id
+        assert manifest.get("template_hash") == template_hash
+        assert manifest.get("sheet_order") == ["CO1", "Summary", "Graph", SYSTEM_HASH_SHEET]
+        sheet_hashes = manifest.get("sheets")
+        assert isinstance(sheet_hashes, list)
+        assert [entry.get("name") for entry in sheet_hashes] == manifest.get("sheet_order")
+        assert all(
+            isinstance(entry, dict) and entry.get("hash") == sign_payload(str(entry.get("name", "")))
+            for entry in sheet_hashes
+        )
+
         ws = wb["CO1"]
         assert ws["B1"].value == "Course Code"
         assert ws["C1"].value == "ECE000"

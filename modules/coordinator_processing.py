@@ -50,7 +50,7 @@ from common.excel_sheet_layout import (
 )
 from common.jobs import CancellationToken
 from common.utils import app_runtime_storage_dir, coerce_excel_number, create_app_runtime_sqlite_file, normalize
-from common.workbook_signing import verify_payload_signature
+from common.workbook_signing import sign_payload, verify_payload_signature
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
 
@@ -78,6 +78,7 @@ _NORM_SECTION_KEY = normalize(COURSE_METADATA_SECTION_KEY)
 _DEDUP_SQLITE_THRESHOLD_ENTRIES = 1
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
+_INTEGRITY_SCHEMA_VERSION = 1
 
 
 @dataclass(slots=True, frozen=True)
@@ -738,6 +739,8 @@ def _create_co_attainment_sheet(
     sheet.set_paper(9)  # A4
     sheet.fit_to_pages(1, 0)
     sheet.repeat_rows(0, header_row_index)
+    # Freeze rows through the header and columns through Student name (A:C).
+    sheet.freeze_panes(header_row_index + 1, 3)
     sheet.protect()
     sheet.set_selection(header_row_index, 0, header_row_index, 0)
     return _CoOutputSheetState(
@@ -899,6 +902,38 @@ def _create_graph_sheet(
     graph_sheet.protect()
 
 
+def _write_system_integrity_sheets(
+    workbook: Any,
+    *,
+    template_id: str,
+    sheet_order: list[str],
+) -> None:
+    template_hash = sign_payload(template_id)
+    hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET)
+    hash_ws.write(0, 0, SYSTEM_HASH_TEMPLATE_ID_HEADER)
+    hash_ws.write(0, 1, SYSTEM_HASH_TEMPLATE_HASH_HEADER)
+    hash_ws.write(1, 0, template_id)
+    hash_ws.write(1, 1, template_hash)
+    hash_ws.hide()
+
+    signed_sheet_order = [*sheet_order, SYSTEM_HASH_SHEET]
+    manifest = {
+        "schema_version": _INTEGRITY_SCHEMA_VERSION,
+        "template_id": template_id,
+        "template_hash": template_hash,
+        "sheet_order": signed_sheet_order,
+        "sheets": [{"name": name, "hash": sign_payload(name)} for name in signed_sheet_order],
+    }
+    manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    manifest_hash = sign_payload(manifest_text)
+    integrity_ws = workbook.add_worksheet(SYSTEM_REPORT_INTEGRITY_SHEET)
+    integrity_ws.write(0, 0, SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
+    integrity_ws.write(0, 1, SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
+    integrity_ws.write(1, 0, manifest_text)
+    integrity_ws.write(1, 1, manifest_hash)
+    integrity_ws.hide()
+
+
 def _attainment_thresholds(
     thresholds: tuple[float, float, float] | None = None,
 ) -> tuple[float, float, float]:
@@ -962,6 +997,7 @@ def _generate_co_attainment_workbook(
         output_path,
         token=token,
         total_outcomes=first_signature.total_outcomes,
+        template_id=first_signature.template_id,
         thresholds=thresholds,
     )
 
@@ -972,6 +1008,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
     *,
     token: CancellationToken,
     total_outcomes: int,
+    template_id: str,
     thresholds: tuple[float, float, float] | None = None,
 ) -> _CoAttainmentWorkbookResult:
     try:
@@ -1047,6 +1084,13 @@ def _generate_co_attainment_workbook_course_setup_v1(
             metadata=metadata,
             summary_first_data_row=summary_first_data_row,
             summary_last_data_row=summary_last_data_row,
+        )
+        sheet_order = [f"CO{co_index}" for co_index in range(1, total_outcomes + 1)]
+        sheet_order.extend(["Summary", "Graph"])
+        _write_system_integrity_sheets(
+            output_workbook,
+            template_id=template_id,
+            sheet_order=sheet_order,
         )
         output_workbook.close()
         workbook_closed = True
