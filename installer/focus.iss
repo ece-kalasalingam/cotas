@@ -49,3 +49,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+; Remove per-user app data created at runtime
+Type: filesandordirs; Name: "{userappdata}\FOCUS"
+Type: filesandordirs; Name: "{userappdata}\Focus"
+
