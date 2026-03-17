@@ -23,9 +23,9 @@
 ## Fault Injection Procedure
 - File write interruption / permission simulation is covered by tests:
   - `tests/test_instructor_workflow_service.py`
-  - `tests/test_instructor_module_step5.py`
+  - `tests/test_final_co_report_generator.py`
 - Run:
-  - `conda run -n obe python -m pytest -q tests/test_instructor_workflow_service.py tests/test_instructor_module_step5.py`
+  - `conda run -n obe python -m pytest -q tests/test_instructor_workflow_service.py tests/test_final_co_report_generator.py`
 
 ## Cancellation Verification
 - Regression tests:
@@ -66,7 +66,7 @@
   1. `conda run -n obe python -m pyflakes .`
   2. `conda run -n obe python -m pytest -q`
   3. `conda run -n obe python scripts/check_ui_strings.py`
-  4. `conda run -n obe python -m bandit -q -r common -r modules -r services -x tests`
+  4. `conda run -n obe python -m bandit -q -c .bandit.yaml -r common -r modules -r services`
   5. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
 
 ## Timeout and Crash Pipeline

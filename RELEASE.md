@@ -12,7 +12,7 @@
 
 ## Build
 
-Use commands in `commands.txt`.
+Use commands in `installer/commands.txt`.
 
 - Windows:
   use PyInstaller `--add-data "assets;assets"`

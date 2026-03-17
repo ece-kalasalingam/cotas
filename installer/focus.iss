@@ -27,7 +27,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 OutputDir=dist
-OutputBaseFilename=focus-installer
+OutputBaseFilename=Focus-installer
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\assets\kare-logo.ico
 
