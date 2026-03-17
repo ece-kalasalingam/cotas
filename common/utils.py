@@ -228,7 +228,7 @@ def app_secrets_dir(app_name: str) -> Path:
             return Path(str(PureWindowsPath(program_data) / app_name / "secrets"))
         if sys.platform == "darwin":
             return Path("/Users/Shared") / app_name / "secrets"
-        return Path("/var/tmp") / app_name / "secrets"
+        return _installed_storage_dir(app_name) / "secrets"
     return _join_path(app_runtime_storage_dir(app_name), "secrets")
 
 

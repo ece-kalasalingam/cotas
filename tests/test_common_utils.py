@@ -292,9 +292,10 @@ class TestSettingsHelpers(unittest.TestCase):
     @patch("common.utils._runtime_base_dir", return_value=Path("/usr/local/bin"))
     @patch("common.utils._is_installed_exe", return_value=True)
     @patch("common.utils.sys.platform", "linux")
-    def test_app_secrets_dir_installed_linux_uses_var_tmp(self, *_mocks) -> None:
+    @patch.dict(os.environ, {"XDG_CONFIG_HOME": "/home/alice/.config"}, clear=False)
+    def test_app_secrets_dir_installed_linux_uses_installed_storage_root(self, *_mocks) -> None:
         path = app_secrets_dir("FOCUS")
-        self.assertEqual(str(path).replace("\\", "/"), "/var/tmp/FOCUS/secrets")
+        self.assertEqual(str(path).replace("\\", "/"), "/home/alice/.config/FOCUS/secrets")
 
     @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=False)
