@@ -23,7 +23,9 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QFileDialog,
+    QDoubleSpinBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -51,6 +53,9 @@ from common.constants import (
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     INSTRUCTOR_INFO_TAB_LAYOUT_MARGINS,
     INSTRUCTOR_INFO_TAB_LAYOUT_SPACING,
+    LEVEL_1_THRESHOLD,
+    LEVEL_2_THRESHOLD,
+    LEVEL_3_THRESHOLD,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
     SHORTCUT_OPEN_KEY_SEQUENCE,
@@ -406,6 +411,86 @@ class CoordinatorModule(QWidget):
         header_layout.addWidget(self.hint_label)
         root.addWidget(header_card)
 
+        self.thresholds_card = QFrame()
+        self.thresholds_card.setObjectName("coordinatorHeaderCard")
+        thresholds_layout = QVBoxLayout(self.thresholds_card)
+        thresholds_layout.setContentsMargins(*COORDINATOR_HEADER_LAYOUT_MARGINS)
+        thresholds_layout.setSpacing(COORDINATOR_HEADER_LAYOUT_SPACING)
+        self.threshold_title_label = QLabel()
+        self.threshold_title_label.setObjectName("coordinatorThresholdTitle")
+        self.threshold_title_label.setFont(QFont(UI_FONT_FAMILY, COORDINATOR_SUMMARY_FONT_SIZE, QFont.Weight.Bold))
+        thresholds_layout.addWidget(self.threshold_title_label)
+
+        threshold_rows = QGridLayout()
+        threshold_rows.setContentsMargins(0, 0, 0, 0)
+        threshold_rows.setHorizontalSpacing(COORDINATOR_CONTROLS_LAYOUT_SPACING)
+        threshold_rows.setVerticalSpacing(8)
+        threshold_rows.setColumnStretch(0, 1)
+
+        self.threshold_l1_label = QLabel()
+        self.threshold_l1_note_label = QLabel()
+        self.threshold_l1_note_label.setWordWrap(True)
+        self.threshold_l1_note_label.setStyleSheet("color: palette(mid);")
+        self.threshold_l1_input = QDoubleSpinBox()
+        self.threshold_l1_input.setRange(0.0, 100.0)
+        self.threshold_l1_input.setDecimals(2)
+        self.threshold_l1_input.setSingleStep(0.5)
+        self.threshold_l1_input.setValue(float(LEVEL_1_THRESHOLD))
+        self.threshold_l1_input.setFixedWidth(140)
+        l1_text_col = QVBoxLayout()
+        l1_text_col.setContentsMargins(0, 0, 0, 0)
+        l1_text_col.setSpacing(2)
+        l1_text_col.addWidget(self.threshold_l1_label)
+        l1_text_col.addWidget(self.threshold_l1_note_label)
+        l1_text = QWidget()
+        l1_text.setLayout(l1_text_col)
+        threshold_rows.addWidget(l1_text, 0, 0)
+        threshold_rows.addWidget(self.threshold_l1_input, 0, 1, alignment=Qt.AlignmentFlag.AlignTop)
+
+        self.threshold_l2_label = QLabel()
+        self.threshold_l2_note_label = QLabel()
+        self.threshold_l2_note_label.setWordWrap(True)
+        self.threshold_l2_note_label.setStyleSheet("color: palette(mid);")
+        self.threshold_l2_input = QDoubleSpinBox()
+        self.threshold_l2_input.setRange(0.0, 100.0)
+        self.threshold_l2_input.setDecimals(2)
+        self.threshold_l2_input.setSingleStep(0.5)
+        self.threshold_l2_input.setValue(float(LEVEL_2_THRESHOLD))
+        self.threshold_l2_input.setFixedWidth(140)
+        l2_text_col = QVBoxLayout()
+        l2_text_col.setContentsMargins(0, 0, 0, 0)
+        l2_text_col.setSpacing(2)
+        l2_text_col.addWidget(self.threshold_l2_label)
+        l2_text_col.addWidget(self.threshold_l2_note_label)
+        l2_text = QWidget()
+        l2_text.setLayout(l2_text_col)
+        threshold_rows.addWidget(l2_text, 1, 0)
+        threshold_rows.addWidget(self.threshold_l2_input, 1, 1, alignment=Qt.AlignmentFlag.AlignTop)
+
+        self.threshold_l3_label = QLabel()
+        self.threshold_l3_note_label = QLabel()
+        self.threshold_l3_note_label.setWordWrap(True)
+        self.threshold_l3_note_label.setStyleSheet("color: palette(mid);")
+        self.threshold_l3_input = QDoubleSpinBox()
+        self.threshold_l3_input.setRange(0.0, 100.0)
+        self.threshold_l3_input.setDecimals(2)
+        self.threshold_l3_input.setSingleStep(0.5)
+        self.threshold_l3_input.setValue(float(LEVEL_3_THRESHOLD))
+        self.threshold_l3_input.setFixedWidth(140)
+        l3_text_col = QVBoxLayout()
+        l3_text_col.setContentsMargins(0, 0, 0, 0)
+        l3_text_col.setSpacing(2)
+        l3_text_col.addWidget(self.threshold_l3_label)
+        l3_text_col.addWidget(self.threshold_l3_note_label)
+        l3_text = QWidget()
+        l3_text.setLayout(l3_text_col)
+        threshold_rows.addWidget(l3_text, 2, 0)
+        threshold_rows.addWidget(self.threshold_l3_input, 2, 1, alignment=Qt.AlignmentFlag.AlignTop)
+
+        thresholds_layout.addLayout(threshold_rows)
+
+        root.addWidget(self.thresholds_card)
+
         self.drop_zone = _DropZoneFrame()
         self.drop_zone.setProperty("dragActive", False)
         zone_layout = QVBoxLayout(self.drop_zone)
@@ -499,6 +584,15 @@ class CoordinatorModule(QWidget):
         self.drop_list.set_placeholder_text(t("coordinator.list_placeholder"))
         self.clear_button.setText(t("coordinator.clear_all"))
         self.calculate_button.setText(t("coordinator.calculate"))
+        self.threshold_title_label.setText("CO Attainment Thresholds")
+        self.threshold_l1_label.setText("L1 Threshold:")
+        self.threshold_l1_note_label.setText(
+            "(Pass mark of the course or course average for the 3 batches offered in the previous regulation)"
+        )
+        self.threshold_l2_label.setText("L2 Threshold:")
+        self.threshold_l2_note_label.setText("(First Class)")
+        self.threshold_l3_label.setText("L3 Threshold:")
+        self.threshold_l3_note_label.setText("(Distinction Class)")
         self.info_tabs.setTabText(0, t("instructor.log.title"))
         self.info_tabs.setTabText(1, t("instructor.links.title"))
         self._refresh_output_links()
@@ -518,6 +612,9 @@ class CoordinatorModule(QWidget):
         has_files = bool(self._files)
         self.clear_button.setEnabled(has_files and not self.state.busy)
         self.calculate_button.setEnabled(has_files and not self.state.busy)
+        self.threshold_l1_input.setEnabled(not self.state.busy)
+        self.threshold_l2_input.setEnabled(not self.state.busy)
+        self.threshold_l3_input.setEnabled(not self.state.busy)
         self.drop_list.setEnabled(not self.state.busy)
         for row in range(self.drop_list.count()):
             item = self.drop_list.item(row)
@@ -526,6 +623,22 @@ class CoordinatorModule(QWidget):
                 widget.remove_btn.setEnabled(not self.state.busy)
         self._refresh_output_links()
         self._refresh_summary()
+
+    def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
+        thresholds = (
+            float(self.threshold_l1_input.value()),
+            float(self.threshold_l2_input.value()),
+            float(self.threshold_l3_input.value()),
+        )
+        if not (thresholds[0] <= thresholds[1] <= thresholds[2]):
+            show_toast(
+                self,
+                "Invalid thresholds: Level 1 <= Level 2 <= Level 3 is required.",
+                title=t("coordinator.title"),
+                level="error",
+            )
+            return None
+        return thresholds
 
     def _on_calculate_clicked(self) -> None:
         calculate_attainment_async(self, ns=globals())

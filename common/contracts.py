@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-from common.constants import DIRECT_RATIO, INDIRECT_RATIO, LIKERT_MAX, LIKERT_MIN
+from common.constants import (
+    DIRECT_RATIO,
+    INDIRECT_RATIO,
+    LEVEL_1_THRESHOLD,
+    LEVEL_2_THRESHOLD,
+    LEVEL_3_THRESHOLD,
+    LIKERT_MAX,
+    LIKERT_MIN,
+)
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
 
 
 def validate_blueprint_registry_contracts() -> None:
     _validate_attainment_policy_contracts()
+    _validate_attainment_threshold_contracts()
     _validate_indirect_tool_policy_contracts()
 
     if not BLUEPRINT_REGISTRY:
@@ -51,6 +60,16 @@ def validate_blueprint_registry_contracts() -> None:
 def _validate_attainment_policy_contracts() -> None:
     if round(DIRECT_RATIO + INDIRECT_RATIO, 5) != 1.0:
         raise ConfigurationError("DIRECT_RATIO + INDIRECT_RATIO must equal 1.0")
+
+
+def _validate_attainment_threshold_contracts() -> None:
+    thresholds = (LEVEL_1_THRESHOLD, LEVEL_2_THRESHOLD, LEVEL_3_THRESHOLD)
+    if any((not isinstance(value, (int, float))) for value in thresholds):
+        raise ConfigurationError("Level thresholds must be numeric.")
+    if any((value < 0.0 or value > 100.0) for value in thresholds):
+        raise ConfigurationError("Level thresholds must be in the range 0 to 100.")
+    if not (LEVEL_1_THRESHOLD <= LEVEL_2_THRESHOLD <= LEVEL_3_THRESHOLD):
+        raise ConfigurationError("Level thresholds must be non-decreasing (L1 <= L2 <= L3).")
 
 
 def _validate_indirect_tool_policy_contracts() -> None:

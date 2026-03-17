@@ -1,5 +1,3 @@
-"""Coordinator step: calculate and export CO attainment workbook."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,6 +31,11 @@ def calculate_attainment_async(module: object, *, ns: dict[str, object]) -> None
     if not save_path:
         return
 
+    thresholds_reader = getattr(module, "get_attainment_thresholds", None)
+    thresholds = thresholds_reader() if callable(thresholds_reader) else None
+    if thresholds is None:
+        return
+
     process_name = COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT
     token = CancellationToken()
     job_id = generate_job_id()
@@ -43,6 +46,7 @@ def calculate_attainment_async(module: object, *, ns: dict[str, object]) -> None
             payload={
                 WORKFLOW_PAYLOAD_KEY_SOURCE: [str(path) for path in module._files],
                 WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path,
+                "thresholds": list(thresholds),
             },
         )
         if workflow_service is not None
@@ -64,12 +68,13 @@ def calculate_attainment_async(module: object, *, ns: dict[str, object]) -> None
             module._downloaded_outputs.append(output_path)
         module._remember_dialog_dir_safe(str(output_path))
         module._publish_status_key("coordinator.status.calculate_completed")
+        threshold_summary = f"thresholds=({thresholds[0]:g},{thresholds[1]:g},{thresholds[2]:g})"
         ns["log_process_message"](
             process_name,
             logger=module._logger,
             success_message=(
                 f"{process_name} completed successfully. output={output_path}, "
-                f"duplicates_removed={duplicate_reg_count}"
+                f"duplicates_removed={duplicate_reg_count}, {threshold_summary}"
             ),
             user_success_message=ns["build_i18n_log_message"](
                 "coordinator.status.calculate_completed",

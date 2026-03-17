@@ -90,6 +90,10 @@ ABOUT_BODY_STYLE = "font-size: 12px;"
 # Direct vs Indirect Contribution
 DIRECT_RATIO: float = 0.8
 INDIRECT_RATIO: float = 0.2
+# CO attainment level thresholds (percentage scale: 0-100)
+LEVEL_1_THRESHOLD: float = 40.0
+LEVEL_2_THRESHOLD: float = 60.0
+LEVEL_3_THRESHOLD: float = 75.0
 
 
 # ==========================================================

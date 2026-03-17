@@ -98,15 +98,25 @@ class CoordinatorWorkflowService:
         generate_co_attainment_workbook: Callable[..., object],
         context: JobContext,
         cancel_token: CancellationToken | None = None,
+        thresholds: tuple[float, float, float] | None = None,
     ):
         return self._execute_with_telemetry(
             context=context,
             operation=COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: generate_co_attainment_workbook(
-                source_paths,
-                output_path,
-                token=effective_cancel_token,
+            work=lambda effective_cancel_token: (
+                generate_co_attainment_workbook(
+                    source_paths,
+                    output_path,
+                    token=effective_cancel_token,
+                )
+                if thresholds is None
+                else generate_co_attainment_workbook(
+                    source_paths,
+                    output_path,
+                    token=effective_cancel_token,
+                    thresholds=thresholds,
+                )
             ),
         )
 
