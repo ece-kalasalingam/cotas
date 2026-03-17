@@ -222,6 +222,7 @@ TEXTS = {
     'coordinator.thresholds.l1.label': 'L1 పరిమితి:',
     'coordinator.thresholds.l2.label': 'L2 పరిమితి:',
     'coordinator.thresholds.l3.label': 'L3 పరిమితి:',
+    'coordinator.thresholds.invalid_rule': 'Threshold rule violated: keep 0 < L1 < L2 < L3 < 100.',
     'coordinator.dialog.title': 'ఎక్సెల్ ఫైల్స్ ఎంచుకోండి',
     'coordinator.links.uploaded_report': 'తుది CO నివేదిక అప్\\u200cలోడ్ చేయబడింది',
     'coordinator.links.downloaded_output': 'డౌన్\u200cలోడ్ చేసిన అవుట్\u200cపుట్',

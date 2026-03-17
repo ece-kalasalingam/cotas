@@ -150,3 +150,57 @@ def test_refresh_ui_toggles_controls_with_file_state(monkeypatch: pytest.MonkeyP
     assert module.calculate_button.isEnabled() is False
     assert module.drop_list.isEnabled() is False
     module.close()
+
+
+def test_threshold_changes_revalidate_calculate_button(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    module = _build_module(monkeypatch)
+    module._files = [Path("C:/a.xlsx")]
+    module.state.busy = False
+
+    module.threshold_l1_input.setValue(40.0)
+    module.threshold_l2_input.setValue(60.0)
+    module.threshold_l3_input.setValue(80.0)
+    module._refresh_ui()
+    assert module.calculate_button.isEnabled() is True
+
+    module.threshold_l2_input.setValue(40.0)
+    assert module.calculate_button.isEnabled() is False
+
+    module.threshold_l2_input.setValue(70.0)
+    assert module.calculate_button.isEnabled() is True
+    module.close()
+
+
+def test_threshold_violation_emits_toast_and_activity_log(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    module = _build_module(monkeypatch)
+    toasts: list[tuple[str, str, str]] = []
+    status_keys: list[str] = []
+
+    monkeypatch.setattr(
+        coordinator_ui,
+        "show_toast",
+        lambda _parent, message, *, title, level: toasts.append((message, title, level)),
+    )
+    monkeypatch.setattr(module, "_publish_status_key", lambda key, **_kwargs: status_keys.append(key))
+
+    module.threshold_l1_input.setValue(40.0)
+    module.threshold_l2_input.setValue(60.0)
+    module.threshold_l3_input.setValue(80.0)
+
+    module.threshold_l2_input.setValue(40.0)
+    assert toasts[-1] == (
+        coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY,
+        "coordinator.title",
+        "error",
+    )
+    assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
+    initial_count = len(toasts)
+
+    module.threshold_l2_input.setValue(30.0)
+    assert len(toasts) == initial_count
+
+    module.threshold_l2_input.setValue(70.0)
+    module.threshold_l2_input.setValue(80.0)
+    assert len(toasts) == initial_count + 1
+    assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
+    module.close()

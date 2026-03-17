@@ -222,6 +222,7 @@ TEXTS = {
     'coordinator.thresholds.l1.label': 'L1 सीमा:',
     'coordinator.thresholds.l2.label': 'L2 सीमा:',
     'coordinator.thresholds.l3.label': 'L3 सीमा:',
+    'coordinator.thresholds.invalid_rule': 'Threshold rule violated: keep 0 < L1 < L2 < L3 < 100.',
     'coordinator.dialog.title': 'Excel फ़ाइलें चुनें',
     'coordinator.links.uploaded_report': 'अपलोड की गई फ़ाइनल CO रिपोर्ट',
     'coordinator.links.downloaded_output': 'डाउनलोड किया गया आउटपुट',

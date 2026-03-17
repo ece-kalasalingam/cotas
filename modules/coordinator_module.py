@@ -367,6 +367,7 @@ class CoordinatorModule(QWidget):
     OUTPUT_LINK_OPEN_FOLDER_KEY = "instructor.links.open_folder"
     OUTPUT_LINK_NOT_AVAILABLE_KEY = "instructor.links.not_available"
     OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
+    _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
 
     def __init__(self) -> None:
         super().__init__()
@@ -380,6 +381,7 @@ class CoordinatorModule(QWidget):
         self._pending_drop_batches: list[list[str]] = []
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
+        self._threshold_violation_active = False
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._build_ui()
         self._setup_ui_logging()
@@ -474,6 +476,9 @@ class CoordinatorModule(QWidget):
             1,
             alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         )
+        self.threshold_l1_input.valueChanged.connect(self._on_threshold_value_changed)
+        self.threshold_l2_input.valueChanged.connect(self._on_threshold_value_changed)
+        self.threshold_l3_input.valueChanged.connect(self._on_threshold_value_changed)
 
         thresholds_layout.addLayout(threshold_rows)
         left_layout.addLayout(thresholds_layout)
@@ -617,7 +622,9 @@ class CoordinatorModule(QWidget):
     def _refresh_ui(self) -> None:
         has_files = bool(self._files)
         self.clear_button.setEnabled(has_files and not self.state.busy)
-        self.calculate_button.setEnabled(has_files and not self.state.busy)
+        self.calculate_button.setEnabled(
+            has_files and not self.state.busy and self._has_valid_attainment_thresholds()
+        )
         self.threshold_l1_input.setEnabled(not self.state.busy)
         self.threshold_l2_input.setEnabled(not self.state.busy)
         self.threshold_l3_input.setEnabled(not self.state.busy)
@@ -630,21 +637,42 @@ class CoordinatorModule(QWidget):
         self._refresh_output_links()
         self._refresh_summary()
 
-    def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
-        thresholds = (
+    def _read_attainment_thresholds(self) -> tuple[float, float, float]:
+        return (
             float(self.threshold_l1_input.value()),
             float(self.threshold_l2_input.value()),
             float(self.threshold_l3_input.value()),
         )
-        if not (thresholds[0] <= thresholds[1] <= thresholds[2]):
-            show_toast(
-                self,
-                "Invalid thresholds: Level 1 <= Level 2 <= Level 3 is required.",
-                title=t("coordinator.title"),
-                level="error",
-            )
+
+    def _has_valid_attainment_thresholds(self) -> bool:
+        l1, l2, l3 = self._read_attainment_thresholds()
+        return 0.0 < l1 < l2 < l3 < 100.0
+
+    def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
+        thresholds = self._read_attainment_thresholds()
+        if not self._has_valid_attainment_thresholds():
+            self._notify_threshold_violation(force=True)
             return None
         return thresholds
+
+    def _notify_threshold_violation(self, *, force: bool) -> None:
+        if self._threshold_violation_active and not force:
+            return
+        show_toast(
+            self,
+            t(self._THRESHOLD_VALIDATION_KEY),
+            title=t("coordinator.title"),
+            level="error",
+        )
+        self._publish_status_key(self._THRESHOLD_VALIDATION_KEY)
+        self._threshold_violation_active = True
+
+    def _on_threshold_value_changed(self, _value: float) -> None:
+        if self._has_valid_attainment_thresholds():
+            self._threshold_violation_active = False
+        else:
+            self._notify_threshold_violation(force=False)
+        self._refresh_ui()
 
     def _on_calculate_clicked(self) -> None:
         calculate_attainment_async(self, ns=globals())

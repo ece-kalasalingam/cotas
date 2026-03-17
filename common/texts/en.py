@@ -238,6 +238,7 @@ TEXTS = {
     "coordinator.thresholds.l1.label": "L1 Threshold:",
     "coordinator.thresholds.l2.label": "L2 Threshold:",
     "coordinator.thresholds.l3.label": "L3 Threshold:",
+    "coordinator.thresholds.invalid_rule": "Invalid thresholds: 0 < L1 < L2 < L3 < 100 is required.",
     "coordinator.dialog.title": "Select Excel Files",
     "coordinator.links.uploaded_report": "Uploaded Final CO Report",
     "coordinator.links.downloaded_output": "Downloaded Output",

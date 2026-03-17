@@ -242,3 +242,30 @@ def test_set_busy_calls_state_and_refresh(monkeypatch: pytest.MonkeyPatch, qapp:
     assert calls["refresh"] == 2
     module.close()
 
+
+def test_get_attainment_thresholds_enforces_strict_bounds(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    module = _build_module(monkeypatch)
+    toasts: list[tuple[str, str, str]] = []
+    status_keys: list[str] = []
+    monkeypatch.setattr(
+        coordinator_ui,
+        "show_toast",
+        lambda _parent, message, *, title, level: toasts.append((message, title, level)),
+    )
+    monkeypatch.setattr(module, "_publish_status_key", lambda key, **_kwargs: status_keys.append(key))
+
+    module.threshold_l1_input.setValue(50.0)
+    module.threshold_l2_input.setValue(70.0)
+    module.threshold_l3_input.setValue(90.0)
+    assert module.get_attainment_thresholds() == (50.0, 70.0, 90.0)
+
+    module.threshold_l1_input.setValue(0.0)
+    assert module.get_attainment_thresholds() is None
+    assert toasts[-1] == (
+        coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY,
+        "coordinator.title",
+        "error",
+    )
+    assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
+    module.close()
+

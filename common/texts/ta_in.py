@@ -234,6 +234,7 @@ TEXTS = {
     "coordinator.thresholds.l1.label": "L1 வரம்பு:",
     "coordinator.thresholds.l2.label": "L2 வரம்பு:",
     "coordinator.thresholds.l3.label": "L3 வரம்பு:",
+    "coordinator.thresholds.invalid_rule": "Threshold rule violated: keep 0 < L1 < L2 < L3 < 100.",
     "coordinator.dialog.title": "Excel கோப்புகளை தேர்வு செய்ய",
     "coordinator.links.uploaded_report": "பதிவேற்றப்பட்ட Final CO Report",
     "coordinator.links.downloaded_output": "பதிவிறக்கப்பட்ட வெளியீடு",
