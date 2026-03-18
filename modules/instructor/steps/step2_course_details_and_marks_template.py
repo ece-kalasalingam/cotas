@@ -125,19 +125,34 @@ def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> 
     if typed_module.state.busy:
         return
 
+    open_path, _ = typed_ns["QFileDialog"].getOpenFileName(
+        typed_module,
+        typed_ns["t"]("instructor.dialog.step2.title"),
+        typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"]),
+        typed_ns["t"]("instructor.dialog.filter.excel_open"),
+    )
+    if not open_path:
+        return
+    upload_course_details_from_path_async(module, open_path, ns=ns)
+
+
+def upload_course_details_from_path_async(
+    module: object,
+    open_path: str,
+    *,
+    show_success_toast: bool = False,
+    ns: Mapping[str, object],
+) -> None:
+    typed_module = cast(_InstructorStep2Module, module)
+    typed_ns = cast(_Step2Namespace, ns)
+    if typed_module.state.busy or not open_path:
+        return
+
     t = typed_ns["t"]
     process_name = t("instructor.log.process.validate_course_details_workbook")
     user_success_message, user_error_message = typed_ns["_localized_log_messages"](
         "instructor.log.process.validate_course_details_workbook"
     )
-    open_path, _ = typed_ns["QFileDialog"].getOpenFileName(
-        typed_module,
-        t("instructor.dialog.step2.title"),
-        typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"]),
-        t("instructor.dialog.filter.excel_open"),
-    )
-    if not open_path:
-        return
     typed_module._remember_dialog_dir_safe(open_path)
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
@@ -166,6 +181,9 @@ def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> 
         typed_module._step2_marks_default_name = (
             default_marks_name_obj if isinstance(default_marks_name_obj, str) else fallback_name
         ) or fallback_name
+        display_path_setter = getattr(typed_module, "_set_step1_course_details_file", None)
+        if callable(display_path_setter):
+            display_path_setter(open_path)
 
         if replacing:
             typed_module.final_report_outdated = typed_module.final_report_done
@@ -177,12 +195,13 @@ def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> 
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
-            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
+            success_message=f"{process_name} completed successfully. file={open_path}",
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
-        typed_module._show_step_success_toast(1)
+        if show_success_toast:
+            typed_module._show_step_success_toast(1)
 
     def _on_failed(exc: Exception) -> None:
         if isinstance(exc, typed_ns["JobCancelledError"]):
@@ -252,7 +271,6 @@ def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> 
         on_success=_on_finished,
         on_failure=_on_failed,
     )
-
 
 def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) -> None:
     typed_module = cast(_InstructorStep2Module, module)

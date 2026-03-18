@@ -2,17 +2,39 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from collections.abc import Callable, Iterable
 from typing import Literal
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QPainter, QPalette, QPen
-from PySide6.QtWidgets import QFrame, QListWidget, QWidget
+from PySide6.QtWidgets import QFrame, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+
+from common.ui_stylings import (
+    COORDINATOR_DROP_LIST_ITEM_SPACING,
+    COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
+    COORDINATOR_DROP_ZONE_LAYOUT_SPACING,
+    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
+    COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_WIDTH,
+    COORDINATOR_DROPZONE_INNER_RADIUS,
+    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
+    COORDINATOR_DROPZONE_OUTER_RADIUS,
+    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
+    COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
+    COORDINATOR_LIST_PLACEHOLDER_COLOR,
+    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
+)
+from common.removable_file_item_widget import RemovableFileItemWidget
 
 
 class DragDropFileList(QListWidget):
     files_dropped = Signal(list)
     drag_state_changed = Signal(bool)
     browse_requested = Signal()
+    DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or double-click to add files"
 
     def __init__(
         self,
@@ -24,7 +46,7 @@ class DragDropFileList(QListWidget):
         drop_mode: Literal["single", "multiple"] = "multiple",
     ) -> None:
         super().__init__()
-        self._placeholder_text = ""
+        self._placeholder_text = self.DEFAULT_PLACEHOLDER_TEXT
         self._placeholder_color = placeholder_color
         self._placeholder_margins = placeholder_margins
         self._placeholder_bottom_margins = placeholder_bottom_margins
@@ -166,3 +188,200 @@ class DragDropZoneFrame(QFrame):
             self._inner_radius,
         )
         painter.end()
+
+
+class ManagedDropFileWidget(QWidget):
+    """Reusable drop widget with internal file list + remove buttons."""
+
+    files_dropped = Signal(list)
+    files_changed = Signal(list)
+    files_rejected = Signal(list)
+    browse_requested = Signal()
+
+    def __init__(
+        self,
+        *,
+        drop_mode: Literal["single", "multiple"] = "multiple",
+        remove_fallback_text: str = "Remove",
+        allow_non_local_sources: bool = False,
+        allowed_extensions: Iterable[str] | None = None,
+        allowed_filenames: Iterable[str] | None = None,
+        file_filter: Callable[[str], bool] | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._drop_mode: Literal["single", "multiple"] = drop_mode
+        self._remove_fallback_text = remove_fallback_text
+        self._allow_non_local_sources = allow_non_local_sources
+        self._files: list[str] = []
+        self._allowed_extensions = self._normalize_extensions(allowed_extensions)
+        self._allowed_filenames = self._normalize_filenames(allowed_filenames)
+        self._file_filter = file_filter
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        self.drop_zone = DragDropZoneFrame(
+            outer_radius=COORDINATOR_DROPZONE_OUTER_RADIUS,
+            inner_radius=COORDINATOR_DROPZONE_INNER_RADIUS,
+            bg_active_alpha=COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
+            outer_rect_adjust=COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
+            inner_rect_adjust=COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
+            border_width=COORDINATOR_DROPZONE_BORDER_WIDTH,
+            border_dash_pattern=COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
+            border_inactive_alpha=COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
+            border_active_alpha=COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
+            background_from_parent_window=True,
+            parent=self,
+        )
+        self.drop_zone.setProperty("dragActive", False)
+        zone_layout = QVBoxLayout(self.drop_zone)
+        zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
+        zone_layout.setSpacing(COORDINATOR_DROP_ZONE_LAYOUT_SPACING)
+        self.drop_list = DragDropFileList(
+            placeholder_color=COORDINATOR_LIST_PLACEHOLDER_COLOR,
+            placeholder_margins=COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
+            placeholder_bottom_margins=COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
+            item_spacing=COORDINATOR_DROP_LIST_ITEM_SPACING,
+            drop_mode=drop_mode,
+        )
+        self.drop_list.drag_state_changed.connect(self.drop_zone.set_drag_active)
+        self.drop_list.files_dropped.connect(self._on_files_dropped)
+        self.drop_list.browse_requested.connect(self.browse_requested.emit)
+        zone_layout.addWidget(self.drop_list)
+        root.addWidget(self.drop_zone)
+
+    def files(self) -> list[str]:
+        return list(self._files)
+
+    def set_allowed_extensions(self, extensions: Iterable[str] | None) -> None:
+        self._allowed_extensions = self._normalize_extensions(extensions)
+
+    def set_allowed_filenames(self, names: Iterable[str] | None) -> None:
+        self._allowed_filenames = self._normalize_filenames(names)
+
+    def set_file_filter(self, predicate: Callable[[str], bool] | None) -> None:
+        self._file_filter = predicate
+
+    def set_allow_non_local_sources(self, value: bool) -> None:
+        self._allow_non_local_sources = bool(value)
+
+    def clear_files(self) -> None:
+        if not self._files and self.drop_list.count() == 0:
+            return
+        self._files.clear()
+        self.drop_list.clear()
+        self.files_changed.emit(self.files())
+
+    def set_files(self, paths: list[str]) -> None:
+        self._files.clear()
+        self.drop_list.clear()
+        self.add_files(paths, emit_drop=False)
+
+    def add_files(self, paths: list[str], *, emit_drop: bool = True) -> list[str]:
+        normalized = [path for path in paths if path]
+        if not normalized:
+            return []
+        accepted: list[str] = []
+        rejected: list[str] = []
+        for path in normalized:
+            if self._accepts_path(path):
+                accepted.append(path)
+            else:
+                rejected.append(path)
+        normalized = accepted
+        if not normalized:
+            if rejected:
+                self.files_rejected.emit(list(rejected))
+            return []
+        existing = set(self._files)
+        deduped: list[str] = []
+        for path in normalized:
+            if path in existing:
+                rejected.append(path)
+                continue
+            deduped.append(path)
+            existing.add(path)
+        normalized = deduped
+        if rejected:
+            self.files_rejected.emit(list(rejected))
+        if not normalized:
+            return []
+        if self._drop_mode == "single":
+            normalized = normalized[:1]
+            self._files = []
+            self.drop_list.clear()
+        added: list[str] = []
+        for path in normalized:
+            self._files.append(path)
+            added.append(path)
+            self._append_row(path)
+        if added:
+            if emit_drop:
+                self.files_dropped.emit(list(added))
+            self.files_changed.emit(self.files())
+        return added
+
+    def _append_row(self, file_path: str) -> None:
+        item = QListWidgetItem()
+        item.setToolTip(file_path)
+        item.setData(Qt.ItemDataRole.UserRole, file_path)
+        self.drop_list.addItem(item)
+        row_widget = RemovableFileItemWidget(
+            file_path,
+            remove_fallback_text=self._remove_fallback_text,
+            parent=self.drop_list,
+        )
+        row_widget.removed.connect(self._remove_path)
+        item.setSizeHint(row_widget.sizeHint())
+        self.drop_list.setItemWidget(item, row_widget)
+
+    def _remove_path(self, file_path: str) -> None:
+        if file_path not in self._files:
+            return
+        self._files = [value for value in self._files if value != file_path]
+        for row in range(self.drop_list.count() - 1, -1, -1):
+            item = self.drop_list.item(row)
+            if item is None:
+                continue
+            path = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(path, str) and path == file_path:
+                self.drop_list.takeItem(row)
+        self.files_changed.emit(self.files())
+
+    def _on_files_dropped(self, paths: list[str]) -> None:
+        self.add_files(paths, emit_drop=True)
+
+    @staticmethod
+    def _normalize_extensions(values: Iterable[str] | None) -> set[str] | None:
+        if values is None:
+            return None
+        normalized: set[str] = set()
+        for value in values:
+            token = value.strip().lower()
+            if not token:
+                continue
+            if not token.startswith("."):
+                token = f".{token}"
+            normalized.add(token)
+        return normalized or None
+
+    @staticmethod
+    def _normalize_filenames(values: Iterable[str] | None) -> set[str] | None:
+        if values is None:
+            return None
+        normalized = {value.strip().lower() for value in values if value.strip()}
+        return normalized or None
+
+    def _accepts_path(self, file_path: str) -> bool:
+        if not self._allow_non_local_sources and RemovableFileItemWidget._normalize_local_path(file_path) is None:
+            return False
+        path = Path(file_path)
+        if self._allowed_extensions is not None and path.suffix.lower() not in self._allowed_extensions:
+            return False
+        if self._allowed_filenames is not None and path.name.lower() not in self._allowed_filenames:
+            return False
+        if self._file_filter is not None and not self._file_filter(file_path):
+            return False
+        return True

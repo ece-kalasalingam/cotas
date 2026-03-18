@@ -55,6 +55,7 @@ TEXTS = {
     'instructor.step2.title': 'CO మార్కుల నివేదికను రూపొందించండి',
     'instructor.step1.desc': 'ధృవీకరించబడిన కోర్సు-వివరాల ఫైల్\\u200cను అప్\\u200cలోడ్ చేయండి, ఆపై మార్కుల టెంప్లేట్\\u200cను సిద్ధం చేసి, సేవ్ చేయండి.',
     'instructor.step2.desc': 'నింపిన మార్కుల వర్క్\\u200cబుక్\\u200cని అప్\\u200cలోడ్ చేసి, ధృవీకరించండి, ఆపై తుది CO నివేదికను రూపొందించండి.',
+    'instructor.drop.course_details.placeholder': 'Drag and drop the course-details workbook here, or double-click to browse.',
     'instructor.links.title': 'ఉత్పత్తి చేయబడిన అవుట్\\u200cపుట్\\u200cలు',
     'instructor.links.course_details_generated': 'కోర్సు వివరాల టెంప్లేట్ రూపొందించబడింది',
     'instructor.links.course_details_uploaded': 'కోర్సు వివరాల ఫైల్ అప్\\u200cలోడ్ చేయబడింది',

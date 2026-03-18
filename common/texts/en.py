@@ -69,6 +69,7 @@ TEXTS = {
     "instructor.step2.title": "Generate CO Marks Report",
     "instructor.step1.desc": "Upload the validated course-details file, then prepare and save the marks template.",
     "instructor.step2.desc": "Upload and validate the filled marks workbook, then generate the final CO report.",
+    "instructor.drop.course_details.placeholder": "Drag and drop the course-details workbook here, or double-click to browse.",
     "instructor.links.title": "Generated Outputs",
     "instructor.links.course_details_generated": "Course details template generated",
     "instructor.links.course_details_uploaded": "Course details file uploaded",

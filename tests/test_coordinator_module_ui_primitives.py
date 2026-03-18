@@ -144,6 +144,8 @@ def test_file_item_widget_fallback_icon_and_emit(monkeypatch: pytest.MonkeyPatch
     assert item_widget.remove_btn.text()
     item_widget.remove_btn.click()
     assert removed == ["C:/a.xlsx"]
+    assert hasattr(item_widget, "open_file_btn")
+    assert hasattr(item_widget, "open_folder_btn")
 
 
 def test_refresh_ui_disables_remove_buttons_and_new_widget_factory(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:

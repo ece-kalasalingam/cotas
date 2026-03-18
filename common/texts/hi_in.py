@@ -55,6 +55,7 @@ TEXTS = {
     'instructor.step2.title': 'CO मार्क्स रिपोर्ट बनाएं',
     'instructor.step1.desc': 'जांची गई Course-details फ़ाइल Upload करें, फिर Marks टेम्पलेट तैयार करें और Save करें।',
     'instructor.step2.desc': 'भरी हुई Marks कार्यपुस्तिका Upload करें और जांचें, फिर Final CO Report बनाएं।',
+    'instructor.drop.course_details.placeholder': 'Drag and drop the course-details workbook here, or double-click to browse.',
     'instructor.links.title': 'बने हुए Outputs',
     'instructor.links.course_details_generated': 'कोर्स विवरण टेम्पलेट तैयार हुआ',
     'instructor.links.course_details_uploaded': 'कोर्स विवरण फ़ाइल अपलोड हुई',

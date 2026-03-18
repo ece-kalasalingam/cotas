@@ -65,6 +65,7 @@ TEXTS = {
     "instructor.step2.title": "CO மதிப்பெண் அறிக்கையை உருவாக்கு",
     "instructor.step1.desc": "சரிபார்க்கப்பட்ட பாட விவர கோப்பை பதிவேற்றி, மதிப்பெண் வார்ப்புருவை தயாரித்து சேமிக்கவும்.",
     "instructor.step2.desc": "நிரப்பப்பட்ட மதிப்பெண் பணிப்புத்தகத்தை சரிபார்த்து பதிவேற்றி, இறுதி CO அறிக்கையை உருவாக்கவும்.",
+    "instructor.drop.course_details.placeholder": "பாட விவர கோப்பையை இங்கே drag-and-drop செய்யவும், அல்லது browse செய்ய double-click செய்யவும்.",
     "instructor.links.title": "உருவாக்கப்பட்ட வெளியீடுகள்",
     "instructor.links.course_details_generated": "உருவாக்கப்பட்ட பாட விவர வார்ப்புரு",
     "instructor.links.course_details_uploaded": "பதிவேற்றப்பட்ட பாட விவர கோப்பு",

@@ -36,8 +36,12 @@ from common.constants import (
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
+from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.texts import t
 from common.toast import show_toast
+from common.ui_stylings import (
+    COORDINATOR_DROP_LIST_MIN_HEIGHT,
+)
 from common.ui_logging import (
     UILogHandler,
     build_i18n_log_message,
@@ -94,6 +98,7 @@ from modules.instructor.steps.step1_course_details_template import (
 from modules.instructor.steps.step2_course_details_and_marks_template import (
     prepare_marks_template_async,
     upload_course_details_async,
+    upload_course_details_from_path_async,
 )
 from modules.instructor.steps.step2_filled_marks_and_final_report import (
     generate_final_report_async,
@@ -237,9 +242,7 @@ class InstructorModule(QWidget):
     RAIL_LINK_TITLE_KEY = "instructor.links.title"
     RAIL_LINKS = (
         ("instructor.links.course_details_generated", "step1_path"),
-        ("instructor.links.course_details_uploaded", "step2_course_details_path"),
         ("instructor.links.marks_template_generated", "marks_template_path"),
-        ("instructor.links.marks_template_uploaded", "filled_marks_path"),
         ("instructor.links.final_co_report_generated", "final_report_path"),
     )
     RAIL_LINK_OPEN_FILE_KEY = "instructor.links.open_file"
@@ -383,21 +386,42 @@ class InstructorModule(QWidget):
         top_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.step1_action_row = QWidget()
-        step1_action_layout = QHBoxLayout(self.step1_action_row)
+        step1_action_layout = QVBoxLayout(self.step1_action_row)
 
+        # Kept for shortcut/test compatibility; the visible upload control is the drop widget.
         self.step1_upload_action = QPushButton()
         self.step1_upload_action.setObjectName("secondaryAction")
         self.step1_upload_action.setDefault(True)
         self.step1_upload_action.clicked.connect(self._on_step1_upload_clicked)
-        step1_action_layout.addWidget(self.step1_upload_action)
+        self.step1_upload_action.setVisible(False)
+
+        self.step1_drop_widget = ManagedDropFileWidget(
+            drop_mode="single",
+            remove_fallback_text=t("coordinator.file.remove_fallback"),
+        )
+        # Aliases retained for compatibility with existing logic/tests.
+        self.step1_drop_zone = self.step1_drop_widget.drop_zone
+        self.step1_drop_list = self.step1_drop_widget.drop_list
+        self.step1_drop_list.setObjectName("instructorCourseDetailsDropList")
+        self.step1_drop_list.setMinimumHeight(COORDINATOR_DROP_LIST_MIN_HEIGHT)
+        self.step1_drop_widget.files_dropped.connect(self._on_step1_course_details_dropped)
+        self.step1_drop_widget.browse_requested.connect(self._on_step1_upload_clicked)
+        self.step1_drop_widget.files_changed.connect(self._on_step1_drop_files_changed)
+        step1_action_layout.addWidget(self.step1_drop_widget, 1)
 
         self.step1_prepare_action = QPushButton()
         self.step1_prepare_action.setObjectName("primaryAction")
         self.step1_prepare_action.setAutoDefault(False)
         self.step1_prepare_action.setDefault(False)
         self.step1_prepare_action.clicked.connect(self._on_step1_prepare_clicked)
-        step1_action_layout.addWidget(self.step1_prepare_action)
-        step1_action_layout.addStretch(1)
+        self.step1_clear_all_action = QPushButton()
+        self.step1_clear_all_action.setObjectName("coordinatorClearButton")
+        self.step1_clear_all_action.clicked.connect(self._on_step1_clear_all_clicked)
+        step1_controls_layout = QHBoxLayout()
+        step1_controls_layout.addWidget(self.step1_clear_all_action)
+        step1_controls_layout.addWidget(self.step1_prepare_action)
+        step1_controls_layout.addStretch(1)
+        step1_action_layout.addLayout(step1_controls_layout)
         top_layout.addWidget(self.step1_action_row)
 
         self.step2_action_row = QWidget()
@@ -545,6 +569,8 @@ class InstructorModule(QWidget):
         can_run, reason = self._can_run_step(self.current_step)
         is_step1 = self.current_step == 1
         is_step2 = self.current_step == 2
+        self.active_title.setVisible(not is_step1)
+        self.active_note.setVisible(not is_step1)
 
         self.primary_action.setVisible(False)
         self.step1_action_row.setVisible(is_step1)
@@ -552,7 +578,9 @@ class InstructorModule(QWidget):
 
         if is_step1:
             self.step1_upload_action.setText(t("instructor.action.step1.upload"))
+            self.step1_clear_all_action.setText(t("coordinator.clear_all"))
             self.step1_prepare_action.setText(t("instructor.action.step1.prepare"))
+            self.step1_clear_all_action.setEnabled(bool(self.step1_drop_widget.files()))
             self.step1_prepare_action.setEnabled(self.step2_upload_ready)
         elif is_step2:
             self.step2_upload_action.setText(t("instructor.action.step2.upload.default"))
@@ -561,8 +589,10 @@ class InstructorModule(QWidget):
             self.step2_generate_action.setEnabled(
                 self.filled_marks_done and not self.filled_marks_outdated
             )
+            self.step1_clear_all_action.setEnabled(False)
 
         self.step1_upload_action.setEnabled(is_step1)
+        self.step1_drop_widget.setEnabled(is_step1 and not self.state.busy)
         if not can_run:
             self.active_note.setText(reason)
         elif self.filled_marks_outdated or self.final_report_outdated:
@@ -577,6 +607,8 @@ class InstructorModule(QWidget):
             self.primary_action.setEnabled(False)
             self.download_course_template_button.setEnabled(False)
             self.step1_upload_action.setEnabled(False)
+            self.step1_drop_widget.setEnabled(False)
+            self.step1_clear_all_action.setEnabled(False)
             self.step1_prepare_action.setEnabled(False)
             self.step2_upload_action.setEnabled(False)
             self.step2_generate_action.setEnabled(False)
@@ -607,6 +639,46 @@ class InstructorModule(QWidget):
 
     def _on_step1_upload_clicked(self) -> None:
         self._upload_course_details_async()
+        self._refresh_ui()
+
+    def _on_step1_course_details_dropped(self, dropped_files: list[str]) -> None:
+        if self.state.busy:
+            return
+        selected_path = next((path for path in dropped_files if path), "")
+        if not selected_path:
+            return
+        self._upload_course_details_from_path_async(selected_path)
+        self._refresh_ui()
+
+    def _set_step1_drop_active(self, active: bool) -> None:
+        self.step1_drop_zone.set_drag_active(active)
+
+    def _on_step1_clear_all_clicked(self) -> None:
+        if self.state.busy:
+            return
+        self.step1_drop_widget.clear_files()
+        self._refresh_ui()
+
+    def _set_step1_course_details_file(self, file_path: str) -> None:
+        self.step1_drop_widget.set_files([file_path])
+
+    def _on_step1_drop_files_changed(self, files: list[str]) -> None:
+        if self.state.busy:
+            return
+        if files:
+            return
+        if not self.step2_course_details_path:
+            self._refresh_ui()
+            return
+        self.step2_course_details_path = None
+        self.step2_upload_ready = False
+        self.marks_template_done = False
+        self.marks_template_path = None
+        self._step2_marks_default_name = t("instructor.dialog.step1.prepare.default_name")
+        self.filled_marks_outdated = self.filled_marks_done
+        self.final_report_outdated = self.final_report_done
+        if self.filled_marks_outdated or self.final_report_outdated:
+            self._publish_status(t("instructor.status.step1_changed"))
         self._refresh_ui()
 
     def _on_step1_prepare_clicked(self) -> None:
@@ -772,6 +844,9 @@ class InstructorModule(QWidget):
 
     def _upload_course_details_async(self) -> None:
         upload_course_details_async(self, ns=globals())
+
+    def _upload_course_details_from_path_async(self, open_path: str) -> None:
+        upload_course_details_from_path_async(self, open_path, ns=globals())
 
     def _upload_filled_marks_async(self) -> None:
         upload_filled_marks_async(self, ns=globals())

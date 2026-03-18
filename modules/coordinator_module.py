@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
     QKeySequence,
     QShortcut,
@@ -24,8 +24,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
-    QStyle,
     QTabWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -34,8 +32,6 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
-    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
-    COORDINATOR_REMOVE_BUTTON_SIZE,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
@@ -45,6 +41,12 @@ from common.constants import (
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
 from common.drag_drop_file_widget import DragDropFileList, DragDropZoneFrame
+from common.removable_file_item_widget import (
+    ElidedFileNameLabel as _SharedElidedFileNameLabel,
+)
+from common.removable_file_item_widget import (
+    RemovableFileItemWidget as _SharedRemovableFileItemWidget,
+)
 from common.texts import t
 from common.toast import show_toast
 from common.ui_stylings import (
@@ -61,13 +63,9 @@ from common.ui_stylings import (
     COORDINATOR_DROPZONE_BORDER_WIDTH,
     COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
     COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
-    COORDINATOR_FILE_ITEM_LAYOUT_MARGINS,
-    COORDINATOR_FILE_ITEM_LAYOUT_SPACING,
-    COORDINATOR_FILE_NAME_FONT_SIZE,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
     COORDINATOR_LIST_PLACEHOLDER_COLOR,
     COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
-    COORDINATOR_REMOVE_BUTTON_STYLESHEET,
     COORDINATOR_SUMMARY_FONT_SIZE,
 )
 from common.ui_logging import (
@@ -222,54 +220,17 @@ class _DropZoneFrame(DragDropZoneFrame):
         self.setObjectName("coordinatorDropZone")
 
 
-class _ElidedFileNameLabel(QLabel):
-    def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._full_text = text
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setMinimumWidth(0)
-        self._apply_elided_text()
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._apply_elided_text()
-
-    def _apply_elided_text(self) -> None:
-        width = self.contentsRect().width()
-        if width <= 0:
-            return
-        super().setText(self.fontMetrics().elidedText(self._full_text, Qt.TextElideMode.ElideMiddle, width))
+class _ElidedFileNameLabel(_SharedElidedFileNameLabel):
+    pass
 
 
-class _CoordinatorFileItemWidget(QWidget):
-    removed = Signal(str)
-
+class _CoordinatorFileItemWidget(_SharedRemovableFileItemWidget):
     def __init__(self, file_path: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.file_path = file_path
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(*COORDINATOR_FILE_ITEM_LAYOUT_MARGINS)
-        layout.setSpacing(COORDINATOR_FILE_ITEM_LAYOUT_SPACING)
-
-        file_name = Path(file_path).name
-        name_label = _ElidedFileNameLabel(file_name)
-        name_label.setToolTip(file_path)
-        layout.addWidget(name_label, 1)
-
-        self.remove_btn = QPushButton()
-        self.remove_btn.setObjectName("coordinatorFileRemoveButton")
-        self.remove_btn.setFixedSize(COORDINATOR_REMOVE_BUTTON_SIZE, COORDINATOR_REMOVE_BUTTON_SIZE)
-        self.remove_btn.setStyleSheet(COORDINATOR_REMOVE_BUTTON_STYLESHEET)
-        self.remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
-        if not icon.isNull():
-            self.remove_btn.setIcon(icon)
-            self.remove_btn.setIconSize(QSize(COORDINATOR_REMOVE_BUTTON_ICON_SIZE, COORDINATOR_REMOVE_BUTTON_ICON_SIZE))
-        else:
-            self.remove_btn.setText(t("coordinator.file.remove_fallback"))
-        self.remove_btn.clicked.connect(lambda: self.removed.emit(self.file_path))
-        layout.addWidget(self.remove_btn, 0)
+        super().__init__(
+            file_path,
+            remove_fallback_text=t("coordinator.file.remove_fallback"),
+            parent=parent,
+        )
 
 
 class CoordinatorModule(QWidget):
@@ -293,6 +254,7 @@ class CoordinatorModule(QWidget):
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
+        self._last_widget_added_count = 0
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._build_ui()
         self._setup_ui_logging()
@@ -404,6 +366,9 @@ class CoordinatorModule(QWidget):
         self.summary_label = QLabel()
         self.summary_label.setObjectName("coordinatorSummary")
         controls_row.addWidget(self.summary_label)
+        self.last_added_label = QLabel()
+        self.last_added_label.setObjectName("hintText")
+        controls_row.addWidget(self.last_added_label)
         controls_row.addStretch(1)
         self.clear_button = QPushButton()
         self.clear_button.setObjectName("coordinatorClearButton")
@@ -463,7 +428,7 @@ class CoordinatorModule(QWidget):
         self._rerender_user_log()
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
-        self.drop_list.set_placeholder_text(t("coordinator.list_placeholder"))
+        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
         self.clear_button.setText(t("coordinator.clear_all"))
         self.calculate_button.setText(t("coordinator.calculate"))
         self.threshold_title_label.setText(t("coordinator.thresholds.title"))
@@ -585,6 +550,8 @@ class CoordinatorModule(QWidget):
         _add_uploaded_paths_impl(self, added_paths, ns=globals())
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
+        self._last_widget_added_count = len([value for value in dropped_files if value])
+        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
         first_path = next((value for value in dropped_files if value), "")
         if first_path:
             self._remember_dialog_dir_safe(first_path)
@@ -600,6 +567,8 @@ class CoordinatorModule(QWidget):
             t("instructor.dialog.filter.excel_open"),
         )
         if selected_files:
+            self._last_widget_added_count = len(selected_files)
+            self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
             self._remember_dialog_dir_safe(selected_files[0])
             self._process_files_async(selected_files)
 
@@ -661,6 +630,8 @@ class CoordinatorModule(QWidget):
         remove_file_by_path(self, file_path, ns=_file_actions_namespace())
 
     def _clear_all(self) -> None:
+        self._last_widget_added_count = 0
+        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
         clear_all(self, ns=_file_actions_namespace())
 
     def closeEvent(self, event) -> None:

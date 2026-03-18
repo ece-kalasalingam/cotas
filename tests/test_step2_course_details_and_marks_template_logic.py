@@ -154,7 +154,7 @@ def test_upload_course_details_async_success_replacing_marks_downstream_outdated
     assert module.filled_marks_outdated is True
     assert module.final_report_outdated is True
     assert any("step1_changed" in msg for msg in module.published)
-    assert module.toasts[-1] == ("success", "1")
+    assert ("success", "1") not in module.toasts
 
 
 def test_upload_course_details_async_failure_branches() -> None:
@@ -297,4 +297,3 @@ def test_prepare_marks_template_async_work_uses_service_and_fallback() -> None:
     out2 = cast(Callable[[], Path], module2.started["work"])()
     assert out2 == Path("D:/marks2.xlsx")
     assert called["gen"] == 1
-
