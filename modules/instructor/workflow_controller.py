@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Protocol, cast
+
 from common.texts import t
 
-_STEP_RUN_ALWAYS = (1, 2, 3)
+_STEP_RUN_ALWAYS = (1, 2)
 _EMPTY_REASON = ""
-_STEP_LIST_SEPARATOR = ". "
-_STEP_LIST_STATE_GAP = "  "
 
 
 class InstructorWorkflowController:
     def __init__(self, module: object) -> None:
-        self._m = module
+        self._m = cast(_InstructorWorkflowModule, module)
 
     def step_path(self, step: int) -> str | None:
         return getattr(self._m, self._m.PATH_ATTRS[step])
@@ -25,19 +25,14 @@ class InstructorWorkflowController:
         return bool(getattr(self._m, outdated_attr)) if outdated_attr else False
 
     def step_state_text(self, step: int) -> str:
-        done = self.step_done(step)
-        outdated = self.step_outdated(step)
-        if done and outdated:
-            return t("instructor.badge.needs_update")
-        return t("instructor.badge.done") if done else t("instructor.badge.pending")
+        return ""
 
     def step_list_text(self, step: int) -> str:
         title = t(self._m.STEP_TITLE_KEYS[step])
-        state = self.step_state_text(step)
-        return f"{step}{_STEP_LIST_SEPARATOR}{title}{_STEP_LIST_STATE_GAP}{state}"
+        return title
 
     def action_text_for_step(self, step: int) -> str:
-        key = self._m.ACTION_REDO_KEYS[step] if self.step_done(step) else self._m.ACTION_DEFAULT_KEYS[step]
+        key = self._m.ACTION_DEFAULT_KEYS[step]
         return t(key)
 
     def can_run_step(self, step: int) -> tuple[bool, str]:
@@ -49,3 +44,20 @@ class InstructorWorkflowController:
         self._m.current_step = step
         self._m.state.current_step = step
         self._m._refresh_ui()
+
+
+class _InstructorState(Protocol):
+    current_step: int
+
+
+class _InstructorWorkflowModule(Protocol):
+    PATH_ATTRS: dict[int, str]
+    DONE_ATTRS: dict[int, str]
+    OUTDATED_ATTRS: dict[int, str]
+    STEP_TITLE_KEYS: dict[int, str]
+    ACTION_DEFAULT_KEYS: dict[int, str]
+    current_step: int
+    state: _InstructorState
+
+    def _refresh_ui(self) -> None:
+        ...

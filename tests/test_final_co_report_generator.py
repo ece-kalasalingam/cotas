@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -61,7 +62,7 @@ def _build_filled_marks_workbook(tmp_path: Path) -> Path:
     return marks
 
 
-def _find_direct_header_row(ws: object) -> int:
+def _find_direct_header_row(ws: Any) -> int:
     row = 1
     while row <= 200:
         if ws.cell(row=row, column=1).value == "#":

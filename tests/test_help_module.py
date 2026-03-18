@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -17,7 +18,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def _build_widget(monkeypatch: pytest.MonkeyPatch) -> help_ui.HelpModule:
@@ -133,14 +134,8 @@ def test_show_context_menu_dispatches_actions(monkeypatch: pytest.MonkeyPatch, q
     class _FakeMenu:
         selected = "download"
 
-        def __init__(self) -> None:
+        def __init__(self, *_args, **_kwargs) -> None:
             self._actions = {}
-
-        def setStyleSheet(self, _value: str) -> None:  # noqa: N802
-            return None
-
-        def setStyle(self, _style) -> None:  # noqa: N802
-            return None
 
         def addAction(self, label: str):  # noqa: N802
             token = object()
@@ -158,9 +153,7 @@ def test_show_context_menu_dispatches_actions(monkeypatch: pytest.MonkeyPatch, q
             return object()
 
     monkeypatch.setattr(help_ui, "QMenu", _FakeMenu)
-    monkeypatch.setattr(help_ui.QStyleFactory, "create", lambda _name: None)
-    monkeypatch.setattr(help_ui.QApplication, "style", lambda: object())
-    monkeypatch.setattr(widget.pdf_view, "mapToGlobal", lambda pos: pos)
+    monkeypatch.setattr(widget.pdf_view.viewport(), "mapToGlobal", lambda pos: pos)
 
     _FakeMenu.selected = "download"
     widget.show_context_menu(None)
@@ -173,4 +166,76 @@ def test_show_context_menu_dispatches_actions(monkeypatch: pytest.MonkeyPatch, q
     _FakeMenu.selected = "none"
     widget.show_context_menu(None)
     assert called == {"download": 1, "open": 1}
+    widget.close()
+
+
+def test_show_context_menu_applies_fusion_style_when_available(
+    monkeypatch: pytest.MonkeyPatch, qapp: QApplication
+) -> None:
+    widget = _build_widget(monkeypatch)
+    styled = {"applied": 0}
+
+    class _FakeMenu:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self._actions = {}
+
+        def setStyle(self, _style) -> None:  # noqa: N802
+            styled["applied"] += 1
+
+        def addAction(self, label: str):  # noqa: N802
+            token = object()
+            self._actions[label] = token
+            return token
+
+        def exec(self, _pos):
+            return object()
+
+    monkeypatch.setattr(help_ui, "QMenu", _FakeMenu)
+    monkeypatch.setattr(help_ui.QStyleFactory, "create", lambda _name: object())
+    monkeypatch.setattr(widget.pdf_view.viewport(), "mapToGlobal", lambda pos: pos)
+
+    widget.show_context_menu(None)
+    assert styled["applied"] == 1
+    widget.close()
+
+
+def test_download_pdf_success_and_copy_error_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, qapp: QApplication
+) -> None:
+    widget = _build_widget(monkeypatch)
+    src = tmp_path / "help.pdf"
+    src.write_bytes(b"%PDF-1.4\n")
+    widget.pdf_path = src
+
+    statuses: list[str] = []
+    toasts: list[tuple[str, str, str]] = []
+    logs: list[tuple[tuple, dict]] = []
+    remembered: list[str] = []
+
+    monkeypatch.setattr(help_ui, "emit_user_status", lambda _sig, msg, logger=None: statuses.append(msg))
+    monkeypatch.setattr(
+        help_ui,
+        "show_toast",
+        lambda _parent, message, *, title, level: toasts.append((message, title, level)),
+    )
+    monkeypatch.setattr(help_ui, "log_process_message", lambda *a, **k: logs.append((a, k)))
+    monkeypatch.setattr(
+        help_ui,
+        "remember_dialog_dir_safe",
+        lambda path, *, app_name, logger=None: remembered.append(path),
+    )
+    monkeypatch.setattr(help_ui, "resolve_dialog_start_path", lambda _app, _default=None: str(tmp_path / "out.pdf"))
+    monkeypatch.setattr(help_ui.QFileDialog, "getSaveFileName", lambda *_a, **_k: (str(tmp_path / "out.pdf"), ""))
+
+    widget.download_pdf()
+    assert remembered == [str(tmp_path / "out.pdf")]
+    assert toasts and toasts[-1][2] == "success"
+    assert statuses
+    assert logs
+
+    monkeypatch.setattr(help_ui.QFileDialog, "getSaveFileName", lambda *_a, **_k: (str(tmp_path / "err.pdf"), ""))
+    monkeypatch.setattr(help_ui.shutil, "copyfile", lambda *_a, **_k: (_ for _ in ()).throw(OSError("disk")))
+    widget.download_pdf()
+    assert toasts[-1][2] == "error"
+    assert len(statuses) >= 2
     widget.close()

@@ -43,13 +43,20 @@ from common.constants import (
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
 )
+from common.excel_sheet_layout import color_without_hash as _color_without_hash
 from common.excel_sheet_layout import (
-    color_without_hash as _color_without_hash,
     compute_sampled_column_widths as _compute_sampled_column_widths,
+)
+from common.excel_sheet_layout import (
     style_registry_for_setup as _style_registry_for_setup,
 )
 from common.jobs import CancellationToken
-from common.utils import app_runtime_storage_dir, coerce_excel_number, create_app_runtime_sqlite_file, normalize
+from common.utils import (
+    app_runtime_storage_dir,
+    coerce_excel_number,
+    create_app_runtime_sqlite_file,
+    normalize,
+)
 from common.workbook_signing import sign_payload, verify_payload_signature
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -545,8 +552,6 @@ def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
                         missing.remove(key)
                         if not missing:
                             return row_idx, row_map
-            if not missing:
-                return row_idx, row_map
         return 0, {}
 
     header_row, column_map = _find_header_row(1, header_scan_limit)
@@ -626,7 +631,7 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
                     indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
                 match = indirect_lookup.get(key)
         else:
-            match = indirect_lookup.get(key)
+            match = indirect_lookup.get(key) if indirect_lookup is not None else None
 
         if match is None:
             continue

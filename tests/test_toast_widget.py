@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -14,7 +16,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def test_resolve_parent_returns_none_when_no_qapp(monkeypatch: pytest.MonkeyPatch) -> None:

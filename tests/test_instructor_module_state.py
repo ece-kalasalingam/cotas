@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, cast
 
 import pytest
 
@@ -15,7 +16,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def _build_module(monkeypatch: pytest.MonkeyPatch) -> instructor_ui.InstructorModule:
@@ -26,52 +27,45 @@ def _build_module(monkeypatch: pytest.MonkeyPatch) -> instructor_ui.InstructorMo
 
 def test_on_open_shortcut_routes_by_step_and_enabled(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    calls = {"step2": 0, "step3": 0}
+    calls = {"step1": 0, "step2": 0}
+    monkeypatch.setattr(module, "_on_step1_upload_clicked", lambda: calls.__setitem__("step1", calls["step1"] + 1))
     monkeypatch.setattr(module, "_on_step2_upload_clicked", lambda: calls.__setitem__("step2", calls["step2"] + 1))
-    monkeypatch.setattr(module, "_on_step3_upload_clicked", lambda: calls.__setitem__("step3", calls["step3"] + 1))
 
     module.state.busy = True
     module._on_open_shortcut_activated()
-    assert calls == {"step2": 0, "step3": 0}
+    assert calls == {"step1": 0, "step2": 0}
 
     module.state.busy = False
+    module.current_step = 1
+    module.step1_upload_action.setEnabled(True)
+    module._on_open_shortcut_activated()
+    assert calls["step1"] == 1
+
     module.current_step = 2
     module.step2_upload_action.setEnabled(True)
     module._on_open_shortcut_activated()
     assert calls["step2"] == 1
-
-    module.current_step = 3
-    module.step3_upload_action.setEnabled(True)
-    module._on_open_shortcut_activated()
-    assert calls["step3"] == 1
     module.close()
 
 
 def test_on_save_shortcut_routes_by_step_and_enabled(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    calls = {"run": 0, "prepare": 0, "generate": 0}
-    monkeypatch.setattr(module, "_run_current_step_action", lambda: calls.__setitem__("run", calls["run"] + 1))
-    monkeypatch.setattr(module, "_on_step2_prepare_clicked", lambda: calls.__setitem__("prepare", calls["prepare"] + 1))
-    monkeypatch.setattr(module, "_on_step3_generate_clicked", lambda: calls.__setitem__("generate", calls["generate"] + 1))
+    calls = {"prepare": 0, "generate": 0}
+    monkeypatch.setattr(module, "_on_step1_prepare_clicked", lambda: calls.__setitem__("prepare", calls["prepare"] + 1))
+    monkeypatch.setattr(module, "_on_step2_generate_clicked", lambda: calls.__setitem__("generate", calls["generate"] + 1))
 
     module.state.busy = True
     module._on_save_shortcut_activated()
-    assert calls == {"run": 0, "prepare": 0, "generate": 0}
+    assert calls == {"prepare": 0, "generate": 0}
 
     module.state.busy = False
     module.current_step = 1
-    module.primary_action.setEnabled(True)
-    monkeypatch.setattr(module.primary_action, "isVisible", lambda: True)
-    module._on_save_shortcut_activated()
-    assert calls["run"] == 1
-
-    module.current_step = 2
-    module.step2_prepare_action.setEnabled(True)
+    module.step1_prepare_action.setEnabled(True)
     module._on_save_shortcut_activated()
     assert calls["prepare"] == 1
 
-    module.current_step = 3
-    module.step3_generate_action.setEnabled(True)
+    module.current_step = 2
+    module.step2_generate_action.setEnabled(True)
     module._on_save_shortcut_activated()
     assert calls["generate"] == 1
     module.close()
@@ -84,16 +78,16 @@ def test_on_step_row_changed_ignores_negative_and_maps_positive(monkeypatch: pyt
 
     module._on_step_row_changed(-1)
     module._on_step_row_changed(0)
+    module._on_step_row_changed(1)
     module._on_step_row_changed(2)
 
-    assert selected == [1, 3]
+    assert selected == [1, 2]
     module.close()
 
 
 def test_run_current_step_action_dispatch(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    calls = {"d1": 0, "u2": 0, "g3": 0, "r": 0}
-    monkeypatch.setattr(module, "_download_course_template_async", lambda: calls.__setitem__("d1", calls["d1"] + 1))
+    calls = {"u2": 0, "g3": 0, "r": 0}
     monkeypatch.setattr(module, "_upload_course_details_async", lambda: calls.__setitem__("u2", calls["u2"] + 1))
     monkeypatch.setattr(module, "_generate_final_report_async", lambda: calls.__setitem__("g3", calls["g3"] + 1))
     monkeypatch.setattr(module, "_refresh_ui", lambda: calls.__setitem__("r", calls["r"] + 1))
@@ -102,12 +96,10 @@ def test_run_current_step_action_dispatch(monkeypatch: pytest.MonkeyPatch, qapp:
     module._run_current_step_action()
     module.current_step = 2
     module._run_current_step_action()
-    module.current_step = 3
-    module._run_current_step_action()
     module.current_step = 99
     module._run_current_step_action()
 
-    assert calls == {"d1": 1, "u2": 1, "g3": 1, "r": 4}
+    assert calls == {"u2": 1, "g3": 1, "r": 3}
     module.close()
 
 
@@ -180,9 +172,9 @@ def test_close_event_cleans_resources(monkeypatch: pytest.MonkeyPatch, qapp: QAp
             self.cancelled = True
 
     token = _Token()
-    module._cancel_token = token
+    module._cancel_token = cast(Any, token)
     module._active_jobs = [object()]
-    module._ui_log_handler = object()
+    module._ui_log_handler = cast(Any, object())
     removed = {"count": 0}
     monkeypatch.setattr(instructor_ui._logger, "removeHandler", lambda _h: removed.__setitem__("count", removed["count"] + 1))
 

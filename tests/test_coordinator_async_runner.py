@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable, cast
+
 from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken
 from modules.coordinator.async_runner import AsyncOperationRunner
@@ -39,7 +41,7 @@ def test_async_runner_success_path_finalizes_and_calls_hooks() -> None:
     )
 
     assert len(target._active_jobs) == 1
-    callbacks["on_finished"](callbacks["work"]())
+    cast(Callable[[object], None], callbacks["on_finished"])(cast(Callable[[], object], callbacks["work"])())
 
     assert finished == [123]
     assert finally_calls["count"] == 1
@@ -70,7 +72,7 @@ def test_async_runner_failure_path_finalizes_and_calls_failure() -> None:
     )
 
     assert len(target._active_jobs) == 1
-    callbacks["on_failed"](JobCancelledError("cancelled"))
+    cast(Callable[[Exception], None], callbacks["on_failed"])(JobCancelledError("cancelled"))
 
     assert len(failures) == 1
     assert isinstance(failures[0], JobCancelledError)

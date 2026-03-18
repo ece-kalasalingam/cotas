@@ -8,19 +8,12 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
-from PySide6.QtWidgets import (
-    QApplication,
-    QFileDialog,
-    QMenu,
-    QStyleFactory,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QFileDialog, QMenu, QStyleFactory, QVBoxLayout, QWidget
 
 from common.constants import APP_NAME
 from common.texts import t
-from common.ui_logging import build_i18n_log_message
 from common.toast import show_toast
+from common.ui_logging import build_i18n_log_message
 from common.utils import (
     emit_user_status,
     log_process_message,
@@ -128,17 +121,16 @@ class HelpModule(QWidget):
     # -----------------------------------------------------
 
     def show_context_menu(self, position):
-        # Use a top-level menu instance so parent widget stylesheets do not
-        # flatten native context-menu rendering.
-        menu = QMenu()
-        menu.setStyleSheet("")
-        native_menu_style = QStyleFactory.create("windowsvista") or QStyleFactory.create("windows")
-        menu.setStyle(native_menu_style if native_menu_style is not None else QApplication.style())
+        # Keep native OS rendering.
+        menu = QMenu(self.pdf_view)
+        fusion = QStyleFactory.create("Fusion")
+        if fusion is not None and hasattr(menu, "setStyle"):
+            menu.setStyle(fusion)
 
         download_action = menu.addAction(t("help.download_pdf"))
         open_action = menu.addAction(t("help.open_default_viewer"))
 
-        action = menu.exec(self.pdf_view.mapToGlobal(position))
+        action = menu.exec(self.pdf_view.viewport().mapToGlobal(position))
 
         if action == download_action:
             self.download_pdf()

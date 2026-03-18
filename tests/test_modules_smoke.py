@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 import main_window as main_window_ui
 from modules import about_module as about_ui
@@ -18,14 +19,15 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def test_about_module_constructs(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     monkeypatch.setattr(about_ui, "t", lambda key, **_kwargs: key)
     widget = about_ui.AboutModule()
-    assert widget.layout() is not None
-    assert widget.layout().count() > 0
+    layout = widget.layout()
+    assert layout is not None
+    assert layout.count() > 0
 
 
 def test_help_module_initializes(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -61,7 +63,7 @@ def test_main_window_reuses_module_instance_across_repeated_switches(
             mode_calls.append(enabled)
 
         def get_shared_outputs_html(self) -> str:
-            return "<p>outputs</p>"
+            return "outputs"
 
     class HelpModule(QWidget):
         def __init__(self) -> None:

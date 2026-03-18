@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from common.exceptions import ValidationError
-from modules.instructor.validators import step3_filled_marks_validator as validator
+from modules.instructor.validators import step2_filled_marks_validator as validator
 
 
 class _Cell:
@@ -98,6 +98,123 @@ def test_validate_uploaded_filled_marks_workbook_header_and_manifest_errors(monk
         validator.validate_uploaded_filled_marks_workbook(path)
 
     assert wb.closed is True
+
+
+def test_validate_uploaded_filled_marks_workbook_additional_header_and_hash_branches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import openpyxl
+
+    path = tmp_path / "m.xlsx"
+    path.write_text("x", encoding="utf-8")
+
+    wb_missing_system = _Workbook(sheetnames=[], sheets={})
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_missing_system)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_b1_bad = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {"A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY, "B1": "bad", "A2": validator.ID_COURSE_SETUP, "B2": "sig"}
+            )
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_b1_bad)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_no_template_id = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {"A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY, "B1": validator.SYSTEM_HASH_TEMPLATE_HASH_KEY, "A2": "", "B2": "sig"}
+            )
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_no_template_id)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_hash_mismatch = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {
+                    "A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY,
+                    "B1": validator.SYSTEM_HASH_TEMPLATE_HASH_KEY,
+                    "A2": validator.ID_COURSE_SETUP,
+                    "B2": "sig",
+                }
+            )
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_hash_mismatch)
+    monkeypatch.setattr(validator, "verify_payload_signature", lambda *_a, **_k: False)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_layout_a1_bad = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET, validator.SYSTEM_LAYOUT_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {
+                    "A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY,
+                    "B1": validator.SYSTEM_HASH_TEMPLATE_HASH_KEY,
+                    "A2": validator.ID_COURSE_SETUP,
+                    "B2": "sig1",
+                }
+            ),
+            validator.SYSTEM_LAYOUT_SHEET: _Sheet(
+                {"A1": "bad", "B1": validator.SYSTEM_LAYOUT_MANIFEST_HASH_KEY, "A2": "{}", "B2": "sig2"}
+            ),
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_layout_a1_bad)
+    monkeypatch.setattr(validator, "verify_payload_signature", lambda *_a, **_k: True)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_layout_b1_bad = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET, validator.SYSTEM_LAYOUT_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {
+                    "A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY,
+                    "B1": validator.SYSTEM_HASH_TEMPLATE_HASH_KEY,
+                    "A2": validator.ID_COURSE_SETUP,
+                    "B2": "sig1",
+                }
+            ),
+            validator.SYSTEM_LAYOUT_SHEET: _Sheet(
+                {"A1": validator.SYSTEM_LAYOUT_MANIFEST_KEY, "B1": "bad", "A2": "{}", "B2": "sig2"}
+            ),
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_layout_b1_bad)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
+
+    wb_layout_missing = _Workbook(
+        sheetnames=[validator.SYSTEM_HASH_SHEET, validator.SYSTEM_LAYOUT_SHEET],
+        sheets={
+            validator.SYSTEM_HASH_SHEET: _Sheet(
+                {
+                    "A1": validator.SYSTEM_HASH_TEMPLATE_ID_KEY,
+                    "B1": validator.SYSTEM_HASH_TEMPLATE_HASH_KEY,
+                    "A2": validator.ID_COURSE_SETUP,
+                    "B2": "sig1",
+                }
+            ),
+            validator.SYSTEM_LAYOUT_SHEET: _Sheet(
+                {"A1": validator.SYSTEM_LAYOUT_MANIFEST_KEY, "B1": validator.SYSTEM_LAYOUT_MANIFEST_HASH_KEY, "A2": "", "B2": ""}
+            ),
+        },
+    )
+    monkeypatch.setattr(openpyxl, "load_workbook", lambda *_a, **_k: wb_layout_missing)
+    with pytest.raises(ValidationError):
+        validator.validate_uploaded_filled_marks_workbook(path)
 
 
 def test_validate_uploaded_filled_marks_workbook_json_invalid_and_validator_call(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

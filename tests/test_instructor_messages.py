@@ -67,11 +67,11 @@ def test_show_system_error_toast_uses_action_translation(monkeypatch) -> None:
         lambda _widget, body, *, title, level: seen.append((body, title, level)),
     )
 
-    messages.show_system_error_toast(object(), title_key="instructor.step3.title")
+    messages.show_system_error_toast(object(), title_key="instructor.step2.title")
 
     assert len(seen) == 1
     body, title, level = seen[0]
     assert "failed_to_do" in body
-    assert "instructor.step3.title" in body
+    assert "instructor.step2.title" in body
     assert "error_title" in title
     assert level == "error"

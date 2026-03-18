@@ -15,31 +15,29 @@ from common.constants import (
     ASSESSMENT_CONFIG_SHEET,
     ASSESSMENT_VALIDATION_YES_NO_OPTIONS,
     CO_REPORT_ABSENT_TOKEN,
-    COMPONENT_NAME_LABEL,
     CO_REPORT_DIRECT_SHEET_SUFFIX,
-    CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
     CO_REPORT_HEADER_TOTAL,
     CO_REPORT_HEADER_TOTAL_100,
     CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE,
+    CO_REPORT_INDIRECT_SHEET_SUFFIX,
+    CO_REPORT_MAX_DECIMAL_PLACES,
     CO_REPORT_METADATA_OUTCOME_FIELD,
     CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE,
     CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE,
-    CO_REPORT_MAX_DECIMAL_PLACES,
     CO_REPORT_NOT_APPLICABLE_TOKEN,
     CO_REPORT_PERCENT_SYMBOL,
     CO_REPORT_SCALED_LABEL_TEMPLATE,
-    COURSE_METADATA_HEADERS,
+    COMPONENT_NAME_LABEL,
     COURSE_METADATA_FACULTY_NAME_KEY,
+    COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     DIRECT_RATIO,
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
-    LIKERT_MAX,
-    LIKERT_MIN,
     LAYOUT_MANIFEST_KEY_SHEETS,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
     LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
@@ -49,20 +47,24 @@ from common.constants import (
     LAYOUT_SHEET_SPEC_KEY_HEADERS,
     LAYOUT_SHEET_SPEC_KEY_KIND,
     LAYOUT_SHEET_SPEC_KEY_NAME,
-    SYSTEM_LAYOUT_SHEET,
+    LIKERT_MAX,
+    LIKERT_MIN,
     SYSTEM_HASH_SHEET,
-    SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
-    SYSTEM_LAYOUT_MANIFEST_KEY,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+    SYSTEM_LAYOUT_MANIFEST_KEY,
+    SYSTEM_LAYOUT_SHEET,
     SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
     SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
     SYSTEM_REPORT_INTEGRITY_SHEET,
     WORKBOOK_TEMP_SUFFIX,
 )
+from common.excel_sheet_layout import color_without_hash as _color_without_hash
 from common.excel_sheet_layout import (
-    color_without_hash as _color_without_hash,
     compute_sampled_column_widths as _compute_sampled_column_widths,
+)
+from common.excel_sheet_layout import (
     style_registry_for_setup as _style_registry_for_setup,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
@@ -122,7 +124,6 @@ class _IndirectComponentComputed:
     name: str
     weight: float
     marks_by_co: dict[int, list[float | str]]
-
 
 def generate_final_co_report(
     filled_marks_path: str | Path,
@@ -261,11 +262,9 @@ def generate_final_co_report(
             except OSError:
                 _logger.warning("Failed to cleanup temp final report file: %s", tmp_path)
 
-
 def _raise_if_cancelled(cancel_token: CancellationToken | None) -> None:
     if cancel_token is not None:
         cancel_token.raise_if_cancelled()
-
 
 def _validate_source_workbook_integrity(workbook: Any) -> None:
     if SYSTEM_HASH_SHEET not in workbook.sheetnames:
@@ -317,7 +316,6 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
     if not verify_payload_signature(manifest_text, manifest_hash):
         raise ValidationError(t("instructor.validation.step3.layout_hash_mismatch"))
 
-
 def _read_course_metadata(sheet: Any) -> tuple[list[tuple[str, Any]], int]:
     rows: list[tuple[str, Any]] = []
     total_outcomes = 0
@@ -337,7 +335,6 @@ def _read_course_metadata(sheet: Any) -> tuple[list[tuple[str, Any]], int]:
     if total_outcomes <= 0:
         raise ValidationError(t("instructor.validation.course_metadata_total_outcomes_invalid"))
     return rows, total_outcomes
-
 
 def _read_direct_components(sheet: Any) -> list[_DirectComponent]:
     expected_headers = list(ASSESSMENT_CONFIG_HEADERS)
@@ -376,7 +373,6 @@ def _read_direct_components(sheet: Any) -> list[_DirectComponent]:
             )
         row += 1
     return out
-
 
 def _read_indirect_components(sheet: Any) -> list[_IndirectComponent]:
     expected_headers = list(ASSESSMENT_CONFIG_HEADERS)
@@ -554,7 +550,9 @@ def _compute_component_marks(
     expected_students = len(students)
 
     max_by_co = {co: 0.0 for co in range(1, total_outcomes + 1)}
-    marks_by_co = {co: [0.0] * expected_students for co in range(1, total_outcomes + 1)}
+    marks_by_co: dict[int, list[float | str]] = {
+        co: [0.0] * expected_students for co in range(1, total_outcomes + 1)
+    }
     if kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         question_cols = list(range(_EXCEL_COL_FIRST_MARK, max(_EXCEL_COL_FIRST_MARK, len(headers))))
         co_by_col: dict[int, int] = {}
@@ -655,7 +653,9 @@ def _compute_indirect_component_marks(
     first_data_row = header_row + _EXCEL_ROW_HEADER_OFFSET_INDIRECT
     expected_students = len(students)
 
-    marks_by_co = {co: [0.0] * expected_students for co in range(1, total_outcomes + 1)}
+    marks_by_co: dict[int, list[float | str]] = {
+        co: [0.0] * expected_students for co in range(1, total_outcomes + 1)
+    }
     for idx in range(expected_students):
         row = first_data_row + idx
         for co in range(1, total_outcomes + 1):

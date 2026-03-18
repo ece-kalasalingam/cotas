@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from logging import Logger
+from typing import Any, Protocol, cast
 
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
@@ -18,12 +19,29 @@ _ATTR_REFRESH_UI = "_refresh_ui"
 _JOB_REF_KEY = "job"
 
 
+class _CompatTarget(Protocol):
+    status_changed: object
+
+
+class _InstructorRunnerTarget(Protocol):
+    _cancel_token: CancellationToken | None
+    _active_jobs: list[object]
+    _is_closing: bool
+
+    def _set_busy(self, busy: bool, *, job_id: str | None = ...) -> None:
+        ...
+
+    def _refresh_ui(self) -> None:
+        ...
+
+
 def publish_status_compat(*, target: object, message: str, logger: object) -> None:
     publish = getattr(target, _ATTR_PUBLISH_STATUS, None)
     if callable(publish):
         publish(message)
         return
-    emit_user_status(getattr(target, "status_changed", None), message, logger=logger)
+    typed_target = cast(_CompatTarget, target)
+    emit_user_status(typed_target.status_changed, message, logger=cast(Logger | None, logger))
 
 
 def set_busy_compat(*, target: object, busy: bool, job_id: str | None = None) -> None:
@@ -103,7 +121,7 @@ class AsyncOperationRunner:
         on_success: Callable[[object], None],
         on_failure: Callable[[Exception], None],
     ) -> None:
-        target = self._target
+        target = cast(_InstructorRunnerTarget, self._target)
         target._cancel_token = token
         target._set_busy(True, job_id=job_id)
         job_ref: dict[str, object] = {}

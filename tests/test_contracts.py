@@ -92,3 +92,23 @@ def test_validate_blueprint_registry_contracts_rejects_duplicate_headers(monkeyp
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": _bp(headers=["Name", "name"])})
     with pytest.raises(ConfigurationError, match="duplicate headers"):
         contracts.validate_blueprint_registry_contracts()
+
+
+def test_validate_attainment_threshold_contracts_additional_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(contracts, "LEVEL_1_THRESHOLD", "x")
+    monkeypatch.setattr(contracts, "LEVEL_2_THRESHOLD", 50)
+    monkeypatch.setattr(contracts, "LEVEL_3_THRESHOLD", 75)
+    with pytest.raises(ConfigurationError, match="must be numeric"):
+        contracts._validate_attainment_threshold_contracts()
+
+    monkeypatch.setattr(contracts, "LEVEL_1_THRESHOLD", -1)
+    monkeypatch.setattr(contracts, "LEVEL_2_THRESHOLD", 50)
+    monkeypatch.setattr(contracts, "LEVEL_3_THRESHOLD", 75)
+    with pytest.raises(ConfigurationError, match="range 0 to 100"):
+        contracts._validate_attainment_threshold_contracts()
+
+    monkeypatch.setattr(contracts, "LEVEL_1_THRESHOLD", 60)
+    monkeypatch.setattr(contracts, "LEVEL_2_THRESHOLD", 40)
+    monkeypatch.setattr(contracts, "LEVEL_3_THRESHOLD", 80)
+    with pytest.raises(ConfigurationError, match="non-decreasing"):
+        contracts._validate_attainment_threshold_contracts()

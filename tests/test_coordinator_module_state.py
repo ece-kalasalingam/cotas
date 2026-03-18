@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -16,7 +17,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def _build_module(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.CoordinatorModule:
@@ -115,9 +116,9 @@ def test_close_event_cancels_token_and_removes_handler(monkeypatch: pytest.Monke
             self.cancelled = True
 
     token = _Token()
-    module._cancel_token = token
+    module._cancel_token = cast(Any, token)
     module._active_jobs = [object()]
-    module._ui_log_handler = object()
+    module._ui_log_handler = cast(Any, object())
     removed = {"count": 0}
     monkeypatch.setattr(module._logger, "removeHandler", lambda _h: removed.__setitem__("count", removed["count"] + 1))
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any, cast
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -17,12 +20,16 @@ class _SignalRecorder:
 
 
 class _DummyModule:
-    def __init__(self, *, step3_path: str | None = None) -> None:
+    @dataclass
+    class _State:
+        busy: bool = False
+
+    def __init__(self, *, filled_marks_path: str | None = None) -> None:
         self.step2_course_details_path: str | None = None
         self.step2_upload_ready = False
-        self.step3_path = step3_path
-        self.step3_done = bool(step3_path)
-        self.state = type("State", (), {"busy": False})()
+        self.filled_marks_path = filled_marks_path
+        self.filled_marks_done = bool(filled_marks_path)
+        self.state: Any = _DummyModule._State()
         self._active_jobs: list[object] = []
         self._cancel_token = None
         self._workflow_service = None
@@ -85,7 +92,7 @@ def test_step2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyP
         lambda *_args, **_kwargs: (_ for _ in ()).throw(JobCancelledError("cancelled")),
     )
 
-    instructor_ui.InstructorModule._upload_course_details_async(dummy)
+    instructor_ui.InstructorModule._upload_course_details_async(cast(Any, dummy))
 
     assert dummy.step2_upload_ready is False
     assert dummy.step2_course_details_path is None
@@ -107,9 +114,9 @@ def test_step3_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyP
         lambda *_args, **_kwargs: (_ for _ in ()).throw(JobCancelledError("cancelled")),
     )
 
-    instructor_ui.InstructorModule._upload_filled_marks_async(dummy)
+    instructor_ui.InstructorModule._upload_filled_marks_async(cast(Any, dummy))
 
-    assert dummy.step3_done is False
-    assert dummy.step3_path is None
+    assert dummy.filled_marks_done is False
+    assert dummy.filled_marks_path is None
     assert dummy.status_changed.messages == ["instructor.status.operation_cancelled"]
     assert dummy._toasts == []

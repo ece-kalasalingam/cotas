@@ -57,7 +57,7 @@ class _Qt:
 def _ns(log_calls: list[tuple]):
     return {
         "_path_key": lambda p: str(p).lower(),
-        "Qt": _Qt,
+        "user_role": _Qt.ItemDataRole.UserRole,
         "log_process_message": lambda *args, **kwargs: log_calls.append((args, kwargs)),
         "build_i18n_log_message": lambda *args, **kwargs: "payload",
         "t": lambda key, **kwargs: f"T:{key}",

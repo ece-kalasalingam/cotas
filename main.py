@@ -1,46 +1,45 @@
+import logging
 import os
 import re
 import sys
-import logging
-from PySide6.QtCore import QLockFile, Qt, QTimer
+
+from PySide6.QtCore import QEvent, QLockFile, QObject, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 
 try:
     import qdarktheme  # type: ignore[import-not-found]
 except ModuleNotFoundError:
     qdarktheme = None
 
-
 from common.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     MAIN_SPLASH_MS,
+    QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
     SINGLE_INSTANCE_ACK_PAYLOAD,
     SINGLE_INSTANCE_ACTIVATE_PAYLOAD,
     SINGLE_INSTANCE_CLIENT_ACK_TIMEOUT_MS,
     SINGLE_INSTANCE_CLIENT_CONNECT_TIMEOUT_MS,
     SINGLE_INSTANCE_CLIENT_WRITE_TIMEOUT_MS,
-    QT_ADAPTIVE_STRUCTURE_SENSITIVITY,
     SINGLE_INSTANCE_LOCK_TIMEOUT_MS,
     SINGLE_INSTANCE_SERVER_IO_TIMEOUT_MS,
     SPLASH_STATUS_COLOR,
     STARTUP_TOAST_DURATION_MS,
     STARTUP_TOAST_QUIT_DELAY_MS,
-    THEME_MODE_AUTO,
-    THEME_SETUP_DEFER_MS,
-    THEME_REFRESH_DEBOUNCE_MS,
-    UI_FONT_FAMILY,
     UI_LANGUAGE,
     WIN32_SHOW_WINDOW_RESTORE,
 )
 from common.contracts import validate_blueprint_registry_contracts
+from common.crash_reporting import (
+    capture_unhandled_exception,
+    has_remote_crash_endpoint,
+)
 from common.exceptions import ConfigurationError
-from common.crash_reporting import capture_unhandled_exception, has_remote_crash_endpoint
-from common.workbook_secret import ensure_workbook_secret_policy
 from common.texts import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
+from common.ui_stylings import apply_global_ui_styles
 from common.utils import (
     UI_LANGUAGE_AUTO_ALIASES,
     app_runtime_storage_dir,
@@ -49,12 +48,10 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
+from common.workbook_secret import ensure_workbook_secret_policy
 from main_window import MainWindow
 
-
 _logger = logging.getLogger(__name__)
-_theme_apply_in_progress = False
-_theme_refresh_pending = False
 
 
 def _build_splash_pixmap() -> QPixmap:
@@ -63,7 +60,10 @@ def _build_splash_pixmap() -> QPixmap:
 
     painter = QPainter(pixmap)
     painter.setPen(QColor("#ffffff"))
-    painter.setFont(QFont(UI_FONT_FAMILY, 20, QFont.Weight.Bold))
+    splash_font = QFont(painter.font())
+    splash_font.setPointSize(20)
+    splash_font.setBold(True)
+    painter.setFont(splash_font)
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, APP_NAME)
     painter.end()
     return pixmap
@@ -161,43 +161,41 @@ def _install_activation_server(window: MainWindow) -> QLocalServer:
 
 
 def _setup_system_theme() -> None:
-    global _theme_apply_in_progress
     if qdarktheme is None:
         return
-    if _theme_apply_in_progress:
-        return
-    _theme_apply_in_progress = True
     try:
-        qdarktheme.setup_theme(THEME_MODE_AUTO)
+        qdarktheme.setup_theme("auto")
     except (RuntimeError, AttributeError, TypeError, ValueError) as exc:
-        _logger.warning(
-            "Failed to apply qdarktheme.",
-            exc_info=exc,
-            extra={"error_code": "THEME_APPLY_FAILED"},
-        )
+        _logger.warning("Failed to apply qdarktheme.", exc_info=exc)
     except Exception as exc:
-        _logger.exception(
-            "Unexpected error while applying qdarktheme.",
-            exc_info=exc,
-            extra={"error_code": "THEME_APPLY_UNEXPECTED"},
-        )
-    finally:
-        _theme_apply_in_progress = False
+        _logger.exception("Unexpected error while applying qdarktheme.", exc_info=exc)
 
 
-def _schedule_system_theme_refresh() -> None:
-    global _theme_refresh_pending
-    if qdarktheme is None or _theme_apply_in_progress or _theme_refresh_pending:
-        return
-    _theme_refresh_pending = True
+class _UiStyleRefreshFilter(QObject):
+    def __init__(self, app: QApplication) -> None:
+        super().__init__()
+        self._app = app
 
-    def _run() -> None:
-        global _theme_refresh_pending
-        _theme_refresh_pending = False
-        _setup_system_theme()
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() in (
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+            QEvent.Type.ThemeChange,
+        ):
+            apply_global_ui_styles(self._app)
+        return super().eventFilter(watched, event)
 
-    # Debounce palette bursts to avoid recursive signal storms.
-    QTimer.singleShot(THEME_REFRESH_DEBOUNCE_MS, _run)
+
+def _wire_global_style_refresh(app: QApplication) -> None:
+    app_refresher = _UiStyleRefreshFilter(app)
+    install_filter = getattr(app, "installEventFilter", None)
+    if callable(install_filter):
+        install_filter(app_refresher)
+    setattr(app, "_ui_style_refresh_filter", app_refresher)
+    palette_changed = getattr(app, "paletteChanged", None)
+    connect = getattr(palette_changed, "connect", None)
+    if callable(connect):
+        connect(lambda *_args: apply_global_ui_styles(app))
 
 
 def _install_excepthook() -> None:
@@ -278,6 +276,10 @@ def main() -> int:
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    _setup_system_theme()
+    apply_global_ui_styles(app)
+    _wire_global_style_refresh(app)
     app.setOrganizationName(APP_ORGANIZATION)
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
@@ -338,13 +340,9 @@ def main() -> int:
         _ = activation_server
         window.show()
         splash.finish(window)
-        # Defer theme setup until after first paint for faster perceived startup.
-        QTimer.singleShot(THEME_SETUP_DEFER_MS, _setup_system_theme)
 
     # Keep splash visible long enough to be noticeable on fast systems.
     QTimer.singleShot(MAIN_SPLASH_MS, _finish_startup)
-    if qdarktheme is not None:
-        app.paletteChanged.connect(lambda: _schedule_system_theme_refresh())
 
     return app.exec()
 

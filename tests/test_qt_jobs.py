@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -49,7 +51,7 @@ def test_run_in_background_wires_callbacks_and_starts_job() -> None:
         lambda: "ok",
         on_finished=lambda value: events.append(("finished", value)),
         on_failed=lambda exc: events.append(("failed", exc)),
-        thread_pool=pool,
+        thread_pool=cast(Any, pool),
     )
 
     assert pool.started == [job]

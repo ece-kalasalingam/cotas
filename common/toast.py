@@ -5,7 +5,15 @@ from typing import Literal
 
 from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QFrame, QGraphicsDropShadowEffect, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
+
 from common.constants import (
     TOAST_CONTENT_MARGIN_BOTTOM,
     TOAST_CONTENT_MARGIN_LEFT,
@@ -14,8 +22,8 @@ from common.constants import (
     TOAST_CONTENT_SPACING,
     TOAST_DEFAULT_DURATION_MS,
     TOAST_ERROR_DURATION_MS,
-    TOAST_MAX_WIDTH,
     TOAST_MARGIN,
+    TOAST_MAX_WIDTH,
     TOAST_SHADOW_ALPHA,
     TOAST_SHADOW_BLUR_RADIUS,
     TOAST_SHADOW_OFFSET_X,
@@ -36,6 +44,7 @@ _LEVEL_COLORS_DARK: dict[str, tuple[str, str, str]] = {
     "warning": ("#30271B", "#FFEED2", "#B99052"),
     "error": ("#322123", "#FFE4E8", "#B67279"),
 }
+
 _IS_WINDOWS = platform.system().lower().startswith("win")
 
 
@@ -55,14 +64,14 @@ class _ToastWidget(QFrame):
         # UpdateLayeredWindowIndirect warnings with invalid dirty regions.
         if not _IS_WINDOWS:
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-
+            
         is_dark = QApplication.palette().window().color().lightness() < 128
         palette_map = _LEVEL_COLORS_DARK if is_dark else _LEVEL_COLORS_LIGHT
         bg, fg, border = palette_map[level]
         self.setStyleSheet(
-            f"#toastFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 10px; }}"
-            f"#toastTitle, #toastBody {{ color: {fg}; border: none; background: transparent; margin: 0; padding: 0; }}"
-            "#toastTitle { font-weight: 600; }"
+        f"#toastFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 6px; }}"
+        f"#toastTitle, #toastBody {{ color: {fg}; border: none; background: transparent; margin: 0; padding: 0; }}"
+        "#toastTitle { font-weight: 600; }"
         )
         self.setMaximumWidth(TOAST_MAX_WIDTH)
 
@@ -77,6 +86,9 @@ class _ToastWidget(QFrame):
         if title.strip():
             title_label = QLabel(title)
             title_label.setObjectName("toastTitle")
+            title_font = title_label.font()
+            title_font.setBold(True)
+            title_label.setFont(title_font)
             layout.addWidget(title_label)
             self._title_label = title_label
         body = QLabel(message)

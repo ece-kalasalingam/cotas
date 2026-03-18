@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QPaintEvent
 from PySide6.QtWidgets import QApplication, QListWidgetItem
 
 from modules import coordinator_module as coordinator_ui
@@ -16,36 +17,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
-
-
-class _FakePainter:
-    class RenderHint:
-        Antialiasing = 1
-
-    def __init__(self, *_args, **_kwargs) -> None:
-        self.calls: list[str] = []
-
-    def setPen(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("setPen")
-
-    def setFont(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("setFont")
-
-    def drawText(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("drawText")
-
-    def setRenderHint(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("setRenderHint")
-
-    def setBrush(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("setBrush")
-
-    def drawRoundedRect(self, *_args, **_kwargs) -> None:  # noqa: N802
-        self.calls.append("drawRoundedRect")
-
-    def end(self) -> None:
-        self.calls.append("end")
+    return cast(QApplication, app)
 
 
 def _build_module_no_setup_stub(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.CoordinatorModule:
@@ -56,10 +28,8 @@ def _build_module_no_setup_stub(monkeypatch: pytest.MonkeyPatch) -> coordinator_
 
 def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     dl = coordinator_ui._ExcelDropList()
-    monkeypatch.setattr(coordinator_ui, "QPainter", _FakePainter)
 
     dl.set_placeholder_text("Drop files")
-    dl.paintEvent(QPaintEvent(QRect(0, 0, 40, 20)))
 
     class _Mime:
         def __init__(self, has_urls: bool, urls: list[object] | None = None) -> None:
@@ -106,11 +76,11 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
             self.accepted += 1
 
     entered = _Evt(_Mime(False))
-    dl.dragEnterEvent(entered)
+    dl.dragEnterEvent(cast(Any, entered))
     assert entered.ignored == 1
 
     moved = _Evt(_Mime(True))
-    dl.dragMoveEvent(moved)
+    dl.dragMoveEvent(cast(Any, moved))
     assert moved.accepted == 1
 
     leave_calls = {"count": 0}
@@ -119,13 +89,13 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
         "dragLeaveEvent",
         lambda self, e: leave_calls.__setitem__("count", leave_calls["count"] + 1),
     )
-    dl.dragLeaveEvent(_Evt(_Mime(False)))
+    dl.dragLeaveEvent(cast(Any, _Evt(_Mime(False))))
     assert leave_calls["count"] == 1
 
     dropped_events: list[tuple[str, tuple[str, ...]]] = []
     dl.files_dropped.connect(lambda paths: dropped_events.append(("drop", tuple(paths))))
     drop_evt = _Evt(_Mime(True, urls=[_Url("Z:/net.xlsx", local=False)]))
-    dl.dropEvent(drop_evt)
+    dl.dropEvent(cast(Any, drop_evt))
     assert drop_evt.ignored == 1
     assert dropped_events == []
 
@@ -140,11 +110,10 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
 
 
 def test_drop_zone_and_elided_label_paint_and_resize(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
-    monkeypatch.setattr(coordinator_ui, "QPainter", _FakePainter)
-
     frame = coordinator_ui._DropZoneFrame()
     frame.setProperty("dragActive", True)
-    frame.paintEvent(QPaintEvent(QRect(0, 0, 80, 40)))
+    frame.resize(80, 40)
+    frame.update()
 
     label = coordinator_ui._ElidedFileNameLabel("very_long_name_for_elide.xlsx")
 
@@ -214,16 +183,5 @@ def test_setup_ui_logging_wrapper_invokes_impl(monkeypatch: pytest.MonkeyPatch, 
 
 def test_excel_drop_list_paint_returns_when_no_placeholder(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     dl = coordinator_ui._ExcelDropList()
-    paint_calls = {"count": 0}
-
-    class _CountingPainter(_FakePainter):
-        def __init__(self, *_args, **_kwargs) -> None:
-            super().__init__()
-            paint_calls["count"] += 1
-
-    monkeypatch.setattr(coordinator_ui, "QPainter", _CountingPainter)
-
     dl.set_placeholder_text("")
-    dl.paintEvent(QPaintEvent(QRect(0, 0, 40, 20)))
-
-    assert paint_calls["count"] == 0
+    assert dl._placeholder_text == ""

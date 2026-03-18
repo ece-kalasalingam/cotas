@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import cast
 
 import pytest
 
@@ -99,20 +100,23 @@ def test_compute_sampled_column_widths_handles_padding_and_short_rows() -> None:
 
 def test_set_header_selected_cell_updates_active_and_sqref() -> None:
     import openpyxl
+    from openpyxl.worksheet.worksheet import Worksheet
 
     wb = openpyxl.Workbook()
-    ws = wb.active
+    ws = cast(Worksheet, wb.active)
     layout.set_header_selected_cell(ws, 3)
 
+    assert ws.sheet_view.selection
     assert ws.sheet_view.selection[0].activeCell == "A3"
     assert ws.sheet_view.selection[0].sqref == "A3"
 
 
 def test_apply_sheet_layout_and_protection_sets_expected_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     import openpyxl
+    from openpyxl.worksheet.worksheet import Worksheet
 
     wb = openpyxl.Workbook()
-    ws = wb.active
+    ws = cast(Worksheet, wb.active)
     ws["A1"] = "h"
 
     calls = {"policy": 0, "autosize": 0, "selected": 0}
@@ -135,6 +139,7 @@ def test_apply_sheet_layout_and_protection_sets_expected_flags(monkeypatch: pyte
     assert ws.page_setup.orientation == "landscape"
     assert ws.page_setup.fitToWidth == 1
     assert ws.page_setup.fitToHeight == 0
+    assert ws.sheet_properties.pageSetUpPr is not None
     assert ws.sheet_properties.pageSetUpPr.fitToPage is True
     assert ws.protection.sheet is True
     assert isinstance(ws.protection.password, str)

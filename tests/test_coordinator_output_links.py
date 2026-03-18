@@ -14,7 +14,7 @@ class _DummyModule:
     def __init__(self) -> None:
         self._files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
-        self.generated_outputs_view = None
+        self.generated_outputs_view: _DummyView | None = None
 
 
 class _DummyView:
@@ -31,7 +31,6 @@ def _ns() -> dict[str, object]:
         "OUTPUT_LINK_MODE_FILE": "file",
         "OUTPUT_LINK_MODE_FOLDER": "folder",
         "OUTPUT_LINK_SEPARATOR": "::",
-        "OUTPUT_LINK_ROW_MARGIN_BOTTOM_PX": 10,
         "show_toast": lambda *args, **kwargs: None,
     }
 
@@ -39,7 +38,7 @@ def _ns() -> dict[str, object]:
 def test_output_link_markup_without_path_uses_not_available_label() -> None:
     module = _DummyModule()
     html = output_links.output_link_markup(module, "Uploaded", None, ns=_ns())
-    assert "<b>Uploaded</b>: T(instructor.links.not_available)" in html
+    assert "Uploaded: T(instructor.links.not_available)" in html
 
 
 def test_output_link_markup_with_path_renders_file_and_folder_links() -> None:
@@ -55,9 +54,9 @@ def test_output_link_markup_with_path_renders_file_and_folder_links() -> None:
 def test_output_links_html_includes_uploaded_and_downloaded_placeholders_when_empty() -> None:
     module = _DummyModule()
     html = output_links.output_links_html(module, ns=_ns())
-    assert html.count("margin-bottom:10px") == 2
     assert "T(coordinator.links.uploaded_report)" in html
     assert "T(coordinator.links.downloaded_output)" in html
+    assert "<a href=" not in html
 
 
 def test_refresh_output_links_sets_generated_outputs_html() -> None:
@@ -67,6 +66,7 @@ def test_refresh_output_links_sets_generated_outputs_html() -> None:
 
     output_links.refresh_output_links(module, ns=_ns())
 
+    assert module.generated_outputs_view is not None
     assert "a.xlsx" in module.generated_outputs_view.html
 
 
@@ -114,3 +114,21 @@ def test_on_output_link_activated_folder_mode_uses_parent_and_shows_error_toast_
             "error",
         )
     ]
+
+
+def test_output_links_downloaded_entries_and_open_success_branch(monkeypatch) -> None:
+    module = _DummyModule()
+    module._files = [Path("C:/tmp/a.xlsx")]
+    module._downloaded_outputs = [Path("C:/tmp/out1.xlsx"), Path("C:/tmp/out2.xlsx")]
+    html = output_links.output_links_html(module, ns=_ns())
+    assert "out1.xlsx" in html and "out2.xlsx" in html
+
+    class _FakeQUrl:
+        @staticmethod
+        def fromLocalFile(path: str) -> str:
+            return path
+
+    monkeypatch.setattr(output_links, "QUrl", _FakeQUrl)
+    monkeypatch.setattr(output_links.QDesktopServices, "openUrl", lambda _url: True)
+    # Covered branch: returns early when open succeeds.
+    output_links.on_output_link_activated(module, "file::C:/tmp/a.xlsx", ns=_ns())

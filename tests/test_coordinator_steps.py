@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Callable, TypedDict, cast
 
 import pytest
 
@@ -17,9 +18,29 @@ class _Logger:
         self.info_calls.append((msg, args, kwargs))
 
 
+@dataclass
+class _State:
+    busy: bool = False
+
+
+class _NS(TypedDict):
+    t: Callable[..., str]
+    _path_key: Callable[[Path], str]
+    _analyze_dropped_files: Callable[..., dict[str, object]]
+    QListWidgetItem: type[object]
+    build_i18n_log_message: Callable[..., str]
+    log_process_message: Callable[..., None]
+    show_toast: Callable[..., None]
+    _log_calls: list[tuple[tuple[object, ...], dict[str, object]]]
+
+
 class _Module:
+    drop_list: Any
+    _remove_file_by_path: Callable[..., None]
+    _new_file_item_widget: Callable[..., Any]
+
     def __init__(self) -> None:
-        self.state = type("State", (), {"busy": False})()
+        self.state = _State()
         self._files: list[Path] = []
         self._pending_drop_batches: list[list[str]] = []
         self._logger = _Logger()
@@ -47,9 +68,9 @@ class _Result:
     duplicate_entries: tuple[tuple[str, str, str], ...]
 
 
-def _collect_ns(module: _Module) -> dict[str, object]:
+def _collect_ns(module: _Module) -> _NS:
     toasts = module._toasts
-    logs: list[tuple] = []
+    logs: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
     def _show_toast(_parent, message: str, *, title: str, level: str) -> None:
         toasts.append((message, title, level))
@@ -88,8 +109,8 @@ def test_process_files_async_success_and_cancel_paths() -> None:
     collect_files.process_files_async(module, ["C:/new.xlsx"], ns=ns)
     assert "on_success" in module._started and "on_failure" in module._started
 
-    on_success = module._started["on_success"]
-    on_failure = module._started["on_failure"]
+    on_success = cast(Callable[[object], None], module._started["on_success"])
+    on_failure = cast(Callable[[Exception], None], module._started["on_failure"])
 
     on_success(
         {
@@ -114,7 +135,7 @@ def test_process_files_async_on_finished_rejects_unexpected_result_type() -> Non
     ns = _collect_ns(module)
 
     collect_files.process_files_async(module, ["C:/new.xlsx"], ns=ns)
-    on_success = module._started["on_success"]
+    on_success = cast(Callable[[object], None], module._started["on_success"])
 
     with pytest.raises(RuntimeError, match="unexpected result type"):
         on_success("not-a-dict")
@@ -125,7 +146,7 @@ def test_process_files_async_non_cancel_failure_logs_and_toasts() -> None:
     ns = _collect_ns(module)
 
     collect_files.process_files_async(module, ["C:/new.xlsx"], ns=ns)
-    on_failure = module._started["on_failure"]
+    on_failure = cast(Callable[[Exception], None], module._started["on_failure"])
 
     exc = RuntimeError("boom")
     on_failure(exc)

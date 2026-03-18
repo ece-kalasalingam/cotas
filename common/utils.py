@@ -1,14 +1,14 @@
 """Shared utility helpers used across the application."""
 
+import atexit
 import json
 import logging
 import os
-import atexit
 import shutil
 import sys
 import tempfile
-from logging.handlers import RotatingFileHandler
 from decimal import Decimal, InvalidOperation
+from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Literal
 
@@ -24,6 +24,7 @@ UI_LANGUAGE_AUTO_ALIASES = {"auto", "system", "os"}
 PORTABLE_MODE_ENV_VAR = "FOCUS_PORTABLE"
 LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [job=%(job_id)s step=%(step_id)s] %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+_APP_LOGGING_CONFIGURED = False
 DEFAULT_LOG_MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_LOG_BACKUP_COUNT = 3
 RUNTIME_MIN_FREE_BYTES_ENV_VAR = "FOCUS_RUNTIME_MIN_FREE_BYTES"
@@ -276,7 +277,8 @@ def configure_app_logging(
     User-facing messages should be shown in UI (status/toast/log panel), while
     detailed diagnostics are persisted in the log file.
     """
-    if getattr(configure_app_logging, "_configured", False):
+    global _APP_LOGGING_CONFIGURED
+    if _APP_LOGGING_CONFIGURED:
         return app_log_path(app_name=app_name, log_file_name=log_file_name)
 
     log_path = app_log_path(app_name=app_name, log_file_name=log_file_name)
@@ -300,7 +302,7 @@ def configure_app_logging(
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 
-    configure_app_logging._configured = True
+    _APP_LOGGING_CONFIGURED = True
     return log_path
 
 

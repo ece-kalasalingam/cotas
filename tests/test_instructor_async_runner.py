@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable, cast
+
 from common.jobs import CancellationToken
 from modules.instructor import async_runner as ir
 
@@ -98,7 +100,7 @@ def test_start_async_operation_compat_fallback_success_finalizes_and_refreshes()
         token=token,
         job_id="job-1",
         work=lambda: 7,
-        on_success=lambda result: finished.append(result),
+        on_success=lambda result: finished.append(cast(int, result)),
         on_failure=lambda _exc: None,
         run_async=_run_async,
     )
@@ -107,7 +109,7 @@ def test_start_async_operation_compat_fallback_success_finalizes_and_refreshes()
     assert target.busy_calls[0] == (True, "job-1")
     assert len(target._active_jobs) == 1
 
-    callbacks["on_finished"](callbacks["work"]())
+    cast(Callable[[object], None], callbacks["on_finished"])(cast(Callable[[], int], callbacks["work"])())
 
     assert finished == [7]
     assert target._cancel_token is None
@@ -147,7 +149,7 @@ def test_start_async_operation_compat_fallback_failure_handles_non_list_active_j
     )
 
     err = RuntimeError("x")
-    callbacks["on_failed"](err)
+    cast(Callable[[Exception], None], callbacks["on_failed"])(err)
 
     assert failures == [err]
     assert target._cancel_token is None
@@ -190,7 +192,9 @@ def test_async_operation_runner_success_finalizes_even_if_success_handler_raises
     )
 
     try:
-        callbacks["on_finished"](callbacks["work"]())
+        cast(Callable[[object], None], callbacks["on_finished"])(
+            cast(Callable[[], int], callbacks["work"])()
+        )
     except RuntimeError as exc:
         assert str(exc) == "boom"
 
@@ -221,7 +225,7 @@ def test_async_operation_runner_failure_does_not_refresh_while_closing() -> None
     )
 
     err = RuntimeError("fail")
-    callbacks["on_failed"](err)
+    cast(Callable[[Exception], None], callbacks["on_failed"])(err)
 
     assert failures == [err]
     assert target._cancel_token is None

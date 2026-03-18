@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -20,8 +22,8 @@ class _DummyModule:
         self.RAIL_LINKS = (
             ("instructor.links.course_details_generated", "step1_path"),
             ("instructor.links.course_details_uploaded", "step2_course_details_path"),
-            ("instructor.links.marks_template_generated", "step2_path"),
-            ("instructor.links.marks_template_uploaded", "step3_path"),
+            ("instructor.links.marks_template_generated", "marks_template_path"),
+            ("instructor.links.marks_template_uploaded", "filled_marks_path"),
         )
         self.RAIL_LINK_OPEN_FILE_KEY = "instructor.links.open_file"
         self.RAIL_LINK_OPEN_FOLDER_KEY = "instructor.links.open_folder"
@@ -29,8 +31,8 @@ class _DummyModule:
         self.RAIL_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
         self.step1_path: str | None = "D:/tmp/course_details_template.xlsx"
         self.step2_course_details_path: str | None = "D:/tmp/course_details_filled.xlsx"
-        self.step2_path: str | None = "D:/tmp/marks_template.xlsx"
-        self.step3_path: str | None = "D:/tmp/marks_filled.xlsx"
+        self.marks_template_path: str | None = "D:/tmp/marks_template.xlsx"
+        self.filled_marks_path: str | None = "D:/tmp/marks_filled.xlsx"
         self.quick_link_labels = {
             "instructor.links.course_details_generated": _DummyLabel(),
             "instructor.links.course_details_uploaded": _DummyLabel(),
@@ -39,10 +41,10 @@ class _DummyModule:
         }
 
     def _quick_link_items(self):
-        return instructor_ui.InstructorModule._quick_link_items(self)
+        return instructor_ui.InstructorModule._quick_link_items(cast(Any, self))
 
     def _quick_link_markup(self, link_key: str, path: str | None):
-        return instructor_ui.InstructorModule._quick_link_markup(self, link_key, path)
+        return instructor_ui.InstructorModule._quick_link_markup(cast(Any, self), link_key, path)
 
 
 def test_quick_link_markup_uses_filename_and_actions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,7 +52,7 @@ def test_quick_link_markup_uses_filename_and_actions(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
 
     text = instructor_ui.InstructorModule._quick_link_markup(
-        dummy,
+        cast(Any, dummy),
         "instructor.links.course_details_generated",
         "D:/tmp/course_details_template.xlsx",
     )
@@ -65,7 +67,7 @@ def test_quick_link_markup_missing_path_shows_not_available(monkeypatch: pytest.
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
 
     text = instructor_ui.InstructorModule._quick_link_markup(
-        dummy,
+        cast(Any, dummy),
         "instructor.links.marks_template_uploaded",
         None,
     )
@@ -77,7 +79,7 @@ def test_refresh_quick_links_updates_all_rows(monkeypatch: pytest.MonkeyPatch) -
     dummy = _DummyModule()
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
 
-    instructor_ui.InstructorModule._refresh_quick_links(dummy)
+    instructor_ui.InstructorModule._refresh_quick_links(cast(Any, dummy))
 
     assert "course_details_template.xlsx" in dummy.quick_link_labels[
         "instructor.links.course_details_generated"
@@ -115,7 +117,7 @@ def test_open_file_quick_link_uses_desktop_services(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
     instructor_ui.InstructorModule._on_quick_link_activated(
-        object(),
+        cast(Any, object()),
         "file::D:/tmp/marks_template.xlsx",
     )
 
@@ -140,7 +142,7 @@ def test_open_folder_quick_link_uses_parent_dir(monkeypatch: pytest.MonkeyPatch)
     )
 
     instructor_ui.InstructorModule._on_quick_link_activated(
-        object(),
+        cast(Any, object()),
         "folder::D:/tmp/marks_template.xlsx",
     )
 
@@ -165,7 +167,7 @@ def test_quick_link_open_failure_shows_error_toast(monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
     instructor_ui.InstructorModule._on_quick_link_activated(
-        _DummyModule(),
+        cast(Any, _DummyModule()),
         "file::D:/tmp/missing.xlsx",
     )
 

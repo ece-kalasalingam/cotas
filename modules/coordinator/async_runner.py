@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol, cast
 
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
 
 _JOB_REF_KEY = "job"
+
+
+class _CoordinatorRunnerTarget(Protocol):
+    _cancel_token: CancellationToken | None
+    _active_jobs: list[object]
+
+    def _set_busy(self, busy: bool, *, job_id: str | None = ...) -> None:
+        ...
 
 
 class AsyncOperationRunner:
@@ -28,7 +36,7 @@ class AsyncOperationRunner:
         on_failure: Callable[[Exception], None],
         on_finally: Callable[[], None] | None = None,
     ) -> None:
-        target = self._target
+        target = cast(_CoordinatorRunnerTarget, self._target)
         target._cancel_token = token
         target._set_busy(True, job_id=job_id)
         job_ref: dict[str, object] = {}

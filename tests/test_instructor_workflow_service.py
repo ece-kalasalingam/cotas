@@ -187,3 +187,35 @@ def test_service_logs_stable_error_code_for_validation_errors(
 
     codes = [getattr(record, "error_code", None) for record in caplog.records]
     assert "BAD_DATA" in codes
+
+
+def test_resolve_timeout_seconds_invalid_env_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(service_mod.WORKFLOW_STEP_TIMEOUT_ENV_VAR, "not-an-int")
+    assert (
+        service_mod.InstructorWorkflowService._resolve_timeout_seconds()
+        == service_mod.DEFAULT_WORKFLOW_STEP_TIMEOUT_SECONDS
+    )
+
+
+def test_call_with_optional_cancel_token_signature_fallback_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Force `signature(fn)` to fail so fallback Signature() path is exercised.
+    monkeypatch.setattr(
+        service_mod,
+        "signature",
+        lambda _fn: (_ for _ in ()).throw(ValueError("bad signature")),
+    )
+    called: list[tuple[object, ...]] = []
+
+    def _fn_no_cancel(*args):
+        called.append(args)
+        return "ok"
+
+    out = service_mod.InstructorWorkflowService._call_with_optional_cancel_token(
+        _fn_no_cancel,
+        "a",
+        "b",
+        cancel_token=CancellationToken(),
+    )
+
+    assert out == "ok"
+    assert called == [("a", "b")]

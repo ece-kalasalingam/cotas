@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 from common import ui_logging
 
@@ -18,9 +19,15 @@ def test_parse_i18n_log_message_non_dict_payload_and_non_string_fallback() -> No
 
 def test_resolve_i18n_log_message_non_string_and_invalid_embedded_payload(monkeypatch) -> None:
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: f"T:{key}")
-    assert ui_logging.resolve_i18n_log_message(42) == 42
+    assert ui_logging.resolve_i18n_log_message(cast(Any, 42)) == 42
     bad = "INFO: __I18N_LOG__:{bad-json"
     assert ui_logging.resolve_i18n_log_message(bad) == bad
+
+
+def test_resolve_i18n_log_message_embedded_payload_fallback_on_translation_error(monkeypatch) -> None:
+    payload = '__I18N_LOG__:{"key":"k","kwargs":{},"fallback":"fb"}'
+    monkeypatch.setattr(ui_logging, "t", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("x")))
+    assert ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"
 
 
 def test_resolve_i18n_kwargs_nested_translation_fallback_on_error(monkeypatch) -> None:

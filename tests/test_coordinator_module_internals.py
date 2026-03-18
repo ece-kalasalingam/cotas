@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Callable, cast
 
 import pytest
 
@@ -9,6 +10,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
+from common.jobs import CancellationToken
 from modules import coordinator_module as coordinator_ui
 
 
@@ -17,7 +19,7 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    return cast(QApplication, app)
 
 
 def _build_module(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.CoordinatorModule:
@@ -61,7 +63,7 @@ def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch
         def start(self, **kwargs):
             seen.append("runner")
 
-    module._async_runner = _Runner()
+    module._async_runner = cast(Any, _Runner())
 
     monkeypatch.setattr(coordinator_ui, "_add_uploaded_paths_impl", lambda _m, paths, ns: seen.append(f"add:{len(paths)}"))
     monkeypatch.setattr(coordinator_ui, "_output_link_markup_impl", lambda _m, label, path, ns: f"M:{label}:{path}")
@@ -69,7 +71,13 @@ def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(coordinator_ui, "_refresh_output_links_impl", lambda _m, ns: seen.append("refresh"))
     monkeypatch.setattr(coordinator_ui, "_on_output_link_activated_impl", lambda _m, href, ns: seen.append(f"open:{href}"))
 
-    module._start_async_operation(token=object(), job_id="j", work=lambda: None, on_success=lambda _r: None, on_failure=lambda _e: None)
+    module._start_async_operation(
+        token=CancellationToken(),
+        job_id="j",
+        work=lambda: None,
+        on_success=lambda _r: None,
+        on_failure=lambda _e: None,
+    )
     module._add_uploaded_paths([Path("a.xlsx")])
     assert module._output_link_markup("L", "P") == "M:L:P"
     assert module._output_links_html() == "HTML"
@@ -85,7 +93,7 @@ def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch
 
 def test_on_files_dropped_remembers_first_path(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    seen = {"remember": None, "process": None}
+    seen: dict[str, object] = {"remember": None, "process": None}
     monkeypatch.setattr(module, "_remember_dialog_dir_safe", lambda path: seen.__setitem__("remember", path))
     monkeypatch.setattr(module, "_process_files_async", lambda dropped: seen.__setitem__("process", list(dropped)))
 
@@ -100,7 +108,10 @@ def test_clear_info_selection_and_drop_active(monkeypatch: pytest.MonkeyPatch, q
     module = _build_module(monkeypatch)
 
     for view in (module.user_log_view, module.generated_outputs_view):
-        view.setPlainText("hello") if hasattr(view, "setPlainText") else view.setText("hello")
+        if hasattr(view, "setPlainText"):
+            view.setPlainText("hello")
+        else:
+            cast(Any, view).setText("hello")
         cursor = view.textCursor()
         cursor.select(cursor.SelectionType.Document)
         view.setTextCursor(cursor)
@@ -168,15 +179,15 @@ def test_drop_list_event_branches(monkeypatch: pytest.MonkeyPatch, qapp: QApplic
             self.accepted += 1
 
     e1 = _Evt(_Mime(True))
-    dl.dragEnterEvent(e1)
+    dl.dragEnterEvent(cast(Any, e1))
     assert e1.accepted == 1
 
     e2 = _Evt(_Mime(False))
-    dl.dragMoveEvent(e2)
+    dl.dragMoveEvent(cast(Any, e2))
     assert e2.ignored == 1
 
     e3 = _Evt(_Mime(True, urls=[_Url("C:/a.xlsx"), _Url("Z:/n", local=False)]))
-    dl.dropEvent(e3)
+    dl.dropEvent(cast(Any, e3))
     assert any(tag == "drop" and payload == ("C:/a.xlsx",) for tag, payload in events)
 
     e4 = _Evt(_Mime(False))
@@ -186,9 +197,13 @@ def test_drop_list_event_branches(monkeypatch: pytest.MonkeyPatch, qapp: QApplic
 
 def test_on_files_dropped_skips_remember_when_all_paths_empty(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    seen = {"remember": 0, "process": None}
+    seen: dict[str, object] = {"remember": 0, "process": None}
 
-    monkeypatch.setattr(module, "_remember_dialog_dir_safe", lambda _path: seen.__setitem__("remember", seen["remember"] + 1))
+    monkeypatch.setattr(
+        module,
+        "_remember_dialog_dir_safe",
+        lambda _path: seen.__setitem__("remember", cast(int, seen["remember"]) + 1),
+    )
     monkeypatch.setattr(module, "_process_files_async", lambda dropped: seen.__setitem__("process", list(dropped)))
 
     module._on_files_dropped(["", ""])
@@ -205,7 +220,7 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(coordinator_ui, "_setup_ui_logging_impl", lambda _m, ns: seen.append("setup"))
     monkeypatch.setattr(coordinator_ui, "_append_user_log_impl", lambda _m, message, ns: seen.append(f"append:{message}"))
     monkeypatch.setattr(coordinator_ui, "_rerender_user_log_impl", lambda _m, ns: seen.append("rerender"))
-    monkeypatch.setattr(module, "_output_links_html", lambda: "<html/>")
+    monkeypatch.setattr(module, "_output_links_html", lambda: "outputs")
     monkeypatch.setattr(coordinator_ui, "remove_file_by_path", lambda _m, path, ns: seen.append(f"remove:{path}"))
     monkeypatch.setattr(coordinator_ui, "clear_all", lambda _m, ns: seen.append("clear"))
 
@@ -215,7 +230,7 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     assert module.info_tabs.isHidden() is True
     module.set_shared_activity_log_mode(False)
     assert module.info_tabs.isHidden() is False
-    assert module.get_shared_outputs_html() == "<html/>"
+    assert module.get_shared_outputs_html() == "outputs"
     module._remove_file_by_path("C:/a.xlsx")
     module._clear_all()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable
 
 from common.constants import (
     ID_COURSE_SETUP,
@@ -21,7 +22,7 @@ from common.workbook_signing import verify_payload_signature
 from domain.template_versions import course_setup_v1
 
 
-def filled_marks_manifest_validators() -> dict[str, object]:
+def filled_marks_manifest_validators() -> dict[str, Callable[[object, object], None]]:
     return {
         ID_COURSE_SETUP: course_setup_v1.validate_filled_marks_manifest_schema,
     }

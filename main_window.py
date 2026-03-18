@@ -3,43 +3,50 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from PySide6.QtCore import QSize, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QStackedWidget, QWidget, QHBoxLayout, QToolBar,
-    QVBoxLayout, QStatusBar, QLabel, QMenu, QPushButton, QFrame, QPlainTextEdit, QTabWidget, QTextBrowser,
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QPlainTextEdit,
+    QPushButton,
+    QStackedWidget,
+    QStatusBar,
+    QTabWidget,
+    QTextBrowser,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
 )
-
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
-from PySide6.QtCore import QSize, QTimer, Qt, QUrl
 
 # Import modules
 from common.constants import (
     APP_NAME,
-    INSTRUCTOR_CARD_MARGIN,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_HIDDEN_ACTIVITY_MODULE_KEYS,
-    MAIN_SHARED_TAB_LAYOUT_MARGINS,
-    MAIN_SHARED_TAB_LAYOUT_SPACING,
     MAIN_WINDOW_TITLE_TEXT_KEY,
-    MAIN_WINDOW_CONTENT_MARGINS,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
-from common.utils import (
-    get_ui_language_preference,
-    resource_path,
-    set_ui_language_preference,
-)
 from common.ui_logging import (
     build_i18n_log_message,
     format_log_line_at,
     parse_i18n_log_message,
     resolve_i18n_log_message,
 )
+from common.utils import (
+    get_ui_language_preference,
+    resource_path,
+    set_ui_language_preference,
+)
 from modules.coordinator_module import CoordinatorModule
 from modules.instructor_module import InstructorModule
-
 
 WINDOW_TARGET_HEIGHT_RATIO = 0.8
 WINDOW_HEIGHT_CAP = 640
@@ -47,31 +54,7 @@ WINDOW_WIDTH_TO_HEIGHT_RATIO = 1.57
 WINDOW_MIN_WIDTH = 1005
 WINDOW_MIN_HEIGHT = 640
 STATUS_FLASH_TIMEOUT_MS = 3000
-MAIN_SHARED_INFO_TABS_HEIGHT = 150
-MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT = 16
-MAIN_SHARED_LAYOUT_MARGINS = (0, 8, 0, 8)
-MAIN_SHARED_LAYOUT_SPACING = 6
-MAIN_SHARED_TAB_FIRST_MARGIN_LEFT = 8
-MAIN_SHARED_ACTIVITY_STYLESHEET = """
-QFrame#sharedActivityFrame {
-    border: none;
-    background: transparent;
-}
-QTabWidget#sharedInfoTabs::pane {
-    border: none;
-    background: palette(base);
-}
-QTabWidget#sharedInfoTabs QTabBar::tab:first {
-    margin-left: __TAB_MARGIN__px;
-}
-QPlainTextEdit#sharedActivityLog,
-QTextBrowser#sharedGeneratedOutputs {
-    border: 1px solid palette(mid);
-    border-radius: 8px;
-    background: palette(base);
-    padding: 8px;
-}
-"""
+
 MAIN_ACTIVITYBAR_STYLESHEET = """
 QToolBar {
     spacing: 0px;
@@ -143,11 +126,9 @@ class MainWindow(QMainWindow):
         central_container = QWidget()
         self.setCentralWidget(central_container)
         central_layout = QVBoxLayout(central_container)
-        central_layout.setContentsMargins(*MAIN_WINDOW_CONTENT_MARGINS)
 
         self.work_area = QWidget()
         self.work_layout = QHBoxLayout(self.work_area)
-        self.work_layout.setContentsMargins(*MAIN_WINDOW_CONTENT_MARGINS)
         self.stack = QStackedWidget()
         self.work_layout.addWidget(self.stack)
         
@@ -158,22 +139,15 @@ class MainWindow(QMainWindow):
 
         self.shared_activity_frame = QFrame()
         self.shared_activity_frame.setObjectName("sharedActivityFrame")
-        shared_tabs_height = MAIN_SHARED_INFO_TABS_HEIGHT
-        self.shared_activity_frame.setFixedHeight(shared_tabs_height + MAIN_SHARED_ACTIVITY_FRAME_EXTRA_HEIGHT)
         shared_layout = QVBoxLayout(self.shared_activity_frame)
-        shared_layout.setContentsMargins(*MAIN_SHARED_LAYOUT_MARGINS)
-        shared_layout.setSpacing(MAIN_SHARED_LAYOUT_SPACING)
 
         self.shared_info_tabs = QTabWidget()
         self.shared_info_tabs.setObjectName("sharedInfoTabs")
-        self.shared_info_tabs.setFixedHeight(shared_tabs_height)
         self.shared_info_tabs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.shared_info_tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         shared_log_tab = QWidget()
         shared_log_layout = QVBoxLayout(shared_log_tab)
-        shared_log_layout.setContentsMargins(*MAIN_SHARED_TAB_LAYOUT_MARGINS)
-        shared_log_layout.setSpacing(MAIN_SHARED_TAB_LAYOUT_SPACING)
         self.shared_activity_log = QPlainTextEdit()
         self.shared_activity_log.setObjectName("sharedActivityLog")
         self.shared_activity_log.setReadOnly(True)
@@ -182,26 +156,37 @@ class MainWindow(QMainWindow):
 
         shared_outputs_tab = QWidget()
         shared_outputs_layout = QVBoxLayout(shared_outputs_tab)
-        shared_outputs_layout.setContentsMargins(*MAIN_SHARED_TAB_LAYOUT_MARGINS)
-        shared_outputs_layout.setSpacing(MAIN_SHARED_TAB_LAYOUT_SPACING)
         self.shared_generated_outputs = QTextBrowser()
         self.shared_generated_outputs.setObjectName("sharedGeneratedOutputs")
         self.shared_generated_outputs.setOpenExternalLinks(False)
         self.shared_generated_outputs.setOpenLinks(False)
         self.shared_generated_outputs.setFrameShape(QFrame.Shape.NoFrame)
-        self.shared_generated_outputs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.shared_generated_outputs.anchorClicked.connect(
             lambda url: self._on_shared_output_link_activated(url.toString())
         )
         shared_outputs_layout.addWidget(self.shared_generated_outputs)
+        shared_log_layout.setContentsMargins(0, 0, 0, 0)
+        shared_outputs_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.shared_info_tabs.setStyleSheet("""
+            #sharedActivityLog, #sharedGeneratedOutputs {
+                border: none;
+                outline: none;
+            }
+            #sharedActivityLog:focus, #sharedGeneratedOutputs:focus {
+                border: none;
+                outline: none;
+            }
+            #sharedActivityLog:hover, #sharedGeneratedOutputs:hover {
+                border: none;
+            }
+        """)
 
         self.shared_info_tabs.addTab(shared_log_tab, t("instructor.log.title"))
         self.shared_info_tabs.addTab(shared_outputs_tab, t("instructor.links.title"))
         shared_layout.addWidget(self.shared_info_tabs)
 
         shared_row = QHBoxLayout()
-        shared_row.setContentsMargins(INSTRUCTOR_CARD_MARGIN, 0, INSTRUCTOR_CARD_MARGIN, 0)
-        shared_row.setSpacing(0)
         shared_row.addWidget(self.shared_activity_frame)
         central_layout.addLayout(shared_row)
 
@@ -274,13 +259,6 @@ class MainWindow(QMainWindow):
             if btn:
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.action_co_section.setChecked(True)
-
-        self.setStyleSheet(
-            MAIN_SHARED_ACTIVITY_STYLESHEET.replace(
-                "__TAB_MARGIN__",
-                str(MAIN_SHARED_TAB_FIRST_MARGIN_LEFT),
-            )
-        )
 
         self.language_menu = QMenu(self)
         self.language_action_group = QActionGroup(self.language_menu)
@@ -537,7 +515,8 @@ class MainWindow(QMainWindow):
             return
         provider = getattr(widget, "get_shared_outputs_html", None)
         if callable(provider):
-            self.shared_generated_outputs.setHtml(provider())
+            value = provider()
+            self.shared_generated_outputs.setHtml(value if isinstance(value, str) else str(value))
             return
         self.shared_generated_outputs.setHtml("")
 

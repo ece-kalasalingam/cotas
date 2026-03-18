@@ -83,3 +83,28 @@ def test_run_with_timeout_cancels_token_and_raises_system_error() -> None:
 
     with pytest.raises(JobCancelledError):
         token.raise_if_cancelled()
+
+
+def test_execute_with_telemetry_app_system_and_unexpected_error_paths() -> None:
+    service = service_mod.CoordinatorWorkflowService()
+    context = service.create_job_context(step_id="collect")
+
+    with pytest.raises(AppSystemError):
+        service.collect_files(
+            ["a.xlsx"],
+            existing_keys=set(),
+            existing_paths=[],
+            analyze_dropped_files=lambda *_a, **_k: (_ for _ in ()).throw(AppSystemError("system")),
+            context=context,
+            cancel_token=CancellationToken(),
+        )
+
+    with pytest.raises(ValueError):
+        service.collect_files(
+            ["a.xlsx"],
+            existing_keys=set(),
+            existing_paths=[],
+            analyze_dropped_files=lambda *_a, **_k: (_ for _ in ()).throw(ValueError("boom")),
+            context=context,
+            cancel_token=CancellationToken(),
+        )

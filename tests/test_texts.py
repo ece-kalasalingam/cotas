@@ -212,3 +212,12 @@ def test_system_language_maps_regional_variants_via_lang_only_fallbacks() -> Non
     set_language_from_system(system_lcid=None, system_locale="en-GB")
     assert t("status.ready") == "Ready"
     set_language("en")
+
+
+def test_system_language_uses_windows_lcid_fallback_when_locale_missing(monkeypatch) -> None:
+    monkeypatch.setattr(texts, "_get_windows_ui_lcid", lambda: 1097)
+    monkeypatch.setattr(texts.locale, "getlocale", lambda: (None, None))
+
+    set_language_from_system(system_lcid=None, system_locale=None)
+    assert t("status.ready") == "தயார்"
+    set_language("en")

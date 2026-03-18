@@ -97,3 +97,36 @@ def test_rerender_user_log_uses_fallback_when_translation_raises() -> None:
     messages.rerender_user_log(module, ns=ns)
 
     assert module.user_log_view.lines == ["L:fallback-text"]
+
+
+def test_append_and_rerender_user_log_none_line_and_plain_message_branches() -> None:
+    module = _Module()
+    ns = {
+        "parse_i18n_log_message": lambda _m: None,
+        "resolve_i18n_log_message": lambda m: m,
+        "format_log_line_at": lambda *_a, **_k: None,
+    }
+    messages.append_user_log(module, "plain", ns=ns)
+    assert module.user_log_view.lines == []
+
+    module._user_log_entries = [{"timestamp": datetime.now(), "message": "raw"}]
+    ns2 = {
+        "t": lambda key, **kwargs: f"T:{key}",
+        "format_log_line_at": lambda message, timestamp=None: f"L:{message}",
+    }
+    messages.rerender_user_log(module, ns=ns2)
+    assert module.user_log_view.lines == ["L:raw"]
+
+
+def test_rerender_user_log_skips_none_formatted_line_branch() -> None:
+    module = _Module()
+    module._user_log_entries = [
+        {"timestamp": datetime.now(), "message": "skip-me"},
+        {"timestamp": datetime.now(), "message": "keep-me"},
+    ]
+    ns = {
+        "t": lambda key, **kwargs: f"T:{key}",
+        "format_log_line_at": lambda message, timestamp=None: None if message == "skip-me" else f"L:{message}",
+    }
+    messages.rerender_user_log(module, ns=ns)
+    assert module.user_log_view.lines == ["L:keep-me"]

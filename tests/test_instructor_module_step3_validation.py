@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,11 +11,11 @@ pytest.importorskip("PySide6")
 
 from common.exceptions import ValidationError
 from common.workbook_signing import sign_payload
-from modules import instructor_module as instructor_ui
 from domain.instructor_template_engine import (
     generate_course_details_template,
     generate_marks_template_from_course_details,
 )
+from modules import instructor_module as instructor_ui
 
 
 def _build_filled_marks_template(tmp_path: Path) -> Path:
@@ -26,7 +27,7 @@ def _build_filled_marks_template(tmp_path: Path) -> Path:
     return marks_template
 
 
-def _sheet_rows_from_manifest(workbook: object, sheet_name: str) -> tuple[int, int]:
+def _sheet_rows_from_manifest(workbook: Any, sheet_name: str) -> tuple[int, int]:
     manifest_text = workbook["__SYSTEM_LAYOUT__"]["A2"].value
     assert isinstance(manifest_text, str)
     import json

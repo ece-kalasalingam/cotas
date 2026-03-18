@@ -1,0 +1,27 @@
+{
+  "include": [
+    "main.py",
+    "main_window.py",
+    "common",
+    "domain",
+    "modules",
+    "services",
+    "tests",
+    "scripts"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    ".pytest_cache*",
+    ".tmp_*",
+    ".audit_cache_new",
+    "build",
+    "dist",
+    "htmlcov"
+  ],
+  "venvPath": "C:/Users/jprak/miniconda3/envs",
+  "venv": "obe",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "warning"
+}

@@ -2,29 +2,30 @@ import os
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
 from common.exceptions import AppSystemError, ValidationError
 from common.utils import (
-    app_settings_path,
+    _reset_runtime_storage_cache_for_tests,
     app_secrets_dir,
+    app_settings_path,
     coerce_excel_number,
     create_app_runtime_sqlite_file,
     emit_user_status,
     from_portable_path,
-    get_ui_language_preference,
     get_last_saved_dir,
+    get_ui_language_preference,
     log_process_message,
-    remember_dialog_dir,
     normalize,
+    remember_dialog_dir,
     resolve_dialog_start_path,
     resource_path,
-    set_ui_language_preference,
     set_last_saved_dir,
-    _reset_runtime_storage_cache_for_tests,
+    set_ui_language_preference,
     to_portable_path,
 )
 
@@ -80,14 +81,15 @@ class TestResourcePath(unittest.TestCase):
         had_meipass = hasattr(sys, "_MEIPASS")
         old_meipass = getattr(sys, "_MEIPASS", None)
         try:
-            sys._MEIPASS = r"C:\temp\bundle_root"
+            cast_sys = sys  # alias for test-only dynamic attribute usage
+            setattr(cast_sys, "_MEIPASS", r"C:\temp\bundle_root")
             self.assertEqual(
                 resource_path("assets/icon.svg"),
                 os.path.join(r"C:\temp\bundle_root", "assets/icon.svg"),
             )
         finally:
             if had_meipass:
-                sys._MEIPASS = old_meipass
+                setattr(sys, "_MEIPASS", old_meipass)
             else:
                 delattr(sys, "_MEIPASS")
 
@@ -116,6 +118,10 @@ class TestCoerceExcelNumber(unittest.TestCase):
     def test_non_numeric_strings(self) -> None:
         self.assertEqual(coerce_excel_number("abc"), "abc")
         self.assertEqual(coerce_excel_number("  A12 "), "A12")
+
+    def test_other_types_return_as_is(self) -> None:
+        payload = {"a": 1}
+        self.assertEqual(coerce_excel_number(payload), payload)
 
 
 @pytest.mark.windows_acl_compat
@@ -267,6 +273,71 @@ class TestSettingsHelpers(unittest.TestCase):
                     os.path.normcase(str(target)),
                 )
 
+    def test_read_settings_payload_decode_and_oserror_paths(self) -> None:
+        from common.utils import _read_settings_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "settings.json"
+            p.write_text("{bad", encoding="utf-8")
+            self.assertEqual(_read_settings_payload(p), {})
+
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.read_text", side_effect=OSError("denied")
+        ):
+            self.assertEqual(_read_settings_payload(Path("x")), {})
+
+    def test_get_last_saved_dir_invalid_and_remember_dir_guards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_base = Path(tmp)
+            with patch("common.utils._runtime_base_dir", return_value=run_base), patch(
+                "common.utils._is_installed_exe", return_value=False
+            ), patch(
+                "common.utils._is_storage_dir_usable", return_value=True
+            ):
+                settings_file = run_base / "settings.json"
+                settings_file.write_text('{"last_saved_dir": 1}', encoding="utf-8")
+                self.assertIsNone(get_last_saved_dir("FOCUS"))
+
+        remember_dialog_dir("", "FOCUS")
+        with patch("os.path.expanduser", side_effect=OSError("bad path")):
+            remember_dialog_dir("~/x", "FOCUS")
+        with tempfile.TemporaryDirectory() as tmp:
+            remember_dialog_dir(str(Path(tmp) / "missing.xlsx"), "FOCUS")
+            remember_dialog_dir(str(Path(tmp) / "missing_parent" / "x.xlsx"), "FOCUS")
+
+    def test_resolve_dialog_start_path_downloads_and_home_fallbacks(self) -> None:
+        with patch("common.utils.get_last_saved_dir", return_value=None), patch(
+            "pathlib.Path.home", return_value=Path("/home/test")
+        ), patch(
+            "common.utils.Path.exists", side_effect=[True, False]
+        ), patch(
+            "common.utils.Path.is_dir", return_value=True
+        ):
+            out = resolve_dialog_start_path("FOCUS", "a.xlsx")
+            self.assertIn("Downloads", out)
+
+        with patch("common.utils.get_last_saved_dir", return_value=None), patch(
+            "pathlib.Path.home", return_value=Path("/home/test")
+        ), patch("common.utils.Path.exists", return_value=False), patch(
+            "common.utils.Path.is_dir", return_value=False
+        ):
+            out = resolve_dialog_start_path("FOCUS", "a.xlsx")
+            self.assertTrue(out.endswith("a.xlsx"))
+
+    def test_runtime_base_and_join_path_posix_branch(self) -> None:
+        from common.utils import _join_path, _runtime_base_dir
+
+        with patch("common.utils.sys.frozen", True, create=True), patch(
+            "common.utils.sys.executable", "/tmp/app/bin/app"
+        ):
+            base = _runtime_base_dir()
+            self.assertTrue(str(base).lower().endswith("app\\bin") or str(base).lower().endswith("app/bin"))
+
+        self.assertEqual(
+            str(_join_path(cast(Any, PurePosixPath("/tmp/base")), "child")).replace("\\", "/"),
+            "/tmp/base/child",
+        )
+
     @patch("common.utils._runtime_base_dir", return_value=Path(r"D:\portable\FOCUS"))
     @patch("common.utils._is_installed_exe", return_value=False)
     @patch("common.utils._is_storage_dir_usable", return_value=True)
@@ -373,6 +444,14 @@ class TestLogProcessMessage(unittest.TestCase):
         self.assertIn("sample.xlsx", notify.call_args.args[0])
         self.assertEqual(notify.call_args.args[1], "error")
 
+    def test_validation_error_empty_detail_fallback_message(self) -> None:
+        logger = Mock()
+        notify = Mock()
+        error = ValidationError("   ")
+        result = log_process_message("process", logger=logger, error=error, notify=notify)
+        self.assertFalse(result)
+        notify.assert_called_once_with("Validation failed due to invalid data.", "error")
+
     def test_app_system_error_logs_generic_english_message(self) -> None:
         logger = Mock()
         notify = Mock()
@@ -477,8 +556,9 @@ def test_remember_dialog_dir_safe_logs_warning_on_oserror() -> None:
 
 
 def test_safe_extra_formatter_backfills_job_and_step_fields() -> None:
-    from common import utils
     import logging
+
+    from common import utils
 
     formatter = utils._SafeExtraFormatter(fmt=utils.LOG_FORMAT, datefmt=utils.LOG_DATE_FORMAT)
     record = logging.LogRecord(
@@ -603,8 +683,9 @@ def test_app_log_path_uses_settings_parent() -> None:
 
 
 def test_configure_app_logging_configures_once_and_reuses_guard() -> None:
-    from common import utils
     import logging
+
+    from common import utils
 
     if hasattr(utils.configure_app_logging, '_configured'):
         delattr(utils.configure_app_logging, '_configured')

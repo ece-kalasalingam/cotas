@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from common.constants import TOAST_DEFAULT_DURATION_MS, TOAST_ERROR_DURATION_MS, TOAST_MARGIN
+from typing import Any, cast
+
 from common import toast
+from common.constants import (
+    TOAST_DEFAULT_DURATION_MS,
+    TOAST_ERROR_DURATION_MS,
+    TOAST_MARGIN,
+)
 
 
 class _FakeWidget:
@@ -64,10 +70,10 @@ class _FakeScreen:
 
 
 class _FakeApp:
-    _instance = None
-    _active = None
-    _top = []
-    _screen = None
+    _instance: Any = None
+    _active: Any = None
+    _top: list[Any] = []
+    _screen: Any = None
 
     @staticmethod
     def instance():
@@ -123,7 +129,7 @@ class _FakeToastWidget:
 
 def test_resolve_parent_prefers_explicit_parent_window() -> None:
     parent = _FakeWidget()
-    assert toast._resolve_parent(parent) is parent
+    assert toast._resolve_parent(cast(Any, parent)) is parent
 
 
 def test_resolve_parent_uses_active_visible_window(monkeypatch) -> None:
@@ -217,3 +223,23 @@ def test_show_toast_uses_global_screen_position_when_no_host(monkeypatch) -> Non
     expected_y = 20 + TOAST_MARGIN
     assert created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))
     assert timer_calls[-1][0] == TOAST_DEFAULT_DURATION_MS
+
+
+def test_toast_fit_width_early_return_and_no_screen_fallback(monkeypatch) -> None:
+    # fit_width early return branch when body label is missing
+    toast_widget = toast._ToastWidget.__new__(toast._ToastWidget)  # bypass __init__
+    toast_widget._body_label = None
+    toast_widget._message = ""
+    toast._ToastWidget.fit_width(toast_widget, 100)
+
+    monkeypatch.setattr(toast, "_resolve_parent", lambda _p: None)
+    monkeypatch.setattr(toast, "_ToastWidget", _FakeToastWidget)
+    monkeypatch.setattr(
+        toast,
+        "QApplication",
+        type("_NoScreenApp", (), {"primaryScreen": staticmethod(lambda: None), "instance": staticmethod(lambda: None)}),
+    )
+    _FakeToastWidget.instances.clear()
+    toast.show_toast(None, "hello")
+    created = _FakeToastWidget.instances[-1]
+    assert created.moves[-1] == (TOAST_MARGIN, TOAST_MARGIN)

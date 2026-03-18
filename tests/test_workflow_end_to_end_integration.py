@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -159,7 +160,7 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
         cancel_token=CancellationToken(),
     )
     assert output.exists()
-    assert result.output_path == output
+    assert cast(Any, result).output_path == output
 
     wb = openpyxl.load_workbook(output, data_only=True)
     try:

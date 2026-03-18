@@ -95,6 +95,23 @@ def test_build_default_name_fallback_on_incomplete_required_fields(tmp_path: Pat
     assert ops.build_final_report_default_name(str(wb_path)) == "fallback.xlsx"
 
 
+def test_build_default_name_skips_empty_metadata_keys_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ops, "t", lambda key, **kwargs: "fallback.xlsx")
+    wb_path = tmp_path / "with_empty_key_row.xlsx"
+    _write_course_metadata_workbook(
+        wb_path,
+        fields={
+            "": "ignored",
+            ops.COURSE_METADATA_COURSE_CODE_KEY: "ECE101",
+            ops.COURSE_METADATA_SEMESTER_KEY: "III",
+            ops.COURSE_METADATA_SECTION_KEY: "A",
+            ops.COURSE_METADATA_ACADEMIC_YEAR_KEY: "2025-26",
+        },
+    )
+    name = ops.build_marks_template_default_name(str(wb_path))
+    assert name.startswith("ECE101_III_A_2025-26")
+
+
 def test_atomic_copy_file_success(tmp_path: Path) -> None:
     src = tmp_path / "src.xlsx"
     dst = tmp_path / "nested" / "dst.xlsx"

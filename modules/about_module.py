@@ -13,13 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from common.constants import (
-    ABOUT_BODY_STYLE,
-    ABOUT_LAYOUT_MARGIN,
-    ABOUT_ICON_SIZE,
-    APP_NAME,
-    SYSTEM_VERSION,
-)
+from common.constants import ABOUT_ICON_SIZE, APP_NAME, SYSTEM_VERSION
 from common.texts import t
 from common.utils import resource_path
 
@@ -29,19 +23,11 @@ class AboutModule(QWidget):
         super().__init__()
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(
-            ABOUT_LAYOUT_MARGIN,
-            ABOUT_LAYOUT_MARGIN,
-            ABOUT_LAYOUT_MARGIN,
-            ABOUT_LAYOUT_MARGIN,
-        )
-        root.setSpacing(18)
 
         # -------------------------------------------------
         # Header Section (Icon + Title Block)
         # -------------------------------------------------
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(20)
 
         icon_label = QLabel()
         icon_label.setFixedSize(ABOUT_ICON_SIZE, ABOUT_ICON_SIZE)
@@ -53,16 +39,12 @@ class AboutModule(QWidget):
         header_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
         title_layout = QVBoxLayout()
-        title_layout.setSpacing(4)
 
         app_name = QLabel(APP_NAME)
-        app_name.setStyleSheet("font-size: 24px; font-weight: 600;")
 
         self.subtitle = QLabel()
-        self.subtitle.setStyleSheet("font-size: 15px;")
 
         self.version_label = QLabel()
-        self.version_label.setStyleSheet("font-size: 12px;")
 
         title_layout.addWidget(app_name)
         title_layout.addWidget(self.subtitle)
@@ -84,18 +66,13 @@ class AboutModule(QWidget):
         # -------------------------------------------------
         self.description = QLabel()
         self.description.setWordWrap(True)
-        self.description.setStyleSheet(ABOUT_BODY_STYLE)
 
         self.institution = QLabel()
-        self.institution.setStyleSheet(ABOUT_BODY_STYLE)
 
         self.copyright_label = QLabel()
-        self.copyright_label.setStyleSheet("font-size: 11px;")
 
         root.addWidget(self.description)
-        root.addSpacing(8)
         root.addWidget(self.institution)
-        root.addSpacing(4)
         root.addWidget(self.copyright_label)
 
         # Push content upward

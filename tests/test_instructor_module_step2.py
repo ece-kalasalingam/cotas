@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any, cast
+
 import pytest
 
 pytest.importorskip("PySide6")
 
 from common.exceptions import ValidationError
 from modules import instructor_module as instructor_ui
+
 
 class _SignalRecorder:
     def __init__(self) -> None:
@@ -15,16 +19,20 @@ class _SignalRecorder:
         self.messages.append(message)
 
 class _DummyModule:
+    @dataclass
+    class _State:
+        busy: bool = False
+
     def __init__(self) -> None:
-        self.step2_path: str | None = None
+        self.marks_template_path: str | None = None
         self.step2_course_details_path: str | None = None
-        self.step2_done = False
+        self.marks_template_done = False
         self.step2_upload_ready = False
-        self.step3_done = False
-        self.step4_done = False
-        self.step3_outdated = False
-        self.step4_outdated = False
-        self.state = type("State", (), {"busy": False})()
+        self.filled_marks_done = False
+        self.final_report_done = False
+        self.filled_marks_outdated = False
+        self.final_report_outdated = False
+        self.state: Any = _DummyModule._State()
         self._active_jobs: list[object] = []
         self._cancel_token = None
         self._workflow_service = None
@@ -46,7 +54,7 @@ class _DummyModule:
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
         if not hasattr(self, "state"):
-            self.state = type("State", (), {"busy": False})()
+            self.state = _DummyModule._State()
         self.state.busy = busy
 
     def _refresh_ui(self) -> None:
@@ -89,12 +97,12 @@ def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda *_args, **_kwargs: validate_calls.__setitem__("count", validate_calls["count"] + 1),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(dummy)
+    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
 
     assert validate_calls["count"] == 0
     assert dummy.step2_upload_ready is False
-    assert dummy.step2_done is False
-    assert dummy.step2_path is None
+    assert dummy.marks_template_done is False
+    assert dummy.marks_template_path is None
     assert dummy.step2_course_details_path is None
     assert dummy.status_changed.messages == []
 
@@ -112,11 +120,11 @@ def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyP
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValidationError("bad workbook")),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(dummy)
+    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
 
     assert dummy._toasts == [("validation", "bad workbook")]
     assert dummy.step2_upload_ready is False
-    assert dummy.step2_done is False
+    assert dummy.marks_template_done is False
     assert dummy.status_changed.messages == []
 
 def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,19 +148,19 @@ def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -
         lambda path, app_name: remembered.append((path, app_name)),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(dummy)
+    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
 
     assert dummy.step2_upload_ready is True
     assert dummy.step2_course_details_path == "D:/tmp/course_details.xlsx"
-    assert dummy.step2_done is False
-    assert dummy.step2_path is None
+    assert dummy.marks_template_done is False
+    assert dummy.marks_template_path is None
     assert remembered == [("D:/tmp/course_details.xlsx", instructor_ui.APP_NAME)]
-    assert dummy.status_changed.messages == ["instructor.status.step2_validated"]
+    assert dummy.status_changed.messages == ["instructor.status.step1_validated"]
 
 def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
-    dummy.state = type("State", (), {"busy": False})()
+    dummy.state = _DummyModule._State()
     dummy._active_jobs = []
     dummy._cancel_token = None
     dummy._workflow_service = None
@@ -181,13 +189,13 @@ def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
 
-    instructor_ui.InstructorModule._upload_course_details_async(dummy)
+    instructor_ui.InstructorModule._upload_course_details_async(cast(Any, dummy))
 
     assert dummy.step2_upload_ready is True
     assert dummy.step2_course_details_path == "D:/tmp/course_details_async.xlsx"
-    assert dummy.step2_done is False
-    assert dummy.step2_path is None
+    assert dummy.marks_template_done is False
+    assert dummy.marks_template_path is None
     assert dummy.state.busy is False
-    assert dummy.status_changed.messages == ["instructor.status.step2_validated"]
+    assert dummy.status_changed.messages == ["instructor.status.step1_validated"]
 
 

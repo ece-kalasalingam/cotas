@@ -8,6 +8,7 @@ import platform
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from types import TracebackType
 from uuid import uuid4
 
 from common.constants import APP_NAME, SYSTEM_VERSION
@@ -17,7 +18,11 @@ CRASH_REPORT_ENDPOINT_ENV_VAR = "FOCUS_CRASH_REPORT_ENDPOINT"
 CRASH_REPORTS_DIR_NAME = "crash_reports"
 
 
-def capture_unhandled_exception(exc_type: object, exc_value: object, exc_traceback: object) -> Path | None:
+def capture_unhandled_exception(
+    exc_type: type[BaseException] | None,
+    exc_value: BaseException | None,
+    exc_traceback: TracebackType | None,
+) -> Path | None:
     """Persist unhandled exceptions into a local crash spool."""
     try:
         reports_dir = _crash_reports_dir()
