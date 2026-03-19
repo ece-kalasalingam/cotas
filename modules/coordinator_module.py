@@ -375,7 +375,7 @@ class CoordinatorModule(QWidget):
         self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
         right_layout.addWidget(self.drop_widget, 1)
 
-        # Aliases retained for compatibility with helper modules/tests.
+        # Shortcut aliases for direct access in module helpers/tests.
         self.drop_zone = self.drop_widget.drop_zone
         self.drop_list = self.drop_widget.drop_list
         self.clear_button = self.drop_widget.clear_button

@@ -16,6 +16,10 @@ Developed at Kalasalingam Academy of Research and Education (KARE).
 - `Help`: packaged PDF guidance, export/open actions.
 - `About`: version/build metadata and app identity panel.
 
+## Shared Core
+- `common/async_operation_runner.py`: shared async workflow lifecycle core used by both Instructor and Coordinator modules.
+- `common/module_messages.py`: shared status publishing and i18n log-rendering core used by both modules.
+
 ## Instructor Workflow (Current)
 - `Step 1`: Generate and validate course details, then generate marks templates.
 - `Step 2`: Upload/validate filled marks and generate final CO reports.

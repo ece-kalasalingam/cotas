@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import logging
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import cast
 
@@ -36,6 +35,8 @@ from common.constants import (
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
+from common.module_messages import append_user_log as _append_user_log_impl
+from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -144,6 +145,18 @@ def _output_link_namespace() -> InstructorOutputNamespace:
         "url_from_local_file": QUrl.fromLocalFile,
         "open_url": QDesktopServices.openUrl,
         "show_toast": show_toast,
+    }
+
+
+def _messages_namespace() -> dict[str, object]:
+    return {
+        "emit_user_status": emit_user_status,
+        "t": t,
+        "build_i18n_log_message": build_i18n_log_message,
+        "parse_i18n_log_message": parse_i18n_log_message,
+        "resolve_i18n_log_message": resolve_i18n_log_message,
+        "format_log_line_at": format_log_line_at,
+        "UILogHandler": UILogHandler,
     }
 
 
@@ -276,6 +289,7 @@ class InstructorModule(QWidget):
 
         self.state = InstructorWorkflowState()
         self._workflow_service = InstructorWorkflowService()
+        self._logger = _logger
         self._cancel_token: CancellationToken | None = None
         self._active_jobs: list[object] = []
         self._is_closing = False
@@ -351,7 +365,7 @@ class InstructorModule(QWidget):
         self.primary_action.clicked.connect(self._run_current_step_action)
         right_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        # Kept for shortcut/test compatibility; the visible upload control is the drop widget.
+        # Hidden upload action used by keyboard shortcuts and test harness hooks.
         self.step1_upload_action = QPushButton()
         self.step1_upload_action.setObjectName("secondaryAction")
         self.step1_upload_action.setDefault(True)
@@ -365,7 +379,7 @@ class InstructorModule(QWidget):
             open_folder_tooltip=t("instructor.links.open_folder"),
             remove_tooltip=t("coordinator.file.remove_tooltip"),
         )
-        # Aliases retained for compatibility with existing logic/tests.
+        # Shortcut aliases for direct access in module handlers/tests.
         self.step1_drop_zone = self.step1_drop_widget.drop_zone
         self.step1_drop_list = self.step1_drop_widget.drop_list
         self.step1_drop_widget.files_dropped.connect(self._on_step1_course_details_dropped)
@@ -392,7 +406,7 @@ class InstructorModule(QWidget):
         self.step2_action_row = QWidget()
         step2_action_layout = QHBoxLayout(self.step2_action_row)
 
-        # Kept for shortcut/test compatibility; the visible upload control is the drop widget.
+        # Hidden upload action used by keyboard shortcuts and test harness hooks.
         self.step2_upload_action = QPushButton()
         self.step2_upload_action.setObjectName("secondaryAction")
         self.step2_upload_action.setDefault(True)
@@ -834,7 +848,7 @@ class InstructorModule(QWidget):
         if self._ui_log_handler is not None:
             return
         self._ui_log_handler = UILogHandler(self._append_user_log)
-        _logger.addHandler(self._ui_log_handler)
+        self._logger.addHandler(self._ui_log_handler)
         self._append_user_log(
             build_i18n_log_message(
                 "instructor.log.ready",
@@ -843,52 +857,14 @@ class InstructorModule(QWidget):
         )
 
     def _append_user_log(self, message: str) -> None:
-        parsed = parse_i18n_log_message(message)
-        localized = resolve_i18n_log_message(message)
-        timestamp = datetime.now()
-        if parsed is None:
-            self._user_log_entries.append({"timestamp": timestamp, "message": localized})
-        else:
-            key, kwargs, fallback = parsed
-            self._user_log_entries.append(
-                {
-                    "timestamp": timestamp,
-                    "message": localized,
-                    "text_key": key,
-                    "kwargs": kwargs,
-                    "fallback": fallback,
-                }
-            )
-        line = format_log_line_at(localized, timestamp=timestamp)
-        if line is None:
-            return
-        self.user_log_view.appendPlainText(line)
+        _append_user_log_impl(self, message, ns=_messages_namespace())
 
     def _publish_status(self, message: str) -> None:
         self._append_user_log(message)
-        emit_user_status(getattr(self, "status_changed", None), message, logger=_logger)
+        emit_user_status(getattr(self, "status_changed", None), message, logger=self._logger)
 
     def _rerender_user_log(self) -> None:
-        self.user_log_view.clear()
-        for entry in self._user_log_entries:
-            timestamp = entry.get("timestamp")
-            text_key = entry.get("text_key")
-            fallback = entry.get("fallback")
-            kwargs = entry.get("kwargs")
-            message = entry.get("message")
-            if isinstance(text_key, str):
-                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
-                try:
-                    resolved = t(text_key, **safe_kwargs)
-                except Exception:
-                    resolved = fallback if isinstance(fallback, str) else str(message or "")
-            else:
-                resolved = str(message or "")
-            ts = timestamp if isinstance(timestamp, datetime) else None
-            line = format_log_line_at(resolved, timestamp=ts)
-            if line is None:
-                continue
-            self.user_log_view.appendPlainText(line)
+        _rerender_user_log_impl(self, ns=_messages_namespace())
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
@@ -922,7 +898,7 @@ class InstructorModule(QWidget):
             self._cancel_token = None
         self._active_jobs.clear()
         if self._ui_log_handler is not None:
-            _logger.removeHandler(self._ui_log_handler)
+            self._logger.removeHandler(self._ui_log_handler)
             self._ui_log_handler = None
         super().closeEvent(event)
 
