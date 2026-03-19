@@ -18,6 +18,12 @@
 3. Reproduce with same workbook in staging.
 4. Determine whether issue is validation, system, timeout, or corruption.
 
+## Module Routing
+1. `Instructor`: template generation/validation/final report issues.
+2. `Coordinator`: multi-file intake and attainment output issues.
+3. `Help`: PDF load/save/open issues.
+4. `About`: metadata/version rendering issues.
+
 ## Communication
 1. Acknowledge incident with severity and ETA.
 2. Update status every 30 minutes for `SEV-1/2`.

@@ -23,14 +23,22 @@ Initial triage target: 7 business days.
   workbook secret is auto-provisioned and stored per machine/user.
 - Signature versioning:
   `FOCUS_WORKBOOK_SIGNATURE_VERSION` controls active signature format version.
+  Legacy unsigned-signature compatibility paths are not accepted in the current release.
 - CI quality gate:
-  lint, UI string policy check, and tests.
+  lint, type check, UI string policy check, and tests.
 - CI dependency audit:
   `pip-audit` runs on each pull request and push.
 - CI SAST gate:
   `bandit` runs on each pull request and push.
 - Cross-platform CI matrix:
   Windows, macOS, and Linux.
+
+## Module Security Scope
+
+- `Instructor`: workbook validation/signature checks and controlled output writes.
+- `Coordinator`: signed workbook intake paths and aggregation integrity checks.
+- `Help`: local asset/PDF handling and controlled file-save/open behavior.
+- `About`: static metadata presentation (no privileged data flow).
 
 ## Operational Requirements
 

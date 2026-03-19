@@ -5,6 +5,7 @@
 - Service: `services/instructor_workflow_service.py`
 - Engine facade: `domain/instructor_engine.py`
 - Template/report engines: `domain/instructor_template_engine.py`, `domain/instructor_report_engine.py`
+- Workflow model: Instructor UI uses `Step 1` and `Step 2` only.
 
 ## Operational SLO Baseline
 - UI responsiveness: workflow actions must run in background and must not block the Qt event loop.
@@ -63,11 +64,17 @@
 
 ## Release Gate
 - Required:
-  1. `conda run -n obe python -m pyflakes .`
-  2. `conda run -n obe python -m pytest -q`
-  3. `conda run -n obe python scripts/check_ui_strings.py`
-  4. `conda run -n obe python -m bandit -q -c .bandit.yaml -r common -r modules -r services`
-  5. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
+  1. `conda run -n obe python -m ruff check .`
+  2. `conda run -n obe python -m isort --check-only --diff .`
+  3. `conda run -n obe python -m pyflakes .`
+  4. `conda run -n obe python -m pyright`
+  5. `conda run -n obe python scripts/check_ui_strings.py`
+  6. `conda run --no-capture-output -n obe python -m pytest -q`
+  7. `conda run -n obe python -m coverage run -m pytest -q`
+  8. `conda run -n obe python -m coverage report -m`
+  9. `conda run -n obe python -m bandit -q -c .bandit.yaml -r .`
+  10. `conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache -r requirements.txt -r requirements-dev.txt`
+  11. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
 
 ## Timeout and Crash Pipeline
 - Workflow step timeout env:

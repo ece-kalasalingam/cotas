@@ -86,7 +86,7 @@ def main() -> int:
                 )
             )
 
-            ctx4 = service.create_job_context(step_id="step3", payload={"i": index})
+            ctx4 = service.create_job_context(step_id="step2", payload={"i": index})
             timings["generate_final_report"].append(
                 _time_call(
                     lambda: service.generate_final_report(

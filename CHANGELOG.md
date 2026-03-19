@@ -24,4 +24,9 @@ All notable changes to this project are documented in this file.
 
 ### Quality
 - `pyright`: `0 errors, 0 warnings`
-- `pytest -q`: `364 passed`
+- `pytest -q`: `474 passed`
+- `ruff check .`: `passed`
+- `isort --check-only --diff .`: `passed`
+- `pyflakes .`: `passed`
+- `bandit -q -r . -c .bandit.yaml`: `passed`
+- `pip-audit`: `No known vulnerabilities found`
