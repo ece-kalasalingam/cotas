@@ -9,8 +9,8 @@ from common.constants import (
     WORKFLOW_PAYLOAD_KEY_OUTPUT,
     WORKFLOW_PAYLOAD_KEY_SOURCE,
 )
-from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken, generate_job_id
+from modules.coordinator.steps.shared_execution import handle_step_failure
 
 
 class _ModuleState(Protocol):
@@ -87,6 +87,7 @@ class _CalculateNamespace(TypedDict):
     build_i18n_log_message: Callable[..., str]
     show_toast: Callable[..., None]
     _generate_co_attainment_workbook: Callable[..., Path | _CoAttainmentWorkbookResult]
+    JobCancelledError: type[Exception]
 
 
 def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -198,41 +199,13 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
             )
 
     def _on_failed(exc: Exception) -> None:
-        if isinstance(exc, JobCancelledError):
-            typed_module._publish_status_key("coordinator.status.operation_cancelled")
-            typed_module._logger.info(
-                "%s cancelled by user/system request.",
-                process_name,
-                extra={
-                    "user_message": typed_ns["build_i18n_log_message"](
-                        "coordinator.status.operation_cancelled",
-                        fallback=t("coordinator.status.operation_cancelled"),
-                    ),
-                    "job_id": job_context.job_id if job_context else job_id,
-                    "step_id": (
-                        job_context.step_id
-                        if job_context
-                        else COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT
-                    ),
-                },
-            )
-            return
-        typed_ns["log_process_message"](
-            process_name,
-            logger=typed_module._logger,
-            error=exc,
-            user_error_message=typed_ns["build_i18n_log_message"](
-                "coordinator.status.processing_failed",
-                fallback=t("coordinator.status.processing_failed"),
-            ),
+        handle_step_failure(
+            exc=exc,
+            ns=typed_ns,
+            module=typed_module,
+            process_name=process_name,
             job_id=job_context.job_id if job_context else job_id,
             step_id=job_context.step_id if job_context else COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
-        )
-        typed_ns["show_toast"](
-            typed_module,
-            t("coordinator.status.processing_failed"),
-            title=t("coordinator.title"),
-            level="error",
         )
 
     typed_module._start_async_operation(

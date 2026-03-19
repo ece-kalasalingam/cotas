@@ -44,6 +44,7 @@ from common.drag_drop_file_widget import (
     DragDropZoneFrame,
     ManagedDropFileWidget,
 )
+from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
@@ -86,6 +87,7 @@ from common.utils import (
     resolve_dialog_start_path,
 )
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
+from modules.coordinator.messages import show_threshold_validation_toast
 from modules.coordinator.output_links import (
     on_output_link_activated as _on_output_link_activated_impl,
 )
@@ -105,6 +107,7 @@ from modules.coordinator.steps.collect_files import (
 from modules.coordinator.steps.collect_files import (
     process_files_async,
 )
+from modules.coordinator.workflow_controller import CoordinatorWorkflowController
 from services import CoordinatorWorkflowService
 
 from .coordinator_processing import (
@@ -135,6 +138,7 @@ _COORDINATOR_NS_EXPORTS = (
     emit_user_status,
     log_process_message,
     remember_dialog_dir,
+    JobCancelledError,
     _CoAttainmentWorkbookResult,
     _analyze_dropped_files,
     _build_co_attainment_default_name,
@@ -261,6 +265,7 @@ class CoordinatorModule(QWidget):
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
+        self._workflow_controller = CoordinatorWorkflowController(self)
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._runtime = ModuleRuntime(
             module=self,
@@ -482,15 +487,10 @@ class CoordinatorModule(QWidget):
         self._refresh_summary()
 
     def _read_attainment_thresholds(self) -> tuple[float, float, float]:
-        return (
-            float(self.threshold_l1_input.value()),
-            float(self.threshold_l2_input.value()),
-            float(self.threshold_l3_input.value()),
-        )
+        return self._workflow_controller.read_attainment_thresholds()
 
     def _has_valid_attainment_thresholds(self) -> bool:
-        l1, l2, l3 = self._read_attainment_thresholds()
-        return 0.0 < l1 < l2 < l3 < 100.0
+        return self._workflow_controller.has_valid_attainment_thresholds()
 
     def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
         thresholds = self._read_attainment_thresholds()
@@ -500,22 +500,19 @@ class CoordinatorModule(QWidget):
         return thresholds
 
     def _notify_threshold_violation(self, *, force: bool) -> None:
-        if self._threshold_violation_active and not force:
-            return
-        show_toast(
+        self._workflow_controller.notify_threshold_violation(force=force)
+
+    def _show_threshold_validation_toast(self) -> None:
+        show_threshold_validation_toast(
             self,
-            t(self._THRESHOLD_VALIDATION_KEY),
-            title=t("coordinator.title"),
-            level="error",
+            message_key=self._THRESHOLD_VALIDATION_KEY,
+            title_key="coordinator.title",
+            toast_fn=show_toast,
+            translate=t,
         )
-        self._publish_status_key(self._THRESHOLD_VALIDATION_KEY)
-        self._threshold_violation_active = True
 
     def _on_threshold_value_changed(self, _value: float) -> None:
-        if self._has_valid_attainment_thresholds():
-            self._threshold_violation_active = False
-        else:
-            self._notify_threshold_violation(force=False)
+        self._workflow_controller.on_threshold_value_changed()
         self._refresh_ui()
 
     def _on_calculate_clicked(self) -> None:
