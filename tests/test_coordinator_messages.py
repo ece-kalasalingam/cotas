@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from modules.coordinator import messages
+from common import module_messages as messages
 
 
 class _View:

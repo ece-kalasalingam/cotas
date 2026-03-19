@@ -105,20 +105,15 @@ def test_run_current_step_action_dispatch(monkeypatch: pytest.MonkeyPatch, qapp:
 
 def test_remember_dialog_dir_safe_fallback(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    calls = {"primary": 0, "fallback": 0}
-
-    def _primary(*_args, **_kwargs):
-        calls["primary"] += 1
-        raise OSError("x")
+    calls = {"fallback": 0}
 
     def _fallback(*_args, **_kwargs):
         calls["fallback"] += 1
 
-    monkeypatch.setattr(instructor_ui, "remember_dialog_dir", _primary)
     monkeypatch.setattr(instructor_ui, "remember_dialog_dir_safe", _fallback)
 
     module._remember_dialog_dir_safe("C:/tmp/a.xlsx")
-    assert calls == {"primary": 1, "fallback": 1}
+    assert calls == {"fallback": 1}
     module.close()
 
 

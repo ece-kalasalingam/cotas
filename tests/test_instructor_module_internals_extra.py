@@ -106,10 +106,11 @@ def test_user_log_append_publish_and_rerender_branches(monkeypatch: pytest.Monke
     assert module._user_log_entries[-1]["text_key"] == "k"
 
     emitted: list[str] = []
-    monkeypatch.setattr(module, "_append_user_log", lambda message: emitted.append(f"append:{message}"))
     monkeypatch.setattr(instructor_ui, "emit_user_status", lambda _sig, msg, logger=None: emitted.append(f"emit:{msg}"))
+    before_count = len(module._user_log_entries)
     module._publish_status("status-1")
-    assert emitted == ["append:status-1", "emit:status-1"]
+    assert emitted == ["emit:status-1"]
+    assert len(module._user_log_entries) == before_count + 1
 
     module._user_log_entries = [
         {
@@ -220,7 +221,7 @@ def test_setup_ui_logging_and_step_toast_wrappers(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(instructor_ui, "t", lambda key, **kwargs: key)
     module = instructor_ui.InstructorModule()
 
-    seen = {"handler": 0, "append": []}
+    seen = {"handler": 0}
 
     class _Handler:
         def __init__(self, callback):
@@ -228,12 +229,16 @@ def test_setup_ui_logging_and_step_toast_wrappers(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(instructor_ui, "UILogHandler", _Handler)
     monkeypatch.setattr(instructor_ui._logger, "addHandler", lambda _h: seen.__setitem__("handler", seen["handler"] + 1))
-    monkeypatch.setattr(module, "_append_user_log", lambda message: seen["append"].append(message))
     monkeypatch.setattr(instructor_ui, "build_i18n_log_message", lambda key, fallback="": f"I18N:{key}:{fallback}")
+    monkeypatch.setattr(instructor_ui, "resolve_i18n_log_message", lambda m: m)
+    monkeypatch.setattr(instructor_ui, "parse_i18n_log_message", lambda _m: None)
+    monkeypatch.setattr(instructor_ui, "format_log_line_at", lambda message, timestamp=None: message)
 
     original_setup(module)
     assert seen["handler"] == 1
-    assert seen["append"] and seen["append"][0].startswith("I18N:instructor.log.ready")
+    assert module._user_log_entries and str(module._user_log_entries[0].get("message", "")).startswith(
+        "I18N:instructor.log.ready"
+    )
     # Early-return branch when handler already initialized.
     original_setup(module)
     assert seen["handler"] == 1

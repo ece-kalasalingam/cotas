@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Callable, cast
 
+from common.async_operation_runner import AsyncOperationRunner
 from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken
-from modules.coordinator.async_runner import AsyncOperationRunner
 
 
 class _Target:

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
     ID_COURSE_SETUP,
@@ -36,7 +37,9 @@ from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.module_messages import append_user_log as _append_user_log_impl
+from common.module_messages import publish_status as _publish_status_impl
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
+from common.module_messages import setup_ui_logging as _setup_ui_logging_impl
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -61,7 +64,6 @@ from modules.instructor import (
     generate_marks_template_from_course_details,
     validate_course_details_workbook,
 )
-from modules.instructor.async_runner import AsyncOperationRunner
 from modules.instructor.messages import (
     localized_log_messages,
     show_step_success_toast,
@@ -129,6 +131,7 @@ _STEP_RUNTIME_GLOBALS = (
     JobCancelledError,
     ValidationError,
     log_process_message,
+    remember_dialog_dir,
     resolve_dialog_start_path,
     generate_course_details_template,
     generate_marks_template_from_course_details,
@@ -295,7 +298,12 @@ class InstructorModule(QWidget):
         self._is_closing = False
         self._step2_marks_default_name = t("instructor.dialog.step1.prepare.default_name")
         self._workflow_controller = InstructorWorkflowController(self)
-        self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
+        self._async_runner = AsyncOperationRunner(
+            self,
+            run_async=run_in_background,
+            refresh_ui=lambda: self._refresh_ui(),
+            should_refresh_ui=lambda: not self._is_closing,
+        )
 
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
@@ -835,33 +843,20 @@ class InstructorModule(QWidget):
             self._on_step2_generate_clicked()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
-        try:
-            remember_dialog_dir(selected_path, app_name=APP_NAME)
-        except OSError:
-            remember_dialog_dir_safe(
-                selected_path,
-                app_name=APP_NAME,
-                logger=_logger,
-            )
+        remember_dialog_dir_safe(
+            selected_path,
+            app_name=APP_NAME,
+            logger=self._logger,
+        )
 
     def _setup_ui_logging(self) -> None:
-        if self._ui_log_handler is not None:
-            return
-        self._ui_log_handler = UILogHandler(self._append_user_log)
-        self._logger.addHandler(self._ui_log_handler)
-        self._append_user_log(
-            build_i18n_log_message(
-                "instructor.log.ready",
-                fallback=t("instructor.log.ready"),
-            )
-        )
+        _setup_ui_logging_impl(self, ns=_messages_namespace())
 
     def _append_user_log(self, message: str) -> None:
         _append_user_log_impl(self, message, ns=_messages_namespace())
 
     def _publish_status(self, message: str) -> None:
-        self._append_user_log(message)
-        emit_user_status(getattr(self, "status_changed", None), message, logger=self._logger)
+        _publish_status_impl(self, message, ns=_messages_namespace())
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())

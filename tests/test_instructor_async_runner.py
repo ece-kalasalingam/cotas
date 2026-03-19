@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Callable, cast
 
+from common.async_operation_runner import AsyncOperationRunner
 from common.jobs import CancellationToken
-from modules.instructor import async_runner as ir
 
 
 class _RunnerTarget:
@@ -31,7 +31,12 @@ def test_async_operation_runner_success_finalizes_even_if_success_handler_raises
         callbacks["on_failed"] = on_failed
         return object()
 
-    runner = ir.AsyncOperationRunner(target, run_async=_run_async)
+    runner = AsyncOperationRunner(
+        target,
+        run_async=_run_async,
+        refresh_ui=lambda: target._refresh_ui(),
+        should_refresh_ui=lambda: not target._is_closing,
+    )
     runner.start(
         token=CancellationToken(),
         job_id="j3",
@@ -64,7 +69,12 @@ def test_async_operation_runner_failure_does_not_refresh_while_closing() -> None
         callbacks["on_failed"] = on_failed
         return object()
 
-    runner = ir.AsyncOperationRunner(target, run_async=_run_async)
+    runner = AsyncOperationRunner(
+        target,
+        run_async=_run_async,
+        refresh_ui=lambda: target._refresh_ui(),
+        should_refresh_ui=lambda: not target._is_closing,
+    )
     runner.start(
         token=CancellationToken(),
         job_id="j4",

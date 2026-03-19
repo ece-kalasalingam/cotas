@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
     LEVEL_1_THRESHOLD,
@@ -44,6 +45,11 @@ from common.drag_drop_file_widget import (
     ManagedDropFileWidget,
 )
 from common.jobs import CancellationToken
+from common.module_messages import append_user_log as _append_user_log_impl
+from common.module_messages import publish_status as _publish_status_impl
+from common.module_messages import publish_status_key as _publish_status_key_impl
+from common.module_messages import rerender_user_log as _rerender_user_log_impl
+from common.module_messages import setup_ui_logging as _setup_ui_logging_impl
 from common.qt_jobs import run_in_background
 from common.removable_file_item_widget import (
     ElidedFileNameLabel as _SharedElidedFileNameLabel,
@@ -83,13 +89,7 @@ from common.utils import (
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
-from modules.coordinator.async_runner import AsyncOperationRunner
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
-from modules.coordinator.messages import append_user_log as _append_user_log_impl
-from modules.coordinator.messages import publish_status as _publish_status_impl
-from modules.coordinator.messages import publish_status_key as _publish_status_key_impl
-from modules.coordinator.messages import rerender_user_log as _rerender_user_log_impl
-from modules.coordinator.messages import setup_ui_logging as _setup_ui_logging_impl
 from modules.coordinator.output_links import (
     on_output_link_activated as _on_output_link_activated_impl,
 )
@@ -138,6 +138,7 @@ _COORDINATOR_NS_EXPORTS = (
     resolve_i18n_log_message,
     emit_user_status,
     log_process_message,
+    remember_dialog_dir,
     _CoAttainmentWorkbookResult,
     _analyze_dropped_files,
     _build_co_attainment_default_name,
@@ -577,14 +578,11 @@ class CoordinatorModule(QWidget):
             self._process_files_async(selected_files)
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
-        try:
-            remember_dialog_dir(selected_path, app_name=APP_NAME)
-        except OSError:
-            remember_dialog_dir_safe(
-                selected_path,
-                app_name=APP_NAME,
-                logger=self._logger,
-            )
+        remember_dialog_dir_safe(
+            selected_path,
+            app_name=APP_NAME,
+            logger=self._logger,
+        )
 
     def _setup_ui_logging(self) -> None:
         _setup_ui_logging_impl(self, ns=_messages_namespace())
