@@ -53,6 +53,27 @@ class _DummyModule:
             self.state = _DummyModule._State()
         self.state.busy = busy
 
+    def _publish_status(self, message: str) -> None:
+        instructor_ui.emit_user_status(self.status_changed, message, logger=None)
+
+    def _start_async_operation(self, *, token, job_id, work, on_success, on_failure) -> None:
+        self._cancel_token = token
+        self._set_busy(True, job_id=job_id)
+
+        def _on_finished(result):
+            on_success(result)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        def _on_failed(exc):
+            on_failure(exc)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        instructor_ui.run_in_background(work, on_finished=_on_finished, on_failed=_on_failed)
+
     def _refresh_ui(self) -> None:
         return
 
@@ -80,7 +101,7 @@ def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
     return object()
 
 
-def test_step3_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
 
@@ -95,14 +116,14 @@ def test_step3_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda *_args, **_kwargs: None,
     )
 
-    instructor_ui.InstructorModule._upload_filled_marks(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_filled_marks_async(cast(Any, dummy))
 
     assert dummy.filled_marks_done is False
     assert dummy.filled_marks_path is None
     assert dummy.status_changed.messages == []
 
 
-def test_step3_upload_success_allowed_without_step2(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_upload_success_allowed_without_step2(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
     remembered: list[tuple[str, str]] = []
@@ -123,7 +144,7 @@ def test_step3_upload_success_allowed_without_step2(monkeypatch: pytest.MonkeyPa
         lambda *_args, **_kwargs: None,
     )
 
-    instructor_ui.InstructorModule._upload_filled_marks(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_filled_marks_async(cast(Any, dummy))
 
     assert dummy.marks_template_done is False
     assert dummy.filled_marks_done is True
@@ -134,7 +155,7 @@ def test_step3_upload_success_allowed_without_step2(monkeypatch: pytest.MonkeyPa
     assert dummy.status_changed.messages == ["instructor.status.step2_uploaded_filled"]
 
 
-def test_step3_replace_marks_flags_step4_outdated(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_replace_marks_flags_step2_outdated(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
     dummy.filled_marks_done = True
@@ -152,7 +173,7 @@ def test_step3_replace_marks_flags_step4_outdated(monkeypatch: pytest.MonkeyPatc
         lambda *_args, **_kwargs: None,
     )
 
-    instructor_ui.InstructorModule._upload_filled_marks(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_filled_marks_async(cast(Any, dummy))
 
     assert dummy.filled_marks_done is True
     assert dummy.filled_marks_outdated is False
@@ -161,7 +182,7 @@ def test_step3_replace_marks_flags_step4_outdated(monkeypatch: pytest.MonkeyPatc
     assert dummy.status_changed.messages == ["instructor.status.step2_changed_filled"]
 
 
-def test_step3_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
     dummy = _DummyModule()
     dummy.state = _DummyModule._State()
@@ -200,3 +221,4 @@ def test_step3_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyP
     assert dummy.filled_marks_outdated is False
     assert dummy.state.busy is False
     assert dummy.status_changed.messages == ["instructor.status.step2_uploaded_filled"]
+

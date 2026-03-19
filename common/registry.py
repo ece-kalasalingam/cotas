@@ -17,7 +17,6 @@ from common.constants import (
 )
 from common.sheet_schema import SheetSchema, ValidationRule, WorkbookBlueprint
 
-
 SETUP_STYLE_REGISTRY = {
     "header": {
         "bold": True,

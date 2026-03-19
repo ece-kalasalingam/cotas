@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import pytest
 
-
 WINDOWS_ACL_COMPAT_MARK = "windows_acl_compat"
 WINDOWS_ACL_COMPAT_ENV = "FOCUS_TEST_ENABLE_WINDOWS_ACL_COMPAT"
 

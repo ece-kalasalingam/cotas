@@ -44,7 +44,7 @@ def _sheet_rows_from_manifest(workbook: Any, sheet_name: str) -> tuple[int, int]
     raise AssertionError(f"Sheet spec not found for {sheet_name}")
 
 
-def test_step3_validation_accepts_generated_marks_template(tmp_path: Path) -> None:
+def test_step2_validation_accepts_generated_marks_template(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
@@ -90,7 +90,7 @@ def _fill_all_mark_entries(workbook_path: Path) -> None:
         workbook.close()
 
 
-def test_step3_validation_rejects_missing_layout_sheet(tmp_path: Path) -> None:
+def test_step2_validation_rejects_missing_layout_sheet(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -103,7 +103,7 @@ def test_step3_validation_rejects_missing_layout_sheet(tmp_path: Path) -> None:
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_layout_manifest_hash_tampering(tmp_path: Path) -> None:
+def test_step2_validation_rejects_layout_manifest_hash_tampering(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -116,7 +116,7 @@ def test_step3_validation_rejects_layout_manifest_hash_tampering(tmp_path: Path)
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_dynamic_header_tampering(tmp_path: Path) -> None:
+def test_step2_validation_rejects_dynamic_header_tampering(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -130,7 +130,7 @@ def test_step3_validation_rejects_dynamic_header_tampering(tmp_path: Path) -> No
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_empty_mark_entry_cell(tmp_path: Path) -> None:
+def test_step2_validation_rejects_empty_mark_entry_cell(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -144,7 +144,7 @@ def test_step3_validation_rejects_empty_mark_entry_cell(tmp_path: Path) -> None:
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_student_identity_tampering(tmp_path: Path) -> None:
+def test_step2_validation_rejects_student_identity_tampering(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -158,7 +158,7 @@ def test_step3_validation_rejects_student_identity_tampering(tmp_path: Path) -> 
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_mark_value_above_maximum(tmp_path: Path) -> None:
+def test_step2_validation_rejects_mark_value_above_maximum(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -172,7 +172,7 @@ def test_step3_validation_rejects_mark_value_above_maximum(tmp_path: Path) -> No
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_non_numeric_non_a_mark_value(tmp_path: Path) -> None:
+def test_step2_validation_rejects_non_numeric_non_a_mark_value(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -186,7 +186,7 @@ def test_step3_validation_rejects_non_numeric_non_a_mark_value(tmp_path: Path) -
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_mixed_absence_and_numeric_in_row(tmp_path: Path) -> None:
+def test_step2_validation_rejects_mixed_absence_and_numeric_in_row(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -201,7 +201,7 @@ def test_step3_validation_rejects_mixed_absence_and_numeric_in_row(tmp_path: Pat
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_excess_decimal_precision(tmp_path: Path) -> None:
+def test_step2_validation_rejects_excess_decimal_precision(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -215,7 +215,7 @@ def test_step3_validation_rejects_excess_decimal_precision(tmp_path: Path) -> No
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_indirect_non_integer_value(tmp_path: Path) -> None:
+def test_step2_validation_rejects_indirect_non_integer_value(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -229,7 +229,7 @@ def test_step3_validation_rejects_indirect_non_integer_value(tmp_path: Path) -> 
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_total_formula_tampering_on_later_rows(tmp_path: Path) -> None:
+def test_step2_validation_rejects_total_formula_tampering_on_later_rows(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -250,7 +250,7 @@ def test_step3_validation_rejects_total_formula_tampering_on_later_rows(tmp_path
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_structure_snapshot_tampering(tmp_path: Path) -> None:
+def test_step2_validation_rejects_structure_snapshot_tampering(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -264,7 +264,7 @@ def test_step3_validation_rejects_structure_snapshot_tampering(tmp_path: Path) -
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
 
 
-def test_step3_validation_rejects_unsupported_template_id(tmp_path: Path) -> None:
+def test_step2_validation_rejects_unsupported_template_id(tmp_path: Path) -> None:
     workbook_path = _build_filled_marks_template(tmp_path)
     workbook = openpyxl.load_workbook(workbook_path)
     try:
@@ -276,3 +276,4 @@ def test_step3_validation_rejects_unsupported_template_id(tmp_path: Path) -> Non
 
     with pytest.raises(ValidationError, match="Unknown workbook template"):
         instructor_ui._validate_uploaded_filled_marks_workbook(workbook_path)
+

@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -132,7 +132,7 @@ def test_managed_drop_widget_applies_tooltips_to_row_actions(qapp: QApplication)
     )
     widget.add_files(["C:/a.xlsx"])
     item = widget.drop_list.item(0)
-    row = widget.drop_list.itemWidget(item)
+    row = cast(Any, widget.drop_list.itemWidget(item))
     assert row.open_file_btn.toolTip() == "Open File"
     assert row.open_folder_btn.toolTip() == "Open Folder"
     assert row.remove_btn.toolTip() == "Remove File"

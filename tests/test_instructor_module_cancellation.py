@@ -60,6 +60,27 @@ class _DummyModule:
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:  # noqa: ARG002
         self.state.busy = busy
 
+    def _publish_status(self, message: str) -> None:
+        instructor_ui.emit_user_status(self.status_changed, message, logger=None)
+
+    def _start_async_operation(self, *, token, job_id, work, on_success, on_failure) -> None:
+        self._cancel_token = token
+        self._set_busy(True, job_id=job_id)
+
+        def _on_finished(result):
+            on_success(result)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        def _on_failed(exc):
+            on_failure(exc)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        instructor_ui.run_in_background(work, on_finished=_on_finished, on_failed=_on_failed)
+
     def _refresh_ui(self) -> None:
         return
 
@@ -87,7 +108,7 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
 
 
-def test_step2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_row2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common(monkeypatch)
     dummy = _DummyModule()
     monkeypatch.setattr(
@@ -109,7 +130,7 @@ def test_step2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyP
     assert dummy._toasts == []
 
 
-def test_step3_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common(monkeypatch)
     dummy = _DummyModule()
     monkeypatch.setattr(
@@ -129,3 +150,4 @@ def test_step3_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyP
     assert dummy.filled_marks_path is None
     assert dummy.status_changed.messages == ["instructor.status.operation_cancelled"]
     assert dummy._toasts == []
+

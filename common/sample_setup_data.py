@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from typing import Any
+
 from common.constants import (
     ASSESSMENT_CONFIG_SHEET,
     COURSE_METADATA_SHEET,
     QUESTION_MAP_SHEET,
     STUDENTS_SHEET,
 )
-
 
 SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
     COURSE_METADATA_SHEET: [

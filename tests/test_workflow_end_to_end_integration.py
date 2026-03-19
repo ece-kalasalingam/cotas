@@ -117,11 +117,11 @@ def _build_final_report(
     )
 
     _fill_marks_workbook(marks_template, mark_value=1.0)
-    context_step3 = instructor.create_job_context(step_id=f"step3_{section}")
+    context_step2 = instructor.create_job_context(step_id=f"step2_{section}")
     instructor.generate_final_report(
         marks_template,
         final_report,
-        context=context_step3,
+        context=context_step2,
         cancel_token=CancellationToken(),
     )
     return final_report
@@ -173,3 +173,4 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
         assert isinstance(ws["B8"].value, str)
     finally:
         wb.close()
+

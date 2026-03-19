@@ -36,7 +36,7 @@ def build_marks_template_default_name(course_details_path: str | None) -> str:
     return _build_workbook_default_name_from_metadata(
         workbook_path=course_details_path,
         suffix_label=MARKS_TEMPLATE_NAME_SUFFIX,
-        fallback=t("instructor.dialog.step3.default_name"),
+        fallback=t("instructor.dialog.step1.prepare.default_name"),
     )
 
 
@@ -44,7 +44,7 @@ def build_final_report_default_name(filled_marks_path: str | None) -> str:
     return _build_workbook_default_name_from_metadata(
         workbook_path=filled_marks_path,
         suffix_label=CO_REPORT_TEMPLATE_NAME_SUFFIX,
-        fallback=t("instructor.dialog.step4.default_name"),
+        fallback=t("instructor.dialog.step2.generate.default_name"),
     )
 
 
@@ -121,3 +121,4 @@ def atomic_copy_file(source_path: str | Path, output_path: str | Path, *, logger
                         warning("Failed to cleanup temp report file: %s", temp_name)
         raise
     return output
+

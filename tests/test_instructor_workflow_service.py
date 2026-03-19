@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from threading import Event
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -36,7 +36,7 @@ def test_service_generate_final_report_copies_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
+    context = service.create_job_context(step_id="step2")
     src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
@@ -63,7 +63,7 @@ def test_service_logs_step_lifecycle(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
+    context = service.create_job_context(step_id="step2")
     src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
@@ -75,7 +75,7 @@ def test_service_logs_step_lifecycle(
     messages = [record.getMessage() for record in caplog.records]
     assert "Instructor workflow step started." in messages
     assert "Instructor workflow step completed." in messages
-    step_records = [record for record in caplog.records if getattr(record, "step_id", None) == "step3"]
+    step_records = [record for record in caplog.records if getattr(record, "step_id", None) == "step2"]
     assert step_records
 
 
@@ -96,7 +96,7 @@ def test_service_generate_final_report_keeps_existing_dest_on_copy_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
+    context = service.create_job_context(step_id="step2")
     src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("fresh", encoding="utf-8")
@@ -115,7 +115,7 @@ def test_service_generate_final_report_keeps_existing_dest_on_copy_failure(
 
 def test_service_enforces_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
+    context = service.create_job_context(step_id="step2")
     src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
@@ -135,7 +135,7 @@ def test_service_timeout_prevents_post_timeout_output_mutation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="step3")
+    context = service.create_job_context(step_id="step2")
     src = tmp_path / "filled.txt"
     dst = tmp_path / "report.xlsx"
     src.write_text("data", encoding="utf-8")
@@ -219,3 +219,4 @@ def test_call_with_optional_cancel_token_signature_fallback_branch(monkeypatch: 
 
     assert out == "ok"
     assert called == [("a", "b")]
+

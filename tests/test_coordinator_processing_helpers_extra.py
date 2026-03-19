@@ -299,7 +299,6 @@ def test_register_dedup_store_sqlite_fd_close_oserror_is_swallowed(monkeypatch, 
 
 def test_cleanup_stale_dedup_sqlite_files_skips_missing_root(monkeypatch, tmp_path: Path) -> None:
     temp_root = tmp_path / "temp"
-    sqlite_root = tmp_path / "runtime" / "sqlite"
     temp_root.mkdir(parents=True)
     monkeypatch.setattr(cp.tempfile, "gettempdir", lambda: str(temp_root))
     monkeypatch.setattr(cp, "app_runtime_storage_dir", lambda _app: tmp_path / "runtime")
@@ -488,8 +487,8 @@ def test_extract_final_report_signature_metadata_none_branch(monkeypatch, tmp_pa
     monkeypatch.setattr(cp, "_read_report_sheet_counts", lambda _w: (1, 1))
     monkeypatch.setattr(cp, "_read_signature_metadata", lambda _w: None)
 
-    import types
     import sys
+    import types
 
     mod = types.SimpleNamespace(load_workbook=lambda **_k: _LoadWb())
     monkeypatch.setitem(sys.modules, "openpyxl", mod)

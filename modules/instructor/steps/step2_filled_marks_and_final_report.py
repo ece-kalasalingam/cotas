@@ -1,4 +1,4 @@
-"""Step 3: upload filled marks and generate final report."""
+"""Step 2 (row 2): upload filled marks and generate final report."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from common.constants import (
     WORKFLOW_PAYLOAD_KEY_OUTPUT,
     WORKFLOW_PAYLOAD_KEY_PATH,
     WORKFLOW_PAYLOAD_KEY_SOURCE,
-    WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
-    WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS,
+    WORKFLOW_STEP_ID_STEP2_GENERATE_FINAL_REPORT,
+    WORKFLOW_STEP_ID_STEP2_UPLOAD_FILLED_MARKS,
 )
 
 _LOG_FINAL_REPORT_SOURCE_MISSING = "Final report generation failed: filled marks file is missing. path=%s"
@@ -52,6 +52,14 @@ class _QFileDialog(Protocol):
     ) -> tuple[str, str]:
         ...
 
+    def getExistingDirectory(  # noqa: N802 - Qt naming
+        self,
+        parent: object,
+        caption: str = ...,
+        dir: str = ...,
+    ) -> str:
+        ...
+
 
 class _CancellationToken(Protocol):
     def raise_if_cancelled(self) -> None:
@@ -63,7 +71,7 @@ class _JobContext(Protocol):
     step_id: str | None
 
 
-class _InstructorStep3Module(Protocol):
+class _InstructorStep2Module(Protocol):
     state: _ModuleState
     _logger: _Logger
     filled_marks_done: bool
@@ -95,7 +103,7 @@ class _InstructorStep3Module(Protocol):
 class _StartAsyncOperation(Protocol):
     def __call__(
         self,
-        module: _InstructorStep3Module,
+        module: _InstructorStep2Module,
         *,
         token: _CancellationToken,
         job_id: str | None,
@@ -106,7 +114,7 @@ class _StartAsyncOperation(Protocol):
         ...
 
 
-class _Step3Namespace(TypedDict):
+class _Step2Namespace(TypedDict):
     t: Callable[..., str]
     _localized_log_messages: Callable[[str], tuple[str, str]]
     QFileDialog: _QFileDialog
@@ -116,8 +124,8 @@ class _Step3Namespace(TypedDict):
     JobCancelledError: type[Exception]
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
-    _publish_status_compat: Callable[..., None]
-    _start_async_operation_compat: _StartAsyncOperation
+    _publish_status: Callable[..., None]
+    _start_async_operation: _StartAsyncOperation
     log_process_message: Callable[..., None]
     build_i18n_log_message: Callable[..., str]
     show_toast: Callable[..., None]
@@ -128,8 +136,8 @@ class _Step3Namespace(TypedDict):
 
 
 def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, object]) -> None:
-    typed_module = cast(_InstructorStep3Module, module)
-    typed_ns = cast(_Step3Namespace, ns)
+    typed_module = cast(_InstructorStep2Module, module)
+    typed_ns = cast(_Step2Namespace, ns)
     if typed_module.state.busy:
         return
 
@@ -202,7 +210,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
-            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+            step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_FINAL_REPORT,
             payload={WORKFLOW_PAYLOAD_KEY_SOURCE: list(source_paths), WORKFLOW_PAYLOAD_KEY_OUTPUT: output_dir},
         )
         if workflow_service is not None
@@ -222,7 +230,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
                         source_path,
                         output_path,
                         context=workflow_service.create_job_context(
-                            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+                            step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_FINAL_REPORT,
                             payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: output_path},
                         ),
                         cancel_token=token,
@@ -253,7 +261,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         typed_module.final_report_done = bool(generated_outputs)
         typed_module.final_report_outdated = False
         if generated_outputs:
-            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step2_generated"))
+            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_generated"))
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -280,7 +288,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -301,7 +309,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         )
         typed_module._show_system_error_toast(2)
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,
@@ -312,8 +320,8 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
 
 
 def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> None:
-    typed_module = cast(_InstructorStep3Module, module)
-    typed_ns = cast(_Step3Namespace, ns)
+    typed_module = cast(_InstructorStep2Module, module)
+    typed_ns = cast(_Step2Namespace, ns)
     if typed_module.state.busy:
         return
 
@@ -336,7 +344,7 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
     job_context = (
         workflow_service.create_job_context(
-            step_id=WORKFLOW_STEP_ID_STEP3_UPLOAD_FILLED_MARKS,
+            step_id=WORKFLOW_STEP_ID_STEP2_UPLOAD_FILLED_MARKS,
             payload={WORKFLOW_PAYLOAD_KEY_PATH: open_path},
         )
         if workflow_service is not None
@@ -351,9 +359,9 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
 
         if replacing and typed_module.filled_marks_done:
             typed_module.final_report_outdated = True
-            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step2_changed_filled"))
+            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_changed_filled"))
         else:
-            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step2_uploaded_filled"))
+            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_uploaded_filled"))
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -369,7 +377,7 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -416,7 +424,7 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
         token.raise_if_cancelled()
         return True
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,
@@ -427,8 +435,8 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
 
 
 def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> None:
-    typed_module = cast(_InstructorStep3Module, module)
-    typed_ns = cast(_Step3Namespace, ns)
+    typed_module = cast(_InstructorStep2Module, module)
+    typed_ns = cast(_Step2Namespace, ns)
     if typed_module.state.busy:
         return
 
@@ -480,7 +488,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
-            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+            step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_FINAL_REPORT,
             payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path},
         )
         if workflow_service is not None
@@ -492,7 +500,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
         typed_module.final_report_done = True
         typed_module.final_report_outdated = False
         typed_module._remember_dialog_dir_safe(save_path)
-        typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step2_generated"))
+        typed_ns["_publish_status"](typed_module, t("instructor.status.step2_generated"))
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -508,7 +516,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -552,7 +560,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
             )
         return typed_ns["_atomic_copy_file"](source_path, save_path)
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,

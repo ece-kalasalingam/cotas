@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAX_TEMPLATE_ENGINE_LINES = 900
 _MAX_COORDINATOR_MODULE_LINES = 1425

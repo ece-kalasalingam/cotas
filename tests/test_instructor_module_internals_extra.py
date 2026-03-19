@@ -27,29 +27,34 @@ def _build_module(monkeypatch: pytest.MonkeyPatch) -> instructor_ui.InstructorMo
     return instructor_ui.InstructorModule()
 
 
-def test_top_level_compat_wrappers_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_top_level_step_helpers_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[tuple[str, object]] = []
 
-    monkeypatch.setattr(
-        instructor_ui,
-        "_publish_status_compat_impl",
-        lambda **kwargs: seen.append(("publish", kwargs["message"])),
-    )
-    monkeypatch.setattr(instructor_ui, "build_i18n_log_message", lambda key, fallback="": f"P:{key}:{fallback}")
-    monkeypatch.setattr(instructor_ui, "_set_busy_compat_impl", lambda **kwargs: seen.append(("busy", kwargs["busy"])))
+    class _Target:
+        def _publish_status(self, message: str) -> None:
+            seen.append(("publish", message))
 
-    target = type("_T", (), {"_supports_i18n_status_payload": True})()
-    msg = instructor_ui.t("instructor.status.operation_cancelled")
-    instructor_ui._publish_status_compat(target, msg)
-    instructor_ui._set_busy_compat(target, True, job_id="j")
+        def _start_async_operation(self, **kwargs) -> None:
+            seen.append(("start", kwargs.get("job_id")))
+
+    target = _Target()
+    instructor_ui._publish_status(target, "hello")
+    instructor_ui._start_async_operation(
+        target,
+        token=CancellationToken(),
+        job_id="j",
+        work=lambda: None,
+        on_success=lambda _r: None,
+        on_failure=lambda _e: None,
+    )
 
     monkeypatch.setattr(instructor_ui, "validate_filled_marks_manifest_schema_by_template", lambda *_a, **_k: seen.append(("validate", True)))
     monkeypatch.setattr(instructor_ui, "filled_marks_manifest_validators", lambda: {"x": object()})
     instructor_ui._validate_filled_marks_manifest_schema_by_template(object(), {}, template_id="x")
     assert instructor_ui._filled_marks_manifest_validators().keys() == {"x"}
 
-    assert any(tag == "publish" and str(value).startswith("P:instructor.status.operation_cancelled") for tag, value in seen)
-    assert ("busy", True) in seen
+    assert ("publish", "hello") in seen
+    assert ("start", "j") in seen
     assert ("validate", True) in seen
 
 
@@ -321,19 +326,16 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     module._ui_log_handler = cast(Any, object())
     module._setup_ui_logging()
 
-    # Direct async wrappers and legacy wrappers.
+    # Direct async wrappers.
     direct_calls = {"prepare": 0, "download": 0, "generate": 0}
     monkeypatch.setattr(instructor_ui, "prepare_marks_template_async", lambda _m, ns=None: direct_calls.__setitem__("prepare", direct_calls["prepare"] + 1))
     monkeypatch.setattr(instructor_ui, "download_course_template_async", lambda _m, ns=None: direct_calls.__setitem__("download", direct_calls["download"] + 1))
     monkeypatch.setattr(instructor_ui, "generate_final_report_async", lambda _m, ns=None: direct_calls.__setitem__("generate", direct_calls["generate"] + 1))
     module._prepare_marks_template_async()
-    module._download_course_template_async()
+    instructor_ui.InstructorModule._download_course_template_async(module)
     module._generate_final_report_async()
-    module._download_course_template()
-    module._prepare_marks_template()
-    module._generate_final_report()
-    assert direct_calls["prepare"] == 2
-    assert direct_calls["download"] >= 1
-    assert direct_calls["generate"] == 2
+    assert direct_calls["prepare"] == 1
+    assert direct_calls["download"] == 1
+    assert direct_calls["generate"] == 1
     module.close()
 

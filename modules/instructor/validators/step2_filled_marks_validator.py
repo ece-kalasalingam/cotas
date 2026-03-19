@@ -37,7 +37,7 @@ def validate_filled_marks_manifest_schema_by_template(
     validator = filled_marks_manifest_validators().get(template_id)
     if validator is None:
         raise ValidationError(
-            t("instructor.validation.step3.template_validator_missing", template_id=template_id)
+            t("instructor.validation.step2.template_validator_missing", template_id=template_id)
         )
     validator(workbook, manifest)
 
@@ -95,13 +95,13 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
 
         if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
             raise ValidationError(
-                t("instructor.validation.step3.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
+                t("instructor.validation.step2.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
             )
         layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
         if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.layout_header_mismatch",
+                    "instructor.validation.step2.layout_header_mismatch",
                     column="A1",
                     expected=SYSTEM_LAYOUT_MANIFEST_KEY,
                 )
@@ -109,7 +109,7 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.layout_header_mismatch",
+                    "instructor.validation.step2.layout_header_mismatch",
                     column="B1",
                     expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
                 )
@@ -118,14 +118,15 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
         manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
         if not manifest_text or not manifest_hash:
-            raise ValidationError(t("instructor.validation.step3.layout_manifest_missing"))
+            raise ValidationError(t("instructor.validation.step2.layout_manifest_missing"))
         if not verify_payload_signature(manifest_text, manifest_hash):
-            raise ValidationError(t("instructor.validation.step3.layout_hash_mismatch"))
+            raise ValidationError(t("instructor.validation.step2.layout_hash_mismatch"))
 
         try:
             manifest = json.loads(manifest_text)
         except Exception as exc:
-            raise ValidationError(t("instructor.validation.step3.layout_manifest_json_invalid")) from exc
+            raise ValidationError(t("instructor.validation.step2.layout_manifest_json_invalid")) from exc
         validate_filled_marks_manifest_schema_by_template(workbook, manifest, template_id=template_id)
     finally:
         workbook.close()
+

@@ -67,17 +67,17 @@ def validate_course_details_rules(workbook: Any) -> None:
 
 def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     if not isinstance(manifest, dict):
-        raise ValidationError(t("instructor.validation.step3.manifest_root_invalid"))
+        raise ValidationError(t("instructor.validation.step2.manifest_root_invalid"))
 
     sheet_order = manifest.get(LAYOUT_MANIFEST_KEY_SHEET_ORDER)
     sheet_specs = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS)
     if not isinstance(sheet_order, list) or not isinstance(sheet_specs, list):
-        raise ValidationError(t("instructor.validation.step3.manifest_structure_invalid"))
+        raise ValidationError(t("instructor.validation.step2.manifest_structure_invalid"))
 
     if list(workbook.sheetnames) != sheet_order:
         raise ValidationError(
             t(
-                "instructor.validation.step3.sheet_order_mismatch",
+                "instructor.validation.step2.sheet_order_mismatch",
                 expected=sheet_order,
                 found=list(workbook.sheetnames),
             )
@@ -88,7 +88,7 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     baseline_student_sheet: str | None = None
     for spec in sheet_specs:
         if not isinstance(spec, dict):
-            raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+            raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
         sheet_name = spec.get(LAYOUT_SHEET_SPEC_KEY_NAME)
         header_row = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADER_ROW)
         headers = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADERS)
@@ -96,27 +96,27 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
         formula_anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS, [])
         if not isinstance(sheet_name, str) or sheet_name not in workbook.sheetnames:
             raise ValidationError(
-                t("instructor.validation.step3.sheet_missing", sheet_name=sheet_name)
+                t("instructor.validation.step2.sheet_missing", sheet_name=sheet_name)
             )
         if not isinstance(header_row, int) or header_row <= 0:
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.header_row_invalid",
+                    "instructor.validation.step2.header_row_invalid",
                     sheet_name=sheet_name,
                     header_row=header_row,
                 )
             )
         if not isinstance(headers, list) or not headers:
             raise ValidationError(
-                t("instructor.validation.step3.headers_missing", sheet_name=sheet_name)
+                t("instructor.validation.step2.headers_missing", sheet_name=sheet_name)
             )
         if not isinstance(anchors, list):
             raise ValidationError(
-                t("instructor.validation.step3.anchor_spec_invalid", sheet_name=sheet_name)
+                t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
             )
         if not isinstance(formula_anchors, list):
             raise ValidationError(
-                t("instructor.validation.step3.formula_anchor_spec_invalid", sheet_name=sheet_name)
+                t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
             )
 
         worksheet = workbook[sheet_name]
@@ -128,7 +128,7 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
         if actual_headers != expected_headers:
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.header_row_mismatch",
+                    "instructor.validation.step2.header_row_mismatch",
                     sheet_name=sheet_name,
                     row=header_row,
                     expected=headers,
@@ -138,18 +138,18 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
         for anchor in anchors:
             if not isinstance(anchor, list) or len(anchor) != 2:
                 raise ValidationError(
-                    t("instructor.validation.step3.anchor_spec_invalid", sheet_name=sheet_name)
+                    t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
                 )
             cell_ref, expected_value = anchor
             if not isinstance(cell_ref, str) or not cell_ref:
                 raise ValidationError(
-                    t("instructor.validation.step3.anchor_spec_invalid", sheet_name=sheet_name)
+                    t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
                 )
             actual_value = worksheet[cell_ref].value
             if not _filled_marks_values_match(expected_value, actual_value):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.anchor_value_mismatch",
+                        "instructor.validation.step2.anchor_value_mismatch",
                         sheet_name=sheet_name,
                         cell=cell_ref,
                         expected=expected_value,
@@ -159,18 +159,18 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
         for formula_anchor in formula_anchors:
             if not isinstance(formula_anchor, list) or len(formula_anchor) != 2:
                 raise ValidationError(
-                    t("instructor.validation.step3.formula_anchor_spec_invalid", sheet_name=sheet_name)
+                    t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
                 )
             cell_ref, expected_formula = formula_anchor
             if not isinstance(cell_ref, str) or not isinstance(expected_formula, str):
                 raise ValidationError(
-                    t("instructor.validation.step3.formula_anchor_spec_invalid", sheet_name=sheet_name)
+                    t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
                 )
             actual_formula = worksheet[cell_ref].value
             if _normalized_formula(actual_formula) != _normalized_formula(expected_formula):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.formula_mismatch",
+                        "instructor.validation.step2.formula_mismatch",
                         sheet_name=sheet_name,
                         cell=cell_ref,
                     )
@@ -200,7 +200,7 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             elif actual_student_hash != baseline_student_hash:
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.student_identity_cross_sheet_mismatch",
+                        "instructor.validation.step2.student_identity_cross_sheet_mismatch",
                         sheet_name=sheet_name,
                         reference_sheet=baseline_student_sheet,
                     )
@@ -214,7 +214,7 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             )
 
     if not has_marks_component:
-        raise ValidationError(t("instructor.validation.step3.no_component_sheets"))
+        raise ValidationError(t("instructor.validation.step2.no_component_sheets"))
 
 
 def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
@@ -596,11 +596,11 @@ def _validate_component_student_identity(
 ) -> str:
     if not isinstance(expected_student_count, int) or expected_student_count < 0:
         raise ValidationError(
-            t("instructor.validation.step3.student_identity_spec_invalid", sheet_name=sheet_name)
+            t("instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name)
         )
     if not isinstance(expected_student_hash, str) or not expected_student_hash.strip():
         raise ValidationError(
-            t("instructor.validation.step3.student_identity_spec_invalid", sheet_name=sheet_name)
+            t("instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name)
         )
 
     students = _extract_component_students(
@@ -612,7 +612,7 @@ def _validate_component_student_identity(
     if len(students) != expected_student_count:
         raise ValidationError(
             t(
-                "instructor.validation.step3.student_identity_mismatch",
+                "instructor.validation.step2.student_identity_mismatch",
                 sheet_name=sheet_name,
             )
         )
@@ -621,7 +621,7 @@ def _validate_component_student_identity(
     if actual_hash != expected_student_hash:
         raise ValidationError(
             t(
-                "instructor.validation.step3.student_identity_mismatch",
+                "instructor.validation.step2.student_identity_mismatch",
                 sheet_name=sheet_name,
             )
         )
@@ -649,7 +649,7 @@ def _extract_component_students(
         if not reg_no or not student_name:
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.student_identity_mismatch",
+                    "instructor.validation.step2.student_identity_mismatch",
                     sheet_name=sheet_name,
                 )
             )
@@ -657,7 +657,7 @@ def _extract_component_students(
         if reg_key in seen_reg_numbers:
             raise ValidationError(
                 t(
-                    "instructor.validation.step3.student_reg_duplicate",
+                    "instructor.validation.step2.student_reg_duplicate",
                     sheet_name=sheet_name,
                     reg_no=reg_no,
                 )
@@ -706,7 +706,7 @@ def _validate_non_empty_marks_entries(
             if token == "":
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.mark_entry_empty",
+                        "instructor.validation.step2.mark_entry_empty",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                     )
@@ -720,7 +720,7 @@ def _validate_non_empty_marks_entries(
             if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.mark_value_invalid",
+                        "instructor.validation.step2.mark_value_invalid",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                         value=cell_value,
@@ -731,7 +731,7 @@ def _validate_non_empty_marks_entries(
             if not _has_allowed_decimal_precision(float(numeric_value)):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.mark_precision_invalid",
+                        "instructor.validation.step2.mark_precision_invalid",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                         value=cell_value,
@@ -741,7 +741,7 @@ def _validate_non_empty_marks_entries(
             if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT and not _is_integer_value(float(numeric_value)):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.indirect_mark_must_be_integer",
+                        "instructor.validation.step2.indirect_mark_must_be_integer",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                         value=cell_value,
@@ -752,7 +752,7 @@ def _validate_non_empty_marks_entries(
             if numeric_float < minimum or numeric_float > maximum:
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.mark_value_invalid",
+                        "instructor.validation.step2.mark_value_invalid",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                         value=cell_value,
@@ -805,7 +805,7 @@ def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
         return range(4, header_count)
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return range(4, header_count + 1)
-    raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+    raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
 
 
 def _mark_min_for_sheet(sheet_kind: Any) -> float:
@@ -822,9 +822,9 @@ def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) 
     elif sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         max_value = coerce_excel_number(worksheet.cell(row=max_row, column=col).value)
     else:
-        raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+        raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
     if isinstance(max_value, bool) or not isinstance(max_value, (int, float)):
-        raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+        raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
     return float(max_value)
 
 
@@ -855,7 +855,7 @@ def _validate_absence_policy_for_row(
     if has_absent and has_numeric:
         raise ValidationError(
             t(
-                "instructor.validation.step3.absence_policy_violation",
+                "instructor.validation.step2.absence_policy_violation",
                 sheet_name=sheet_name,
                 row=row,
                 range=f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
@@ -892,7 +892,7 @@ def _validate_row_total_consistency(
             if _normalized_formula(actual) != _normalized_formula(expected):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.total_formula_mismatch",
+                        "instructor.validation.step2.total_formula_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=row, column=total_col).coordinate,
                     )
@@ -907,7 +907,7 @@ def _validate_row_total_consistency(
                 if not isinstance(formula, str) or not formula.startswith("="):
                     raise ValidationError(
                         t(
-                            "instructor.validation.step3.co_formula_mismatch",
+                            "instructor.validation.step2.co_formula_mismatch",
                             sheet_name=sheet_name,
                             cell=worksheet.cell(row=row, column=col).coordinate,
                         )
@@ -926,21 +926,21 @@ def _validate_component_structure_snapshot(
 ) -> None:
     if not isinstance(structure, dict):
         raise ValidationError(
-            t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+            t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
         )
     max_row = header_row + 2
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
             raise ValidationError(
-                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
             )
         for idx, expected in enumerate(maxima, start=4):
             actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
             if not _filled_marks_values_match(expected, actual):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.structure_snapshot_mismatch",
+                        "instructor.validation.step2.structure_snapshot_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=max_row, column=idx).coordinate,
                     )
@@ -950,14 +950,14 @@ def _validate_component_structure_snapshot(
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
             raise ValidationError(
-                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
             )
         for idx, expected in enumerate(maxima, start=4):
             actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
             if not _filled_marks_values_match(expected, actual):
                 raise ValidationError(
                     t(
-                        "instructor.validation.step3.structure_snapshot_mismatch",
+                        "instructor.validation.step2.structure_snapshot_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=max_row, column=idx).coordinate,
                     )
@@ -967,10 +967,10 @@ def _validate_component_structure_snapshot(
         likert_range = structure.get("likert_range")
         if likert_range != [LIKERT_MIN, LIKERT_MAX]:
             raise ValidationError(
-                t("instructor.validation.step3.structure_snapshot_missing", sheet_name=sheet_name)
+                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
             )
         return
-    raise ValidationError(t("instructor.validation.step3.manifest_sheet_spec_invalid"))
+    raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
 
 
 def _has_allowed_decimal_precision(value: float) -> bool:
@@ -1060,3 +1060,4 @@ def _log_marks_anomaly_warnings_from_stats(
                     same,
                     numeric_count,
                 )
+

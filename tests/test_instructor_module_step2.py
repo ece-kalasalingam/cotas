@@ -59,6 +59,27 @@ class _DummyModule:
             self.state = _DummyModule._State()
         self.state.busy = busy
 
+    def _publish_status(self, message: str) -> None:
+        instructor_ui.emit_user_status(self.status_changed, message, logger=None)
+
+    def _start_async_operation(self, *, token, job_id, work, on_success, on_failure) -> None:
+        self._cancel_token = token
+        self._set_busy(True, job_id=job_id)
+
+        def _on_finished(result):
+            on_success(result)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        def _on_failed(exc):
+            on_failure(exc)
+            self._cancel_token = None
+            self._set_busy(False)
+            self._refresh_ui()
+
+        instructor_ui.run_in_background(work, on_finished=_on_finished, on_failed=_on_failed)
+
     def _refresh_ui(self) -> None:
         return
 
@@ -104,7 +125,7 @@ def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda *_args, **_kwargs: validate_calls.__setitem__("count", validate_calls["count"] + 1),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_course_details_async(cast(Any, dummy))
 
     assert validate_calls["count"] == 0
     assert dummy.step2_upload_ready is False
@@ -127,7 +148,7 @@ def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyP
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValidationError("bad workbook")),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_course_details_async(cast(Any, dummy))
 
     assert dummy._toasts == []
     assert dummy.step2_upload_ready is False
@@ -156,7 +177,7 @@ def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -
         lambda path, app_name: remembered.append((path, app_name)),
     )
 
-    instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
+    instructor_ui.InstructorModule._upload_course_details_async(cast(Any, dummy))
 
     assert dummy.step2_upload_ready is True
     assert dummy.step2_course_details_path == "D:/tmp/course_details.xlsx"

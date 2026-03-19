@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 
 import pytest
+
 from common.exceptions import ConfigurationError
 
 

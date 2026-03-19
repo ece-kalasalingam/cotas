@@ -83,7 +83,7 @@ def _ns(module: _Module, *, save_path: str = "") -> dict[str, object]:
         if callable(notify):
             notify("validation error", "error")
 
-    def _start_async_operation_compat(target: _Module, **kwargs) -> None:
+    def _start_async_operation(target: _Module, **kwargs) -> None:
         target.started = kwargs
 
     return {
@@ -104,10 +104,10 @@ def _ns(module: _Module, *, save_path: str = "") -> dict[str, object]:
         "ValidationError": ValidationError,
         "AppSystemError": AppSystemError,
         "build_i18n_log_message": lambda key, fallback="": f"I18N:{key}:{fallback}",
-        "_publish_status_compat": lambda _m, msg: module.published.append(msg),
+        "_publish_status": lambda _m, msg: module.published.append(msg),
         "log_process_message": _log_process_message,
         "_logger": logger,
-        "_start_async_operation_compat": _start_async_operation_compat,
+        "_start_async_operation": _start_async_operation,
         "generate_course_details_template": lambda _path, *, template_id: None,
         "_logs": logs,
         "_logger_obj": logger,

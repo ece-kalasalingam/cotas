@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
+import subprocess  # nosec B404 - trusted local command orchestration
 import sys
 from pathlib import Path
 
 
 def _run(command: list[str], *, repo_root: Path) -> int:
-    process = subprocess.run(command, cwd=repo_root, check=False)
+    process = subprocess.run(command, cwd=repo_root, check=False)  # nosec B603
     return process.returncode
 
 

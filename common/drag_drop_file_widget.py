@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Callable, Iterable
+from pathlib import Path
 from typing import Literal
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QPainter, QPalette, QPen
+from PySide6.QtGui import (
+    QColor,
+    QDragEnterEvent,
+    QDragLeaveEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QPainter,
+    QPalette,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -19,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from common.removable_file_item_widget import RemovableFileItemWidget
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
     COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
@@ -36,7 +46,6 @@ from common.ui_stylings import (
     COORDINATOR_LIST_PLACEHOLDER_COLOR,
     COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
 )
-from common.removable_file_item_widget import RemovableFileItemWidget
 
 
 class DragDropFileList(QListWidget):

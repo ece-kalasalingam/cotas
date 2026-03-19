@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict
 
 from common.exceptions import JobCancelledError
 from modules.coordinator.steps import calculate_attainment as step

@@ -34,12 +34,6 @@ def verify_payload_signature(payload: str, signature: str) -> bool:
             if hmac.compare_digest(digest, _hmac_digest(payload, secret)):
                 return True
         return False
-
-    # Backward compatibility for legacy signatures that were plain sha256 hex.
-    for secret in _accepted_secrets():
-        legacy = sha256(f"{payload}|{secret}".encode("utf-8")).hexdigest()
-        if hmac.compare_digest(token, legacy):
-            return True
     return False
 
 

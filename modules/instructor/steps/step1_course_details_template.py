@@ -91,12 +91,12 @@ class _Step1Namespace(TypedDict):
     JobCancelledError: type[Exception]
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
-    _publish_status_compat: Callable[..., None]
+    _publish_status: Callable[..., None]
     log_process_message: Callable[..., None]
     _logger: _Logger
     build_i18n_log_message: Callable[..., str]
     generate_course_details_template: Callable[..., None]
-    _start_async_operation_compat: _StartAsyncOperation
+    _start_async_operation: _StartAsyncOperation
 
 
 def download_course_template_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -136,7 +136,7 @@ def download_course_template_async(module: object, *, ns: Mapping[str, object]) 
     def _on_finished(_result: object) -> None:
         typed_module.step1_path = save_path
         typed_module.step1_done = True
-        typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_selected"))
+        typed_ns["_publish_status"](typed_module, t("instructor.status.step1_selected"))
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -152,7 +152,7 @@ def download_course_template_async(module: object, *, ns: Mapping[str, object]) 
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -203,7 +203,7 @@ def download_course_template_async(module: object, *, ns: Mapping[str, object]) 
         typed_ns["generate_course_details_template"](save_path, template_id=template_id)
         return Path(save_path)
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,

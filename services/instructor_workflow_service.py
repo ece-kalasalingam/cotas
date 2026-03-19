@@ -6,7 +6,8 @@ import logging
 import os
 import time
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from inspect import Signature, signature
 from pathlib import Path
 from typing import Any, Callable, Mapping, TypeVar
@@ -19,12 +20,12 @@ from common.constants import (
     WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
     WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
     WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
+    WORKFLOW_STEP_TIMEOUT_ENV_VAR,
     WORKFLOW_TIMEOUT_ERROR_TEMPLATE,
     WORKFLOW_USER_MESSAGE_CANCELLED_TEMPLATE,
     WORKFLOW_USER_MESSAGE_COMPLETED_TEMPLATE,
     WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
     WORKFLOW_USER_MESSAGE_STARTED_SUFFIX,
-    WORKFLOW_STEP_TIMEOUT_ENV_VAR,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken, JobContext

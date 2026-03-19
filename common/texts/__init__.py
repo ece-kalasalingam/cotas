@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import ctypes
 import locale
 import logging
 import sys
+from collections.abc import Mapping
 
 from common.texts.en import TEXTS as EN_TEXTS
 from common.texts.hi_in import TEXTS as HI_IN_TEXTS

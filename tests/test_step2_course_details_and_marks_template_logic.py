@@ -82,7 +82,13 @@ class _WorkflowService:
         return "course_setup_template"
 
 
-def _ns(module: _Module, *, open_paths: list[str] | None = None, output_dir: str = "") -> dict[str, object]:
+def _ns(
+    module: _Module,
+    *,
+    open_path: str = "",
+    open_paths: list[str] | None = None,
+    output_dir: str = "",
+) -> dict[str, object]:
     logs: list[tuple] = []
     logger = _Logger()
 
@@ -92,7 +98,7 @@ def _ns(module: _Module, *, open_paths: list[str] | None = None, output_dir: str
         if callable(notify):
             notify("validation error", "error")
 
-    def _start_async_operation_compat(target: _Module, **kwargs) -> None:
+    def _start_async_operation(target: _Module, **kwargs) -> None:
         target.started = kwargs
 
     return {
@@ -117,10 +123,10 @@ def _ns(module: _Module, *, open_paths: list[str] | None = None, output_dir: str
         "ValidationError": ValidationError,
         "AppSystemError": AppSystemError,
         "build_i18n_log_message": lambda key, fallback="": f"I18N:{key}:{fallback}",
-        "_publish_status_compat": lambda _m, msg: module.published.append(msg),
+        "_publish_status": lambda _m, msg: module.published.append(msg),
         "log_process_message": _log_process_message,
         "_logger": logger,
-        "_start_async_operation_compat": _start_async_operation_compat,
+        "_start_async_operation": _start_async_operation,
         "show_toast": lambda _m, body, *, title, level: module.toasts.append((level, body)),
         "validate_course_details_workbook": lambda p: None,
         "ID_COURSE_SETUP": "course_setup_template",

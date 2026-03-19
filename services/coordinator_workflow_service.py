@@ -6,7 +6,8 @@ import logging
 import os
 import time
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any, Callable, Mapping, TypeVar
 

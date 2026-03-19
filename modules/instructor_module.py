@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
@@ -32,13 +33,12 @@ from common.constants import (
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
+from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
-from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.texts import t
 from common.toast import show_toast
-from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.ui_logging import (
     UILogHandler,
     build_i18n_log_message,
@@ -46,6 +46,7 @@ from common.ui_logging import (
     parse_i18n_log_message,
     resolve_i18n_log_message,
 )
+from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
     emit_user_status,
     log_process_message,
@@ -60,20 +61,15 @@ from modules.instructor import (
     validate_course_details_workbook,
 )
 from modules.instructor.async_runner import AsyncOperationRunner
-from modules.instructor.async_runner import (
-    publish_status_compat as _publish_status_compat_impl,
-)
-from modules.instructor.async_runner import set_busy_compat as _set_busy_compat_impl
-from modules.instructor.async_runner import (
-    start_async_operation_compat as _start_async_operation_compat_impl,
-)
 from modules.instructor.messages import (
     localized_log_messages,
     show_step_success_toast,
     show_system_error_toast,
     show_validation_error_toast,
 )
-from modules.instructor.output_links import InstructorOutputNamespace
+from modules.instructor.output_links import (
+    InstructorOutputNamespace,
+)
 from modules.instructor.output_links import (
     on_quick_link_activated as _on_quick_link_activated_impl,
 )
@@ -98,8 +94,8 @@ from modules.instructor.steps.step2_course_details_and_marks_template import (
     upload_course_details_from_paths_async,
 )
 from modules.instructor.steps.step2_filled_marks_and_final_report import (
-    generate_final_reports_from_paths_async,
     generate_final_report_async,
+    generate_final_reports_from_paths_async,
     upload_filled_marks_async,
 )
 from modules.instructor.validators.step2_filled_marks_validator import (
@@ -123,17 +119,6 @@ _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + 72
 _ENABLE_SECOND_ROW_ACTIONS = True
-_INSTRUCTOR_STATUS_KEYS = (
-    "instructor.status.step1_selected",
-    "instructor.status.step1_validated",
-    "instructor.status.step1_prepared",
-    "instructor.status.step1_changed",
-    "instructor.status.step2_uploaded_filled",
-    "instructor.status.step2_changed_filled",
-    "instructor.status.step2_generated",
-    "instructor.status.operation_in_progress",
-    "instructor.status.operation_cancelled",
-)
 
 # Step handlers receive `ns=globals()`, so these names must stay module-visible.
 _STEP_RUNTIME_GLOBALS = (
@@ -162,22 +147,11 @@ def _output_link_namespace() -> InstructorOutputNamespace:
     }
 
 
-def _publish_status_compat(target: object, message: str) -> None:
-    payload = message
-    supports_payload = bool(getattr(target, "_supports_i18n_status_payload", False))
-    if supports_payload:
-        for key in _INSTRUCTOR_STATUS_KEYS:
-            if message == t(key):
-                payload = build_i18n_log_message(key, fallback=message)
-                break
-    _publish_status_compat_impl(target=target, message=payload, logger=_logger)
+def _publish_status(target: object, message: str) -> None:
+    cast("InstructorModule", target)._publish_status(message)
 
 
-def _set_busy_compat(target: object, busy: bool, *, job_id: str | None = None) -> None:
-    _set_busy_compat_impl(target=target, busy=busy, job_id=job_id)
-
-
-def _start_async_operation_compat(
+def _start_async_operation(
     target: object,
     *,
     token: CancellationToken,
@@ -186,14 +160,12 @@ def _start_async_operation_compat(
     on_success,
     on_failure,
 ) -> None:
-    _start_async_operation_compat_impl(
-        target=target,
+    cast("InstructorModule", target)._start_async_operation(
         token=token,
         job_id=job_id,
         work=work,
         on_success=on_success,
         on_failure=on_failure,
-        run_async=run_in_background,
     )
 
 
@@ -281,7 +253,6 @@ class InstructorModule(QWidget):
 
     def __init__(self):
         super().__init__()
-        self._supports_i18n_status_payload = True
         self.current_step = 1
 
         self.step1_path: str | None = None
@@ -592,8 +563,8 @@ class InstructorModule(QWidget):
         self.active_title.setText(t(self.STEP_TITLE_KEYS[self.current_step]))
         self.active_desc.setText(t(self.STEP_DESC_KEYS[self.current_step]))
         if self.current_step == 2 and not _ENABLE_SECOND_ROW_ACTIONS:
-            self.active_title.setText("")
-            self.active_desc.setText("")
+            self.active_title.clear()
+            self.active_desc.clear()
         self.info_tabs.setTabText(0, t("instructor.log.title"))
         self.info_tabs.setTabText(1, t(self.RAIL_LINK_TITLE_KEY))
         self._refresh_quick_links()
@@ -645,7 +616,7 @@ class InstructorModule(QWidget):
         else:
             self.active_note.setText(t("instructor.note.default"))
         if is_step2 and not _ENABLE_SECOND_ROW_ACTIONS:
-            self.active_note.setText("")
+            self.active_note.clear()
 
         if self.state.busy:
             self.primary_action.setEnabled(False)
@@ -1068,18 +1039,3 @@ class InstructorModule(QWidget):
 
     def _show_system_error_toast(self, step: int) -> None:
         show_system_error_toast(self, title_key=self.STEP_TITLE_KEYS[step])
-
-    def _download_course_template(self) -> None:
-        InstructorModule._download_course_template_async(self)
-
-    def _upload_course_details(self) -> None:
-        InstructorModule._upload_course_details_async(self)
-
-    def _prepare_marks_template(self) -> None:
-        InstructorModule._prepare_marks_template_async(self)
-
-    def _upload_filled_marks(self) -> None:
-        InstructorModule._upload_filled_marks_async(self)
-
-    def _generate_final_report(self) -> None:
-        InstructorModule._generate_final_report_async(self)

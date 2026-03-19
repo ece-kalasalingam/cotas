@@ -1,5 +1,14 @@
 exclude_dirs:
   - tests
+  - .perf_tmp
+  - .pytest_tmp_env
+  - .pytest_cache_cotas
+  - .pytest_temp_cotas
+  - .tmp_audit_run
+  - .tmp_*
+  - htmlcov
+  - build
+  - dist
 skips:
   - B105
 

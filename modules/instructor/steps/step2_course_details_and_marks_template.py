@@ -133,8 +133,8 @@ class _Step2Namespace(TypedDict):
     JobCancelledError: type[Exception]
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
-    _publish_status_compat: Callable[..., None]
-    _start_async_operation_compat: _StartAsyncOperation
+    _publish_status: Callable[..., None]
+    _start_async_operation: _StartAsyncOperation
     log_process_message: Callable[..., None]
     build_i18n_log_message: Callable[..., str]
     show_toast: Callable[..., None]
@@ -232,7 +232,7 @@ def upload_course_details_from_paths_async(
             except Exception:
                 invalid_paths.append(path)
                 processed += 1
-                typed_ns["_publish_status_compat"](
+                typed_ns["_publish_status"](
                     typed_module,
                     t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
                 )
@@ -240,14 +240,14 @@ def upload_course_details_from_paths_async(
             if template_id != typed_ns["ID_COURSE_SETUP"]:
                 mismatched_template_paths.append(path)
                 processed += 1
-                typed_ns["_publish_status_compat"](
+                typed_ns["_publish_status"](
                     typed_module,
                     t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
                 )
                 continue
             valid_paths.append(path)
             processed += 1
-            typed_ns["_publish_status_compat"](
+            typed_ns["_publish_status"](
                 typed_module,
                 t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
             )
@@ -297,11 +297,11 @@ def upload_course_details_from_paths_async(
             typed_module.final_report_outdated = typed_module.final_report_done
             typed_module.filled_marks_outdated = typed_module.filled_marks_done
             if typed_module.filled_marks_outdated or typed_module.final_report_outdated:
-                typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_changed"))
+                typed_ns["_publish_status"](typed_module, t("instructor.status.step1_changed"))
         elif merged_paths:
-            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_validated"))
+            typed_ns["_publish_status"](typed_module, t("instructor.status.step1_validated"))
 
-        typed_ns["_publish_status_compat"](
+        typed_ns["_publish_status"](
             typed_module,
             t("instructor.status.step1_validated_progress", valid=len(valid_paths), total=total),
         )
@@ -340,7 +340,7 @@ def upload_course_details_from_paths_async(
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -361,7 +361,7 @@ def upload_course_details_from_paths_async(
         )
         typed_module._show_system_error_toast(1)
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,
@@ -475,8 +475,8 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         typed_module.filled_marks_outdated = typed_module.filled_marks_done
         typed_module.final_report_outdated = typed_module.final_report_done
         if generated_outputs:
-            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_prepared"))
-        typed_ns["_publish_status_compat"](
+            typed_ns["_publish_status"](typed_module, t("instructor.status.step1_prepared"))
+        typed_ns["_publish_status"](
             typed_module,
             t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
         )
@@ -510,7 +510,7 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             status_key = "instructor.status.operation_cancelled"
             user_message = t(status_key)
             user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_publish_status"](typed_module, user_message)
             typed_ns["_logger"].info(
                 PROCESS_MESSAGE_CANCELLED_TEMPLATE,
                 process_name,
@@ -576,7 +576,7 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
                 failed_count += 1
             finally:
                 processed_count += 1
-                typed_ns["_publish_status_compat"](
+                typed_ns["_publish_status"](
                     typed_module,
                     t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
                 )
@@ -588,7 +588,7 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             "skipped_count": skipped_conflicts,
         }
 
-    typed_ns["_start_async_operation_compat"](
+    typed_ns["_start_async_operation"](
         typed_module,
         token=token,
         job_id=job_context.job_id if job_context else None,

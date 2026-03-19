@@ -10,8 +10,8 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 pytest.importorskip("PySide6")
 
-from common.workbook_secret import get_workbook_password
 from common.exceptions import ValidationError
+from common.workbook_secret import get_workbook_password
 from common.workbook_signing import sign_payload
 from domain.instructor_template_engine import (
     generate_course_details_template,
@@ -74,7 +74,7 @@ def _fill_all_mark_entries(workbook_path: Path) -> None:
         workbook.close()
 
 
-def test_high_volume_workbook_generation_validation_and_step3_schema(tmp_path: Path) -> None:
+def test_high_volume_workbook_generation_validation_and_step2_schema(tmp_path: Path) -> None:
     details_path = _build_course_details(tmp_path)
     wb = openpyxl.load_workbook(details_path)
     try:
@@ -158,7 +158,7 @@ def test_validation_rejects_partial_corrupted_workbook(tmp_path: Path) -> None:
         instructor_ui._validate_uploaded_filled_marks_workbook(bad)
 
 
-def test_step3_rejects_malformed_layout_manifest_json(tmp_path: Path) -> None:
+def test_step2_rejects_malformed_layout_manifest_json(tmp_path: Path) -> None:
     marks = _build_marks_template(tmp_path)
     wb = openpyxl.load_workbook(marks)
     try:
@@ -172,7 +172,7 @@ def test_step3_rejects_malformed_layout_manifest_json(tmp_path: Path) -> None:
         instructor_ui._validate_uploaded_filled_marks_workbook(marks)
 
 
-def test_step3_rejects_formula_tampering(tmp_path: Path) -> None:
+def test_step2_rejects_formula_tampering(tmp_path: Path) -> None:
     marks = _build_marks_template(tmp_path)
     wb = openpyxl.load_workbook(marks)
     try:
@@ -196,7 +196,7 @@ def test_step3_rejects_formula_tampering(tmp_path: Path) -> None:
         instructor_ui._validate_uploaded_filled_marks_workbook(marks)
 
 
-def test_backward_compat_accepts_legacy_unsigned_hash_format(tmp_path: Path) -> None:
+def test_rejects_legacy_unsigned_hash_format(tmp_path: Path) -> None:
     details = _build_course_details(tmp_path)
     wb = openpyxl.load_workbook(details)
     try:
@@ -207,10 +207,11 @@ def test_backward_compat_accepts_legacy_unsigned_hash_format(tmp_path: Path) -> 
     finally:
         wb.close()
 
-    assert validate_course_details_workbook(details) == "COURSE_SETUP_V1"
+    with pytest.raises(ValidationError):
+        validate_course_details_workbook(details)
 
 
-def test_backward_compat_accepts_legacy_layout_hash_in_step3(tmp_path: Path) -> None:
+def test_rejects_legacy_layout_hash_in_step2(tmp_path: Path) -> None:
     marks = _build_marks_template(tmp_path)
     wb = openpyxl.load_workbook(marks)
     try:
@@ -221,7 +222,8 @@ def test_backward_compat_accepts_legacy_layout_hash_in_step3(tmp_path: Path) -> 
     finally:
         wb.close()
 
-    instructor_ui._validate_uploaded_filled_marks_workbook(marks)
+    with pytest.raises(ValidationError):
+        instructor_ui._validate_uploaded_filled_marks_workbook(marks)
 
 
 def test_marks_template_has_no_invalid_minus_equal_formulas(tmp_path: Path) -> None:
@@ -235,3 +237,4 @@ def test_marks_template_has_no_invalid_minus_equal_formulas(tmp_path: Path) -> N
                         assert "-=" not in cell.value
     finally:
         wb.close()
+

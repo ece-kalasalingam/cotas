@@ -1,7 +1,12 @@
 import logging
 
 import common.texts as texts
-from common.texts import get_available_languages, set_language, set_language_from_system, t
+from common.texts import (
+    get_available_languages,
+    set_language,
+    set_language_from_system,
+    t,
+)
 from common.texts.en import TEXTS as EN_TEXTS
 from common.texts.hi_in import TEXTS as HI_IN_TEXTS
 from common.texts.ta_in import TEXTS as TA_IN_TEXTS

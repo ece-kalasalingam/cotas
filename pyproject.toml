@@ -1,0 +1,30 @@
+[tool.ruff]
+exclude = [
+  ".git",
+  "__pycache__",
+  ".pytest_tmp_env",
+  ".pytest_cache*",
+  ".tmp_*",
+  ".perf_tmp",
+  ".tmp_audit_run",
+  "build",
+  "dist",
+  "htmlcov",
+]
+
+[tool.ruff.lint]
+ignore = ["E402"]
+
+[tool.isort]
+profile = "black"
+skip_gitignore = true
+extend_skip_glob = [
+  ".pytest_tmp_env/*",
+  ".pytest_cache*/*",
+  ".tmp_*/*",
+  ".perf_tmp/*",
+  ".tmp_audit_run/*",
+  "build/*",
+  "dist/*",
+  "htmlcov/*",
+]

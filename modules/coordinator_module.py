@@ -38,9 +38,13 @@ from common.constants import (
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
+from common.drag_drop_file_widget import (
+    DragDropFileList,
+    DragDropZoneFrame,
+    ManagedDropFileWidget,
+)
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
-from common.drag_drop_file_widget import DragDropFileList, DragDropZoneFrame, ManagedDropFileWidget
 from common.removable_file_item_widget import (
     ElidedFileNameLabel as _SharedElidedFileNameLabel,
 )
@@ -49,30 +53,28 @@ from common.removable_file_item_widget import (
 )
 from common.texts import t
 from common.toast import show_toast
-from common.ui_stylings import (
-    GLOBAL_QPUSHBUTTON_MIN_WIDTH,
-    COORDINATOR_DROP_LIST_ITEM_SPACING,
-    COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
-    COORDINATOR_DROP_ZONE_LAYOUT_SPACING,
-    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_INNER_RADIUS,
-    COORDINATOR_DROPZONE_OUTER_RADIUS,
-    COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-    COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_WIDTH,
-    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
-    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
-    COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
-    COORDINATOR_LIST_PLACEHOLDER_COLOR,
-    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
-)
 from common.ui_logging import (
     UILogHandler,
     build_i18n_log_message,
     format_log_line_at,
     parse_i18n_log_message,
     resolve_i18n_log_message,
+)
+from common.ui_stylings import (
+    COORDINATOR_DROP_LIST_ITEM_SPACING,
+    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
+    COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
+    COORDINATOR_DROPZONE_BORDER_WIDTH,
+    COORDINATOR_DROPZONE_INNER_RADIUS,
+    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
+    COORDINATOR_DROPZONE_OUTER_RADIUS,
+    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
+    COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
+    COORDINATOR_LIST_PLACEHOLDER_COLOR,
+    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
+    GLOBAL_QPUSHBUTTON_MIN_WIDTH,
 )
 from common.utils import (
     emit_user_status,
@@ -104,7 +106,9 @@ from modules.coordinator.steps.calculate_attainment import calculate_attainment_
 from modules.coordinator.steps.collect_files import (
     add_uploaded_paths as _add_uploaded_paths_impl,
 )
-from modules.coordinator.steps.collect_files import process_files_async
+from modules.coordinator.steps.collect_files import (
+    process_files_async,
+)
 from services import CoordinatorWorkflowService
 
 from .coordinator_processing import (
@@ -113,14 +117,17 @@ from .coordinator_processing import (
     _CoAttainmentWorkbookResult,
     _extract_final_report_signature,
     _generate_co_attainment_workbook,
-    _path_key,
 )
 from .coordinator_processing import (
     _has_valid_final_co_report as _processing_has_valid_final_co_report,
 )
+from .coordinator_processing import (
+    _path_key,
+)
 
 # Referenced indirectly by coordinator helper modules via ns=globals().
 _COORDINATOR_NS_EXPORTS = (
+    QListWidget,
     QListWidgetItem,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,

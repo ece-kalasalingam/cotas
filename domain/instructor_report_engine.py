@@ -270,7 +270,7 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
     if SYSTEM_HASH_SHEET not in workbook.sheetnames:
         raise ValidationError(t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET))
     if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
-        raise ValidationError(t("instructor.validation.step3.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET))
+        raise ValidationError(t("instructor.validation.step2.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET))
 
     hash_sheet = workbook[SYSTEM_HASH_SHEET]
     template_id_raw = hash_sheet[_CELL_SYSTEM_TEMPLATE_ID].value
@@ -294,7 +294,7 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
     if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
         raise ValidationError(
             t(
-                "instructor.validation.step3.layout_header_mismatch",
+                "instructor.validation.step2.layout_header_mismatch",
                 column="A1",
                 expected=SYSTEM_LAYOUT_MANIFEST_KEY,
             )
@@ -302,7 +302,7 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
     if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
         raise ValidationError(
             t(
-                "instructor.validation.step3.layout_header_mismatch",
+                "instructor.validation.step2.layout_header_mismatch",
                 column="B1",
                 expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
             )
@@ -312,9 +312,9 @@ def _validate_source_workbook_integrity(workbook: Any) -> None:
     manifest_text = str(manifest_text_raw).strip() if manifest_text_raw is not None else ""
     manifest_hash = str(manifest_hash_raw).strip() if manifest_hash_raw is not None else ""
     if not manifest_text or not manifest_hash:
-        raise ValidationError(t("instructor.validation.step3.layout_manifest_missing"))
+        raise ValidationError(t("instructor.validation.step2.layout_manifest_missing"))
     if not verify_payload_signature(manifest_text, manifest_hash):
-        raise ValidationError(t("instructor.validation.step3.layout_hash_mismatch"))
+        raise ValidationError(t("instructor.validation.step2.layout_hash_mismatch"))
 
 def _read_course_metadata(sheet: Any) -> tuple[list[tuple[str, Any]], int]:
     rows: list[tuple[str, Any]] = []
@@ -1065,7 +1065,6 @@ def _report_metadata_rows(
         )
     )
     return filtered
-
 def _ratio_total_header(ratio: float) -> str:
     percent = ratio * 100.0
     if abs(percent - round(percent)) <= 1e-9:
@@ -1073,3 +1072,4 @@ def _ratio_total_header(ratio: float) -> str:
     else:
         token = f"{percent:g}"
     return CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE.format(ratio=token)
+
