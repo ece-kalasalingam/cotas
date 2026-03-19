@@ -2,6 +2,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon
@@ -9,7 +10,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
-    QLabel,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# Import modules
 from common.constants import (
     APP_NAME,
     MAIN_ACTIVITY_ICON_SIZE,
@@ -32,6 +31,7 @@ from common.constants import (
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
+from common.module_plugins import ModulePluginSpec
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
 from common.ui_logging import (
@@ -45,8 +45,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
-from modules.coordinator_module import CoordinatorModule
-from modules.instructor_module import InstructorModule
+from modules.module_catalog import build_module_catalog
 
 WINDOW_TARGET_HEIGHT_RATIO = 0.8
 WINDOW_HEIGHT_CAP = 640
@@ -77,26 +76,6 @@ QToolButton:checked {
 """
 
 _logger = logging.getLogger(__name__)
-
-
-class _PlaceholderModule(QWidget):
-    def __init__(self, title_key: str):
-        super().__init__()
-        self._title_key = title_key
-        layout = QVBoxLayout(self)
-        self._label = QLabel(self)
-        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._label.setWordWrap(True)
-        layout.addWidget(self._label)
-        self.retranslate_ui()
-
-    def retranslate_ui(self) -> None:
-        self._label.setText(t("module.placeholder", title=t(self._title_key)))
-
-
-class POAnalysisModule(_PlaceholderModule):
-    def __init__(self):
-        super().__init__("module.po_analysis")
 
 
 class MainWindow(QMainWindow):
@@ -133,7 +112,10 @@ class MainWindow(QMainWindow):
         self.work_layout.addWidget(self.stack)
         
         # Dictionary to keep track of initialized modules
-        self.modules = {}
+        self.modules: dict[str, Any] = {}
+        self._module_specs: tuple[ModulePluginSpec, ...] = build_module_catalog()
+        self._module_specs_by_key = {spec.key: spec for spec in self._module_specs}
+        self._module_actions_by_key: dict[str, QAction] = {}
 
         central_layout.addWidget(self.work_area)
 
@@ -190,7 +172,7 @@ class MainWindow(QMainWindow):
         shared_row.addWidget(self.shared_activity_frame)
         central_layout.addLayout(shared_row)
 
-        self.current_module = None
+        self.current_module: Any | None = None
         self._shared_activity_entries: list[dict[str, object]] = []
 
         # ----------------------------
@@ -204,55 +186,30 @@ class MainWindow(QMainWindow):
         self.activitybar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         self.activitybar.setStyleSheet(MAIN_ACTIVITYBAR_STYLESHEET)
 
-        # SVG Icons
-        self.action_co_section = QAction(
-            QIcon(resource_path("assets/co_section.svg")),
-            t("module.instructor"),
-            self
-        )
-        self.action_co_section.setCheckable(True)
-
-        self.action_co_course = QAction(
-            QIcon(resource_path("assets/co_course.svg")),
-            t("module.coordinator_short"),
-            self
-        )
-        self.action_co_course.setCheckable(True)
-
-        self.action_po = QAction(
-            QIcon(resource_path("assets/po.svg")),
-            t("module.po_analysis"),
-            self
-        )
-        self.action_po.setCheckable(True)
-
-        self.action_help = QAction(
-            QIcon(resource_path("assets/help.svg")),
-            t("nav.help"),
-            self
-        )
-        self.action_help.setCheckable(True)
-
-        self.action_about = QAction(
-            QIcon(resource_path("assets/about.svg")),
-            t("nav.about"),
-            self
-        )
-        self.action_about.setCheckable(True)
-
         # Exclusive selection
         self.nav_group = QActionGroup(self)
         self.nav_group.setExclusive(True)
 
-        for action in (
-            self.action_co_section,
-            self.action_co_course,
-            self.action_po,
-            self.action_help,
-            self.action_about,
-        ):
+        for spec in self._module_specs:
+            if not spec.show_in_activity_bar:
+                continue
+            action = QAction(
+                QIcon(resource_path(spec.icon_path)),
+                t(spec.title_key),
+                self,
+            )
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, key=spec.key: self._load_module_by_key(key))
+            self._module_actions_by_key[spec.key] = action
             self.nav_group.addAction(action)
             self.activitybar.addAction(action)
+
+        # Backward-compatible action aliases used by tests/internals.
+        self.action_co_section = self._module_actions_by_key["instructor"]
+        self.action_co_course = self._module_actions_by_key["coordinator"]
+        self.action_po = self._module_actions_by_key["po_analysis"]
+        self.action_help = self._module_actions_by_key["help"]
+        self.action_about = self._module_actions_by_key["about"]
 
         for action in self.activitybar.actions():
             btn = self.activitybar.widgetForAction(action)
@@ -276,25 +233,6 @@ class MainWindow(QMainWindow):
         self.language_status_button.clicked.connect(self._show_language_menu_from_statusbar)
         self.statusBar().addPermanentWidget(self.language_status_button)
 
-        # ----------------------------
-        # Connect Navigation
-        # ----------------------------
-        self.action_co_section.triggered.connect(
-            lambda: self.load_module(InstructorModule)
-        )
-        self.action_co_course.triggered.connect(
-            lambda: self.load_module(CoordinatorModule)
-        )
-        self.action_po.triggered.connect(
-            lambda: self.load_module(POAnalysisModule)
-        )
-        self.action_help.triggered.connect(
-            self._load_help_module
-        )
-        self.action_about.triggered.connect(
-            self._load_about_module
-        )
-
         self._refresh_language_switcher()
         self._refresh_shared_activity_texts()
         self._append_shared_activity_log(
@@ -306,7 +244,7 @@ class MainWindow(QMainWindow):
         self._refresh_shared_outputs_html()
 
         # Load default module
-        self.load_module(InstructorModule)
+        self._load_module_by_key("instructor")
 
     # ----------------------------------------------------
     # Module Handling
@@ -348,43 +286,29 @@ class MainWindow(QMainWindow):
             set_shared_mode(shared_enabled)
         self._refresh_shared_outputs_html()
         self.statusBar().showMessage(t("status.ready"))
+
+    def _load_module_by_key(self, key: str) -> None:
+        spec = self._module_specs_by_key.get(key)
+        if spec is None:
+            return
+        try:
+            module_class = spec.class_loader()
+        except Exception as exc:
+            _logger.exception("Failed to import module plugin '%s'.", key)
+            module_label = t(spec.title_key)
+            show_toast(
+                self,
+                t("module.load_failed_body", module=module_label, error=exc),
+                title=t("module.load_failed_title"),
+                level="error",
+            )
+            self.flash_status(t("module.load_failed_status", module=module_label))
+            return
+        self.load_module(module_class)
     
     def flash_status(self, message: str, timeout: int = STATUS_FLASH_TIMEOUT_MS):
         self.statusBar().showMessage(message)
         QTimer.singleShot(timeout, lambda: self.statusBar().showMessage(t("status.ready")))
-
-    def _load_help_module(self):
-        # Lazy import avoids QtPdf startup cost until Help is actually opened.
-        try:
-            from modules.help_module import HelpModule
-        except Exception as exc:
-            _logger.exception("Failed to import Help module.")
-            show_toast(
-                self,
-                t("module.load_failed_body", module=t("nav.help"), error=exc),
-                title=t("module.load_failed_title"),
-                level="error",
-            )
-            self.flash_status(t("module.load_failed_status", module=t("nav.help")))
-            return
-
-        self.load_module(HelpModule)
-
-    def _load_about_module(self):
-        try:
-            from modules.about_module import AboutModule
-        except Exception as exc:
-            _logger.exception("Failed to import About module.")
-            show_toast(
-                self,
-                t("module.load_failed_body", module=t("nav.about"), error=exc),
-                title=t("module.load_failed_title"),
-                level="error",
-            )
-            self.flash_status(t("module.load_failed_status", module=t("nav.about")))
-            return
-
-        self.load_module(AboutModule)
 
     def _refresh_language_switcher(self) -> None:
         preferred = get_ui_language_preference(APP_NAME)
@@ -428,11 +352,10 @@ class MainWindow(QMainWindow):
     def apply_language_change(self) -> None:
         self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY))
         self.activitybar.setWindowTitle(t("toolbar.navigation"))
-        self.action_co_section.setText(t("module.instructor"))
-        self.action_co_course.setText(t("module.coordinator_short"))
-        self.action_po.setText(t("module.po_analysis"))
-        self.action_help.setText(t("nav.help"))
-        self.action_about.setText(t("nav.about"))
+        for spec in self._module_specs:
+            action = self._module_actions_by_key.get(spec.key)
+            if action is not None:
+                action.setText(t(spec.title_key))
         self._refresh_language_switcher()
         self._refresh_shared_activity_texts()
         self._rerender_shared_activity_log()

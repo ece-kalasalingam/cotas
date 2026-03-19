@@ -85,7 +85,7 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
 
     leave_calls = {"count": 0}
     monkeypatch.setattr(
-        coordinator_ui.QListWidget,
+        coordinator_ui.DragDropFileList,
         "dragLeaveEvent",
         lambda self, e: leave_calls.__setitem__("count", leave_calls["count"] + 1),
     )
@@ -101,7 +101,7 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
 
     dbl_calls = {"count": 0}
     monkeypatch.setattr(
-        coordinator_ui.QListWidget,
+        coordinator_ui.DragDropFileList,
         "mouseDoubleClickEvent",
         lambda self, e: dbl_calls.__setitem__("count", dbl_calls["count"] + 1),
     )

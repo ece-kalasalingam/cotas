@@ -83,9 +83,9 @@ from common.ui_stylings import (
 from common.utils import (
     emit_user_status,
     log_process_message,
-    remember_dialog_dir,
     resolve_dialog_start_path,
 )
+from modules.coordinator.contracts import require_keys
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
 from modules.coordinator.messages import show_threshold_validation_toast
 from modules.coordinator.output_links import (
@@ -124,33 +124,11 @@ from .coordinator_processing import (
     _path_key,
 )
 
-# Referenced indirectly by coordinator helper modules via ns=globals().
-_COORDINATOR_NS_EXPORTS = (
-    QListWidget,
-    QListWidgetItem,
-    OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_SEPARATOR,
-    show_toast,
-    build_i18n_log_message,
-    format_log_line_at,
-    parse_i18n_log_message,
-    resolve_i18n_log_message,
-    emit_user_status,
-    log_process_message,
-    remember_dialog_dir,
-    JobCancelledError,
-    _CoAttainmentWorkbookResult,
-    _analyze_dropped_files,
-    _build_co_attainment_default_name,
-    _extract_final_report_signature,
-    _generate_co_attainment_workbook,
-    _path_key,
-)
-
 OUTPUT_LINK_MODE_FILE = "file"
 
 _logger = logging.getLogger(__name__)
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + 72
+_QT_COMPAT_EXPORTS = (QListWidget,)
 
 
 @dataclass(slots=True)
@@ -197,6 +175,73 @@ def _output_links_namespace() -> dict[str, object]:
         "OUTPUT_LINK_SEPARATOR": OUTPUT_LINK_SEPARATOR,
         "show_toast": show_toast,
     }
+
+
+def _collect_files_namespace() -> dict[str, object]:
+    return {
+        "t": t,
+        "_path_key": _path_key,
+        "show_toast": show_toast,
+        "log_process_message": log_process_message,
+        "build_i18n_log_message": build_i18n_log_message,
+        "_analyze_dropped_files": _analyze_dropped_files,
+        "QListWidgetItem": QListWidgetItem,
+        "JobCancelledError": JobCancelledError,
+    }
+
+
+def _calculate_attainment_namespace() -> dict[str, object]:
+    return {
+        "t": t,
+        "QFileDialog": QFileDialog,
+        "APP_NAME": APP_NAME,
+        "resolve_dialog_start_path": resolve_dialog_start_path,
+        "_extract_final_report_signature": _extract_final_report_signature,
+        "_build_co_attainment_default_name": _build_co_attainment_default_name,
+        "_CoAttainmentWorkbookResult": _CoAttainmentWorkbookResult,
+        "_path_key": _path_key,
+        "log_process_message": log_process_message,
+        "build_i18n_log_message": build_i18n_log_message,
+        "show_toast": show_toast,
+        "_generate_co_attainment_workbook": _generate_co_attainment_workbook,
+        "JobCancelledError": JobCancelledError,
+    }
+
+
+def _validate_coordinator_namespaces() -> None:
+    require_keys(
+        _collect_files_namespace(),
+        keys=(
+            "t",
+            "_path_key",
+            "show_toast",
+            "log_process_message",
+            "build_i18n_log_message",
+            "_analyze_dropped_files",
+            "QListWidgetItem",
+            "JobCancelledError",
+        ),
+        context="coordinator.collect_files",
+    )
+    require_keys(
+        _calculate_attainment_namespace(),
+        keys=(
+            "t",
+            "QFileDialog",
+            "APP_NAME",
+            "resolve_dialog_start_path",
+            "_extract_final_report_signature",
+            "_build_co_attainment_default_name",
+            "_CoAttainmentWorkbookResult",
+            "_path_key",
+            "log_process_message",
+            "build_i18n_log_message",
+            "show_toast",
+            "_generate_co_attainment_workbook",
+            "JobCancelledError",
+        ),
+        context="coordinator.calculate_attainment",
+    )
 
 
 class _ExcelDropList(DragDropFileList):
@@ -252,13 +297,19 @@ class CoordinatorModule(QWidget):
     OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        workflow_service: CoordinatorWorkflowService | None = None,
+        async_runner: AsyncOperationRunner | None = None,
+    ) -> None:
         super().__init__()
+        _validate_coordinator_namespaces()
         self._files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
         self._logger = _logger
         self.state = CoordinatorWorkflowState()
-        self._workflow_service = CoordinatorWorkflowService()
+        self._workflow_service = workflow_service or CoordinatorWorkflowService()
         self._cancel_token: CancellationToken | None = None
         self._active_jobs: list[object] = []
         self._pending_drop_batches: list[list[str]] = []
@@ -266,7 +317,7 @@ class CoordinatorModule(QWidget):
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
         self._workflow_controller = CoordinatorWorkflowController(self)
-        self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
+        self._async_runner = async_runner or AsyncOperationRunner(self, run_async=run_in_background)
         self._runtime = ModuleRuntime(
             module=self,
             app_name=APP_NAME,
@@ -516,7 +567,7 @@ class CoordinatorModule(QWidget):
         self._refresh_ui()
 
     def _on_calculate_clicked(self) -> None:
-        calculate_attainment_async(self, ns=globals())
+        calculate_attainment_async(self, ns=_calculate_attainment_namespace())
 
     def _on_save_shortcut_activated(self) -> None:
         if self.state.busy:
@@ -531,7 +582,7 @@ class CoordinatorModule(QWidget):
         self._process_files_async(next_batch)
 
     def _process_files_async(self, dropped_files: list[str]) -> None:
-        process_files_async(self, dropped_files, ns=globals())
+        process_files_async(self, dropped_files, ns=_collect_files_namespace())
 
     def _start_async_operation(
         self,
@@ -557,7 +608,7 @@ class CoordinatorModule(QWidget):
         return _CoordinatorFileItemWidget(file_path, parent=parent)
 
     def _add_uploaded_paths(self, added_paths: list[Path]) -> None:
-        _add_uploaded_paths_impl(self, added_paths, ns=globals())
+        _add_uploaded_paths_impl(self, added_paths, ns=_collect_files_namespace())
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
         first_path = next((value for value in dropped_files if value), "")
