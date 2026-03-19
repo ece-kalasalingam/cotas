@@ -6,15 +6,12 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, TypedDict, cast
 
 from common.constants import (
-    LOG_EXTRA_KEY_JOB_ID,
-    LOG_EXTRA_KEY_STEP_ID,
-    LOG_EXTRA_KEY_USER_MESSAGE,
-    PROCESS_MESSAGE_CANCELLED_TEMPLATE,
     PROCESS_MESSAGE_SUCCESS_SUFFIX,
     WORKFLOW_PAYLOAD_KEY_OUTPUT,
     WORKFLOW_PAYLOAD_KEY_TEMPLATE_ID,
     WORKFLOW_STEP_ID_STEP1_GENERATE_COURSE_TEMPLATE,
 )
+from modules.instructor.steps.shared_execution import handle_step_failure
 
 
 class _ModuleState(Protocol):
@@ -148,50 +145,17 @@ def download_course_template_async(module: object, *, ns: Mapping[str, object]) 
         typed_module._show_step_success_toast(1)
 
     def _on_failed(exc: Exception) -> None:
-        if isinstance(exc, typed_ns["JobCancelledError"]):
-            status_key = "instructor.status.operation_cancelled"
-            user_message = t(status_key)
-            user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status"](typed_module, user_message)
-            typed_ns["_logger"].info(
-                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
-                process_name,
-                extra={
-                    LOG_EXTRA_KEY_USER_MESSAGE: user_message_payload,
-                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
-                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
-                },
-            )
-            return
-        if isinstance(exc, typed_ns["ValidationError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                notify=lambda message, _level: typed_module._show_validation_error_toast(message),
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-        elif isinstance(exc, typed_ns["AppSystemError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
-        else:
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
+        handle_step_failure(
+            exc=exc,
+            ns=typed_ns,
+            module=typed_module,
+            process_name=process_name,
+            user_error_message=user_error_message,
+            step_no=1,
+            job_id=job_context.job_id if job_context else None,
+            step_id=job_context.step_id if job_context else None,
+            show_validation_toast=typed_module._show_validation_error_toast,
+        )
 
     def _work() -> Path:
         if workflow_service is not None and job_context is not None:

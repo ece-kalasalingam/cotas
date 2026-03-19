@@ -19,6 +19,8 @@ Developed at Kalasalingam Academy of Research and Education (KARE).
 ## Instructor Workflow (Current)
 - `Step 1`: Generate and validate course details, then generate marks templates.
 - `Step 2`: Upload/validate filled marks and generate final CO reports.
+- Steps are intentionally independent across sessions: do not assume Step 1 artifacts are reusable cache for later Step 2 runs.
+- Workbook formatting/protection and system-sheet structure are mandatory in current release outputs.
 - The instructor UI intentionally uses a two-step model only.
 
 ## Tech Stack

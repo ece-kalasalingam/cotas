@@ -147,6 +147,10 @@ Complexity:
 - Coordinator aggregation cost rises with number of uploaded files and per-file student/outcome volume.
 - Help/About do not materially affect compute budget.
 
+Non-goals (intentional constraints):
+- Do not cache Step 1 workbook metadata for Step 2 reuse across sessions. Users may run steps in different order, on different days, and for different courses on shared PCs.
+- Do not reduce workbook formatting/protection/sheet footprint solely for speed. Current output structure is required by release workflow and integrity checks.
+
 Operational guidance:
 - Keep workbook templates structurally clean and bounded.
 - Prefer batched processing for very large sections.

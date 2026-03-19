@@ -6,10 +6,6 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, TypedDict, cast
 
 from common.constants import (
-    LOG_EXTRA_KEY_JOB_ID,
-    LOG_EXTRA_KEY_STEP_ID,
-    LOG_EXTRA_KEY_USER_MESSAGE,
-    PROCESS_MESSAGE_CANCELLED_TEMPLATE,
     PROCESS_MESSAGE_SUCCESS_SUFFIX,
     WORKFLOW_PAYLOAD_KEY_OUTPUT,
     WORKFLOW_PAYLOAD_KEY_PATH,
@@ -17,6 +13,9 @@ from common.constants import (
     WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE,
     WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS,
 )
+from modules.instructor.steps.shared_execution import handle_step_failure
+
+_PROGRESS_UPDATE_BATCH_SIZE = 10
 
 
 def _coerce_int(value: object, default: int) -> int:
@@ -212,6 +211,15 @@ def upload_course_details_from_paths_async(
         mismatched_template_paths: list[str] = []
         total_unique = len(unique_paths)
         processed = 0
+
+        def _publish_progress_if_needed(*, force: bool = False) -> None:
+            if not force and processed % _PROGRESS_UPDATE_BATCH_SIZE != 0:
+                return
+            typed_ns["_publish_status"](
+                typed_module,
+                t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
+            )
+
         for path in unique_paths:
             token.raise_if_cancelled()
             try:
@@ -232,25 +240,17 @@ def upload_course_details_from_paths_async(
             except Exception:
                 invalid_paths.append(path)
                 processed += 1
-                typed_ns["_publish_status"](
-                    typed_module,
-                    t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
-                )
+                _publish_progress_if_needed()
                 continue
             if template_id != typed_ns["ID_COURSE_SETUP"]:
                 mismatched_template_paths.append(path)
                 processed += 1
-                typed_ns["_publish_status"](
-                    typed_module,
-                    t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
-                )
+                _publish_progress_if_needed()
                 continue
             valid_paths.append(path)
             processed += 1
-            typed_ns["_publish_status"](
-                typed_module,
-                t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
-            )
+            _publish_progress_if_needed()
+        _publish_progress_if_needed(force=True)
         return {
             "valid_paths": valid_paths,
             "invalid_paths": invalid_paths,
@@ -336,30 +336,16 @@ def upload_course_details_from_paths_async(
             )
 
     def _on_failed(exc: Exception) -> None:
-        if isinstance(exc, typed_ns["JobCancelledError"]):
-            status_key = "instructor.status.operation_cancelled"
-            user_message = t(status_key)
-            user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status"](typed_module, user_message)
-            typed_ns["_logger"].info(
-                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
-                process_name,
-                extra={
-                    LOG_EXTRA_KEY_USER_MESSAGE: user_message_payload,
-                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
-                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
-                },
-            )
-            return
-        typed_ns["log_process_message"](
-            process_name,
-            logger=typed_ns["_logger"],
-            error=exc,
+        handle_step_failure(
+            exc=exc,
+            ns=typed_ns,
+            module=typed_module,
+            process_name=process_name,
             user_error_message=user_error_message,
+            step_no=1,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
-        typed_module._show_system_error_toast(1)
 
     typed_ns["_start_async_operation"](
         typed_module,
@@ -506,50 +492,17 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         )
 
     def _on_failed(exc: Exception) -> None:
-        if isinstance(exc, typed_ns["JobCancelledError"]):
-            status_key = "instructor.status.operation_cancelled"
-            user_message = t(status_key)
-            user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
-            typed_ns["_publish_status"](typed_module, user_message)
-            typed_ns["_logger"].info(
-                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
-                process_name,
-                extra={
-                    LOG_EXTRA_KEY_USER_MESSAGE: user_message_payload,
-                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
-                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
-                },
-            )
-            return
-        if isinstance(exc, typed_ns["ValidationError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                notify=lambda message, _level: typed_module._show_validation_error_toast(message),
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-        elif isinstance(exc, typed_ns["AppSystemError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
-        else:
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
+        handle_step_failure(
+            exc=exc,
+            ns=typed_ns,
+            module=typed_module,
+            process_name=process_name,
+            user_error_message=user_error_message,
+            step_no=1,
+            job_id=job_context.job_id if job_context else None,
+            step_id=job_context.step_id if job_context else None,
+            show_validation_toast=typed_module._show_validation_error_toast,
+        )
 
     def _work() -> object:
         generated_outputs: list[str] = []
@@ -576,10 +529,11 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
                 failed_count += 1
             finally:
                 processed_count += 1
-                typed_ns["_publish_status"](
-                    typed_module,
-                    t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
-                )
+                if processed_count % _PROGRESS_UPDATE_BATCH_SIZE == 0 or processed_count == total_count:
+                    typed_ns["_publish_status"](
+                        typed_module,
+                        t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
+                    )
         return {
             "generated_outputs": generated_outputs,
             "processed_count": len(planned_pairs),

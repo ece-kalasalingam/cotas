@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -86,6 +88,7 @@ _DEDUP_SQLITE_THRESHOLD_ENTRIES = 1
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
 _INTEGRITY_SCHEMA_VERSION = 1
+_SIGNATURE_VALIDATION_MAX_WORKERS = 8
 
 
 @dataclass(slots=True, frozen=True)
@@ -411,11 +414,28 @@ def _analyze_dropped_files(
     seen_sections: set[str] = set()
     signature_cache: dict[str, _FinalReportSignature | None] = {}
 
-    def _cached_signature(path: Path) -> _FinalReportSignature | None:
+    unique_paths: list[Path] = []
+    seen_signature_keys: set[str] = set()
+    for path in [*existing_resolved, *accepted]:
         key = _path_key(path)
-        if key not in signature_cache:
-            signature_cache[key] = _extract_final_report_signature(path)
-        return signature_cache[key]
+        if key in seen_signature_keys:
+            continue
+        seen_signature_keys.add(key)
+        unique_paths.append(path)
+
+    max_workers = min(
+        _SIGNATURE_VALIDATION_MAX_WORKERS,
+        max(1, os.cpu_count() or 1),
+        len(unique_paths) or 1,
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_pairs = [(path, executor.submit(_extract_final_report_signature, path)) for path in unique_paths]
+        for path, future in future_pairs:
+            token.raise_if_cancelled()
+            signature_cache[_path_key(path)] = future.result()
+
+    def _cached_signature(path: Path) -> _FinalReportSignature | None:
+        return signature_cache.get(_path_key(path))
 
     for path in existing_resolved:
         token.raise_if_cancelled()
@@ -606,47 +626,23 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
         raise ValueError(f"Missing CO sheets for CO{co_index}.")
 
-    direct_iter = iter(_iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO))
-    indirect_iter = iter(_iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO))
+    indirect_lookup: dict[tuple[int, str], _ParsedScoreRow] = {}
+    for item in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO):
+        indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
 
-    lockstep = True
-    indirect_lookup: dict[tuple[int, str], _ParsedScoreRow] | None = None
-    current_indirect = next(indirect_iter, None)
-
-    for direct_row in direct_iter:
+    for direct_row in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO):
         key = (direct_row.reg_hash, direct_row.reg_key)
-        match: _ParsedScoreRow | None = None
-        if lockstep and indirect_lookup is None:
-            if current_indirect is not None and (
-                current_indirect.reg_hash == direct_row.reg_hash and current_indirect.reg_key == direct_row.reg_key
-            ):
-                match = current_indirect
-                current_indirect = next(indirect_iter, None)
-            else:
-                lockstep = False
-                indirect_lookup = {}
-                if current_indirect is not None:
-                    indirect_lookup[(current_indirect.reg_hash, current_indirect.reg_key)] = current_indirect
-                for item in indirect_iter:
-                    indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
-                match = indirect_lookup.get(key)
-        else:
-            match = indirect_lookup.get(key) if indirect_lookup is not None else None
-
+        match = indirect_lookup.get(key)
         if match is None:
             continue
 
-        direct_name_value = direct_row.student_name
-        direct_score = direct_row.score
-        indirect_name_value = match.student_name
-        indirect_score = match.score
-        student_name = direct_name_value or indirect_name_value
+        student_name = direct_row.student_name or match.student_name
         yield _CoAttainmentRow(
             reg_hash=direct_row.reg_hash,
             reg_no=direct_row.reg_no,
             student_name=student_name,
-            direct_score=direct_score,
-            indirect_score=indirect_score,
+            direct_score=direct_row.score,
+            indirect_score=match.score,
             worksheet_name=direct_name,
             workbook_name=workbook_name,
         )

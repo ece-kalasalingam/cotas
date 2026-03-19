@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from common.constants import (
     ID_COURSE_SETUP,
@@ -59,8 +59,9 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
             context={"workbook": str(workbook_file)},
         )
 
+    # Fast pass: stream and validate static system headers/hash fields.
     try:
-        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False, read_only=True)
     except Exception as exc:
         raise ValidationError(
             t("instructor.validation.workbook_open_failed", workbook=workbook_file),
@@ -69,59 +70,20 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         ) from exc
 
     try:
-        if SYSTEM_HASH_SHEET not in workbook.sheetnames:
-            raise ValidationError(t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET))
+        template_id, manifest_text = _read_system_manifest_payload(workbook)
+    finally:
+        workbook.close()
 
-        hash_sheet = workbook[SYSTEM_HASH_SHEET]
-        if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_KEY):
-            raise ValidationError(t("instructor.validation.system_hash_missing_template_id_header"))
-        if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_KEY):
-            raise ValidationError(t("instructor.validation.system_hash_missing_template_hash_header"))
-
-        template_id = str(hash_sheet["A2"].value).strip() if hash_sheet["A2"].value is not None else ""
-        template_hash = str(hash_sheet["B2"].value).strip() if hash_sheet["B2"].value is not None else ""
-        if not template_id:
-            raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
-        if not verify_payload_signature(template_id, template_hash):
-            raise ValidationError(t("instructor.validation.system_hash_mismatch"))
-        if normalize(template_id) != normalize(ID_COURSE_SETUP):
-            raise ValidationError(
-                t(
-                    "instructor.validation.unknown_template",
-                    template_id=template_id,
-                    available=ID_COURSE_SETUP,
-                )
-            )
-
-        if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
-            raise ValidationError(
-                t("instructor.validation.step2.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
-            )
-        layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
-        if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
-            raise ValidationError(
-                t(
-                    "instructor.validation.step2.layout_header_mismatch",
-                    column="A1",
-                    expected=SYSTEM_LAYOUT_MANIFEST_KEY,
-                )
-            )
-        if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
-            raise ValidationError(
-                t(
-                    "instructor.validation.step2.layout_header_mismatch",
-                    column="B1",
-                    expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
-                )
-            )
-
-        manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
-        manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
-        if not manifest_text or not manifest_hash:
-            raise ValidationError(t("instructor.validation.step2.layout_manifest_missing"))
-        if not verify_payload_signature(manifest_text, manifest_hash):
-            raise ValidationError(t("instructor.validation.step2.layout_hash_mismatch"))
-
+    # Deep pass: run manifest schema/template rules on full workbook only after fast pass.
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
+    except Exception as exc:
+        raise ValidationError(
+            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
+            code="WORKBOOK_OPEN_FAILED",
+            context={"workbook": str(workbook_file)},
+        ) from exc
+    try:
         try:
             manifest = json.loads(manifest_text)
         except Exception as exc:
@@ -129,4 +91,60 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         validate_filled_marks_manifest_schema_by_template(workbook, manifest, template_id=template_id)
     finally:
         workbook.close()
+
+
+def _read_system_manifest_payload(workbook: Any) -> tuple[str, str]:
+    if SYSTEM_HASH_SHEET not in workbook.sheetnames:
+        raise ValidationError(t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET))
+
+    hash_sheet = workbook[SYSTEM_HASH_SHEET]
+    if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_KEY):
+        raise ValidationError(t("instructor.validation.system_hash_missing_template_id_header"))
+    if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_KEY):
+        raise ValidationError(t("instructor.validation.system_hash_missing_template_hash_header"))
+
+    template_id = str(hash_sheet["A2"].value).strip() if hash_sheet["A2"].value is not None else ""
+    template_hash = str(hash_sheet["B2"].value).strip() if hash_sheet["B2"].value is not None else ""
+    if not template_id:
+        raise ValidationError(t("instructor.validation.system_hash_template_id_missing"))
+    if not verify_payload_signature(template_id, template_hash):
+        raise ValidationError(t("instructor.validation.system_hash_mismatch"))
+    if normalize(template_id) != normalize(ID_COURSE_SETUP):
+        raise ValidationError(
+            t(
+                "instructor.validation.unknown_template",
+                template_id=template_id,
+                available=ID_COURSE_SETUP,
+            )
+        )
+
+    if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
+        raise ValidationError(
+            t("instructor.validation.step2.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET)
+        )
+    layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
+    if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
+        raise ValidationError(
+            t(
+                "instructor.validation.step2.layout_header_mismatch",
+                column="A1",
+                expected=SYSTEM_LAYOUT_MANIFEST_KEY,
+            )
+        )
+    if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
+        raise ValidationError(
+            t(
+                "instructor.validation.step2.layout_header_mismatch",
+                column="B1",
+                expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+            )
+        )
+
+    manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
+    manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
+    if not manifest_text or not manifest_hash:
+        raise ValidationError(t("instructor.validation.step2.layout_manifest_missing"))
+    if not verify_payload_signature(manifest_text, manifest_hash):
+        raise ValidationError(t("instructor.validation.step2.layout_hash_mismatch"))
+    return template_id, manifest_text
 

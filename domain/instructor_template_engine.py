@@ -672,8 +672,9 @@ def validate_course_details_workbook(workbook_path: str | Path) -> str:
             workbook=str(workbook_file),
         )
 
+    # Fast pass: stream workbook in read-only mode for identity/schema checks.
     try:
-        workbook = openpyxl.load_workbook(workbook_file, data_only=True)
+        workbook = openpyxl.load_workbook(workbook_file, data_only=True, read_only=True)
     except Exception as exc:
         raise _ve(
             t("instructor.validation.workbook_open_failed", workbook=workbook_file),
@@ -684,7 +685,20 @@ def validate_course_details_workbook(workbook_path: str | Path) -> str:
     try:
         template_id = _extract_and_validate_template_id(workbook)
         blueprint = _get_blueprint(template_id)
-        _validate_workbook_schema(workbook, blueprint)
+        _validate_workbook_schema_read_only(workbook, blueprint)
+    finally:
+        workbook.close()
+
+    # Deep pass: run template-specific business rules only after fast pass succeeds.
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=True)
+    except Exception as exc:
+        raise _ve(
+            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(workbook_file),
+        ) from exc
+    try:
         _validate_template_specific_rules(workbook, template_id)
     finally:
         workbook.close()
@@ -744,6 +758,48 @@ def _validate_workbook_schema(workbook: Any, blueprint: WorkbookBlueprint) -> No
             normalize(worksheet.cell(row=1, column=col_index + 1).value)
             for col_index in range(len(expected_headers))
         ]
+        if actual_headers != expected_headers:
+            raise ValidationError(
+                t(
+                    "instructor.validation.header_mismatch",
+                    sheet_name=sheet_schema.name,
+                    expected=sheet_schema.header_matrix[0],
+                )
+            )
+
+
+def _read_header_row_values(worksheet: Any, *, count: int) -> list[str]:
+    first_row = next(
+        worksheet.iter_rows(min_row=1, max_row=1, min_col=1, max_col=count, values_only=True),
+        tuple(),
+    )
+    return [normalize(value) for value in first_row]
+
+
+def _validate_workbook_schema_read_only(workbook: Any, blueprint: WorkbookBlueprint) -> None:
+    expected_sheet_names = [schema.name for schema in blueprint.sheets] + [SYSTEM_HASH_SHEET]
+    actual_sheet_names = list(workbook.sheetnames)
+    if actual_sheet_names != expected_sheet_names:
+        raise ValidationError(
+            t(
+                "instructor.validation.workbook_sheet_mismatch",
+                template_id=blueprint.type_id,
+                expected=expected_sheet_names,
+                found=actual_sheet_names,
+            )
+        )
+
+    for sheet_schema in blueprint.sheets:
+        if len(sheet_schema.header_matrix) != 1:
+            raise ValidationError(
+                t(
+                    "instructor.validation.sheet_single_header_row",
+                    sheet_name=sheet_schema.name,
+                )
+            )
+        expected_headers = [normalize(h) for h in sheet_schema.header_matrix[0]]
+        worksheet = workbook[sheet_schema.name]
+        actual_headers = _read_header_row_values(worksheet, count=len(expected_headers))
         if actual_headers != expected_headers:
             raise ValidationError(
                 t(
