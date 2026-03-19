@@ -21,8 +21,12 @@
 ## Module Routing
 1. `Instructor`: template generation/validation/final report issues.
 2. `Coordinator`: multi-file intake and attainment output issues.
-3. `Help`: PDF load/save/open issues.
-4. `About`: metadata/version rendering issues.
+3. `PO Analysis`: placeholder rendering/navigation issues.
+4. `Help`: PDF load/save/open issues.
+5. `About`: metadata/version rendering issues.
+
+## Architecture Routing Note
+- Navigation/bootstrap issues should be triaged against plugin catalog wiring in `modules/module_catalog.py` and plugin contracts in `common/module_plugins.py`.
 
 ## Communication
 1. Acknowledge incident with severity and ETA.

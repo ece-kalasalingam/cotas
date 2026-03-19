@@ -111,7 +111,6 @@ TEXTS = {
     "instructor.status.step2_uploaded_filled": "Filled marks uploaded.",
     "instructor.status.step2_changed_filled": "Filled marks changed. Regenerate final report.",
     "instructor.status.step2_generated": "Final CO report path selected.",
-    "instructor.status.operation_in_progress": "Operation in progress...",
     "instructor.status.operation_cancelled": "Operation cancelled.",
     "instructor.status.step1_drop_browse_requested": "Course details browse requested from drag-and-drop widget.",
     "instructor.status.step1_drop_files_dropped": "{count} file(s) dropped into course details widget.",

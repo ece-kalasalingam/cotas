@@ -107,7 +107,6 @@ TEXTS = {
     "instructor.status.step2_uploaded_filled": "நிரப்பப்பட்ட மதிப்பெண்கள் பதிவேற்றப்பட்டன.",
     "instructor.status.step2_changed_filled": "நிரப்பப்பட்ட மதிப்பெண்கள் மாற்றப்பட்டன. இறுதி அறிக்கையை மீண்டும் உருவாக்கவும்.",
     "instructor.status.step2_generated": "இறுதி CO அறிக்கைப் பாதை தேர்வு செய்யப்பட்டது.",
-    "instructor.status.operation_in_progress": "செயல் நடைபெற்று கொண்டிருக்கிறது...",
     "instructor.status.operation_cancelled": "செயல் ரத்து செய்யப்பட்டது.",
     "instructor.status.step1_drop_browse_requested": "இழுத்து-விடும் விட்ஜெட்டில் பாட விவர கோப்பு தேர்வு கோரப்பட்டது.",
     "instructor.status.step1_drop_files_dropped": "பாட விவர விட்ஜெட்டில் {count} கோப்பு(கள்) விடப்பட்டது.",

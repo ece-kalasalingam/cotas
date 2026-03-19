@@ -36,6 +36,9 @@ htmlcov/
 
 # Logs and local runtime files
 *.log
+*.stackdump
+core
+core.*
 settings.json
 crash_reports/
 .tmp/

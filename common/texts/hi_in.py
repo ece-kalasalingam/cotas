@@ -97,7 +97,6 @@ TEXTS = {
     'instructor.status.step2_uploaded_filled': 'भरे हुए मार्क्स अपलोड हो गए हैं।',
     'instructor.status.step2_changed_filled': 'भरे हुए मार्क्स बदल गए हैं। अंतिम रिपोर्ट फिर से बनाएँ।',
     'instructor.status.step2_generated': 'अंतिम CO रिपोर्ट का पाथ चुन लिया गया है।',
-    'instructor.status.operation_in_progress': 'ऑपरेशन जारी है...',
     'instructor.status.operation_cancelled': 'ऑपरेशन रद्द कर दिया गया है।',
     'instructor.status.step1_drop_browse_requested': 'ड्रैग-एंड-ड्रॉप विजेट से कोर्स डिटेल्स फ़ाइल चुनने का अनुरोध किया गया।',
     'instructor.status.step1_drop_files_dropped': 'कोर्स डिटेल्स विजेट में {count} फ़ाइल(ें) ड्रॉप की गईं।',

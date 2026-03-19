@@ -23,7 +23,9 @@
 3. Coordinator module: intake and attainment output work.
 4. Help module: PDF load/save/open works.
 5. About module: metadata panel renders.
-6. No new unhandled crash reports.
+6. PO Analysis module placeholder renders.
+7. Module navigation loads via plugin catalog entries in `modules/module_catalog.py`.
+8. No new unhandled crash reports.
 
 ## Post-Rollback
 1. Collect logs/crash reports.

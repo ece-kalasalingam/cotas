@@ -23,6 +23,7 @@ Use commands in `installer/commands.txt`.
 
 - Launch app smoke test on each target OS.
 - Verify workbook creation/validation flow end-to-end using current two-step instructor flow.
+- Verify module navigation and lazy loading through plugin catalog (`modules/module_catalog.py`).
 - Verify translations load and language switcher works.
 - Verify logs are written and no unhandled exceptions on startup.
 - Verify crash spool path exists for packaged builds (`crash_reports/` in app settings dir).
@@ -36,6 +37,7 @@ Use commands in `installer/commands.txt`.
 
 ## Required Quality Gates (Current)
 
+- `conda run -n obe python scripts/quality_gate.py --mode strict`
 - `conda run -n obe python -m ruff check .`
 - `conda run -n obe python -m isort --check-only --diff .`
 - `conda run -n obe python -m pyflakes .`
@@ -43,8 +45,8 @@ Use commands in `installer/commands.txt`.
 - `conda run --no-capture-output -n obe python -m pytest -q`
 - `conda run -n obe python -m coverage run -m pytest -q`
 - `conda run -n obe python -m coverage report -m`
-- `conda run -n obe python -m bandit -q -r . -c .bandit.yaml`
-- `conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache -r requirements.txt -r requirements-dev.txt`
+- `conda run -n obe python -m bandit -q -r common modules services -c .bandit.yaml`
+- `conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache`
 
 ## Platform Distribution Notes
 

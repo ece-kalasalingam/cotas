@@ -2,9 +2,10 @@
 
 ## Executive Summary
 
-FOCUS is a desktop OBE application organized into four user-facing modules:
+FOCUS is a desktop OBE application organized into five user-facing modules:
 - Instructor
 - Coordinator
+- PO Analysis
 - Help
 - About
 
@@ -27,10 +28,14 @@ Overall complexity profile is dominated by Excel workbook generation/validation 
   - Engines: `domain/instructor_template_engine.py`, `domain/instructor_report_engine.py`
 - Coordinator UI: `modules/coordinator_module.py`
   - Step logic: `modules/coordinator/steps/*`
+  - Runtime contracts: `modules/coordinator/contracts.py`
+  - Workflow controller: `modules/coordinator/workflow_controller.py`
   - Processing: `modules/coordinator_processing.py`
   - Service: `services/coordinator_workflow_service.py`
 - Help UI: `modules/help_module.py`
 - About UI: `modules/about_module.py`
+- PO Analysis UI: `modules/po_analysis_module.py` (placeholder plugin module)
+- Plugin catalog: `modules/module_catalog.py`
 
 ### 1.2 Shared Infrastructure
 
@@ -39,6 +44,7 @@ Overall complexity profile is dominated by Excel workbook generation/validation 
 - Toasts: `common/toast.py`
 - Workbook signing/secret policy: `common/workbook_signing.py`, `common/workbook_secret.py`
 - Runtime helpers/storage/logging: `common/utils.py`
+- Module plugin contract: `common/module_plugins.py`
 
 ---
 
@@ -98,7 +104,7 @@ Space:
 
 ---
 
-## 4. Help and About Module Complexity
+## 4. PO Analysis, Help, and About Module Complexity
 
 ### 4.1 Help Module
 
@@ -119,6 +125,15 @@ Primary operations:
 Complexity:
 - Time: `O(1)`
 - Space: `O(1)` excluding static asset size already packaged.
+
+### 4.3 PO Analysis Module (Placeholder)
+
+Primary operations:
+- Render placeholder metadata text.
+
+Complexity:
+- Time: `O(1)`
+- Space: `O(1)`
 
 ---
 
@@ -145,7 +160,7 @@ Complexity:
 
 - Instructor marks/report generation cost rises fastest with student count x component count x question count.
 - Coordinator aggregation cost rises with number of uploaded files and per-file student/outcome volume.
-- Help/About do not materially affect compute budget.
+- PO Analysis/Help/About do not materially affect compute budget.
 
 Non-goals (intentional constraints):
 - Do not cache Step 1 workbook metadata for Step 2 reuse across sessions. Users may run steps in different order, on different days, and for different courses on shared PCs.

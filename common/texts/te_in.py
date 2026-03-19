@@ -97,7 +97,6 @@ TEXTS = {
     'instructor.status.step2_uploaded_filled': 'నింపిన మార్కులు అప్\\u200cలోడ్ చేయబడ్డాయి.',
     'instructor.status.step2_changed_filled': 'నింపిన మార్కులు మారాయి. తుది నివేదికను మళ్లీ రూపొందించండి.',
     'instructor.status.step2_generated': 'తుది CO నివేదిక మార్గం ఎంచుకోబడింది.',
-    'instructor.status.operation_in_progress': 'ఆపరేషన్ పురోగతిలో ఉంది...',
     'instructor.status.operation_cancelled': 'ఆపరేషన్ రద్దు చేయబడింది.',
     'instructor.status.step1_drop_browse_requested': 'డ్రాగ్-అండ్-డ్రాప్ విడ్జెట్ నుండి కోర్సు వివరాల ఫైల్ ఎంపిక అభ్యర్థించబడింది.',
     'instructor.status.step1_drop_files_dropped': 'కోర్సు వివరాల విడ్జెట్‌లో {count} ఫైల్(లు) డ్రాప్ చేయబడ్డాయి.',
