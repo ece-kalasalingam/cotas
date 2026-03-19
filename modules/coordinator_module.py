@@ -45,11 +45,8 @@ from common.drag_drop_file_widget import (
     ManagedDropFileWidget,
 )
 from common.jobs import CancellationToken
-from common.module_messages import append_user_log as _append_user_log_impl
-from common.module_messages import publish_status as _publish_status_impl
-from common.module_messages import publish_status_key as _publish_status_key_impl
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
-from common.module_messages import setup_ui_logging as _setup_ui_logging_impl
+from common.module_runtime import ModuleRuntime
 from common.qt_jobs import run_in_background
 from common.removable_file_item_widget import (
     ElidedFileNameLabel as _SharedElidedFileNameLabel,
@@ -86,7 +83,6 @@ from common.utils import (
     emit_user_status,
     log_process_message,
     remember_dialog_dir,
-    remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
@@ -266,6 +262,13 @@ class CoordinatorModule(QWidget):
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
+        self._runtime = ModuleRuntime(
+            module=self,
+            app_name=APP_NAME,
+            logger=self._logger,
+            async_runner=self._async_runner,
+            messages_namespace_factory=_messages_namespace,
+        )
         self._build_ui()
         self._setup_ui_logging()
         self.retranslate_ui()
@@ -451,10 +454,10 @@ class CoordinatorModule(QWidget):
         self._refresh_summary()
 
     def _publish_status(self, message: str) -> None:
-        _publish_status_impl(self, message, ns=_messages_namespace())
+        self._runtime.publish_status(message)
 
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
-        _publish_status_key_impl(self, text_key, ns=_messages_namespace(), **kwargs)
+        self._runtime.publish_status_key(text_key, **kwargs)
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
@@ -543,7 +546,8 @@ class CoordinatorModule(QWidget):
         on_failure,
         on_finally=None,
     ) -> None:
-        self._async_runner.start(
+        self._runtime.set_async_runner(self._async_runner)
+        self._runtime.start_async_operation(
             token=token,
             job_id=job_id,
             work=work,
@@ -578,17 +582,13 @@ class CoordinatorModule(QWidget):
             self._process_files_async(selected_files)
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
-        remember_dialog_dir_safe(
-            selected_path,
-            app_name=APP_NAME,
-            logger=self._logger,
-        )
+        self._runtime.remember_dialog_dir_safe(selected_path)
 
     def _setup_ui_logging(self) -> None:
-        _setup_ui_logging_impl(self, ns=_messages_namespace())
+        self._runtime.setup_ui_logging()
 
     def _append_user_log(self, message: str) -> None:
-        _append_user_log_impl(self, message, ns=_messages_namespace())
+        self._runtime.append_user_log(message)
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())

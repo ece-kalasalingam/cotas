@@ -38,8 +38,8 @@ def test_publish_and_delegate_helpers(monkeypatch: pytest.MonkeyPatch, qapp: QAp
     module = _build_module(monkeypatch)
     seen: list[tuple[str, tuple, dict]] = []
 
-    monkeypatch.setattr(coordinator_ui, "_publish_status_impl", lambda _m, message, ns: seen.append(("status", (message,), {})))
-    monkeypatch.setattr(coordinator_ui, "_publish_status_key_impl", lambda _m, text_key, ns, **kwargs: seen.append(("key", (text_key,), kwargs)))
+    monkeypatch.setattr(module._runtime, "publish_status", lambda message: seen.append(("status", (message,), {})))
+    monkeypatch.setattr(module._runtime, "publish_status_key", lambda text_key, **kwargs: seen.append(("key", (text_key,), kwargs)))
     monkeypatch.setattr(coordinator_ui, "calculate_attainment_async", lambda _m, ns: seen.append(("calc", (), {})))
     monkeypatch.setattr(coordinator_ui, "process_files_async", lambda _m, dropped, ns: seen.append(("process", (tuple(dropped),), {})))
 
@@ -217,13 +217,14 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     module = _build_module(monkeypatch)
     seen: list[str] = []
 
-    monkeypatch.setattr(coordinator_ui, "_setup_ui_logging_impl", lambda _m, ns: seen.append("setup"))
-    monkeypatch.setattr(coordinator_ui, "_append_user_log_impl", lambda _m, message, ns: seen.append(f"append:{message}"))
+    monkeypatch.setattr(module._runtime, "setup_ui_logging", lambda: seen.append("setup"))
+    monkeypatch.setattr(module._runtime, "append_user_log", lambda message: seen.append(f"append:{message}"))
     monkeypatch.setattr(coordinator_ui, "_rerender_user_log_impl", lambda _m, ns: seen.append("rerender"))
     monkeypatch.setattr(module, "_output_links_html", lambda: "outputs")
     monkeypatch.setattr(coordinator_ui, "remove_file_by_path", lambda _m, path, ns: seen.append(f"remove:{path}"))
     monkeypatch.setattr(coordinator_ui, "clear_all", lambda _m, ns: seen.append("clear"))
 
+    module._setup_ui_logging()
     module._append_user_log("x")
     module._rerender_user_log()
     module.set_shared_activity_log_mode(True)

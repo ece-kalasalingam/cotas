@@ -36,10 +36,8 @@ from common.constants import (
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from common.module_messages import append_user_log as _append_user_log_impl
-from common.module_messages import publish_status as _publish_status_impl
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
-from common.module_messages import setup_ui_logging as _setup_ui_logging_impl
+from common.module_runtime import ModuleRuntime
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -55,7 +53,6 @@ from common.utils import (
     emit_user_status,
     log_process_message,
     remember_dialog_dir,
-    remember_dialog_dir_safe,
     resolve_dialog_start_path,
 )
 from domain import InstructorWorkflowState
@@ -303,6 +300,13 @@ class InstructorModule(QWidget):
             run_async=run_in_background,
             refresh_ui=lambda: self._refresh_ui(),
             should_refresh_ui=lambda: not self._is_closing,
+        )
+        self._runtime = ModuleRuntime(
+            module=self,
+            app_name=APP_NAME,
+            logger=self._logger,
+            async_runner=self._async_runner,
+            messages_namespace_factory=_messages_namespace,
         )
 
         self._ui_log_handler: UILogHandler | None = None
@@ -843,20 +847,16 @@ class InstructorModule(QWidget):
             self._on_step2_generate_clicked()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
-        remember_dialog_dir_safe(
-            selected_path,
-            app_name=APP_NAME,
-            logger=self._logger,
-        )
+        self._runtime.remember_dialog_dir_safe(selected_path)
 
     def _setup_ui_logging(self) -> None:
-        _setup_ui_logging_impl(self, ns=_messages_namespace())
+        self._runtime.setup_ui_logging()
 
     def _append_user_log(self, message: str) -> None:
-        _append_user_log_impl(self, message, ns=_messages_namespace())
+        self._runtime.append_user_log(message)
 
     def _publish_status(self, message: str) -> None:
-        _publish_status_impl(self, message, ns=_messages_namespace())
+        self._runtime.publish_status(message)
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())
@@ -877,13 +877,16 @@ class InstructorModule(QWidget):
         work,
         on_success,
         on_failure,
+        on_finally=None,
     ) -> None:
-        self._async_runner.start(
+        self._runtime.set_async_runner(self._async_runner)
+        self._runtime.start_async_operation(
             token=token,
             job_id=job_id,
             work=work,
             on_success=on_success,
             on_failure=on_failure,
+            on_finally=on_finally,
         )
 
     def closeEvent(self, event) -> None:

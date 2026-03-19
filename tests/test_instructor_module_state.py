@@ -110,7 +110,7 @@ def test_remember_dialog_dir_safe_fallback(monkeypatch: pytest.MonkeyPatch, qapp
     def _fallback(*_args, **_kwargs):
         calls["fallback"] += 1
 
-    monkeypatch.setattr(instructor_ui, "remember_dialog_dir_safe", _fallback)
+    monkeypatch.setattr(module._runtime, "remember_dialog_dir_safe", _fallback)
 
     module._remember_dialog_dir_safe("C:/tmp/a.xlsx")
     assert calls == {"fallback": 1}

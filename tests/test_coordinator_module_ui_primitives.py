@@ -22,7 +22,7 @@ def qapp() -> QApplication:
 
 def _build_module_no_setup_stub(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.CoordinatorModule:
     monkeypatch.setattr(coordinator_ui, "t", lambda key, **kwargs: key)
-    monkeypatch.setattr(coordinator_ui, "_setup_ui_logging_impl", lambda _m, ns: None)
+    monkeypatch.setattr(coordinator_ui.CoordinatorModule, "_setup_ui_logging", lambda self: None)
     return coordinator_ui.CoordinatorModule()
 
 
@@ -173,9 +173,9 @@ def test_setup_ui_logging_wrapper_invokes_impl(monkeypatch: pytest.MonkeyPatch, 
 
     monkeypatch.setattr(coordinator_ui, "t", lambda key, **kwargs: key)
     monkeypatch.setattr(
-        coordinator_ui,
-        "_setup_ui_logging_impl",
-        lambda _m, ns: seen.__setitem__("count", seen["count"] + 1),
+        coordinator_ui.ModuleRuntime,
+        "setup_ui_logging",
+        lambda self: seen.__setitem__("count", seen["count"] + 1),
     )
 
     module = coordinator_ui.CoordinatorModule()
