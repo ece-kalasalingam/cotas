@@ -8,7 +8,16 @@ from typing import Literal
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QPainter, QPalette, QPen
-from PySide6.QtWidgets import QFrame, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
@@ -203,6 +212,9 @@ class ManagedDropFileWidget(QWidget):
         *,
         drop_mode: Literal["single", "multiple"] = "multiple",
         remove_fallback_text: str = "Remove",
+        open_file_tooltip: str = "Open File",
+        open_folder_tooltip: str = "Open Folder",
+        remove_tooltip: str = "Remove File",
         allow_non_local_sources: bool = False,
         allowed_extensions: Iterable[str] | None = None,
         allowed_filenames: Iterable[str] | None = None,
@@ -212,11 +224,15 @@ class ManagedDropFileWidget(QWidget):
         super().__init__(parent)
         self._drop_mode: Literal["single", "multiple"] = drop_mode
         self._remove_fallback_text = remove_fallback_text
+        self._open_file_tooltip = open_file_tooltip
+        self._open_folder_tooltip = open_folder_tooltip
+        self._remove_tooltip = remove_tooltip
         self._allow_non_local_sources = allow_non_local_sources
         self._files: list[str] = []
         self._allowed_extensions = self._normalize_extensions(allowed_extensions)
         self._allowed_filenames = self._normalize_filenames(allowed_filenames)
         self._file_filter = file_filter
+        self._summary_text_builder: Callable[[int], str] = lambda count: f"Files: {count}"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -252,8 +268,30 @@ class ManagedDropFileWidget(QWidget):
         zone_layout.addWidget(self.drop_list)
         root.addWidget(self.drop_zone)
 
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        self.summary_label = QLabel()
+        controls_row.addWidget(self.summary_label)
+        controls_row.addStretch(1)
+
+        self.clear_button = QPushButton("Clear All")
+        self.clear_button.setAutoDefault(False)
+        self.clear_button.setDefault(False)
+        self.clear_button.clicked.connect(self.clear_files)
+        controls_row.addWidget(self.clear_button)
+        root.addLayout(controls_row)
+        self._update_summary_label()
+        self._update_clear_button_state()
+
     def files(self) -> list[str]:
         return list(self._files)
+
+    def set_summary_text_builder(self, builder: Callable[[int], str]) -> None:
+        self._summary_text_builder = builder
+        self._update_summary_label()
+
+    def set_clear_button_text(self, text: str) -> None:
+        self.clear_button.setText(text)
 
     def set_allowed_extensions(self, extensions: Iterable[str] | None) -> None:
         self._allowed_extensions = self._normalize_extensions(extensions)
@@ -272,12 +310,18 @@ class ManagedDropFileWidget(QWidget):
             return
         self._files.clear()
         self.drop_list.clear()
+        self._update_summary_label()
+        self._update_clear_button_state()
         self.files_changed.emit(self.files())
 
     def set_files(self, paths: list[str]) -> None:
         self._files.clear()
         self.drop_list.clear()
-        self.add_files(paths, emit_drop=False)
+        added = self.add_files(paths, emit_drop=False)
+        if not added:
+            self._update_summary_label()
+            self._update_clear_button_state()
+            self.files_changed.emit(self.files())
 
     def add_files(self, paths: list[str], *, emit_drop: bool = True) -> list[str]:
         normalized = [path for path in paths if path]
@@ -318,6 +362,8 @@ class ManagedDropFileWidget(QWidget):
             added.append(path)
             self._append_row(path)
         if added:
+            self._update_summary_label()
+            self._update_clear_button_state()
             if emit_drop:
                 self.files_dropped.emit(list(added))
             self.files_changed.emit(self.files())
@@ -331,6 +377,9 @@ class ManagedDropFileWidget(QWidget):
         row_widget = RemovableFileItemWidget(
             file_path,
             remove_fallback_text=self._remove_fallback_text,
+            open_file_tooltip=self._open_file_tooltip,
+            open_folder_tooltip=self._open_folder_tooltip,
+            remove_tooltip=self._remove_tooltip,
             parent=self.drop_list,
         )
         row_widget.removed.connect(self._remove_path)
@@ -348,6 +397,8 @@ class ManagedDropFileWidget(QWidget):
             path = item.data(Qt.ItemDataRole.UserRole)
             if isinstance(path, str) and path == file_path:
                 self.drop_list.takeItem(row)
+        self._update_summary_label()
+        self._update_clear_button_state()
         self.files_changed.emit(self.files())
 
     def _on_files_dropped(self, paths: list[str]) -> None:
@@ -385,3 +436,9 @@ class ManagedDropFileWidget(QWidget):
         if self._file_filter is not None and not self._file_filter(file_path):
             return False
         return True
+
+    def _update_summary_label(self) -> None:
+        self.summary_label.setText(self._summary_text_builder(len(self._files)))
+
+    def _update_clear_button_state(self) -> None:
+        self.clear_button.setEnabled(bool(self._files))

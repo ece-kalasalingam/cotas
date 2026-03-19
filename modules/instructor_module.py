@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import importlib
 import logging
-import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -39,9 +38,7 @@ from common.qt_jobs import run_in_background
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.texts import t
 from common.toast import show_toast
-from common.ui_stylings import (
-    COORDINATOR_DROP_LIST_MIN_HEIGHT,
-)
+from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.ui_logging import (
     UILogHandler,
     build_i18n_log_message,
@@ -98,9 +95,10 @@ from modules.instructor.steps.step1_course_details_template import (
 from modules.instructor.steps.step2_course_details_and_marks_template import (
     prepare_marks_template_async,
     upload_course_details_async,
-    upload_course_details_from_path_async,
+    upload_course_details_from_paths_async,
 )
 from modules.instructor.steps.step2_filled_marks_and_final_report import (
+    generate_final_reports_from_paths_async,
     generate_final_report_async,
     upload_filled_marks_async,
 )
@@ -123,6 +121,8 @@ _OUTPUT_LINK_RUNTIME_GLOBALS = (
 
 _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")
+_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + 72
+_ENABLE_SECOND_ROW_ACTIONS = True
 _INSTRUCTOR_STATUS_KEYS = (
     "instructor.status.step1_selected",
     "instructor.status.step1_validated",
@@ -286,9 +286,13 @@ class InstructorModule(QWidget):
 
         self.step1_path: str | None = None
         self.marks_template_path: str | None = None
+        self.marks_template_paths: list[str] = []
         self.step2_course_details_path: str | None = None
+        self.step1_course_details_paths: list[str] = []
         self.filled_marks_path: str | None = None
+        self.filled_marks_paths: list[str] = []
         self.final_report_path: str | None = None
+        self.final_report_paths: list[str] = []
 
         self.step1_done = False
         self.marks_template_done = False
@@ -311,10 +315,6 @@ class InstructorModule(QWidget):
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._step_items: list[QListWidgetItem] = []
-        self._busy_started_at: float | None = None
-        self._busy_elapsed_timer = QTimer(self)
-        self._busy_elapsed_timer.setInterval(1000)
-        self._busy_elapsed_timer.timeout.connect(self._update_busy_timer_label)
         self._build_ui()
         self._setup_ui_logging()
         self._refresh_ui()
@@ -329,9 +329,6 @@ class InstructorModule(QWidget):
         self.rail_title = QLabel(t("instructor.workflow_title"))
         left_layout.addWidget(self.rail_title)
 
-        self.busy_timer_label = QLabel()
-        self.busy_timer_label.setObjectName("hintText")
-        left_layout.addWidget(self.busy_timer_label)
         self.download_course_template_button = QPushButton(t("instructor.action.step1.default"))
         self.download_course_template_button.setObjectName("secondaryAction")
         self.download_course_template_button.clicked.connect(self._on_download_course_template_clicked)
@@ -358,35 +355,30 @@ class InstructorModule(QWidget):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.setWidget(left)
+        left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
 
         right = QFrame()
-        right.setObjectName("activeCard")
+        right.setObjectName("coordinatorActiveCard")
         right_layout = QVBoxLayout(right)
-
-        top_content = QWidget()
-        top_layout = QVBoxLayout(top_content)
 
         self.active_title = QLabel()
         self.active_title.setWordWrap(True)
-        top_layout.addWidget(self.active_title)
+        right_layout.addWidget(self.active_title)
 
         self.active_desc = QLabel()
         self.active_desc.setWordWrap(True)
-        top_layout.addWidget(self.active_desc)
+        right_layout.addWidget(self.active_desc)
 
         self.active_note = QLabel(t("instructor.note.default"))
         self.active_note.setWordWrap(True)
         self.active_note.setObjectName("hintText")
-        top_layout.addWidget(self.active_note)
+        right_layout.addWidget(self.active_note)
 
         self.primary_action = QPushButton()
         self.primary_action.setObjectName("secondaryAction")
         self.primary_action.setDefault(True)
         self.primary_action.clicked.connect(self._run_current_step_action)
-        top_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        self.step1_action_row = QWidget()
-        step1_action_layout = QVBoxLayout(self.step1_action_row)
+        right_layout.addWidget(self.primary_action, alignment=Qt.AlignmentFlag.AlignLeft)
 
         # Kept for shortcut/test compatibility; the visible upload control is the drop widget.
         self.step1_upload_action = QPushButton()
@@ -396,41 +388,45 @@ class InstructorModule(QWidget):
         self.step1_upload_action.setVisible(False)
 
         self.step1_drop_widget = ManagedDropFileWidget(
-            drop_mode="single",
+            drop_mode="multiple",
             remove_fallback_text=t("coordinator.file.remove_fallback"),
+            open_file_tooltip=t("instructor.links.open_file"),
+            open_folder_tooltip=t("instructor.links.open_folder"),
+            remove_tooltip=t("coordinator.file.remove_tooltip"),
         )
         # Aliases retained for compatibility with existing logic/tests.
         self.step1_drop_zone = self.step1_drop_widget.drop_zone
         self.step1_drop_list = self.step1_drop_widget.drop_list
-        self.step1_drop_list.setObjectName("instructorCourseDetailsDropList")
-        self.step1_drop_list.setMinimumHeight(COORDINATOR_DROP_LIST_MIN_HEIGHT)
         self.step1_drop_widget.files_dropped.connect(self._on_step1_course_details_dropped)
+        self.step1_drop_widget.files_rejected.connect(self._on_step1_drop_files_rejected)
+        self.step1_drop_widget.browse_requested.connect(self._on_step1_drop_browse_requested)
         self.step1_drop_widget.browse_requested.connect(self._on_step1_upload_clicked)
         self.step1_drop_widget.files_changed.connect(self._on_step1_drop_files_changed)
-        step1_action_layout.addWidget(self.step1_drop_widget, 1)
+        self.step1_drop_widget.clear_button.clicked.connect(self._on_step1_clear_all_clicked)
+        self.step1_drop_widget.set_summary_text_builder(
+            lambda count: t("instructor.step1.drop.summary", count=count)
+        )
+        right_layout.addWidget(self.step1_drop_widget, 1)
 
         self.step1_prepare_action = QPushButton()
         self.step1_prepare_action.setObjectName("primaryAction")
         self.step1_prepare_action.setAutoDefault(False)
         self.step1_prepare_action.setDefault(False)
         self.step1_prepare_action.clicked.connect(self._on_step1_prepare_clicked)
-        self.step1_clear_all_action = QPushButton()
-        self.step1_clear_all_action.setObjectName("coordinatorClearButton")
-        self.step1_clear_all_action.clicked.connect(self._on_step1_clear_all_clicked)
-        step1_controls_layout = QHBoxLayout()
-        step1_controls_layout.addWidget(self.step1_clear_all_action)
-        step1_controls_layout.addWidget(self.step1_prepare_action)
-        step1_controls_layout.addStretch(1)
-        step1_action_layout.addLayout(step1_controls_layout)
-        top_layout.addWidget(self.step1_action_row)
+        controls_row = QHBoxLayout()
+        controls_row.addWidget(self.step1_prepare_action)
+        controls_row.addStretch(1)
+        right_layout.addLayout(controls_row)
 
         self.step2_action_row = QWidget()
         step2_action_layout = QHBoxLayout(self.step2_action_row)
 
+        # Kept for shortcut/test compatibility; the visible upload control is the drop widget.
         self.step2_upload_action = QPushButton()
         self.step2_upload_action.setObjectName("secondaryAction")
         self.step2_upload_action.setDefault(True)
         self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
+        self.step2_upload_action.setVisible(False)
         step2_action_layout.addWidget(self.step2_upload_action)
 
         self.step2_generate_action = QPushButton()
@@ -440,10 +436,28 @@ class InstructorModule(QWidget):
         self.step2_generate_action.clicked.connect(self._on_step2_generate_clicked)
         step2_action_layout.addWidget(self.step2_generate_action)
         step2_action_layout.addStretch(1)
-        top_layout.addWidget(self.step2_action_row)
-        top_layout.addStretch(1)
 
-        right_layout.addWidget(top_content, 1)
+        self.step2_drop_widget = ManagedDropFileWidget(
+            drop_mode="multiple",
+            remove_fallback_text=t("coordinator.file.remove_fallback"),
+            open_file_tooltip=t("instructor.links.open_file"),
+            open_folder_tooltip=t("instructor.links.open_folder"),
+            remove_tooltip=t("coordinator.file.remove_tooltip"),
+        )
+        self.step2_drop_zone = self.step2_drop_widget.drop_zone
+        self.step2_drop_list = self.step2_drop_widget.drop_list
+        self.step2_drop_widget.files_dropped.connect(self._on_step2_filled_marks_dropped)
+        self.step2_drop_widget.files_rejected.connect(self._on_step2_drop_files_rejected)
+        self.step2_drop_widget.browse_requested.connect(self._on_step2_drop_browse_requested)
+        self.step2_drop_widget.browse_requested.connect(self._on_step2_upload_clicked)
+        self.step2_drop_widget.files_changed.connect(self._on_step2_drop_files_changed)
+        self.step2_drop_widget.clear_button.clicked.connect(self._on_step2_clear_all_clicked)
+        self.step2_drop_widget.set_summary_text_builder(
+            lambda count: t("instructor.step1.drop.summary", count=count)
+        )
+        right_layout.addWidget(self.step2_drop_widget, 1)
+        if _ENABLE_SECOND_ROW_ACTIONS:
+            right_layout.addWidget(self.step2_action_row)
 
         self.info_tabs = QTabWidget()
         self.info_tabs.setObjectName("instructorInfoTabs")
@@ -488,7 +502,20 @@ class InstructorModule(QWidget):
         root.addWidget(right, 1)
 
     def _quick_link_items(self) -> tuple[tuple[str, str | None], ...]:
-        return tuple((label_key, getattr(self, attr)) for label_key, attr in self.RAIL_LINKS)
+        rows: list[tuple[str, str | None]] = []
+        for label_key, attr in self.RAIL_LINKS:
+            if attr == "marks_template_path":
+                batch_paths = [path for path in self.marks_template_paths if path]
+                if batch_paths:
+                    rows.extend((label_key, path) for path in batch_paths)
+                    continue
+            if attr == "final_report_path":
+                batch_paths = [path for path in self.final_report_paths if path]
+                if batch_paths:
+                    rows.extend((label_key, path) for path in batch_paths)
+                    continue
+            rows.append((label_key, getattr(self, attr)))
+        return tuple(rows)
 
     def _quick_link_markup(self, label_key: str, path: str | None) -> str:
         return _quick_link_markup_impl(self, label_key, path, ns=_output_link_namespace())
@@ -515,6 +542,8 @@ class InstructorModule(QWidget):
         return self._workflow_controller.step_state_text(step)
 
     def _step_list_text(self, step: int) -> str:
+        if step == 2 and not _ENABLE_SECOND_ROW_ACTIONS:
+            return ""
         return self._workflow_controller.step_list_text(step)
 
     def _action_text_for_step(self, step: int) -> str:
@@ -553,7 +582,6 @@ class InstructorModule(QWidget):
             self.state.current_step = self.current_step
         self.rail_title.setText(t("instructor.workflow_title"))
         self.download_course_template_button.setText(t("instructor.action.step1.default"))
-        self._update_busy_timer_label()
 
         self.step_list.blockSignals(True)
         for index, item in enumerate(self._step_items, start=1):
@@ -563,6 +591,9 @@ class InstructorModule(QWidget):
 
         self.active_title.setText(t(self.STEP_TITLE_KEYS[self.current_step]))
         self.active_desc.setText(t(self.STEP_DESC_KEYS[self.current_step]))
+        if self.current_step == 2 and not _ENABLE_SECOND_ROW_ACTIONS:
+            self.active_title.setText("")
+            self.active_desc.setText("")
         self.info_tabs.setTabText(0, t("instructor.log.title"))
         self.info_tabs.setTabText(1, t(self.RAIL_LINK_TITLE_KEY))
         self._refresh_quick_links()
@@ -570,29 +601,40 @@ class InstructorModule(QWidget):
         is_step1 = self.current_step == 1
         is_step2 = self.current_step == 2
         self.active_title.setVisible(not is_step1)
+        self.active_desc.setVisible(not is_step1)
         self.active_note.setVisible(not is_step1)
 
         self.primary_action.setVisible(False)
-        self.step1_action_row.setVisible(is_step1)
-        self.step2_action_row.setVisible(is_step2)
+        self.step1_drop_widget.setVisible(is_step1)
+        self.step1_prepare_action.setVisible(is_step1)
+        self.step2_drop_widget.setVisible(is_step2 and _ENABLE_SECOND_ROW_ACTIONS)
+        self.step2_action_row.setVisible(is_step2 and _ENABLE_SECOND_ROW_ACTIONS)
 
         if is_step1:
             self.step1_upload_action.setText(t("instructor.action.step1.upload"))
-            self.step1_clear_all_action.setText(t("coordinator.clear_all"))
+            self.step1_drop_widget.set_clear_button_text(t("coordinator.clear_all"))
             self.step1_prepare_action.setText(t("instructor.action.step1.prepare"))
-            self.step1_clear_all_action.setEnabled(bool(self.step1_drop_widget.files()))
-            self.step1_prepare_action.setEnabled(self.step2_upload_ready)
+            self.step1_drop_widget.set_summary_text_builder(
+                lambda count: t("instructor.step1.drop.summary", count=count)
+            )
+            self.step1_drop_widget.clear_button.setEnabled(bool(self.step1_drop_widget.files()))
+            self.step1_prepare_action.setEnabled(bool(self.step1_course_details_paths))
         elif is_step2:
             self.step2_upload_action.setText(t("instructor.action.step2.upload.default"))
             self.step2_generate_action.setText(t("instructor.action.step2.generate.default"))
-            self.step2_upload_action.setEnabled(True)
-            self.step2_generate_action.setEnabled(
-                self.filled_marks_done and not self.filled_marks_outdated
+            self.step2_drop_widget.set_clear_button_text(t("coordinator.clear_all"))
+            self.step2_drop_widget.set_summary_text_builder(
+                lambda count: t("instructor.step1.drop.summary", count=count)
             )
-            self.step1_clear_all_action.setEnabled(False)
+            self.step2_upload_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS)
+            self.step2_drop_widget.clear_button.setEnabled(bool(self.step2_drop_widget.files()))
+            self.step2_generate_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and bool(self.filled_marks_paths))
+            self.step1_drop_widget.clear_button.setEnabled(False)
 
         self.step1_upload_action.setEnabled(is_step1)
         self.step1_drop_widget.setEnabled(is_step1 and not self.state.busy)
+        self.step2_upload_action.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and not self.state.busy)
+        self.step2_drop_widget.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and not self.state.busy)
         if not can_run:
             self.active_note.setText(reason)
         elif self.filled_marks_outdated or self.final_report_outdated:
@@ -602,15 +644,19 @@ class InstructorModule(QWidget):
                 self.active_note.setText(t("instructor.note.outdated_downstream"))
         else:
             self.active_note.setText(t("instructor.note.default"))
+        if is_step2 and not _ENABLE_SECOND_ROW_ACTIONS:
+            self.active_note.setText("")
 
         if self.state.busy:
             self.primary_action.setEnabled(False)
             self.download_course_template_button.setEnabled(False)
             self.step1_upload_action.setEnabled(False)
             self.step1_drop_widget.setEnabled(False)
-            self.step1_clear_all_action.setEnabled(False)
+            self.step1_drop_widget.clear_button.setEnabled(False)
             self.step1_prepare_action.setEnabled(False)
             self.step2_upload_action.setEnabled(False)
+            self.step2_drop_widget.setEnabled(False)
+            self.step2_drop_widget.clear_button.setEnabled(False)
             self.step2_generate_action.setEnabled(False)
         else:
             self.download_course_template_button.setEnabled(True)
@@ -626,6 +672,9 @@ class InstructorModule(QWidget):
             self._refresh_ui()
             return
         if self.current_step == 2:
+            if not _ENABLE_SECOND_ROW_ACTIONS:
+                self._refresh_ui()
+                return
             self._generate_final_report_async()
             self._refresh_ui()
             return
@@ -641,13 +690,18 @@ class InstructorModule(QWidget):
         self._upload_course_details_async()
         self._refresh_ui()
 
+    def _on_step1_drop_browse_requested(self) -> None:
+        self._publish_status(t("instructor.status.step1_drop_browse_requested"))
+
     def _on_step1_course_details_dropped(self, dropped_files: list[str]) -> None:
+        dropped_count = len([path for path in dropped_files if path])
+        self._publish_status(t("instructor.status.step1_drop_files_dropped", count=dropped_count))
         if self.state.busy:
             return
-        selected_path = next((path for path in dropped_files if path), "")
-        if not selected_path:
+        selected_paths = [path for path in dropped_files if path]
+        if not selected_paths:
             return
-        self._upload_course_details_from_path_async(selected_path)
+        self._upload_course_details_from_paths_async(selected_paths)
         self._refresh_ui()
 
     def _set_step1_drop_active(self, active: bool) -> None:
@@ -659,21 +713,39 @@ class InstructorModule(QWidget):
         self.step1_drop_widget.clear_files()
         self._refresh_ui()
 
-    def _set_step1_course_details_file(self, file_path: str) -> None:
-        self.step1_drop_widget.set_files([file_path])
+    def _set_step1_course_details_files(self, file_paths: list[str]) -> None:
+        self.step1_drop_widget.set_files(file_paths)
 
     def _on_step1_drop_files_changed(self, files: list[str]) -> None:
+        self._publish_status(t("instructor.status.step1_drop_files_changed", count=len(files)))
         if self.state.busy:
             return
+        current_valid = [*self.step1_course_details_paths]
         if files:
+            current_keys = {str(Path(path).resolve(strict=False)).lower() for path in current_valid}
+            incoming_keys = {str(Path(path).resolve(strict=False)).lower() for path in files}
+            if incoming_keys.issubset(current_keys):
+                incoming_set = incoming_keys
+                self.step1_course_details_paths = [
+                    path
+                    for path in self.step1_course_details_paths
+                    if str(Path(path).resolve(strict=False)).lower() in incoming_set
+                ]
+                self.step2_course_details_path = (
+                    self.step1_course_details_paths[0] if self.step1_course_details_paths else None
+                )
+                self.step2_upload_ready = bool(self.step1_course_details_paths)
+            self._refresh_ui()
             return
         if not self.step2_course_details_path:
             self._refresh_ui()
             return
+        self.step1_course_details_paths = []
         self.step2_course_details_path = None
         self.step2_upload_ready = False
         self.marks_template_done = False
         self.marks_template_path = None
+        self.marks_template_paths = []
         self._step2_marks_default_name = t("instructor.dialog.step1.prepare.default_name")
         self.filled_marks_outdated = self.filled_marks_done
         self.final_report_outdated = self.final_report_done
@@ -681,16 +753,82 @@ class InstructorModule(QWidget):
             self._publish_status(t("instructor.status.step1_changed"))
         self._refresh_ui()
 
+    def _on_step1_drop_files_rejected(self, files: list[str]) -> None:
+        rejected_count = len([path for path in files if path])
+        if rejected_count <= 0:
+            return
+        self._publish_status(t("instructor.status.step1_drop_files_rejected", count=rejected_count))
+
     def _on_step1_prepare_clicked(self) -> None:
         self._prepare_marks_template_async()
         self._refresh_ui()
 
     def _on_step2_upload_clicked(self) -> None:
-        self._upload_filled_marks_async()
+        if not _ENABLE_SECOND_ROW_ACTIONS:
+            return
+        self._upload_filled_marks_from_dialog_async()
         self._refresh_ui()
 
     def _on_step2_generate_clicked(self) -> None:
+        if not _ENABLE_SECOND_ROW_ACTIONS:
+            return
         self._generate_final_report_async()
+        self._refresh_ui()
+
+    def _on_step2_drop_browse_requested(self) -> None:
+        self._publish_status(t("instructor.status.step2_drop_browse_requested"))
+
+    def _on_step2_filled_marks_dropped(self, dropped_files: list[str]) -> None:
+        dropped_count = len([path for path in dropped_files if path])
+        self._publish_status(t("instructor.status.step2_drop_files_dropped", count=dropped_count))
+        if self.state.busy:
+            return
+        selected_paths = [path for path in dropped_files if path]
+        if not selected_paths:
+            return
+        self._upload_filled_marks_from_paths_async(selected_paths)
+        self._refresh_ui()
+
+    def _on_step2_drop_files_rejected(self, files: list[str]) -> None:
+        rejected_count = len([path for path in files if path])
+        if rejected_count <= 0:
+            return
+        self._publish_status(t("instructor.status.step2_drop_files_rejected", count=rejected_count))
+
+    def _on_step2_clear_all_clicked(self) -> None:
+        if self.state.busy:
+            return
+        self.step2_drop_widget.clear_files()
+        self._refresh_ui()
+
+    def _on_step2_drop_files_changed(self, files: list[str]) -> None:
+        self._publish_status(t("instructor.status.step2_drop_files_changed", count=len(files)))
+        if self.state.busy:
+            return
+        current_valid = [*self.filled_marks_paths]
+        if files:
+            current_keys = {str(Path(path).resolve(strict=False)).lower() for path in current_valid}
+            incoming_keys = {str(Path(path).resolve(strict=False)).lower() for path in files}
+            if incoming_keys.issubset(current_keys):
+                incoming_set = incoming_keys
+                self.filled_marks_paths = [
+                    path
+                    for path in self.filled_marks_paths
+                    if str(Path(path).resolve(strict=False)).lower() in incoming_set
+                ]
+                self.filled_marks_path = self.filled_marks_paths[0] if self.filled_marks_paths else None
+                self.filled_marks_done = bool(self.filled_marks_paths)
+            self._refresh_ui()
+            return
+        if not self.filled_marks_paths:
+            self._refresh_ui()
+            return
+        self.filled_marks_paths = []
+        self.filled_marks_path = None
+        self.filled_marks_done = False
+        self.final_report_outdated = self.final_report_done
+        if self.final_report_outdated:
+            self._publish_status(t("instructor.status.step2_changed_filled"))
         self._refresh_ui()
 
     def _on_open_shortcut_activated(self) -> None:
@@ -699,7 +837,7 @@ class InstructorModule(QWidget):
         if self.current_step == 1 and self.step1_upload_action.isEnabled():
             self._on_step1_upload_clicked()
             return
-        if self.current_step == 2 and self.step2_upload_action.isEnabled():
+        if _ENABLE_SECOND_ROW_ACTIONS and self.current_step == 2 and self.step2_upload_action.isEnabled():
             self._on_step2_upload_clicked()
 
     def _on_save_shortcut_activated(self) -> None:
@@ -708,7 +846,7 @@ class InstructorModule(QWidget):
         if self.current_step == 1 and self.step1_prepare_action.isEnabled():
             self._on_step1_prepare_clicked()
             return
-        if self.current_step == 2 and self.step2_generate_action.isEnabled():
+        if _ENABLE_SECOND_ROW_ACTIONS and self.current_step == 2 and self.step2_generate_action.isEnabled():
             self._on_step2_generate_clicked()
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
@@ -783,28 +921,11 @@ class InstructorModule(QWidget):
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         self.state.set_busy(busy, job_id=job_id)
-        if busy:
-            self._busy_started_at = time.perf_counter()
-            if not self._busy_elapsed_timer.isActive():
-                self._busy_elapsed_timer.start()
-        else:
-            if self._busy_elapsed_timer.isActive():
-                self._busy_elapsed_timer.stop()
-            self._busy_started_at = None
         host_window = self.window()
         set_switch = getattr(host_window, "set_language_switch_enabled", None)
         if callable(set_switch):
             set_switch(not busy)
         self._refresh_ui()
-
-    def _update_busy_timer_label(self) -> None:
-        if not self.state.busy or self._busy_started_at is None:
-            self.busy_timer_label.setText(t("instructor.timer.idle"))
-            return
-        elapsed_seconds = max(0, int(time.perf_counter() - self._busy_started_at))
-        minutes, seconds = divmod(elapsed_seconds, 60)
-        elapsed_text = f"{minutes:02d}:{seconds:02d}"
-        self.busy_timer_label.setText(t("instructor.timer.running", elapsed=elapsed_text))
 
     def _start_async_operation(
         self,
@@ -825,8 +946,6 @@ class InstructorModule(QWidget):
 
     def closeEvent(self, event) -> None:
         self._is_closing = True
-        if self._busy_elapsed_timer.isActive():
-            self._busy_elapsed_timer.stop()
         if self._cancel_token is not None:
             self._cancel_token.cancel()
             self._cancel_token = None
@@ -845,13 +964,100 @@ class InstructorModule(QWidget):
     def _upload_course_details_async(self) -> None:
         upload_course_details_async(self, ns=globals())
 
-    def _upload_course_details_from_path_async(self, open_path: str) -> None:
-        upload_course_details_from_path_async(self, open_path, ns=globals())
+    def _upload_course_details_from_paths_async(self, open_paths: list[str]) -> None:
+        upload_course_details_from_paths_async(self, open_paths, ns=globals())
 
     def _upload_filled_marks_async(self) -> None:
         upload_filled_marks_async(self, ns=globals())
 
+    def _upload_filled_marks_from_dialog_async(self) -> None:
+        if self.state.busy:
+            return
+        open_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            t("instructor.dialog.step2.upload.title"),
+            resolve_dialog_start_path(APP_NAME),
+            t("instructor.dialog.filter.excel_open"),
+        )
+        if not open_paths:
+            return
+        self._upload_filled_marks_from_paths_async(open_paths)
+
+    def _upload_filled_marks_from_paths_async(self, open_paths: list[str]) -> None:
+        if self.state.busy:
+            return
+        selected_paths = [path for path in open_paths if path]
+        if not selected_paths:
+            return
+        self._remember_dialog_dir_safe(selected_paths[0])
+        token = CancellationToken()
+
+        def _work() -> dict[str, object]:
+            valid: list[str] = []
+            invalid: list[str] = []
+            seen: set[str] = set()
+            duplicates = 0
+            for path in selected_paths:
+                key = str(Path(path).resolve(strict=False)).lower()
+                if key in seen:
+                    duplicates += 1
+                    continue
+                seen.add(key)
+                token.raise_if_cancelled()
+                try:
+                    _validate_uploaded_filled_marks_workbook(path)
+                    valid.append(path)
+                except Exception:
+                    invalid.append(path)
+            return {
+                "valid": valid,
+                "invalid": invalid,
+                "duplicates": duplicates,
+            }
+
+        def _on_success(result: object) -> None:
+            data = result if isinstance(result, dict) else {}
+            valid = [p for p in data.get("valid", []) if isinstance(p, str) and p]
+            invalid = [p for p in data.get("invalid", []) if isinstance(p, str) and p]
+            duplicates = int(data.get("duplicates", 0))
+
+            merged: list[str] = []
+            seen_keys: set[str] = set()
+            for value in [*self.filled_marks_paths, *valid]:
+                key = str(Path(value).resolve(strict=False)).lower()
+                if key in seen_keys:
+                    duplicates += 1
+                    continue
+                seen_keys.add(key)
+                merged.append(value)
+            replacing = bool(self.filled_marks_paths)
+            self.filled_marks_paths = merged
+            self.filled_marks_path = self.filled_marks_paths[0] if self.filled_marks_paths else None
+            self.filled_marks_done = bool(self.filled_marks_paths)
+            self.filled_marks_outdated = False
+            self.step2_drop_widget.set_files(self.filled_marks_paths)
+            if replacing and self.filled_marks_done:
+                self.final_report_outdated = True
+                self._publish_status(t("instructor.status.step2_changed_filled"))
+            elif self.filled_marks_done:
+                self._publish_status(t("instructor.status.step2_uploaded_filled"))
+            if invalid or duplicates:
+                show_toast(
+                    self,
+                    f"Some files were not accepted. Invalid={len(invalid)}, duplicates={duplicates}.",
+                    title=t("instructor.step2.title"),
+                    level="warning",
+                )
+
+        def _on_failure(_exc: Exception) -> None:
+            self._show_system_error_toast(2)
+
+        self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
+
     def _generate_final_report_async(self) -> None:
+        if self.filled_marks_paths:
+            generate_final_reports_from_paths_async(self, ns=globals())
+            return
         generate_final_report_async(self, ns=globals())
 
     def _show_step_success_toast(self, step: int) -> None:

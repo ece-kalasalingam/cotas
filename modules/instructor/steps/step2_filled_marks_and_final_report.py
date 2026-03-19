@@ -68,10 +68,13 @@ class _InstructorStep3Module(Protocol):
     _logger: _Logger
     filled_marks_done: bool
     filled_marks_path: str | None
+    filled_marks_paths: list[str]
     filled_marks_outdated: bool
     final_report_outdated: bool
     final_report_path: str | None
+    final_report_paths: list[str]
     final_report_done: bool
+    step1_marks_template_paths: list[str]
 
     def _remember_dialog_dir_safe(self, path: str) -> None:
         ...
@@ -122,6 +125,190 @@ class _Step3Namespace(TypedDict):
     _build_final_report_default_name: Callable[[str | None], str]
     _atomic_copy_file: Callable[[str, str], Path]
     _logger: _Logger
+
+
+def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, object]) -> None:
+    typed_module = cast(_InstructorStep3Module, module)
+    typed_ns = cast(_Step3Namespace, ns)
+    if typed_module.state.busy:
+        return
+
+    t = typed_ns["t"]
+    process_name = t("instructor.log.process.generate_final_co_report")
+    user_success_message, user_error_message = typed_ns["_localized_log_messages"](
+        "instructor.log.process.generate_final_co_report"
+    )
+    source_paths = list(getattr(typed_module, "filled_marks_paths", []) or [])
+    if not source_paths and getattr(typed_module, "filled_marks_path", None):
+        source_paths = [cast(str, typed_module.filled_marks_path)]
+    if not source_paths:
+        source_paths = list(getattr(typed_module, "step1_marks_template_paths", []) or [])
+    if not source_paths:
+        typed_ns["show_toast"](
+            typed_module,
+            t("instructor.require.step2"),
+            title=t("instructor.msg.step_required_title"),
+            level="info",
+        )
+        return
+
+    output_dir = typed_ns["QFileDialog"].getExistingDirectory(
+        typed_module,
+        t("instructor.dialog.step2.generate.title"),
+        typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"]),
+    )
+    if not output_dir:
+        return
+    typed_module._remember_dialog_dir_safe(output_dir)
+
+    planned_pairs: list[tuple[str, str]] = []
+    skipped_conflicts = 0
+    used_targets: set[str] = set()
+    for source_path in source_paths:
+        default_name = typed_ns["_build_final_report_default_name"](source_path)
+        proposed_path = str(Path(output_dir) / default_name)
+        normalized_target = str(Path(proposed_path).resolve(strict=False)).lower()
+        if Path(proposed_path).exists():
+            replacement_path, _ = typed_ns["QFileDialog"].getSaveFileName(
+                typed_module,
+                t("instructor.dialog.step2.generate.title"),
+                typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"], default_name),
+                t("instructor.dialog.filter.excel"),
+            )
+            if not replacement_path:
+                skipped_conflicts += 1
+                continue
+            proposed_path = replacement_path
+            normalized_target = str(Path(proposed_path).resolve(strict=False)).lower()
+        candidate = Path(proposed_path)
+        suffix = 1
+        while normalized_target in used_targets:
+            suffix += 1
+            candidate = candidate.with_name(f"{candidate.stem}_{suffix}{candidate.suffix}")
+            normalized_target = str(candidate.resolve(strict=False)).lower()
+        used_targets.add(normalized_target)
+        planned_pairs.append((source_path, str(candidate)))
+
+    if not planned_pairs:
+        typed_ns["show_toast"](
+            typed_module,
+            "No output files selected for CO report generation.",
+            title=t("instructor.step2.title"),
+            level="warning",
+        )
+        return
+
+    workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
+    token = typed_ns["CancellationToken"]()
+    job_context = (
+        workflow_service.create_job_context(
+            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: list(source_paths), WORKFLOW_PAYLOAD_KEY_OUTPUT: output_dir},
+        )
+        if workflow_service is not None
+        else None
+    )
+
+    def _work() -> dict[str, object]:
+        generated_outputs: list[str] = []
+        failed_count = 0
+        for source_path, output_path in planned_pairs:
+            token.raise_if_cancelled()
+            try:
+                typed_ns["_validate_uploaded_filled_marks_workbook"](source_path)
+                token.raise_if_cancelled()
+                if workflow_service is not None and job_context is not None:
+                    workflow_service.generate_final_report(
+                        source_path,
+                        output_path,
+                        context=workflow_service.create_job_context(
+                            step_id=WORKFLOW_STEP_ID_STEP3_GENERATE_FINAL_REPORT,
+                            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: output_path},
+                        ),
+                        cancel_token=token,
+                    )
+                else:
+                    typed_ns["_atomic_copy_file"](source_path, output_path)
+                generated_outputs.append(output_path)
+            except Exception:
+                failed_count += 1
+        return {
+            "generated_outputs": generated_outputs,
+            "processed_count": len(planned_pairs),
+            "total_count": len(source_paths),
+            "failed_count": failed_count,
+            "skipped_count": skipped_conflicts,
+        }
+
+    def _on_finished(result: object) -> None:
+        data = cast(dict[str, object], result if isinstance(result, dict) else {})
+        generated_outputs = [p for p in cast(list[str], data.get("generated_outputs", [])) if p]
+        processed_count = int(cast(int, data.get("processed_count", len(planned_pairs))))
+        total_count = int(cast(int, data.get("total_count", len(source_paths))))
+        failed_count = int(cast(int, data.get("failed_count", 0)))
+        skipped_count = int(cast(int, data.get("skipped_count", skipped_conflicts)))
+
+        typed_module.final_report_path = generated_outputs[-1] if generated_outputs else None
+        typed_module.final_report_paths = list(generated_outputs)
+        typed_module.final_report_done = bool(generated_outputs)
+        typed_module.final_report_outdated = False
+        if generated_outputs:
+            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step2_generated"))
+        typed_ns["log_process_message"](
+            process_name,
+            logger=typed_ns["_logger"],
+            success_message=(
+                f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX} "
+                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}"
+            ),
+            user_success_message=user_success_message,
+            job_id=job_context.job_id if job_context else None,
+            step_id=job_context.step_id if job_context else None,
+        )
+        typed_ns["show_toast"](
+            typed_module,
+            (
+                f"CO report generation complete: processed {processed_count}/{total_count}, "
+                f"generated {len(generated_outputs)}, failed {failed_count}, skipped {skipped_count}."
+            ),
+            title=t("instructor.step2.title"),
+            level="success" if failed_count == 0 else "warning",
+        )
+
+    def _on_failed(exc: Exception) -> None:
+        if isinstance(exc, typed_ns["JobCancelledError"]):
+            status_key = "instructor.status.operation_cancelled"
+            user_message = t(status_key)
+            user_message_payload = typed_ns["build_i18n_log_message"](status_key, fallback=user_message)
+            typed_ns["_publish_status_compat"](typed_module, user_message)
+            typed_ns["_logger"].info(
+                PROCESS_MESSAGE_CANCELLED_TEMPLATE,
+                process_name,
+                extra={
+                    LOG_EXTRA_KEY_USER_MESSAGE: user_message_payload,
+                    LOG_EXTRA_KEY_JOB_ID: job_context.job_id if job_context else None,
+                    LOG_EXTRA_KEY_STEP_ID: job_context.step_id if job_context else None,
+                },
+            )
+            return
+        typed_ns["log_process_message"](
+            process_name,
+            logger=typed_ns["_logger"],
+            error=exc,
+            user_error_message=user_error_message,
+            job_id=job_context.job_id if job_context else None,
+            step_id=job_context.step_id if job_context else None,
+        )
+        typed_module._show_system_error_toast(2)
+
+    typed_ns["_start_async_operation_compat"](
+        typed_module,
+        token=token,
+        job_id=job_context.job_id if job_context else None,
+        work=_work,
+        on_success=_on_finished,
+        on_failure=_on_failed,
+    )
 
 
 def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> None:

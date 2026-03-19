@@ -19,6 +19,21 @@ from common.constants import (
 )
 
 
+def _coerce_int(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
 class _ModuleState(Protocol):
     busy: bool
 
@@ -29,13 +44,13 @@ class _Logger(Protocol):
 
 
 class _QFileDialog(Protocol):
-    def getOpenFileName(
+    def getOpenFileNames(
         self,
         parent: object,
         caption: str = ...,
         dir: str = ...,
         filter: str = ...,
-    ) -> tuple[str, str]:
+    ) -> tuple[list[str], str]:
         ...
 
     def getSaveFileName(
@@ -45,6 +60,14 @@ class _QFileDialog(Protocol):
         dir: str = ...,
         filter: str = ...,
     ) -> tuple[str, str]:
+        ...
+
+    def getExistingDirectory(  # noqa: N802 - Qt naming
+        self,
+        parent: object,
+        caption: str = ...,
+        dir: str = ...,
+    ) -> str:
         ...
 
 
@@ -64,7 +87,9 @@ class _InstructorStep2Module(Protocol):
     marks_template_done: bool
     step2_upload_ready: bool
     step2_course_details_path: str | None
+    step1_course_details_paths: list[str]
     marks_template_path: str | None
+    marks_template_paths: list[str]
     _step2_marks_default_name: str | None
     final_report_outdated: bool
     final_report_done: bool
@@ -114,7 +139,8 @@ class _Step2Namespace(TypedDict):
     build_i18n_log_message: Callable[..., str]
     show_toast: Callable[..., None]
     _logger: _Logger
-    validate_course_details_workbook: Callable[[str], None]
+    ID_COURSE_SETUP: str
+    validate_course_details_workbook: Callable[[str], str]
     _build_marks_template_default_name: Callable[[str], str]
     generate_marks_template_from_course_details: Callable[[str, str], None]
 
@@ -125,27 +151,30 @@ def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> 
     if typed_module.state.busy:
         return
 
-    open_path, _ = typed_ns["QFileDialog"].getOpenFileName(
+    open_paths, _ = typed_ns["QFileDialog"].getOpenFileNames(
         typed_module,
         typed_ns["t"]("instructor.dialog.step2.title"),
         typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"]),
         typed_ns["t"]("instructor.dialog.filter.excel_open"),
     )
-    if not open_path:
+    if not open_paths:
         return
-    upload_course_details_from_path_async(module, open_path, ns=ns)
+    upload_course_details_from_paths_async(module, open_paths, ns=ns)
 
 
-def upload_course_details_from_path_async(
+def upload_course_details_from_paths_async(
     module: object,
-    open_path: str,
+    open_paths: list[str],
     *,
     show_success_toast: bool = False,
     ns: Mapping[str, object],
 ) -> None:
     typed_module = cast(_InstructorStep2Module, module)
     typed_ns = cast(_Step2Namespace, ns)
-    if typed_module.state.busy or not open_path:
+    if typed_module.state.busy:
+        return
+    normalized_paths = [path for path in open_paths if path]
+    if not normalized_paths:
         return
 
     t = typed_ns["t"]
@@ -153,55 +182,158 @@ def upload_course_details_from_path_async(
     user_success_message, user_error_message = typed_ns["_localized_log_messages"](
         "instructor.log.process.validate_course_details_workbook"
     )
-    typed_module._remember_dialog_dir_safe(open_path)
+    typed_module._remember_dialog_dir_safe(normalized_paths[0])
+
+    seen: set[str] = set()
+    unique_paths: list[str] = []
+    duplicate_input_count = 0
+    for path in normalized_paths:
+        key = str(Path(path).resolve(strict=False)).lower()
+        if key in seen:
+            duplicate_input_count += 1
+            continue
+        seen.add(key)
+        unique_paths.append(path)
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
             step_id=WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS,
-            payload={WORKFLOW_PAYLOAD_KEY_PATH: open_path},
+            payload={WORKFLOW_PAYLOAD_KEY_PATH: list(unique_paths)},
         )
         if workflow_service is not None
         else None
     )
 
+    def _work() -> dict[str, object]:
+        valid_paths: list[str] = []
+        invalid_paths: list[str] = []
+        mismatched_template_paths: list[str] = []
+        total_unique = len(unique_paths)
+        processed = 0
+        for path in unique_paths:
+            token.raise_if_cancelled()
+            try:
+                template_id = (
+                    workflow_service.validate_course_details_workbook(
+                        path,
+                        context=workflow_service.create_job_context(
+                            step_id=WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS,
+                            payload={WORKFLOW_PAYLOAD_KEY_PATH: path},
+                        ),
+                        cancel_token=token,
+                    )
+                    if workflow_service is not None
+                    else typed_ns["validate_course_details_workbook"](path)
+                )
+            except typed_ns["JobCancelledError"]:
+                raise
+            except Exception:
+                invalid_paths.append(path)
+                processed += 1
+                typed_ns["_publish_status_compat"](
+                    typed_module,
+                    t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
+                )
+                continue
+            if template_id != typed_ns["ID_COURSE_SETUP"]:
+                mismatched_template_paths.append(path)
+                processed += 1
+                typed_ns["_publish_status_compat"](
+                    typed_module,
+                    t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
+                )
+                continue
+            valid_paths.append(path)
+            processed += 1
+            typed_ns["_publish_status_compat"](
+                typed_module,
+                t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
+            )
+        return {
+            "valid_paths": valid_paths,
+            "invalid_paths": invalid_paths,
+            "mismatched_template_paths": mismatched_template_paths,
+            "duplicate_input_count": duplicate_input_count,
+            "total_input_count": len(normalized_paths),
+        }
+
     def _on_finished(result: object) -> None:
+        data = cast(dict[str, object], result if isinstance(result, dict) else {})
+        valid_paths = [p for p in cast(list[str], data.get("valid_paths", [])) if p]
+        invalid_paths = [p for p in cast(list[str], data.get("invalid_paths", [])) if p]
+        mismatched_template_paths = [p for p in cast(list[str], data.get("mismatched_template_paths", [])) if p]
+        duplicates = _coerce_int(data.get("duplicate_input_count"), 0)
+        total = _coerce_int(data.get("total_input_count"), len(normalized_paths))
+        existing_paths = list(getattr(typed_module, "step1_course_details_paths", []) or [])
+
+        merged_paths: list[str] = []
+        seen_targets: set[str] = set()
+        for path in [*existing_paths, *valid_paths]:
+            key = str(Path(path).resolve(strict=False)).lower()
+            if key in seen_targets:
+                continue
+            seen_targets.add(key)
+            merged_paths.append(path)
+
         replacing = typed_module.marks_template_done or typed_module.step2_upload_ready
-        typed_module.step2_course_details_path = open_path
-        typed_module.step2_upload_ready = True
+        typed_module.step1_course_details_paths = list(merged_paths)
+        typed_module.step2_course_details_path = merged_paths[0] if merged_paths else None
+        typed_module.step2_upload_ready = bool(merged_paths)
         typed_module.marks_template_done = False
         typed_module.marks_template_path = None
+        typed_module.marks_template_paths = []
         fallback_name = t("instructor.dialog.step1.prepare.default_name")
-        default_marks_name_obj = (
-            cast(dict[str, object], result).get("default_marks_name")
-            if isinstance(result, dict)
-            else fallback_name
-        )
         typed_module._step2_marks_default_name = (
-            default_marks_name_obj if isinstance(default_marks_name_obj, str) else fallback_name
+            typed_ns["_build_marks_template_default_name"](merged_paths[0]) if merged_paths else fallback_name
         ) or fallback_name
-        display_path_setter = getattr(typed_module, "_set_step1_course_details_file", None)
-        if callable(display_path_setter):
-            display_path_setter(open_path)
+
+        display_paths_setter = getattr(typed_module, "_set_step1_course_details_files", None)
+        if callable(display_paths_setter):
+            display_paths_setter(merged_paths)
 
         if replacing:
             typed_module.final_report_outdated = typed_module.final_report_done
             typed_module.filled_marks_outdated = typed_module.filled_marks_done
             if typed_module.filled_marks_outdated or typed_module.final_report_outdated:
                 typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_changed"))
-        else:
+        elif merged_paths:
             typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_validated"))
+
+        typed_ns["_publish_status_compat"](
+            typed_module,
+            t("instructor.status.step1_validated_progress", valid=len(valid_paths), total=total),
+        )
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
-            success_message=f"{process_name} completed successfully. file={open_path}",
+            success_message=(
+                f"{process_name} completed successfully. "
+                f"total={total}, valid={len(valid_paths)}, invalid={len(invalid_paths)}, "
+                f"mismatched={len(mismatched_template_paths)}, duplicates={duplicates}"
+            ),
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
+
         if show_success_toast:
             typed_module._show_step_success_toast(1)
+        has_validation_errors = bool(invalid_paths or mismatched_template_paths or duplicates > 0 or not valid_paths)
+        if has_validation_errors:
+            typed_ns["show_toast"](
+                typed_module,
+                t(
+                    "instructor.toast.step1_validation_summary",
+                    valid=len(valid_paths),
+                    invalid=len(invalid_paths),
+                    mismatched=len(mismatched_template_paths),
+                    duplicates=duplicates,
+                ),
+                title=t("instructor.step1.title"),
+                level="warning",
+            )
 
     def _on_failed(exc: Exception) -> None:
         if isinstance(exc, typed_ns["JobCancelledError"]):
@@ -219,49 +351,15 @@ def upload_course_details_from_path_async(
                 },
             )
             return
-        if isinstance(exc, typed_ns["ValidationError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                notify=lambda message, _level: typed_module._show_validation_error_toast(message),
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-        elif isinstance(exc, typed_ns["AppSystemError"]):
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
-        else:
-            typed_ns["log_process_message"](
-                process_name,
-                logger=typed_ns["_logger"],
-                error=exc,
-                user_error_message=user_error_message,
-                job_id=job_context.job_id if job_context else None,
-                step_id=job_context.step_id if job_context else None,
-            )
-            typed_module._show_system_error_toast(1)
-
-    def _work() -> dict[str, str]:
-        if workflow_service is not None and job_context is not None:
-            workflow_service.validate_course_details_workbook(
-                open_path,
-                context=job_context,
-                cancel_token=token,
-            )
-        else:
-            typed_ns["validate_course_details_workbook"](open_path)
-        token.raise_if_cancelled()
-        return {
-            "default_marks_name": typed_ns["_build_marks_template_default_name"](open_path),
-        }
+        typed_ns["log_process_message"](
+            process_name,
+            logger=typed_ns["_logger"],
+            error=exc,
+            user_error_message=user_error_message,
+            job_id=job_context.job_id if job_context else None,
+            step_id=job_context.step_id if job_context else None,
+        )
+        typed_module._show_system_error_toast(1)
 
     typed_ns["_start_async_operation_compat"](
         typed_module,
@@ -283,7 +381,8 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
     user_success_message, user_error_message = typed_ns["_localized_log_messages"](
         "instructor.log.process.generate_marks_template"
     )
-    if not typed_module.step2_upload_ready or not typed_module.step2_course_details_path:
+    source_paths = list(getattr(typed_module, "step1_course_details_paths", []) or [])
+    if not source_paths:
         typed_ns["show_toast"](
             typed_module,
             t("instructor.require.step1"),
@@ -292,48 +391,119 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         )
         return
 
-    source_path = typed_module.step2_course_details_path
-    default_name = getattr(
-        typed_module,
-        "_step2_marks_default_name",
-        t("instructor.dialog.step1.prepare.default_name"),
-    ) or t("instructor.dialog.step1.prepare.default_name")
-    save_path, _ = typed_ns["QFileDialog"].getSaveFileName(
+    planned_pairs: list[tuple[str, str]] = []
+    skipped_conflicts = 0
+    used_targets: set[str] = set()
+    output_dir = typed_ns["QFileDialog"].getExistingDirectory(
         typed_module,
         t("instructor.dialog.step1.prepare.title"),
-        typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"], default_name),
-        t("instructor.dialog.filter.excel"),
+        typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"]),
     )
-    if not save_path:
+    if not output_dir:
         return
-    typed_module._remember_dialog_dir_safe(save_path)
+    typed_module._remember_dialog_dir_safe(output_dir)
 
+    for source_path in source_paths:
+        default_output_name = typed_ns["_build_marks_template_default_name"](source_path)
+        proposed_path = str(Path(output_dir) / default_output_name)
+        normalized_target = str(Path(proposed_path).resolve(strict=False)).lower()
+        if Path(proposed_path).exists():
+            replacement_path, _ = typed_ns["QFileDialog"].getSaveFileName(
+                typed_module,
+                t("instructor.dialog.step1.prepare.title"),
+                typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"], default_output_name),
+                t("instructor.dialog.filter.excel"),
+            )
+            if not replacement_path:
+                skipped_conflicts += 1
+                continue
+            proposed_path = replacement_path
+            normalized_target = str(Path(proposed_path).resolve(strict=False)).lower()
+        candidate = Path(proposed_path)
+        suffix = 1
+        while normalized_target in used_targets:
+            suffix += 1
+            candidate = candidate.with_name(f"{candidate.stem}_{suffix}{candidate.suffix}")
+            normalized_target = str(candidate.resolve(strict=False)).lower()
+        used_targets.add(normalized_target)
+        planned_pairs.append((source_path, str(candidate)))
+
+    if not planned_pairs:
+        typed_ns["show_toast"](
+            typed_module,
+            t("instructor.toast.step1_prepare_no_outputs"),
+            title=t("instructor.step1.title"),
+            level="warning",
+        )
+        return
+
+    output_base = (
+        str(Path(planned_pairs[0][1]).parent)
+        if planned_pairs
+        else typed_ns["resolve_dialog_start_path"](typed_ns["APP_NAME"])
+    )
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
             step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE,
-            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path},
+            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: list(source_paths), WORKFLOW_PAYLOAD_KEY_OUTPUT: output_base},
         )
         if workflow_service is not None
         else None
     )
 
-    def _on_finished(_result: object) -> None:
-        typed_module.marks_template_path = save_path
-        typed_module.marks_template_done = True
+    def _on_finished(result: object) -> None:
+        data = cast(dict[str, object], result if isinstance(result, dict) else {})
+        if not data and planned_pairs:
+            data = {
+                "generated_outputs": [output for _, output in planned_pairs],
+                "processed_count": len(planned_pairs),
+                "total_count": len(source_paths),
+                "failed_count": 0,
+                "skipped_count": skipped_conflicts,
+            }
+        generated_outputs = [p for p in cast(list[str], data.get("generated_outputs", [])) if p]
+        processed_count = _coerce_int(data.get("processed_count"), len(generated_outputs))
+        total_count = _coerce_int(data.get("total_count"), len(source_paths))
+        failed_count = _coerce_int(data.get("failed_count"), 0)
+        skipped_count = _coerce_int(data.get("skipped_count"), skipped_conflicts)
+
+        typed_module.marks_template_path = generated_outputs[-1] if generated_outputs else None
+        typed_module.marks_template_paths = list(generated_outputs)
+        typed_module.marks_template_done = bool(generated_outputs)
         typed_module.filled_marks_outdated = typed_module.filled_marks_done
         typed_module.final_report_outdated = typed_module.final_report_done
-        typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_prepared"))
+        if generated_outputs:
+            typed_ns["_publish_status_compat"](typed_module, t("instructor.status.step1_prepared"))
+        typed_ns["_publish_status_compat"](
+            typed_module,
+            t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
+        )
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
-            success_message=f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX}",
+            success_message=(
+                f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX} "
+                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}"
+            ),
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
-        typed_module._show_step_success_toast(1)
+        typed_ns["show_toast"](
+            typed_module,
+            t(
+                "instructor.toast.step1_prepare_summary",
+                processed=processed_count,
+                total=total_count,
+                generated=len(generated_outputs),
+                failed=failed_count,
+                skipped=skipped_count,
+            ),
+            title=t("instructor.step1.title"),
+            level="success" if failed_count == 0 else "warning",
+        )
 
     def _on_failed(exc: Exception) -> None:
         if isinstance(exc, typed_ns["JobCancelledError"]):
@@ -381,16 +551,42 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             )
             typed_module._show_system_error_toast(1)
 
-    def _work() -> Path:
-        if workflow_service is not None and job_context is not None:
-            return workflow_service.generate_marks_template(
-                source_path,
-                save_path,
-                context=job_context,
-                cancel_token=token,
-            )
-        typed_ns["generate_marks_template_from_course_details"](source_path, save_path)
-        return Path(save_path)
+    def _work() -> object:
+        generated_outputs: list[str] = []
+        failed_count = 0
+        processed_count = 0
+        total_count = len(planned_pairs)
+        for source_path, output_path in planned_pairs:
+            token.raise_if_cancelled()
+            try:
+                if workflow_service is not None and job_context is not None:
+                    workflow_service.generate_marks_template(
+                        source_path,
+                        output_path,
+                        context=workflow_service.create_job_context(
+                            step_id=WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE,
+                            payload={WORKFLOW_PAYLOAD_KEY_SOURCE: source_path, WORKFLOW_PAYLOAD_KEY_OUTPUT: output_path},
+                        ),
+                        cancel_token=token,
+                    )
+                else:
+                    typed_ns["generate_marks_template_from_course_details"](source_path, output_path)
+                generated_outputs.append(output_path)
+            except Exception:
+                failed_count += 1
+            finally:
+                processed_count += 1
+                typed_ns["_publish_status_compat"](
+                    typed_module,
+                    t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
+                )
+        return {
+            "generated_outputs": generated_outputs,
+            "processed_count": len(planned_pairs),
+            "total_count": len(source_paths),
+            "failed_count": failed_count,
+            "skipped_count": skipped_conflicts,
+        }
 
     typed_ns["_start_async_operation_compat"](
         typed_module,

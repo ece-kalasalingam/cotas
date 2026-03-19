@@ -25,7 +25,9 @@ class _DummyModule:
 
     def __init__(self) -> None:
         self.marks_template_path: str | None = None
+        self.marks_template_paths: list[str] = []
         self.step2_course_details_path: str | None = None
+        self.step1_course_details_paths: list[str] = []
         self.marks_template_done = False
         self.step2_upload_ready = False
         self.filled_marks_done = False
@@ -69,6 +71,11 @@ def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(instructor_ui, "run_in_background", _run_sync)
     monkeypatch.setattr(instructor_ui, "remember_dialog_dir", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        instructor_ui,
+        "show_toast",
+        lambda _parent, body, *, title, level: None,
+    )
 
 def _run_sync(fn, *args, on_finished=None, on_failed=None, **kwargs):
     try:
@@ -88,8 +95,8 @@ def test_step2_upload_cancel_keeps_state(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: ("", ""),
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: ([], ""),
     )
     monkeypatch.setattr(
         instructor_ui,
@@ -111,8 +118,8 @@ def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyP
     dummy = _DummyModule()
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/course_details.xlsx", ""),
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: (["D:/tmp/course_details.xlsx"], ""),
     )
     monkeypatch.setattr(
         instructor_ui,
@@ -122,10 +129,11 @@ def test_step2_upload_validation_failure_shows_error(monkeypatch: pytest.MonkeyP
 
     instructor_ui.InstructorModule._upload_course_details(cast(Any, dummy))
 
-    assert dummy._toasts == [("validation", "bad workbook")]
+    assert dummy._toasts == []
     assert dummy.step2_upload_ready is False
     assert dummy.marks_template_done is False
-    assert dummy.status_changed.messages == []
+    assert "instructor.status.step1_validating_progress" in dummy.status_changed.messages
+    assert "instructor.status.step1_validated_progress" in dummy.status_changed.messages
 
 def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
@@ -134,8 +142,8 @@ def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/course_details.xlsx", ""),
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: (["D:/tmp/course_details.xlsx"], ""),
     )
     monkeypatch.setattr(
         instructor_ui,
@@ -152,10 +160,13 @@ def test_step2_upload_success_enables_prepare(monkeypatch: pytest.MonkeyPatch) -
 
     assert dummy.step2_upload_ready is True
     assert dummy.step2_course_details_path == "D:/tmp/course_details.xlsx"
+    assert dummy.step1_course_details_paths == ["D:/tmp/course_details.xlsx"]
     assert dummy.marks_template_done is False
     assert dummy.marks_template_path is None
     assert remembered == [("D:/tmp/course_details.xlsx", instructor_ui.APP_NAME)]
-    assert dummy.status_changed.messages == ["instructor.status.step1_validated"]
+    assert "instructor.status.step1_validating_progress" in dummy.status_changed.messages
+    assert "instructor.status.step1_validated" in dummy.status_changed.messages
+    assert "instructor.status.step1_validated_progress" in dummy.status_changed.messages
 
 def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common_dependencies(monkeypatch)
@@ -167,8 +178,8 @@ def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/course_details_async.xlsx", ""),
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: (["D:/tmp/course_details_async.xlsx"], ""),
     )
     monkeypatch.setattr(
         instructor_ui,
@@ -193,9 +204,12 @@ def test_step2_upload_async_updates_state_on_success(monkeypatch: pytest.MonkeyP
 
     assert dummy.step2_upload_ready is True
     assert dummy.step2_course_details_path == "D:/tmp/course_details_async.xlsx"
+    assert dummy.step1_course_details_paths == ["D:/tmp/course_details_async.xlsx"]
     assert dummy.marks_template_done is False
     assert dummy.marks_template_path is None
     assert dummy.state.busy is False
-    assert dummy.status_changed.messages == ["instructor.status.step1_validated"]
+    assert "instructor.status.step1_validating_progress" in dummy.status_changed.messages
+    assert "instructor.status.step1_validated" in dummy.status_changed.messages
+    assert "instructor.status.step1_validated_progress" in dummy.status_changed.messages
 
 

@@ -27,7 +27,16 @@ class _DummyModule:
     def __init__(self, *, filled_marks_path: str | None = None) -> None:
         self.step2_course_details_path: str | None = None
         self.step2_upload_ready = False
+        self.step1_course_details_paths: list[str] = []
+        self.marks_template_done = False
+        self.marks_template_path: str | None = None
+        self.marks_template_paths: list[str] = []
+        self._step2_marks_default_name: str | None = "marks_template.xlsx"
+        self.final_report_done = False
+        self.final_report_outdated = False
+        self.filled_marks_outdated = False
         self.filled_marks_path = filled_marks_path
+        self.filled_marks_paths: list[str] = [filled_marks_path] if filled_marks_path else []
         self.filled_marks_done = bool(filled_marks_path)
         self.state: Any = _DummyModule._State()
         self._active_jobs: list[object] = []
@@ -83,8 +92,8 @@ def test_step2_upload_async_cancelled_reports_status(monkeypatch: pytest.MonkeyP
     dummy = _DummyModule()
     monkeypatch.setattr(
         instructor_ui.QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: ("D:/tmp/course_details.xlsx", ""),
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: (["D:/tmp/course_details.xlsx"], ""),
     )
     monkeypatch.setattr(
         instructor_ui,

@@ -73,7 +73,7 @@ def test_refresh_ui_step_specific_paths_and_busy_disable(monkeypatch: pytest.Mon
     module._refresh_ui()
     assert module.step2_upload_action.text() == "instructor.action.step2.upload.default"
     assert module.step2_generate_action.text() == "instructor.action.step2.generate.default"
-    assert module.step2_generate_action.isEnabled() is True
+    assert module.step2_generate_action.isEnabled() is False
 
     module.state.busy = True
     module._refresh_ui()
@@ -150,7 +150,7 @@ def test_misc_wrappers_shortcuts_and_close_cleanup(monkeypatch: pytest.MonkeyPat
     module._on_step1_prepare_clicked()
     module._on_step2_upload_clicked()
     module._on_step2_generate_clicked()
-    assert calls == {"u2": 1, "p2": 1, "u3": 1, "g3": 1, "refresh": 4}
+    assert calls == {"u2": 1, "p2": 1, "u3": 0, "g3": 1, "refresh": 4}
 
     module.current_step = 1
     module.step1_upload_action.setEnabled(True)
@@ -161,7 +161,7 @@ def test_misc_wrappers_shortcuts_and_close_cleanup(monkeypatch: pytest.MonkeyPat
     module.current_step = 2
     module.step2_upload_action.setEnabled(True)
     module._on_open_shortcut_activated()
-    assert calls["u3"] == 2
+    assert calls["u3"] == 0
 
     module.current_step = 1
     module.step1_prepare_action.setEnabled(True)
@@ -202,9 +202,6 @@ def test_misc_wrappers_shortcuts_and_close_cleanup(monkeypatch: pytest.MonkeyPat
     )
     assert seen_start == ["job-x"]
 
-    # close path with active timer covers timer stop branch
-    module._busy_elapsed_timer.start()
-    assert module._busy_elapsed_timer.isActive() is True
     removed = {"count": 0}
     monkeypatch.setattr(instructor_ui._logger, "removeHandler", lambda _h: removed.__setitem__("count", removed["count"] + 1))
     module._ui_log_handler = cast(Any, object())

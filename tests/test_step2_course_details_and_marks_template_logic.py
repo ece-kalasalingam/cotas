@@ -41,7 +41,9 @@ class _Module:
         self.marks_template_done = False
         self.step2_upload_ready = False
         self.step2_course_details_path: str | None = None
+        self.step1_course_details_paths: list[str] = []
         self.marks_template_path: str | None = None
+        self.marks_template_paths: list[str] = []
         self.filled_marks_done = False
         self.final_report_done = False
         self.filled_marks_outdated = False
@@ -74,12 +76,13 @@ class _WorkflowService:
         del payload
         return _Ctx(job_id="job-1", step_id=step_id)
 
-    def validate_course_details_workbook(self, path: str, *, context: _Ctx, cancel_token: _Token) -> None:
+    def validate_course_details_workbook(self, path: str, *, context: _Ctx, cancel_token: _Token) -> str:
         del context, cancel_token
         self.validated.append(path)
+        return "course_setup_template"
 
 
-def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[str, object]:
+def _ns(module: _Module, *, open_paths: list[str] | None = None, output_dir: str = "") -> dict[str, object]:
     logs: list[tuple] = []
     logger = _Logger()
 
@@ -100,10 +103,14 @@ def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[st
             (),
             {
                 "getOpenFileName": staticmethod(lambda *_a, **_k: (open_path, "")),
-                "getSaveFileName": staticmethod(lambda *_a, **_k: (save_path, "")),
+                "getOpenFileNames": staticmethod(lambda *_a, **_k: (list(open_paths or []), "")),
+                "getSaveFileName": staticmethod(lambda *_a, **_k: ("", "")),
+                "getExistingDirectory": staticmethod(lambda *_a, **_k: output_dir),
             },
         ),
         "resolve_dialog_start_path": lambda _app, _default=None: "D:/start.xlsx",
+        "resolve_existing_dialog_directory": lambda p: p or "",
+        "select_existing_directory": lambda _parent, _caption, _directory, _preselect="": output_dir,
         "APP_NAME": "FOCUS",
         "CancellationToken": _Token,
         "JobCancelledError": JobCancelledError,
@@ -116,6 +123,7 @@ def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[st
         "_start_async_operation_compat": _start_async_operation_compat,
         "show_toast": lambda _m, body, *, title, level: module.toasts.append((level, body)),
         "validate_course_details_workbook": lambda p: None,
+        "ID_COURSE_SETUP": "course_setup_template",
         "_build_marks_template_default_name": lambda p: f"DEFAULT:{p}",
         "generate_marks_template_from_course_details": lambda _src, _out: None,
         "_logs": logs,
@@ -125,7 +133,7 @@ def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[st
 
 def test_upload_course_details_async_early_returns_for_busy_or_cancelled_dialog() -> None:
     module = _Module()
-    ns = _ns(module, open_path="")
+    ns = _ns(module, open_paths=[])
 
     module.state.busy = True
     step2.upload_course_details_async(module, ns=ns)
@@ -141,25 +149,87 @@ def test_upload_course_details_async_success_replacing_marks_downstream_outdated
     module.marks_template_done = True
     module.filled_marks_done = True
     module.final_report_done = True
-    ns = _ns(module, open_path="D:/course.xlsx")
+    ns = _ns(module, open_paths=["D:/course.xlsx"])
 
     step2.upload_course_details_async(module, ns=ns)
-    cast(Callable[[object], None], module.started["on_success"])({"default_marks_name": "X.xlsx"})
+    cast(Callable[[object], None], module.started["on_success"])(
+        {
+            "valid_paths": ["D:/course.xlsx"],
+            "invalid_paths": [],
+            "mismatched_template_paths": [],
+            "duplicate_input_count": 0,
+            "total_input_count": 1,
+        }
+    )
 
     assert module.step2_course_details_path == "D:/course.xlsx"
     assert module.step2_upload_ready is True
     assert module.marks_template_done is False
     assert module.marks_template_path is None
-    assert module._step2_marks_default_name == "X.xlsx"
+    assert module._step2_marks_default_name == "DEFAULT:D:/course.xlsx"
     assert module.filled_marks_outdated is True
     assert module.final_report_outdated is True
     assert any("step1_changed" in msg for msg in module.published)
     assert ("success", "1") not in module.toasts
 
 
+def test_upload_course_details_async_appends_to_existing_valid_files() -> None:
+    module = _Module()
+    module.step1_course_details_paths = ["D:/existing.xlsx"]
+    module.step2_upload_ready = True
+    ns = _ns(module, open_paths=["D:/new.xlsx"])
+
+    step2.upload_course_details_async(module, ns=ns)
+    cast(Callable[[object], None], module.started["on_success"])(
+        {
+            "valid_paths": ["D:/new.xlsx"],
+            "invalid_paths": [],
+            "mismatched_template_paths": [],
+            "duplicate_input_count": 0,
+            "total_input_count": 1,
+        }
+    )
+
+    assert module.step1_course_details_paths == ["D:/existing.xlsx", "D:/new.xlsx"]
+    assert module.step2_course_details_path == "D:/existing.xlsx"
+    assert module.step2_upload_ready is True
+
+
+def test_upload_course_details_async_shows_toast_only_when_validation_has_errors() -> None:
+    module = _Module()
+    ns = _ns(module, open_paths=["D:/new.xlsx"])
+
+    step2.upload_course_details_async(module, ns=ns)
+    cast(Callable[[object], None], module.started["on_success"])(
+        {
+            "valid_paths": ["D:/new.xlsx"],
+            "invalid_paths": [],
+            "mismatched_template_paths": [],
+            "duplicate_input_count": 0,
+            "total_input_count": 1,
+        }
+    )
+    assert module.toasts == []
+
+    module2 = _Module()
+    ns2 = _ns(module2, open_paths=["D:/bad.xlsx"])
+    step2.upload_course_details_async(module2, ns=ns2)
+    cast(Callable[[object], None], module2.started["on_success"])(
+        {
+            "valid_paths": [],
+            "invalid_paths": ["D:/bad.xlsx"],
+            "mismatched_template_paths": [],
+            "duplicate_input_count": 0,
+            "total_input_count": 1,
+        }
+    )
+    assert module2.toasts
+    assert module2.toasts[-1][0] == "warning"
+
+
 def test_upload_course_details_async_failure_branches() -> None:
     module = _Module()
-    ns = _ns(module, open_path="D:/course.xlsx")
+    ns = _ns(module, open_paths=["D:/course.xlsx"])
 
     step2.upload_course_details_async(module, ns=ns)
     on_failure = cast(Callable[[Exception], None], module.started["on_failure"])
@@ -169,7 +239,7 @@ def test_upload_course_details_async_failure_branches() -> None:
     assert cast(_Logger, ns["_logger_obj"]).info_calls
 
     on_failure(ValidationError("bad"))
-    assert ("validation", "validation error") in module.toasts
+    assert ("system", "1") in module.toasts
 
     on_failure(AppSystemError("sys"))
     assert ("system", "1") in module.toasts
@@ -182,26 +252,29 @@ def test_upload_course_details_async_work_uses_service_and_fallback() -> None:
     module = _Module()
     service = _WorkflowService()
     module._workflow_service = service
-    ns = _ns(module, open_path="D:/course.xlsx")
+    ns = _ns(module, open_paths=["D:/course.xlsx"])
 
     step2.upload_course_details_async(module, ns=ns)
-    result = cast(Callable[[], dict[str, str]], module.started["work"])()
+    result = cast(Callable[[], dict[str, object]], module.started["work"])()
 
     assert service.validated == ["D:/course.xlsx"]
-    assert result["default_marks_name"] == "DEFAULT:D:/course.xlsx"
+    assert result["valid_paths"] == ["D:/course.xlsx"]
 
     module2 = _Module()
     called = {"validate": 0}
-    ns2 = _ns(module2, open_path="D:/course2.xlsx")
-    ns2["validate_course_details_workbook"] = lambda _p: called.__setitem__("validate", called["validate"] + 1)
+    ns2 = _ns(module2, open_paths=["D:/course2.xlsx"])
+    ns2["validate_course_details_workbook"] = lambda _p: (
+        called.__setitem__("validate", called["validate"] + 1),
+        "course_setup_template",
+    )[1]
     step2.upload_course_details_async(module2, ns=ns2)
-    cast(Callable[[], dict[str, str]], module2.started["work"])()
+    cast(Callable[[], dict[str, object]], module2.started["work"])()
     assert called["validate"] == 1
 
 
 def test_prepare_marks_template_async_early_returns_and_prereq_toast() -> None:
     module = _Module()
-    ns = _ns(module, save_path="")
+    ns = _ns(module, output_dir="")
 
     module.state.busy = True
     step2.prepare_marks_template_async(module, ns=ns)
@@ -218,8 +291,8 @@ def test_prepare_marks_template_async_early_returns_and_prereq_toast() -> None:
 def test_prepare_marks_template_async_returns_when_save_dialog_cancelled() -> None:
     module = _Module()
     module.step2_upload_ready = True
-    module.step2_course_details_path = "D:/course.xlsx"
-    ns = _ns(module, save_path="")
+    module.step1_course_details_paths = ["D:/course.xlsx"]
+    ns = _ns(module, output_dir="")
     step2.prepare_marks_template_async(module, ns=ns)
     assert module.started == {}
 
@@ -227,27 +300,27 @@ def test_prepare_marks_template_async_returns_when_save_dialog_cancelled() -> No
 def test_prepare_marks_template_async_success_sets_paths_and_outdated_flags() -> None:
     module = _Module()
     module.step2_upload_ready = True
-    module.step2_course_details_path = "D:/course.xlsx"
+    module.step1_course_details_paths = ["D:/course.xlsx"]
     module.filled_marks_done = True
     module.final_report_done = True
-    ns = _ns(module, save_path="D:/marks.xlsx")
+    ns = _ns(module, output_dir="D:/out")
 
     step2.prepare_marks_template_async(module, ns=ns)
     cast(Callable[[object], None], module.started["on_success"])(object())
 
     assert module.marks_template_done is True
-    assert module.marks_template_path == "D:/marks.xlsx"
+    assert module.marks_template_path == str(Path("D:/out") / "DEFAULT:D:/course.xlsx")
     assert module.filled_marks_outdated is True
     assert module.final_report_outdated is True
     assert any("step1_prepared" in msg for msg in module.published)
-    assert module.toasts[-1] == ("success", "1")
+    assert module.toasts[-1][0] == "success"
 
 
 def test_prepare_marks_template_async_failure_branches() -> None:
     module = _Module()
     module.step2_upload_ready = True
-    module.step2_course_details_path = "D:/course.xlsx"
-    ns = _ns(module, save_path="D:/marks.xlsx")
+    module.step1_course_details_paths = ["D:/course.xlsx"]
+    ns = _ns(module, output_dir="D:/out")
 
     step2.prepare_marks_template_async(module, ns=ns)
     on_failure = cast(Callable[[Exception], None], module.started["on_failure"])
@@ -269,7 +342,7 @@ def test_prepare_marks_template_async_failure_branches() -> None:
 def test_prepare_marks_template_async_work_uses_service_and_fallback() -> None:
     module = _Module()
     module.step2_upload_ready = True
-    module.step2_course_details_path = "D:/course.xlsx"
+    module.step1_course_details_paths = ["D:/course.xlsx"]
     module._workflow_service = type(
         "_Service",
         (),
@@ -280,20 +353,20 @@ def test_prepare_marks_template_async_work_uses_service_and_fallback() -> None:
             ),
         },
     )()
-    ns = _ns(module, save_path="D:/marks.xlsx")
+    ns = _ns(module, output_dir="D:/out")
     step2.prepare_marks_template_async(module, ns=ns)
-    out = cast(Callable[[], Path], module.started["work"])()
-    assert out == Path("D:/marks.xlsx")
+    out = cast(Callable[[], dict[str, object]], module.started["work"])()
+    assert out["generated_outputs"] == [str(Path("D:/out") / "DEFAULT:D:/course.xlsx")]
 
     module2 = _Module()
     module2.step2_upload_ready = True
-    module2.step2_course_details_path = "D:/course2.xlsx"
+    module2.step1_course_details_paths = ["D:/course2.xlsx"]
     called = {"gen": 0}
-    ns2 = _ns(module2, save_path="D:/marks2.xlsx")
+    ns2 = _ns(module2, output_dir="D:/out2")
     ns2["generate_marks_template_from_course_details"] = lambda _src, _out: called.__setitem__(
         "gen", called["gen"] + 1
     )
     step2.prepare_marks_template_async(module2, ns=ns2)
-    out2 = cast(Callable[[], Path], module2.started["work"])()
-    assert out2 == Path("D:/marks2.xlsx")
+    out2 = cast(Callable[[], dict[str, object]], module2.started["work"])()
+    assert out2["generated_outputs"] == [str(Path("D:/out2") / "DEFAULT:D:/course2.xlsx")]
     assert called["gen"] == 1

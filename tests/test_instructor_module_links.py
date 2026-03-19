@@ -32,6 +32,7 @@ class _DummyModule:
         self.step1_path: str | None = "D:/tmp/course_details_template.xlsx"
         self.step2_course_details_path: str | None = "D:/tmp/course_details_filled.xlsx"
         self.marks_template_path: str | None = "D:/tmp/marks_template.xlsx"
+        self.marks_template_paths: list[str] = []
         self.filled_marks_path: str | None = "D:/tmp/marks_filled.xlsx"
         self.quick_link_labels = {
             "instructor.links.course_details_generated": _DummyLabel(),
@@ -93,6 +94,20 @@ def test_refresh_quick_links_updates_all_rows(monkeypatch: pytest.MonkeyPatch) -
     assert "marks_filled.xlsx" in dummy.quick_link_labels[
         "instructor.links.marks_template_uploaded"
     ].text
+
+
+def test_quick_links_html_lists_all_generated_marks_templates(monkeypatch: pytest.MonkeyPatch) -> None:
+    dummy = _DummyModule()
+    dummy.marks_template_paths = [
+        "D:/tmp/marks_template_a.xlsx",
+        "D:/tmp/marks_template_b.xlsx",
+    ]
+    monkeypatch.setattr(instructor_ui, "t", lambda key, **_kwargs: key)
+
+    html = instructor_ui.InstructorModule._quick_links_html(cast(Any, dummy))
+
+    assert "marks_template_a.xlsx" in html
+    assert "marks_template_b.xlsx" in html
 
 
 def test_open_file_quick_link_uses_desktop_services(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -122,7 +122,7 @@ def test_remember_dialog_dir_safe_fallback(monkeypatch: pytest.MonkeyPatch, qapp
     module.close()
 
 
-def test_set_busy_toggles_host_language_switch_and_timer(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+def test_set_busy_toggles_host_language_switch(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
     toggles: list[bool] = []
 
@@ -135,29 +135,10 @@ def test_set_busy_toggles_host_language_switch_and_timer(monkeypatch: pytest.Mon
 
     module._set_busy(True, job_id="j1")
     assert module.state.busy is True
-    assert module._busy_elapsed_timer.isActive() is True
 
     module._set_busy(False)
     assert module.state.busy is False
-    assert module._busy_elapsed_timer.isActive() is False
     assert toggles == [False, True]
-    module.close()
-
-
-def test_update_busy_timer_label_sets_idle_and_running(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
-    module = _build_module(monkeypatch)
-    monkeypatch.setattr(instructor_ui, "t", lambda key, **kwargs: f"{key}:{kwargs.get('elapsed','')}")
-
-    module.state.busy = False
-    module._busy_started_at = None
-    module._update_busy_timer_label()
-    assert module.busy_timer_label.text().startswith("instructor.timer.idle")
-
-    module.state.busy = True
-    module._busy_started_at = 100.0
-    monkeypatch.setattr(instructor_ui.time, "perf_counter", lambda: 166.0)
-    module._update_busy_timer_label()
-    assert "01:06" in module.busy_timer_label.text()
     module.close()
 
 
@@ -186,4 +167,34 @@ def test_close_event_cleans_resources(monkeypatch: pytest.MonkeyPatch, qapp: QAp
     assert module._active_jobs == []
     assert removed["count"] == 1
     assert module._ui_log_handler is None
+
+
+def test_step1_drop_signal_handlers_publish_log_and_update_count(
+    monkeypatch: pytest.MonkeyPatch, qapp: QApplication
+) -> None:
+    monkeypatch.setattr(
+        instructor_ui,
+        "t",
+        lambda key, **kwargs: f"{key}:{kwargs.get('count', '')}",
+    )
+    monkeypatch.setattr(instructor_ui.InstructorModule, "_setup_ui_logging", lambda self: None)
+    module = instructor_ui.InstructorModule()
+
+    published: list[str] = []
+    uploads: list[list[str]] = []
+    monkeypatch.setattr(module, "_publish_status", lambda message: published.append(message))
+    monkeypatch.setattr(module, "_upload_course_details_from_paths_async", lambda paths: uploads.append(list(paths)))
+    monkeypatch.setattr(module, "_refresh_ui", lambda: None)
+
+    module._on_step1_drop_browse_requested()
+    module.step1_drop_widget.add_files(["C:/course_details.xlsx"])
+    module.step1_drop_widget.add_files(["https://example.com/invalid.xlsx"])
+
+    assert uploads == [["C:/course_details.xlsx"]]
+    assert module.step1_drop_widget.summary_label.text() == "instructor.step1.drop.summary:1"
+    assert "instructor.status.step1_drop_browse_requested:" in published
+    assert "instructor.status.step1_drop_files_dropped:1" in published
+    assert "instructor.status.step1_drop_files_changed:1" in published
+    assert "instructor.status.step1_drop_files_rejected:1" in published
+    module.close()
 

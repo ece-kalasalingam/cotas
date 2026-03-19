@@ -78,15 +78,20 @@ def quick_links_html(module: _InstructorOutputModule, *, ns: InstructorOutputNam
 
 
 def refresh_quick_links(module: _InstructorOutputModule, *, ns: InstructorOutputNamespace) -> None:
+    items = list(module._quick_link_items())
     generated_outputs_view = getattr(module, "generated_outputs_view", None)
     if generated_outputs_view is not None:
-        generated_outputs_view.setHtml(quick_links_html(module, ns=ns))
+        generated_outputs_view.setHtml("<br><br>".join(quick_link_markup(module, key, path, ns=ns) for key, path in items))
     quick_link_labels: Mapping[str, _LabelTarget] = getattr(module, "quick_link_labels", {})
-    for link_key, path in module._quick_link_items():
-        link_label = quick_link_labels.get(link_key)
-        if link_label is None:
+    for link_key, link_label in quick_link_labels.items():
+        matching_paths = [path for key, path in items if key == link_key]
+        if not matching_paths:
+            link_label.setText(quick_link_markup(module, link_key, None, ns=ns))
             continue
-        link_label.setText(quick_link_markup(module, link_key, path, ns=ns))
+        if len(matching_paths) == 1:
+            link_label.setText(quick_link_markup(module, link_key, matching_paths[0], ns=ns))
+            continue
+        link_label.setText("<br><br>".join(quick_link_markup(module, link_key, path, ns=ns) for path in matching_paths))
 
 
 def on_quick_link_activated(module: _InstructorOutputModule, href: str, *, ns: InstructorOutputNamespace) -> None:

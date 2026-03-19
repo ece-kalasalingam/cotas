@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
 
+GLOBAL_QPUSHBUTTON_MIN_WIDTH = 150
+
 QPUSHBUTTON_GLOBAL_STYLESHEET = """
 QPushButton {
     padding: 6px 12px;
-    min-width: 150px;
+    min-width: %dpx;
     min-height: 30px;
     border-radius: 6px;
     border: none;
 }
-""".strip()
+""".strip() % GLOBAL_QPUSHBUTTON_MIN_WIDTH
 
 COORDINATOR_FILE_NAME_FONT_SIZE = 10
 COORDINATOR_SUMMARY_FONT_SIZE = 9

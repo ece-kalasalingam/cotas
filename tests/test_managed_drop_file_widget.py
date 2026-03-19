@@ -29,14 +29,25 @@ def test_managed_drop_widget_add_set_clear_and_files(qapp: QApplication) -> None
     assert widget.files() == ["C:/a.xlsx", "C:/b.xlsx"]
     assert dropped[-1] == ["C:/a.xlsx", "C:/b.xlsx"]
     assert changed[-1] == ["C:/a.xlsx", "C:/b.xlsx"]
+    assert widget.summary_label.text() == "Files: 2"
 
     widget.set_files(["D:/x.xlsx"])
     assert widget.files() == ["D:/x.xlsx"]
     assert changed[-1] == ["D:/x.xlsx"]
+    assert widget.summary_label.text() == "Files: 1"
 
     widget.clear_files()
     assert widget.files() == []
     assert changed[-1] == []
+    assert widget.summary_label.text() == "Files: 0"
+
+
+def test_managed_drop_widget_supports_custom_summary_builder(qapp: QApplication) -> None:
+    widget = ManagedDropFileWidget(drop_mode="multiple")
+    widget.set_summary_text_builder(lambda count: f"Count={count}")
+    assert widget.summary_label.text() == "Count=0"
+    widget.add_files(["C:/a.xlsx", "C:/b.xlsx"])
+    assert widget.summary_label.text() == "Count=2"
 
 
 def test_managed_drop_widget_single_mode_keeps_latest_drop_batch(qapp: QApplication) -> None:
@@ -110,3 +121,18 @@ def test_managed_drop_widget_can_allow_non_local_sources(qapp: QApplication) -> 
     added = widget.add_files(["https://example.com/a.xlsx"])
     assert added == ["https://example.com/a.xlsx"]
     assert widget.files() == ["https://example.com/a.xlsx"]
+
+
+def test_managed_drop_widget_applies_tooltips_to_row_actions(qapp: QApplication) -> None:
+    widget = ManagedDropFileWidget(
+        drop_mode="multiple",
+        open_file_tooltip="Open File",
+        open_folder_tooltip="Open Folder",
+        remove_tooltip="Remove File",
+    )
+    widget.add_files(["C:/a.xlsx"])
+    item = widget.drop_list.item(0)
+    row = widget.drop_list.itemWidget(item)
+    assert row.open_file_btn.toolTip() == "Open File"
+    assert row.open_folder_btn.toolTip() == "Open Folder"
+    assert row.remove_btn.toolTip() == "Remove File"

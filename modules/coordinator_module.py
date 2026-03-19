@@ -40,7 +40,7 @@ from common.constants import (
 )
 from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
-from common.drag_drop_file_widget import DragDropFileList, DragDropZoneFrame
+from common.drag_drop_file_widget import DragDropFileList, DragDropZoneFrame, ManagedDropFileWidget
 from common.removable_file_item_widget import (
     ElidedFileNameLabel as _SharedElidedFileNameLabel,
 )
@@ -50,8 +50,8 @@ from common.removable_file_item_widget import (
 from common.texts import t
 from common.toast import show_toast
 from common.ui_stylings import (
+    GLOBAL_QPUSHBUTTON_MIN_WIDTH,
     COORDINATOR_DROP_LIST_ITEM_SPACING,
-    COORDINATOR_DROP_LIST_MIN_HEIGHT,
     COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
     COORDINATOR_DROP_ZONE_LAYOUT_SPACING,
     COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
@@ -66,7 +66,6 @@ from common.ui_stylings import (
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
     COORDINATOR_LIST_PLACEHOLDER_COLOR,
     COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
-    COORDINATOR_SUMMARY_FONT_SIZE,
 )
 from common.ui_logging import (
     UILogHandler,
@@ -143,6 +142,7 @@ _COORDINATOR_NS_EXPORTS = (
 OUTPUT_LINK_MODE_FILE = "file"
 
 _logger = logging.getLogger(__name__)
+_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + 72
 
 
 @dataclass(slots=True)
@@ -229,6 +229,9 @@ class _CoordinatorFileItemWidget(_SharedRemovableFileItemWidget):
         super().__init__(
             file_path,
             remove_fallback_text=t("coordinator.file.remove_fallback"),
+            open_file_tooltip=t("instructor.links.open_file"),
+            open_folder_tooltip=t("instructor.links.open_folder"),
+            remove_tooltip=t("coordinator.file.remove_tooltip"),
             parent=parent,
         )
 
@@ -254,7 +257,6 @@ class CoordinatorModule(QWidget):
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
-        self._last_widget_added_count = 0
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._build_ui()
         self._setup_ui_logging()
@@ -343,39 +345,36 @@ class CoordinatorModule(QWidget):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.setWidget(left)
+        left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
 
         right = QFrame()
         right.setObjectName("coordinatorActiveCard")
         right_layout = QVBoxLayout(right)
 
-        self.drop_zone = _DropZoneFrame()
-        self.drop_zone.setProperty("dragActive", False)
-        zone_layout = QVBoxLayout(self.drop_zone)
-        zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
-        zone_layout.setSpacing(COORDINATOR_DROP_ZONE_LAYOUT_SPACING)
-        self.drop_list = _ExcelDropList()
-        self.drop_list.setObjectName("coordinatorDropList")
-        self.drop_list.setMinimumHeight(COORDINATOR_DROP_LIST_MIN_HEIGHT)
-        self.drop_list.files_dropped.connect(self._on_files_dropped)
-        self.drop_list.drag_state_changed.connect(self._set_drop_active)
-        self.drop_list.browse_requested.connect(self._browse_files)
-        zone_layout.addWidget(self.drop_list)
-        right_layout.addWidget(self.drop_zone, 1)
+        self.drop_widget = ManagedDropFileWidget(
+            drop_mode="multiple",
+            remove_fallback_text=t("coordinator.file.remove_fallback"),
+            open_file_tooltip=t("instructor.links.open_file"),
+            open_folder_tooltip=t("instructor.links.open_folder"),
+            remove_tooltip=t("coordinator.file.remove_tooltip"),
+        )
+        self.drop_widget.set_summary_text_builder(
+            lambda _count: t("coordinator.summary", count=len(self._files))
+        )
+        self.drop_widget.drop_list.setObjectName("coordinatorDropList")
+        self.drop_widget.files_dropped.connect(self._on_files_dropped)
+        self.drop_widget.browse_requested.connect(self._browse_files)
+        self.drop_widget.clear_button.clicked.connect(self._clear_all)
+        self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
+        right_layout.addWidget(self.drop_widget, 1)
+
+        # Aliases retained for compatibility with helper modules/tests.
+        self.drop_zone = self.drop_widget.drop_zone
+        self.drop_list = self.drop_widget.drop_list
+        self.clear_button = self.drop_widget.clear_button
 
         controls_row = QHBoxLayout()
-        self.summary_label = QLabel()
-        self.summary_label.setObjectName("coordinatorSummary")
-        controls_row.addWidget(self.summary_label)
-        self.last_added_label = QLabel()
-        self.last_added_label.setObjectName("hintText")
-        controls_row.addWidget(self.last_added_label)
         controls_row.addStretch(1)
-        self.clear_button = QPushButton()
-        self.clear_button.setObjectName("coordinatorClearButton")
-        self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clear_button.setDefault(True)
-        self.clear_button.clicked.connect(self._clear_all)
-        controls_row.addWidget(self.clear_button)
         self.calculate_button = QPushButton()
         self.calculate_button.setObjectName("coordinatorCalculateButton")
         self.calculate_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -428,8 +427,10 @@ class CoordinatorModule(QWidget):
         self._rerender_user_log()
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
-        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
-        self.clear_button.setText(t("coordinator.clear_all"))
+        self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
+        self.drop_widget.set_summary_text_builder(
+            lambda _count: t("coordinator.summary", count=len(self._files))
+        )
         self.calculate_button.setText(t("coordinator.calculate"))
         self.threshold_title_label.setText(t("coordinator.thresholds.title"))
         self.threshold_description_label.setText(t("coordinator.thresholds.description"))
@@ -550,8 +551,6 @@ class CoordinatorModule(QWidget):
         _add_uploaded_paths_impl(self, added_paths, ns=globals())
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
-        self._last_widget_added_count = len([value for value in dropped_files if value])
-        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
         first_path = next((value for value in dropped_files if value), "")
         if first_path:
             self._remember_dialog_dir_safe(first_path)
@@ -567,8 +566,6 @@ class CoordinatorModule(QWidget):
             t("instructor.dialog.filter.excel_open"),
         )
         if selected_files:
-            self._last_widget_added_count = len(selected_files)
-            self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
             self._remember_dialog_dir_safe(selected_files[0])
             self._process_files_async(selected_files)
 
@@ -614,7 +611,9 @@ class CoordinatorModule(QWidget):
         self._clear_info_text_selection()
 
     def _refresh_summary(self) -> None:
-        self.summary_label.setText(t("coordinator.summary", count=len(self._files)))
+        self.drop_widget.set_summary_text_builder(
+            lambda _count: t("coordinator.summary", count=len(self._files))
+        )
 
 
     def _set_drop_active(self, active: bool) -> None:
@@ -630,8 +629,6 @@ class CoordinatorModule(QWidget):
         remove_file_by_path(self, file_path, ns=_file_actions_namespace())
 
     def _clear_all(self) -> None:
-        self._last_widget_added_count = 0
-        self.last_added_label.setText(t("coordinator.summary", count=self._last_widget_added_count))
         clear_all(self, ns=_file_actions_namespace())
 
     def closeEvent(self, event) -> None:

@@ -22,6 +22,7 @@ from common.utils import (
     log_process_message,
     normalize,
     remember_dialog_dir,
+    resolve_existing_dialog_directory,
     resolve_dialog_start_path,
     resource_path,
     set_last_saved_dir,
@@ -323,6 +324,17 @@ class TestSettingsHelpers(unittest.TestCase):
         ):
             out = resolve_dialog_start_path("FOCUS", "a.xlsx")
             self.assertTrue(out.endswith("a.xlsx"))
+
+    def test_resolve_existing_dialog_directory_walks_up_to_existing_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            deep = base / "missing" / "child" / "marks_template.xlsx"
+            resolved = resolve_existing_dialog_directory(str(deep))
+            self.assertEqual(os.path.normcase(resolved), os.path.normcase(str(base)))
+
+    def test_resolve_existing_dialog_directory_empty_when_no_parent_exists(self) -> None:
+        resolved = resolve_existing_dialog_directory("")
+        self.assertEqual(resolved, "")
 
     def test_runtime_base_and_join_path_posix_branch(self) -> None:
         from common.utils import _join_path, _runtime_base_dir

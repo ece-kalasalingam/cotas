@@ -67,6 +67,9 @@ class RemovableFileItemWidget(QWidget):
         remove_fallback_text: str = "Remove",
         open_file_fallback_text: str = "Open file",
         open_folder_fallback_text: str = "Open folder",
+        open_file_tooltip: str = "Open File",
+        open_folder_tooltip: str = "Open Folder",
+        remove_tooltip: str = "Remove File",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -102,6 +105,7 @@ class RemovableFileItemWidget(QWidget):
         else:
             self.open_file_btn.setText(open_file_fallback_text)
         self.open_file_btn.setEnabled(self._local_path is not None)
+        self.open_file_btn.setToolTip(open_file_tooltip)
         self.open_file_btn.clicked.connect(self._open_file)
         layout.addWidget(self.open_file_btn, 0)
 
@@ -125,6 +129,7 @@ class RemovableFileItemWidget(QWidget):
         else:
             self.open_folder_btn.setText(open_folder_fallback_text)
         self.open_folder_btn.setEnabled(self._local_path is not None)
+        self.open_folder_btn.setToolTip(open_folder_tooltip)
         self.open_folder_btn.clicked.connect(self._open_folder)
         layout.addWidget(self.open_folder_btn, 0)
 
@@ -147,6 +152,7 @@ class RemovableFileItemWidget(QWidget):
             )
         else:
             self.remove_btn.setText(remove_fallback_text)
+        self.remove_btn.setToolTip(remove_tooltip)
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self.file_path))
         layout.addWidget(self.remove_btn, 0)
 

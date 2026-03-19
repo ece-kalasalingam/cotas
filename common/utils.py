@@ -404,6 +404,32 @@ def resolve_dialog_start_path(app_name: str, file_name: str = "") -> str:
     return str(Path.home() / file_name) if file_name else str(Path.home())
 
 
+def resolve_existing_dialog_directory(start_path: str | None) -> str:
+    """Resolve nearest existing directory for folder dialogs.
+
+    If `start_path` points to a file path (existing or not), this walks upward to
+    find the first existing directory. Returns empty string when no usable parent
+    exists, allowing Qt to fall back to OS defaults.
+    """
+    if not start_path or not str(start_path).strip():
+        return ""
+    try:
+        candidate = Path(os.path.expanduser(start_path))
+    except OSError:
+        return ""
+
+    while True:
+        try:
+            if candidate.exists() and candidate.is_dir():
+                return str(candidate)
+        except OSError:
+            pass
+        parent = candidate.parent
+        if parent == candidate:
+            return ""
+        candidate = parent
+
+
 def remember_dialog_dir(selected_path: str, app_name: str) -> None:
     """Persist selected file/folder directory as last_saved_dir if valid."""
     if not selected_path:
