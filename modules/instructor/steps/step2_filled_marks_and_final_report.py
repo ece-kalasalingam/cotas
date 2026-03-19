@@ -16,6 +16,7 @@ from common.constants import (
 from modules.instructor.steps.shared_execution import handle_step_failure
 
 _LOG_FINAL_REPORT_SOURCE_MISSING = "Final report generation failed: filled marks file is missing. path=%s"
+_REPORT_COPY_FALLBACK_FLAG = "ALLOW_TEST_ONLY_REPORT_COPY_FALLBACK"
 
 
 class _ModuleState(Protocol):
@@ -130,6 +131,23 @@ class _Step2Namespace(TypedDict):
     _build_final_report_default_name: Callable[[str | None], str]
     _atomic_copy_file: Callable[[str, str], Path]
     _logger: _Logger
+    ALLOW_TEST_ONLY_REPORT_COPY_FALLBACK: bool
+
+
+def _failure_reason(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
+def _format_failed_files_summary(failed_files: list[dict[str, str]]) -> str:
+    if not failed_files:
+        return ""
+    preview = failed_files[:5]
+    pieces = [f"{item['source_path']} -> {item['reason']}" for item in preview]
+    extra_count = len(failed_files) - len(preview)
+    if extra_count > 0:
+        pieces.append(f"... +{extra_count} more")
+    return "; ".join(pieces)
 
 
 def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -204,6 +222,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         return
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
+    allow_copy_fallback = bool(typed_ns.get(_REPORT_COPY_FALLBACK_FLAG, False))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
@@ -217,6 +236,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
     def _work() -> dict[str, object]:
         generated_outputs: list[str] = []
         failed_count = 0
+        failed_files: list[dict[str, str]] = []
         for source_path, output_path in planned_pairs:
             token.raise_if_cancelled()
             try:
@@ -233,16 +253,29 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
                         cancel_token=token,
                     )
                 else:
-                    typed_ns["_atomic_copy_file"](source_path, output_path)
+                    if allow_copy_fallback:
+                        typed_ns["_atomic_copy_file"](source_path, output_path)
+                    else:
+                        raise typed_ns["AppSystemError"](
+                            "Workflow service unavailable for final report generation."
+                        )
                 generated_outputs.append(output_path)
-            except Exception:
+            except Exception as exc:
                 failed_count += 1
+                failed_files.append(
+                    {
+                        "source_path": source_path,
+                        "output_path": output_path,
+                        "reason": _failure_reason(exc),
+                    }
+                )
         return {
             "generated_outputs": generated_outputs,
             "processed_count": len(planned_pairs),
             "total_count": len(source_paths),
             "failed_count": failed_count,
             "skipped_count": skipped_conflicts,
+            "failed_files": failed_files,
         }
 
     def _on_finished(result: object) -> None:
@@ -252,6 +285,17 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         total_count = int(cast(int, data.get("total_count", len(source_paths))))
         failed_count = int(cast(int, data.get("failed_count", 0)))
         skipped_count = int(cast(int, data.get("skipped_count", skipped_conflicts)))
+        raw_failed_files = cast(list[object], data.get("failed_files", []))
+        failed_files = [
+            {
+                "source_path": str(item.get("source_path", "")),
+                "output_path": str(item.get("output_path", "")),
+                "reason": str(item.get("reason", "")),
+            }
+            for item in raw_failed_files
+            if isinstance(item, dict)
+        ]
+        failure_summary = _format_failed_files_summary(failed_files)
 
         typed_module.final_report_path = generated_outputs[-1] if generated_outputs else None
         typed_module.final_report_paths = list(generated_outputs)
@@ -264,12 +308,15 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             logger=typed_ns["_logger"],
             success_message=(
                 f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX} "
-                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}"
+                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}, "
+                f"failed_files={failed_files}"
             ),
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
+        if failure_summary:
+            typed_ns["_publish_status"](typed_module, f"Final report per-file failures: {failure_summary}")
         typed_ns["show_toast"](
             typed_module,
             (
@@ -435,6 +482,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
     source_path = typed_module.filled_marks_path
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
+    allow_copy_fallback = bool(typed_ns.get(_REPORT_COPY_FALLBACK_FLAG, False))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
@@ -485,7 +533,9 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
                 context=job_context,
                 cancel_token=token,
             )
-        return typed_ns["_atomic_copy_file"](source_path, save_path)
+        if allow_copy_fallback:
+            return typed_ns["_atomic_copy_file"](source_path, save_path)
+        raise typed_ns["AppSystemError"]("Workflow service unavailable for final report generation.")
 
     typed_ns["_start_async_operation"](
         typed_module,

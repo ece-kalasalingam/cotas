@@ -623,15 +623,15 @@ class InstructorModule(QWidget):
             self.step2_drop_widget.set_summary_text_builder(
                 lambda count: t("instructor.step1.drop.summary", count=count)
             )
-            self.step2_upload_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS)
+            self.step2_upload_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and can_run)
             self.step2_drop_widget.clear_button.setEnabled(bool(self.step2_drop_widget.files()))
-            self.step2_generate_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and bool(self.filled_marks_paths))
+            self.step2_generate_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and can_run and bool(self.filled_marks_paths))
             self.step1_drop_widget.clear_button.setEnabled(False)
 
         self.step1_upload_action.setEnabled(is_step1)
         self.step1_drop_widget.setEnabled(is_step1 and not self.state.busy)
-        self.step2_upload_action.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and not self.state.busy)
-        self.step2_drop_widget.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and not self.state.busy)
+        self.step2_upload_action.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and can_run and not self.state.busy)
+        self.step2_drop_widget.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and can_run and not self.state.busy)
         if not can_run:
             self.active_note.setText(reason)
         elif self.filled_marks_outdated or self.final_report_outdated:
@@ -918,6 +918,15 @@ class InstructorModule(QWidget):
     def _upload_filled_marks_from_dialog_async(self) -> None:
         if self.state.busy:
             return
+        can_run, reason = self._can_run_step(2)
+        if not can_run:
+            show_toast(
+                self,
+                reason,
+                title=t("instructor.msg.step_required_title"),
+                level="info",
+            )
+            return
         open_paths, _ = QFileDialog.getOpenFileNames(
             self,
             t("instructor.dialog.step2.upload.title"),
@@ -930,6 +939,15 @@ class InstructorModule(QWidget):
 
     def _upload_filled_marks_from_paths_async(self, open_paths: list[str]) -> None:
         if self.state.busy:
+            return
+        can_run, reason = self._can_run_step(2)
+        if not can_run:
+            show_toast(
+                self,
+                reason,
+                title=t("instructor.msg.step_required_title"),
+                level="info",
+            )
             return
         selected_paths = [path for path in open_paths if path]
         if not selected_paths:
@@ -1000,6 +1018,15 @@ class InstructorModule(QWidget):
         self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
 
     def _generate_final_report_async(self) -> None:
+        can_run, reason = self._can_run_step(2)
+        if not can_run:
+            show_toast(
+                self,
+                reason,
+                title=t("instructor.msg.step_required_title"),
+                level="info",
+            )
+            return
         if self.filled_marks_paths:
             generate_final_reports_from_paths_async(self, ns=globals())
             return

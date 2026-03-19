@@ -37,6 +37,8 @@ class InstructorWorkflowController:
 
     def can_run_step(self, step: int) -> tuple[bool, str]:
         if step in _STEP_RUN_ALWAYS:
+            if step == 2 and not self._m.step2_upload_ready:
+                return False, t("instructor.require.step1")
             return True, _EMPTY_REASON
         return True, _EMPTY_REASON
 
@@ -56,6 +58,7 @@ class _InstructorWorkflowModule(Protocol):
     OUTDATED_ATTRS: dict[int, str]
     STEP_TITLE_KEYS: dict[int, str]
     ACTION_DEFAULT_KEYS: dict[int, str]
+    step2_upload_ready: bool
     current_step: int
     state: _InstructorState
 

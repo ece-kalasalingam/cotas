@@ -338,6 +338,7 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     monkeypatch.setattr(instructor_ui, "generate_final_report_async", lambda _m, ns=None: direct_calls.__setitem__("generate", direct_calls["generate"] + 1))
     module._prepare_marks_template_async()
     instructor_ui.InstructorModule._download_course_template_async(module)
+    module.step2_upload_ready = True
     module._generate_final_report_async()
     assert direct_calls["prepare"] == 1
     assert direct_calls["download"] == 1

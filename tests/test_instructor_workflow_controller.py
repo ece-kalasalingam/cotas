@@ -21,6 +21,7 @@ class _Module:
         self.d1 = False
         self.d2 = True
         self.o2 = True
+        self.step2_upload_ready = False
         self.current_step = 1
         self.state = _State()
         self.refreshed = 0
@@ -42,6 +43,9 @@ def test_workflow_controller_remaining_branches(monkeypatch) -> None:
     assert controller.step_state_text(2) == ""
     assert controller.step_list_text(1) == "k1"
     assert controller.action_text_for_step(2) == "a2"
+    assert controller.can_run_step(2) == (False, "instructor.require.step1")
+    mod.step2_upload_ready = True
+    assert controller.can_run_step(2) == (True, "")
     assert controller.can_run_step(99) == (True, "")
 
     controller.on_step_selected(2)

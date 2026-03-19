@@ -94,7 +94,13 @@ class _Module:
         return self.can_run, self.can_run_reason
 
 
-def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[str, object]:
+def _ns(
+    module: _Module,
+    *,
+    open_path: str = "",
+    save_path: str = "",
+    allow_report_copy_fallback: bool = False,
+) -> dict[str, object]:
     logs: list[tuple] = []
     logger = _Logger()
 
@@ -132,6 +138,7 @@ def _ns(module: _Module, *, open_path: str = "", save_path: str = "") -> dict[st
         "_validate_uploaded_filled_marks_workbook": lambda _path: None,
         "_build_final_report_default_name": lambda p: f"final:{p}",
         "_atomic_copy_file": lambda src, out: Path(out),
+        "ALLOW_TEST_ONLY_REPORT_COPY_FALLBACK": allow_report_copy_fallback,
         "_logger": logger,
         "_logs": logs,
         "_logger_obj": logger,
@@ -251,7 +258,7 @@ def test_generate_final_report_async_source_missing_and_success() -> None:
         source.unlink(missing_ok=True)
 
 
-def test_generate_final_report_async_failure_and_work_service_fallback() -> None:
+def test_generate_final_report_async_failure_and_work_service_paths() -> None:
     source = Path("tests/.tmp-filled2.xlsx")
     source.write_text("ok", encoding="utf-8")
     try:
@@ -272,8 +279,12 @@ def test_generate_final_report_async_failure_and_work_service_fallback() -> None
         on_failure(RuntimeError("boom"))
         assert ("system", "2") in module.toasts
 
-        out = cast(Callable[[], Path], module.started["work"])()
-        assert out == Path("D:/final.xlsx")
+        work = cast(Callable[[], Path], module.started["work"])
+        try:
+            work()
+            assert False, "Expected AppSystemError when workflow service is unavailable."
+        except AppSystemError as exc:
+            assert "service unavailable" in str(exc).lower()
 
         module2 = _Module()
         module2._workflow_service = _WorkflowService()
@@ -285,6 +296,42 @@ def test_generate_final_report_async_failure_and_work_service_fallback() -> None
         out2 = cast(Callable[[], Path], module2.started["work"])()
         assert out2 == Path("D:/final2.xlsx")
         assert module2._workflow_service.generated == [(str(source), "D:/final2.xlsx")]
+
+        module3 = _Module()
+        module3.filled_marks_done = True
+        module3.filled_marks_outdated = False
+        module3.filled_marks_path = str(source)
+        ns3 = _ns(module3, save_path="D:/final3.xlsx", allow_report_copy_fallback=True)
+        step2_phase.generate_final_report_async(module3, ns=ns3)
+        out3 = cast(Callable[[], Path], module3.started["work"])()
+        assert out3 == Path("D:/final3.xlsx")
+    finally:
+        source.unlink(missing_ok=True)
+
+
+def test_generate_final_reports_from_paths_async_returns_structured_failure_details() -> None:
+    source = Path("tests/.tmp-filled-batch.xlsx")
+    source.write_text("ok", encoding="utf-8")
+    try:
+        module = _Module()
+        module.filled_marks_paths = [str(source)]
+        ns = _ns(module)
+        ns["_build_final_report_default_name"] = lambda _p: "batch.xlsx"
+        ns["QFileDialog"] = type(
+            "_QD",
+            (),
+            {
+                "getExistingDirectory": staticmethod(lambda *_a, **_k: "D:/out"),
+                "getSaveFileName": staticmethod(lambda *_a, **_k: ("", "")),
+            },
+        )
+
+        step2_phase.generate_final_reports_from_paths_async(module, ns=ns)
+        result = cast(Callable[[], dict[str, object]], module.started["work"])()
+        failed_files = cast(list[dict[str, str]], result["failed_files"])
+        assert len(failed_files) == 1
+        assert failed_files[0]["source_path"] == str(source)
+        assert "service unavailable" in failed_files[0]["reason"].lower()
     finally:
         source.unlink(missing_ok=True)
 

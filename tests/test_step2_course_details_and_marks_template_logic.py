@@ -376,3 +376,23 @@ def test_prepare_marks_template_async_work_uses_service_and_fallback() -> None:
     out2 = cast(Callable[[], dict[str, object]], module2.started["work"])()
     assert out2["generated_outputs"] == [str(Path("D:/out2") / "DEFAULT:D:/course2.xlsx")]
     assert called["gen"] == 1
+
+
+def test_prepare_marks_template_async_reports_structured_failed_files() -> None:
+    module = _Module()
+    module.step2_upload_ready = True
+    module.step1_course_details_paths = ["D:/course-bad.xlsx"]
+    ns = _ns(module, output_dir="D:/out")
+
+    def _raise_for_generation(_src: str, _out: str) -> None:
+        raise RuntimeError("generation failed")
+
+    ns["generate_marks_template_from_course_details"] = _raise_for_generation
+    step2.prepare_marks_template_async(module, ns=ns)
+    result = cast(Callable[[], dict[str, object]], module.started["work"])()
+
+    failed_files = cast(list[dict[str, str]], result["failed_files"])
+    assert len(failed_files) == 1
+    assert failed_files[0]["source_path"] == "D:/course-bad.xlsx"
+    assert failed_files[0]["output_path"].replace("\\", "/").endswith("DEFAULT:D:/course-bad.xlsx")
+    assert failed_files[0]["reason"] == "generation failed"

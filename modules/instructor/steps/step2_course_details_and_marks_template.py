@@ -33,6 +33,22 @@ def _coerce_int(value: object, default: int) -> int:
     return default
 
 
+def _failure_reason(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
+def _format_failed_files_summary(failed_files: list[dict[str, str]]) -> str:
+    if not failed_files:
+        return ""
+    preview = failed_files[:5]
+    parts = [f"{item['source_path']} -> {item['reason']}" for item in preview]
+    extra_count = len(failed_files) - len(preview)
+    if extra_count > 0:
+        parts.append(f"... +{extra_count} more")
+    return "; ".join(parts)
+
+
 class _ModuleState(Protocol):
     busy: bool
 
@@ -454,6 +470,17 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         total_count = _coerce_int(data.get("total_count"), len(source_paths))
         failed_count = _coerce_int(data.get("failed_count"), 0)
         skipped_count = _coerce_int(data.get("skipped_count"), skipped_conflicts)
+        raw_failed_files = cast(list[object], data.get("failed_files", []))
+        failed_files = [
+            {
+                "source_path": str(item.get("source_path", "")),
+                "output_path": str(item.get("output_path", "")),
+                "reason": str(item.get("reason", "")),
+            }
+            for item in raw_failed_files
+            if isinstance(item, dict)
+        ]
+        failure_summary = _format_failed_files_summary(failed_files)
 
         typed_module.marks_template_path = generated_outputs[-1] if generated_outputs else None
         typed_module.marks_template_paths = list(generated_outputs)
@@ -471,12 +498,15 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             logger=typed_ns["_logger"],
             success_message=(
                 f"{process_name}{PROCESS_MESSAGE_SUCCESS_SUFFIX} "
-                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}"
+                f"processed={processed_count}, total={total_count}, failed={failed_count}, skipped={skipped_count}, "
+                f"failed_files={failed_files}"
             ),
             user_success_message=user_success_message,
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
+        if failure_summary:
+            typed_ns["_publish_status"](typed_module, f"Marks-template per-file failures: {failure_summary}")
         typed_ns["show_toast"](
             typed_module,
             t(
@@ -507,6 +537,7 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
     def _work() -> object:
         generated_outputs: list[str] = []
         failed_count = 0
+        failed_files: list[dict[str, str]] = []
         processed_count = 0
         total_count = len(planned_pairs)
         for source_path, output_path in planned_pairs:
@@ -525,8 +556,15 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
                 else:
                     typed_ns["generate_marks_template_from_course_details"](source_path, output_path)
                 generated_outputs.append(output_path)
-            except Exception:
+            except Exception as exc:
                 failed_count += 1
+                failed_files.append(
+                    {
+                        "source_path": source_path,
+                        "output_path": output_path,
+                        "reason": _failure_reason(exc),
+                    }
+                )
             finally:
                 processed_count += 1
                 if processed_count % _PROGRESS_UPDATE_BATCH_SIZE == 0 or processed_count == total_count:
@@ -540,6 +578,7 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             "total_count": len(source_paths),
             "failed_count": failed_count,
             "skipped_count": skipped_conflicts,
+            "failed_files": failed_files,
         }
 
     typed_ns["_start_async_operation"](
