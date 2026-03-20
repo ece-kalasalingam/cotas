@@ -99,6 +99,7 @@ from modules.instructor.steps.step2_filled_marks_and_final_report import (
     upload_filled_marks_async,
 )
 from modules.instructor.validators.step2_filled_marks_validator import (
+    consume_last_filled_marks_anomaly_warnings,
     filled_marks_manifest_validators,
     validate_filled_marks_manifest_schema_by_template,
     validate_uploaded_filled_marks_workbook,
@@ -200,6 +201,10 @@ def _atomic_copy_file(source_path: str | Path, output_path: str | Path) -> Path:
 
 def _validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
     validate_uploaded_filled_marks_workbook(workbook_path)
+
+
+def _consume_last_filled_marks_anomaly_warnings() -> list[str]:
+    return consume_last_filled_marks_anomaly_warnings()
 
 
 def _validate_filled_marks_manifest_schema_by_template(
@@ -1007,7 +1012,11 @@ class InstructorModule(QWidget):
             if invalid or duplicates:
                 show_toast(
                     self,
-                    f"Some files were not accepted. Invalid={len(invalid)}, duplicates={duplicates}.",
+                    t(
+                        "instructor.toast.step2_upload_reject_summary",
+                        invalid=len(invalid),
+                        duplicates=duplicates,
+                    ),
                     title=t("instructor.step2.title"),
                     level="warning",
                 )

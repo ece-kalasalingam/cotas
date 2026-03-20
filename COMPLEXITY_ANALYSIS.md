@@ -30,7 +30,7 @@ Overall complexity profile is dominated by Excel workbook generation/validation 
   - Step logic: `modules/coordinator/steps/*`
   - Runtime contracts: `modules/coordinator/contracts.py`
   - Workflow controller: `modules/coordinator/workflow_controller.py`
-  - Processing: `modules/coordinator_processing.py`
+  - Processing: `domain/coordinator_engine.py`
   - Service: `services/coordinator_workflow_service.py`
 - Help UI: `modules/help_module.py`
 - About UI: `modules/about_module.py`

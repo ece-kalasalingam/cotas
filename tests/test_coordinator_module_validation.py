@@ -145,6 +145,10 @@ def test_analyze_dropped_files_marks_non_final_reports_invalid(tmp_path: Path) -
     assert result["added"] == [str(good.resolve())]
     assert result["duplicates"] == 0
     assert result["invalid_final_report"] == [str(bad.resolve())]
+    details = result.get("invalid_final_report_details", [])
+    assert len(details) == 1
+    assert details[0]["path"] == str(bad.resolve())
+    assert "invalid final co report workbook" in details[0]["reason"].lower()
     assert result["ignored"] == 2
 
 
@@ -152,7 +156,8 @@ def test_analyze_dropped_files_rejects_mismatched_template_id_against_base(tmp_p
     base = _build_valid_final_report(tmp_path / "base.xlsx", template_id="COURSE_SETUP_V1", section="A")
     mismatch = _build_valid_final_report(
         tmp_path / "mismatch.xlsx",
-        template_id="COURSE_SETUP_V2",
+        template_id="COURSE_SETUP_V1",
+        course_code="ECE999",
         section="B",
     )
 
@@ -165,6 +170,9 @@ def test_analyze_dropped_files_rejects_mismatched_template_id_against_base(tmp_p
 
     assert result["added"] == []
     assert result["invalid_final_report"] == [str(mismatch.resolve())]
+    details = result.get("invalid_final_report_details", [])
+    assert len(details) == 1
+    assert "mismatch" in details[0]["reason"].lower()
 
 
 def test_analyze_dropped_files_rejects_same_section_across_files(tmp_path: Path) -> None:
@@ -180,6 +188,9 @@ def test_analyze_dropped_files_rejects_same_section_across_files(tmp_path: Path)
 
     assert result["added"] == []
     assert result["invalid_final_report"] == [str(same_section.resolve())]
+    details = result.get("invalid_final_report_details", [])
+    assert len(details) == 1
+    assert "duplicate section" in details[0]["reason"].lower()
 
 
 def test_analyze_dropped_files_accepts_unique_sections_with_same_course_signature(tmp_path: Path) -> None:
@@ -357,23 +368,29 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert ws["C4"].value == "2025-26"
         assert ws["B5"].value == "CO Number"
         assert ws["C5"].value == "CO1"
+        assert ws["B6"].value == "Threshold L1"
+        assert ws["C6"].value == "40"
+        assert ws["B7"].value == "Threshold L2"
+        assert ws["C7"].value == "60"
+        assert ws["B8"].value == "Threshold L3"
+        assert ws["C8"].value == "75"
 
-        assert ws["A7"].value == "#"
-        assert ws["B7"].value == "Regno"
-        assert ws["C7"].value == "Student name"
-        assert ws["D7"].value == "Direct (80%)"
-        assert ws["E7"].value == "Indirect (20%)"
-        assert ws["F7"].value == "Total (100%)"
-        assert ws["G7"].value == "Level"
+        assert ws["A10"].value == "#"
+        assert ws["B10"].value == "Regno"
+        assert ws["C10"].value == "Student name"
+        assert ws["D10"].value == "Direct (80%)"
+        assert ws["E10"].value == "Indirect (20%)"
+        assert ws["F10"].value == "Total (100%)"
+        assert ws["G10"].value == "Level"
         assert ws.column_dimensions["B"].width is not None
         assert ws.column_dimensions["C"].width is not None
         assert ws["C2"].alignment.wrap_text is True
-        assert ws["C8"].alignment.wrap_text is True
+        assert ws["C11"].alignment.wrap_text is True
         assert ws.protection.sheet is True
-        assert ws.print_title_rows == "$1:$7"
+        assert ws.print_title_rows == "$1:$10"
 
         rows = []
-        row_idx = 8
+        row_idx = 11
         while isinstance(ws.cell(row=row_idx, column=1).value, int):
             rows.append(
                 (
@@ -394,18 +411,18 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
             (3, "R003", "Student Three", 60, "A", "A", "NA"),
             (4, "R004", "Student Four", 70, 15, 85, 3),
         ]
-        assert ws["B13"].value == "On Roll:"
-        assert ws["C13"].value == 4
-        assert ws["B14"].value == "Attended:"
-        assert ws["C14"].value == 2
-        assert ws["B15"].value == "Level 0:"
-        assert ws["C15"].value == 0
-        assert ws["B16"].value == "Level 1:"
-        assert ws["C16"].value == 0
-        assert ws["B17"].value == "Level 2:"
-        assert ws["C17"].value == 0
-        assert ws["B18"].value == "Level 3:"
-        assert ws["C18"].value == 2
+        assert ws["B16"].value == "On Roll:"
+        assert ws["C16"].value == 4
+        assert ws["B17"].value == "Attended:"
+        assert ws["C17"].value == 2
+        assert ws["B18"].value == "Level 0:"
+        assert ws["C18"].value == 0
+        assert ws["B19"].value == "Level 1:"
+        assert ws["C19"].value == 0
+        assert ws["B20"].value == "Level 2:"
+        assert ws["C20"].value == 0
+        assert ws["B21"].value == "Level 3:"
+        assert ws["C21"].value == 2
 
         summary = wb["Summary"]
         assert summary["B1"].value == "Course Code"
@@ -418,21 +435,27 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert summary["C4"].value == "2025-26"
         assert summary["B5"].value == "CO Number"
         assert summary["C5"].value == "All COs"
-        assert summary["A7"].value == "CO"
-        assert summary["B7"].value == "Level 0"
-        assert summary["C7"].value == "Level 1"
-        assert summary["D7"].value == "Level 2"
-        assert summary["E7"].value == "Level 3"
-        assert summary["F7"].value == "Attended"
-        assert summary["G7"].value == "CO%"
-        assert summary["A8"].value == "CO1"
-        assert summary["B8"].value == 0
-        assert summary["C8"].value == 0
-        assert summary["D8"].value == 0
-        assert summary["E8"].value == 2
-        assert summary["F8"].value == 2
-        assert summary["G8"].value == 100
-        assert summary.print_title_rows == "$1:$7"
+        assert summary["B6"].value == "Threshold L1"
+        assert summary["C6"].value == "40"
+        assert summary["B7"].value == "Threshold L2"
+        assert summary["C7"].value == "60"
+        assert summary["B8"].value == "Threshold L3"
+        assert summary["C8"].value == "75"
+        assert summary["A10"].value == "CO"
+        assert summary["B10"].value == "Level 0"
+        assert summary["C10"].value == "Level 1"
+        assert summary["D10"].value == "Level 2"
+        assert summary["E10"].value == "Level 3"
+        assert summary["F10"].value == "Attended"
+        assert summary["G10"].value == "CO%"
+        assert summary["A11"].value == "CO1"
+        assert summary["B11"].value == 0
+        assert summary["C11"].value == 0
+        assert summary["D11"].value == 0
+        assert summary["E11"].value == 2
+        assert summary["F11"].value == 2
+        assert summary["G11"].value == 100
+        assert summary.print_title_rows == "$1:$10"
         graph = wb["Graph"]
         assert graph["B1"].value == "Course Code"
         assert graph["C1"].value == "ECE000"
@@ -444,7 +467,13 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert graph["C4"].value == "2025-26"
         assert graph["B5"].value == "CO Number"
         assert graph["C5"].value == "All COs"
-        assert graph.print_title_rows == "$1:$5"
+        assert graph["B6"].value == "Threshold L1"
+        assert graph["C6"].value == "40"
+        assert graph["B7"].value == "Threshold L2"
+        assert graph["C7"].value == "60"
+        assert graph["B8"].value == "Threshold L3"
+        assert graph["C8"].value == "75"
+        assert graph.print_title_rows == "$1:$8"
         assert len(graph._charts) == 1
         assert graph._charts[0].series[0].dLbls is not None
     finally:
@@ -462,6 +491,7 @@ def test_generate_co_attainment_workbook_level_boundaries(tmp_path: Path) -> Non
             ("R002", "S2", 60),
             ("R003", "S3", 75),
             ("R004", "S4", 100),
+            ("R008", "S8", 100.01),
             ("R005", "S5", -1),
             ("R006", "S6", 101),
             ("R007", "S7", "NA"),
@@ -472,6 +502,7 @@ def test_generate_co_attainment_workbook_level_boundaries(tmp_path: Path) -> Non
             ("R002", "S2", 0),
             ("R003", "S3", 0),
             ("R004", "S4", 0),
+            ("R008", "S8", 0),
             ("R005", "S5", 0),
             ("R006", "S6", 0),
             ("R007", "S7", 0),
@@ -486,25 +517,25 @@ def test_generate_co_attainment_workbook_level_boundaries(tmp_path: Path) -> Non
         ws = wb["CO1"]
         levels: list[object] = []
         totals: list[object] = []
-        row_idx = 8
+        row_idx = 11
         while isinstance(ws.cell(row=row_idx, column=1).value, int):
             totals.append(ws.cell(row=row_idx, column=6).value)
             levels.append(ws.cell(row=row_idx, column=7).value)
             row_idx += 1
-        assert totals == [0, 40, 60, 75, 100, -1, 101, "A"]
-        assert levels == [0, 1, 2, 3, 3, "NA", "NA", "NA"]
-        assert ws["B17"].value == "On Roll:"
-        assert ws["C17"].value == 8
-        assert ws["B18"].value == "Attended:"
-        assert ws["C18"].value == 7
-        assert ws["B19"].value == "Level 0:"
-        assert ws["C19"].value == 1
-        assert ws["B20"].value == "Level 1:"
-        assert ws["C20"].value == 1
-        assert ws["B21"].value == "Level 2:"
-        assert ws["C21"].value == 1
-        assert ws["B22"].value == "Level 3:"
-        assert ws["C22"].value == 2
+        assert totals == [0, 40, 60, 75, 100, -1, 101, "A", 100.01]
+        assert levels == [0, 1, 2, 3, 3, "NA", "NA", "NA", 3]
+        assert ws["B21"].value == "On Roll:"
+        assert ws["C21"].value == 9
+        assert ws["B22"].value == "Attended:"
+        assert ws["C22"].value == 8
+        assert ws["B23"].value == "Level 0:"
+        assert ws["C23"].value == 1
+        assert ws["B24"].value == "Level 1:"
+        assert ws["C24"].value == 1
+        assert ws["B25"].value == "Level 2:"
+        assert ws["C25"].value == 1
+        assert ws["B26"].value == "Level 3:"
+        assert ws["C26"].value == 3
     finally:
         wb.close()
 

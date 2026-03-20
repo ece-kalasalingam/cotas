@@ -317,6 +317,9 @@ def test_non_empty_marks_and_row_consistency_and_anomaly_logs(monkeypatch: pytes
         frequency_by_value_by_col={4: {}, 5: {1.0: 10}},
     )
     assert warnings
+    anomaly_messages = v1.consume_last_marks_anomaly_warnings()
+    assert anomaly_messages
+    assert v1.consume_last_marks_anomaly_warnings() == []
 
 
 def test_validate_filled_marks_manifest_schema_formula_anchor_and_cross_sheet_mismatch() -> None:

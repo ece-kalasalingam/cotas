@@ -120,9 +120,12 @@ TEXTS = {
     "instructor.status.step2_drop_files_dropped": "{count} file(s) dropped into filled marks widget.",
     "instructor.status.step2_drop_files_changed": "Filled marks widget now has {count} file(s).",
     "instructor.status.step2_drop_files_rejected": "{count} dropped file(s) were rejected by filled marks widget.",
+    "instructor.status.step2_validation_warnings": "Validation anomaly warnings: {details}",
+    "instructor.status.step2_generate_per_file_failures": "Final report per-file failures: {details}",
     "instructor.status.step1_validating_progress": "Validating course template files: {processed}/{total}.",
     "instructor.status.step1_validated_progress": "Validated valid files: {valid}/{total}.",
     "instructor.status.step1_prepare_progress": "Processed marks templates: {processed}/{total}.",
+    "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "Files: {count}",
     "instructor.toast.step1_validation_summary": (
         "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input."
@@ -130,6 +133,17 @@ TEXTS = {
     "instructor.toast.step1_prepare_no_outputs": "No output files selected for marks template generation.",
     "instructor.toast.step1_prepare_summary": (
         "Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}."
+    ),
+    "instructor.toast.step2_generate_no_outputs": "No output files selected for CO report generation.",
+    "instructor.toast.step2_generate_summary": (
+        "CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}."
+    ),
+    "instructor.toast.step2_upload_reject_summary": (
+        "Some files were not accepted. Invalid={invalid}, duplicates={duplicates}."
+    ),
+    "instructor.toast.validation_warnings_title": "Validation Warnings",
+    "instructor.toast.validation_warnings_body": (
+        "Validation completed with anomaly warnings. Check activity log details."
     ),
     "instructor.log.title": "Activity Log",
     "instructor.log.ready": "Activity log initialized.",
@@ -254,8 +268,10 @@ TEXTS = {
     "coordinator.duplicate.body": "{count} duplicate file(s) were skipped because they already exist in the list.",
     "coordinator.invalid_final_report.title": "Invalid Final CO Report",
     "coordinator.invalid_final_report.body": (
-        "Only Final CO report workbooks generated from Instructor Step 3 are allowed.\n\n{files}"
+        "Only Final CO report workbooks generated from Instructor Step 2 are allowed.\n\n{files}"
     ),
+    "coordinator.invalid_final_report.details_prefix": "Details:",
+    "coordinator.invalid_final_report.detail_line": "{file}: {reason}",
     "coordinator.status.ignored": (
         "{count} file(s) were ignored (unsupported type, missing, duplicate, "
         "or invalid final report workbook)."
@@ -279,6 +295,10 @@ TEXTS = {
         "Reg No: {reg_no} | Worksheet: {worksheet} | Workbook: {workbook}"
     ),
     "coordinator.regno_dedup.log_detail_unavailable": "Duplicate entry details are unavailable.",
+    "coordinator.join_drop.body": (
+        "Some rows were ignored because they existed only in Direct or only in Indirect sheets. "
+        "Dropped rows: {count}. See activity log for details."
+    ),
 }
 
 

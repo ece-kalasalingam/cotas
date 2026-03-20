@@ -21,6 +21,8 @@ Initial triage target: 7 business days.
 
 - Required runtime secret:
   workbook secret is auto-provisioned and stored per machine/user.
+  - Windows: DPAPI (`CryptProtectData`) machine-scoped protection.
+  - POSIX: keyring-first storage (`keyring` backend when available), with restricted-permission file fallback (`0600`) if keyring is unavailable.
 - Signature versioning:
   `FOCUS_WORKBOOK_SIGNATURE_VERSION` controls active signature format version.
   Legacy unsigned-signature compatibility paths are not accepted in the current release.
@@ -50,3 +52,4 @@ Initial triage target: 7 business days.
 - Never commit secrets to git.
 - Protect the host profile where app secrets are stored.
 - Rotate workbook password by controlled app data reset and template regeneration when required.
+- POSIX fallback note: if no keyring backend is available, the fallback secret file is compatibility storage and not equivalent to hardware/OS secret vault protection.

@@ -1,6 +1,6 @@
 # Repository Action Plan (1-2 Member Team)
 
-Date: 2026-03-19  
+Date: 2026-03-20  
 Repository: cotas  
 Branch context: clementine (ahead of main)
 
@@ -16,12 +16,12 @@ Deliver the highest-value reliability improvements with minimal parallel work, c
 
 ## Current Baseline (Verified)
 
-- Test suite: 474 passed
+- Test suite: 484 passed
 - Static checks: ruff, isort, pyright passed
 - Security checks: bandit and pip-audit passed
 - Coverage (line): 95%
 - Architecture boundary tests: passing
-- Local drift: `obe` currently runs Python 3.10.19 while project/CI policy targets Python 3.11
+- Local environment aligned to Python 3.11 policy
 
 ## Scope Tiers
 
@@ -136,7 +136,7 @@ Rule:
 
 Candidate files:
 - `domain/instructor_report_engine.py`
-- `modules/coordinator_processing.py`
+- `domain/coordinator_engine.py`
 - `domain/template_versions/course_setup_v1.py`
 
 Guardrails (mandatory):
@@ -147,12 +147,12 @@ Guardrails (mandatory):
 
 | ID | Status | DRI | Reviewer | Start | Due | Evidence |
 |---|---|---|---|---|---|---|
-| AP-01 | Not Started | TBD | TBD |  |  |  |
-| AP-02 | Not Started | TBD | TBD |  |  |  |
-| AP-03 | Not Started | TBD | TBD |  |  |  |
-| AP-04 | Deferred | TBD | TBD |  |  |  |
-| AP-05 | Deferred | TBD | TBD |  |  |  |
-| AP-06 | Backlog | TBD | TBD |  |  |  |
+| AP-01 | Completed | Local | TBD | 2026-03-20 | 2026-03-20 | `conda run -n obe python -V` = `3.11.15` |
+| AP-02 | Completed | Local | TBD | 2026-03-20 | 2026-03-20 | CI workflow enforces `ruff`, `isort --check-only`, `pyright`; local checks green |
+| AP-03 | Completed | Local | TBD | 2026-03-20 | 2026-03-20 | `modules/instructor/steps/step2_filled_marks_and_final_report.py` coverage >= 85% with focused tests |
+| AP-04 | Not Triggered | Local | TBD | 2026-03-20 |  | No repeated timeout/cancellation incidents observed |
+| AP-05 | Not Triggered | Local | TBD | 2026-03-20 |  | No security/release audit request for ADR in current cycle |
+| AP-06 | Completed | Local | TBD | 2026-03-20 | 2026-03-20 | Dedup store now uses practical SQLite threshold helper in `domain/coordinator_engine.py` |
 
 ## Definition of Done (Small-Team Version)
 

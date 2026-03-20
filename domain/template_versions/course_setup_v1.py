@@ -51,6 +51,17 @@ _LOG_STEP3_HIGH_ABSENCE = "Step3 anomaly: high absence ratio sheet=%s col=%s abs
 _LOG_STEP3_NEAR_CONSTANT = (
     "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s"
 )
+_last_marks_anomaly_warnings: list[str] = []
+
+
+def _reset_marks_anomaly_warnings() -> None:
+    _last_marks_anomaly_warnings.clear()
+
+
+def consume_last_marks_anomaly_warnings() -> list[str]:
+    warnings = list(_last_marks_anomaly_warnings)
+    _last_marks_anomaly_warnings.clear()
+    return warnings
 
 
 def validate_course_details_rules(workbook: Any) -> None:
@@ -66,6 +77,7 @@ def validate_course_details_rules(workbook: Any) -> None:
 
 
 def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
+    _reset_marks_anomaly_warnings()
     if not isinstance(manifest, dict):
         raise ValidationError(t("instructor.validation.step2.manifest_root_invalid"))
 
@@ -1042,6 +1054,11 @@ def _log_marks_anomaly_warnings_from_stats(
     for col in mark_cols:
         absent_count = absent_count_by_col.get(col, 0)
         if absent_count / student_count >= 0.9:
+            warning_message = (
+                f"High absence ratio detected in {sheet_name} ({_excel_col_name(col)}): "
+                f"{absent_count}/{student_count} marked absent."
+            )
+            _last_marks_anomaly_warnings.append(warning_message)
             _logger.warning(
                 _LOG_STEP3_HIGH_ABSENCE,
                 sheet_name,
@@ -1053,6 +1070,11 @@ def _log_marks_anomaly_warnings_from_stats(
         if numeric_count:
             same = max(frequency_by_value_by_col.get(col, {0.0: 0}).values())
             if same / numeric_count >= 0.95:
+                warning_message = (
+                    f"Near-constant marks detected in {sheet_name} ({_excel_col_name(col)}): "
+                    f"{same}/{numeric_count} values are identical."
+                )
+                _last_marks_anomaly_warnings.append(warning_message)
                 _logger.warning(
                     _LOG_STEP3_NEAR_CONSTANT,
                     sheet_name,

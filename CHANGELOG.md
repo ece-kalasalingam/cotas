@@ -17,12 +17,17 @@ All notable changes to this project are documented in this file.
 - Kept Help module context menu rendering native while supporting style application order behavior safely.
 - Refactored `MainWindow` to registry-driven module loading with lazy class import (no hardcoded module imports in window bootstrap path).
 - Hardened Coordinator orchestration by replacing `globals()` step wiring with explicit namespace factories.
+- Migrated coordinator business processing to `domain/coordinator_engine.py` and aligned module/service orchestration to the domain-layer architecture.
+- Hardened instructor final-report generation to require service/domain execution (removed service-unavailable copy-bypass behavior).
+- Improved coordinator and instructor diagnostics: per-file invalid reasons, full per-file batch failure details, and direct/indirect join-drop visibility.
 
 ### Fixed
 - Resolved high-volume static typing issues across Coordinator, Instructor, common utilities, and test modules.
 - Fixed Pylance/Pyright protocol and callable typing mismatches in output-link and async-runner related paths.
 - Fixed test compatibility for Help context menu by guarding style application on menu test doubles.
 - Stabilized Qt monkeypatch teardown behavior by patching Python subclasses instead of raw `PySide6` C++ classes in coordinator UI primitive tests (prevents Linux/macOS segfault in CI).
+- Tightened workflow step gating semantics (including unknown-step blocking) and updated regression coverage.
+- Improved score boundary handling tolerance for attainment level classification near 0/100 floating-point edges.
 
 ### Removed
 - Removed stale package `__all__` exports that produced unsupported-dunder-all warnings in static analysis.
@@ -32,7 +37,7 @@ All notable changes to this project are documented in this file.
 
 ### Quality
 - `pyright`: `0 errors, 0 warnings`
-- `pytest -q`: `474 passed`
+- `pytest -q`: `484 passed`
 - `ruff check .`: `passed`
 - `isort --check-only --diff .`: `passed`
 - `pyflakes .`: `passed`

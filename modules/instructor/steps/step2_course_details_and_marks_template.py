@@ -506,7 +506,10 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             step_id=job_context.step_id if job_context else None,
         )
         if failure_summary:
-            typed_ns["_publish_status"](typed_module, f"Marks-template per-file failures: {failure_summary}")
+            typed_ns["_publish_status"](
+                typed_module,
+                t("instructor.status.step1_prepare_per_file_failures", details=failure_summary),
+            )
         typed_ns["show_toast"](
             typed_module,
             t(

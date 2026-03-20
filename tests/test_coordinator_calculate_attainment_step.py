@@ -29,6 +29,8 @@ class _Result:
     output_path: Path
     duplicate_reg_count: int
     duplicate_entries: tuple[tuple[str, str, str], ...]
+    inner_join_drop_count: int = 0
+    inner_join_drop_details: tuple[str, ...] = ()
 
 
 class _Logger:
@@ -58,7 +60,7 @@ class _FileDialog:
 class _WorkflowService:
     def __init__(self) -> None:
         self.context_payloads: list[dict[str, object]] = []
-        self.calculate_calls: list[tuple[list[Path], Path, object, object, object, object]] = []
+        self.calculate_calls: list[tuple[list[Path], Path, object, object, object]] = []
 
     def create_job_context(self, *, step_id: str, payload: dict[str, object]) -> _JobContext:
         self.context_payloads.append({"step_id": step_id, "payload": payload})
@@ -69,14 +71,11 @@ class _WorkflowService:
         files: list[Path],
         output: Path,
         *,
-        generate_co_attainment_workbook: object,
         context: object,
         cancel_token: object,
         thresholds: object,
     ) -> str:
-        self.calculate_calls.append(
-            (files, output, generate_co_attainment_workbook, context, cancel_token, thresholds)
-        )
+        self.calculate_calls.append((files, output, context, cancel_token, thresholds))
         return "workflow-service-result"
 
 
@@ -190,6 +189,8 @@ def test_calculate_attainment_success_with_result_object_and_duplicates() -> Non
             output_path=Path("C:/generated.xlsx"),
             duplicate_reg_count=2,
             duplicate_entries=(("R1", "Sheet1", "WB1"), ("R2", "Sheet2", "WB2")),
+            inner_join_drop_count=1,
+            inner_join_drop_details=("secA CO1 dropped=1",),
         ),
     )
 
@@ -197,7 +198,8 @@ def test_calculate_attainment_success_with_result_object_and_duplicates() -> Non
     assert module._remembered_dirs == [str(Path("C:/generated.xlsx"))]
     assert any(key == "coordinator.status.calculate_completed" for key, _ in module._published)
     assert any(key == "coordinator.regno_dedup.log_body" for key, _ in module._published)
-    assert len(ctx["toasts"]) == 2
+    assert len(ctx["toasts"]) == 3
+    assert "t:coordinator.join_drop.body" in ctx["toasts"][-1][0].lower()
     logs = ctx["logs"]
     assert logs
     _args, kwargs = logs[-1]

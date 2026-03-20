@@ -116,13 +116,21 @@ TEXTS = {
     "instructor.status.step2_drop_files_dropped": "{count} file(s) dropped into filled marks widget.",
     "instructor.status.step2_drop_files_changed": "Filled marks widget now has {count} file(s).",
     "instructor.status.step2_drop_files_rejected": "{count} dropped file(s) were rejected by filled marks widget.",
+    "instructor.status.step2_validation_warnings": "Validation anomaly warnings: {details}",
+    "instructor.status.step2_generate_per_file_failures": "Final report per-file failures: {details}",
     "instructor.status.step1_validating_progress": "Validating course template files: {processed}/{total}.",
     "instructor.status.step1_validated_progress": "Validated valid files: {valid}/{total}.",
     "instructor.status.step1_prepare_progress": "Processed marks templates: {processed}/{total}.",
+    "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "கோப்புகள்: {count}",
     "instructor.toast.step1_validation_summary": "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.",
     "instructor.toast.step1_prepare_no_outputs": "No output files selected for marks template generation.",
     "instructor.toast.step1_prepare_summary": "Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",
+    "instructor.toast.step2_generate_no_outputs": "No output files selected for CO report generation.",
+    "instructor.toast.step2_generate_summary": "CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",
+    "instructor.toast.step2_upload_reject_summary": "Some files were not accepted. Invalid={invalid}, duplicates={duplicates}.",
+    "instructor.toast.validation_warnings_title": "Validation Warnings",
+    "instructor.toast.validation_warnings_body": "Validation completed with anomaly warnings. Check activity log details.",
     "instructor.log.title": "செயல் பதிவு",
     "instructor.log.ready": "செயல் பதிவு தொடங்கப்பட்டது.",
     "instructor.log.completed_process": "{process} வெற்றிகரமாக முடிந்தது.",
@@ -245,7 +253,9 @@ TEXTS = {
     "coordinator.duplicate.title": "கோப்பு ஏற்கனவே உள்ளது",
     "coordinator.duplicate.body": "பட்டியலில் ஏற்கனவே உள்ளதால் {count} நகல் கோப்பு(கள்) தவிர்க்கப்பட்டன.",
     "coordinator.invalid_final_report.title": "தவறான இறுதி CO அறிக்கை",
-    "coordinator.invalid_final_report.body": "பயிற்றுநர் படி 3 மூலம் உருவாக்கப்பட்ட இறுதி CO report பணிப்புத்தகங்கள் மட்டுமே அனுமதிக்கப்படும்.\n\n{files}",
+    "coordinator.invalid_final_report.body": "பயிற்றுநர் படி 2 மூலம் உருவாக்கப்பட்ட இறுதி CO report பணிப்புத்தகங்கள் மட்டுமே அனுமதிக்கப்படும்.\n\n{files}",
+    "coordinator.invalid_final_report.details_prefix": "Details:",
+    "coordinator.invalid_final_report.detail_line": "{file}: {reason}",
     "coordinator.status.ignored": (
         "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன (ஆதரிக்காத வகை, இல்லை, நகல், "
         "அல்லது தவறான final report workbook)."
@@ -263,6 +273,7 @@ TEXTS = {
     "coordinator.regno_dedup.log_body": "{count} நகல் பதிவு எண் பதிவுகள் நீக்கப்பட்டன:\n{details}",
     "coordinator.regno_dedup.log_detail": "பதிவு எண்: {reg_no} | பணித்தாள்: {worksheet} | பணிப்புத்தகம்: {workbook}",
     "coordinator.regno_dedup.log_detail_unavailable": "நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.",
+    "coordinator.join_drop.body": "Some rows were ignored because they existed only in Direct or only in Indirect sheets. Dropped rows: {count}. See activity log for details.",
 }
 
 

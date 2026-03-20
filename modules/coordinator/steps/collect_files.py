@@ -94,6 +94,7 @@ class _AnalyzeResult(TypedDict):
     added: list[str]
     duplicates: int
     invalid_final_report: list[str]
+    invalid_final_report_details: list[dict[str, str]]
     ignored: int
 
 
@@ -142,6 +143,11 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: Mapping
         added_paths = [Path(value) for value in typed_result.get("added", [])]
         duplicates = int(typed_result.get("duplicates", 0))
         invalid_paths = [Path(value) for value in typed_result.get("invalid_final_report", [])]
+        invalid_details = [
+            item
+            for item in cast(list[object], typed_result.get("invalid_final_report_details", []))
+            if isinstance(item, dict)
+        ]
         ignored = int(typed_result.get("ignored", 0))
 
         typed_module._add_uploaded_paths(added_paths)
@@ -161,13 +167,28 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: Mapping
             )
         if invalid_paths:
             file_names = "\n".join(path.name for path in invalid_paths)
+            reason_lines = [
+                t(
+                    "coordinator.invalid_final_report.detail_line",
+                    file=Path(str(item.get("path", ""))).name,
+                    reason=str(item.get("reason", "")).strip(),
+                )
+                for item in invalid_details
+                if str(item.get("path", "")).strip()
+            ]
+            detail_suffix = (
+                f"\n\n{t('coordinator.invalid_final_report.details_prefix')}\n" + "\n".join(reason_lines)
+                if reason_lines
+                else ""
+            )
             typed_ns["show_toast"](
                 typed_module,
                 t(
                     "coordinator.invalid_final_report.body",
                     count=len(invalid_paths),
                     files=file_names,
-                ),
+                )
+                + detail_suffix,
                 title=t("coordinator.invalid_final_report.title"),
                 level="warning",
             )
@@ -180,7 +201,7 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: Mapping
             success_message=(
                 f"{process_name} completed successfully. "
                 f"added={len(added_paths)}, duplicates={duplicates}, "
-                f"invalid={len(invalid_paths)}, ignored={ignored}"
+                f"invalid={len(invalid_paths)}, invalid_details={invalid_details}, ignored={ignored}"
             ),
             user_success_message=typed_ns["build_i18n_log_message"](
                 "coordinator.status.processing_completed",
@@ -208,7 +229,6 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: Mapping
                 dropped_files,
                 existing_keys=existing_keys,
                 existing_paths=existing_paths,
-                analyze_dropped_files=typed_ns["_analyze_dropped_files"],
                 context=job_context,
                 cancel_token=token,
             )

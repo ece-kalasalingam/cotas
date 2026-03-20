@@ -37,6 +37,8 @@ class _CoAttainmentWorkbookResult(Protocol):
     output_path: Path
     duplicate_reg_count: int
     duplicate_entries: tuple[tuple[str, str, str], ...]
+    inner_join_drop_count: int
+    inner_join_drop_details: tuple[str, ...]
 
 
 class _FinalReportSignature(Protocol):
@@ -139,10 +141,14 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
         output_path = Path(save_path)
         duplicate_reg_count = 0
         duplicate_entries: tuple[tuple[str, str, str], ...] = ()
+        inner_join_drop_count = 0
+        inner_join_drop_details: tuple[str, ...] = ()
         if isinstance(result, typed_ns["_CoAttainmentWorkbookResult"]):
             output_path = result.output_path
             duplicate_reg_count = max(0, int(result.duplicate_reg_count))
             duplicate_entries = result.duplicate_entries
+            inner_join_drop_count = max(0, int(result.inner_join_drop_count))
+            inner_join_drop_details = tuple(str(item) for item in result.inner_join_drop_details if str(item))
         elif result:
             output_path = Path(str(result))
         if all(
@@ -158,7 +164,10 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
             logger=typed_module._logger,
             success_message=(
                 f"{process_name} completed successfully. output={output_path}, "
-                f"duplicates_removed={duplicate_reg_count}, {threshold_summary}"
+                f"duplicates_removed={duplicate_reg_count}, "
+                f"inner_join_dropped={inner_join_drop_count}, "
+                f"inner_join_details={list(inner_join_drop_details)}, "
+                f"{threshold_summary}"
             ),
             user_success_message=typed_ns["build_i18n_log_message"](
                 "coordinator.status.calculate_completed",
@@ -197,6 +206,13 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
                 count=duplicate_reg_count,
                 details=details_text,
             )
+        if inner_join_drop_count:
+            typed_ns["show_toast"](
+                typed_module,
+                t("coordinator.join_drop.body", count=inner_join_drop_count),
+                title=t("coordinator.title"),
+                level="warning",
+            )
 
     def _on_failed(exc: Exception) -> None:
         handle_step_failure(
@@ -215,7 +231,6 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
             workflow_service.calculate_attainment(
                 list(typed_module._files),
                 Path(save_path),
-                generate_co_attainment_workbook=typed_ns["_generate_co_attainment_workbook"],
                 context=job_context,
                 cancel_token=token,
                 thresholds=thresholds,

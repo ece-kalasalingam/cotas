@@ -117,6 +117,9 @@ def test_process_files_async_success_and_cancel_paths() -> None:
             "added": ["C:/added.xlsx"],
             "duplicates": 1,
             "invalid_final_report": ["C:/bad.xlsx"],
+            "invalid_final_report_details": [
+                {"path": "C:/bad.xlsx", "reason": "Invalid final CO report workbook."}
+            ],
             "ignored": 2,
         }
     )
@@ -125,6 +128,7 @@ def test_process_files_async_success_and_cancel_paths() -> None:
     assert any(key == "coordinator.status.added" for key, _ in module._published)
     assert any(key == "coordinator.status.ignored" for key, _ in module._published)
     assert len(module._toasts) == 2
+    assert "t:coordinator.invalid_final_report.details_prefix" in module._toasts[-1][0].lower()
 
     on_failure(JobCancelledError("cancelled"))
     assert any(key == "coordinator.status.operation_cancelled" for key, _ in module._published)

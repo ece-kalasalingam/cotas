@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 
 from common.jobs import CancellationToken
-from modules import coordinator_processing as cp
+from domain import coordinator_engine as cp
 
 
 class _Conn:
@@ -648,10 +648,14 @@ def test_iter_co_rows_from_workbook_missing_and_non_lockstep(monkeypatch) -> Non
         else:
             yield from indirect_rows
 
+    warnings: list[tuple] = []
     monkeypatch.setattr(cp, "_iter_score_rows", _fake_iter_score_rows)
+    monkeypatch.setattr(cp._logger, "warning", lambda *args, **kwargs: warnings.append((args, kwargs)))
     out = list(cp._iter_co_rows_from_workbook(workbook, co_index=1, workbook_name="x.xlsx"))
     assert len(out) == 1
     assert out[0].reg_no == "R2"
+    assert warnings
+    assert "join dropped unmatched students" in str(warnings[0][0][0]).lower()
 
 
 def test_small_helper_branches_and_thresholds(monkeypatch, tmp_path: Path) -> None:
@@ -675,6 +679,12 @@ def test_small_helper_branches_and_thresholds(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setattr(cp, "_extract_final_report_signature", lambda _p: bad_sig)
     with pytest.raises(ValueError, match="Unsupported template id"):
         cp._generate_co_attainment_workbook([src], tmp_path / "out.xlsx", token=token)
+
+
+def test_should_use_sqlite_dedup_threshold_boundary() -> None:
+    assert cp._should_use_sqlite_dedup(source_count=1, total_outcomes=1) is False
+    boundary_total_outcomes = -(-cp._DEDUP_SQLITE_THRESHOLD_ENTRIES // cp._COORDINATOR_STUDENTS_PER_SHEET)
+    assert cp._should_use_sqlite_dedup(source_count=1, total_outcomes=boundary_total_outcomes) is True
 
 
 def test_generate_co_attainment_workbook_course_setup_v1_remaining_branches(
@@ -710,6 +720,7 @@ def test_generate_co_attainment_workbook_course_setup_v1_remaining_branches(
 
     monkeypatch.setattr(cp, "_RegisterDedupStore", lambda **_k: type("_D", (), {"add_if_absent": lambda *_a, **_b: True, "close": lambda *_a: None})())
     monkeypatch.setattr(cp, "_iter_co_rows_from_workbook", lambda *_a, **_k: [])
+    monkeypatch.setattr(cp, "_iter_score_rows", lambda *_a, **_k: [])
     monkeypatch.setattr(cp, "_create_co_attainment_sheet", lambda *_a, **_k: cp._CoOutputSheetState(sheet=object(), header_row_index=0, formats={}, next_row_index=0, next_serial=1, on_roll=0, attended=0, level_counts={0: 0, 1: 0, 2: 0, 3: 0}))
     monkeypatch.setattr(cp, "_append_co_attainment_summary", lambda *_a, **_k: None)
     monkeypatch.setattr(cp, "_create_summary_sheet", lambda *_a, **_k: (1, 1))

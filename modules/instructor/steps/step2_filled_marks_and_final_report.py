@@ -16,9 +16,6 @@ from common.constants import (
 from modules.instructor.steps.shared_execution import handle_step_failure
 
 _LOG_FINAL_REPORT_SOURCE_MISSING = "Final report generation failed: filled marks file is missing. path=%s"
-_REPORT_COPY_FALLBACK_FLAG = "ALLOW_TEST_ONLY_REPORT_COPY_FALLBACK"
-
-
 class _ModuleState(Protocol):
     busy: bool
 
@@ -128,10 +125,10 @@ class _Step2Namespace(TypedDict):
     build_i18n_log_message: Callable[..., str]
     show_toast: Callable[..., None]
     _validate_uploaded_filled_marks_workbook: Callable[[str], None]
+    _consume_last_filled_marks_anomaly_warnings: Callable[[], list[str]]
     _build_final_report_default_name: Callable[[str | None], str]
     _atomic_copy_file: Callable[[str, str], Path]
     _logger: _Logger
-    ALLOW_TEST_ONLY_REPORT_COPY_FALLBACK: bool
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -142,12 +139,17 @@ def _failure_reason(exc: Exception) -> str:
 def _format_failed_files_summary(failed_files: list[dict[str, str]]) -> str:
     if not failed_files:
         return ""
-    preview = failed_files[:5]
-    pieces = [f"{item['source_path']} -> {item['reason']}" for item in preview]
-    extra_count = len(failed_files) - len(preview)
+    return "; ".join(f"{item['source_path']} -> {item['reason']}" for item in failed_files)
+
+
+def _format_warning_summary(warnings: list[str]) -> str:
+    if not warnings:
+        return ""
+    preview = warnings[:3]
+    extra_count = len(warnings) - len(preview)
     if extra_count > 0:
-        pieces.append(f"... +{extra_count} more")
-    return "; ".join(pieces)
+        preview.append(f"... +{extra_count} more")
+    return " | ".join(preview)
 
 
 def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -215,14 +217,13 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
     if not planned_pairs:
         typed_ns["show_toast"](
             typed_module,
-            "No output files selected for CO report generation.",
+            t("instructor.toast.step2_generate_no_outputs"),
             title=t("instructor.step2.title"),
             level="warning",
         )
         return
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
-    allow_copy_fallback = bool(typed_ns.get(_REPORT_COPY_FALLBACK_FLAG, False))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
@@ -237,10 +238,14 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         generated_outputs: list[str] = []
         failed_count = 0
         failed_files: list[dict[str, str]] = []
+        anomaly_warnings: list[str] = []
         for source_path, output_path in planned_pairs:
             token.raise_if_cancelled()
             try:
                 typed_ns["_validate_uploaded_filled_marks_workbook"](source_path)
+                anomaly_warnings.extend(
+                    [f"{source_path} -> {msg}" for msg in typed_ns["_consume_last_filled_marks_anomaly_warnings"]()]
+                )
                 token.raise_if_cancelled()
                 if workflow_service is not None and job_context is not None:
                     workflow_service.generate_final_report(
@@ -253,12 +258,9 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
                         cancel_token=token,
                     )
                 else:
-                    if allow_copy_fallback:
-                        typed_ns["_atomic_copy_file"](source_path, output_path)
-                    else:
-                        raise typed_ns["AppSystemError"](
-                            "Workflow service unavailable for final report generation."
-                        )
+                    raise typed_ns["AppSystemError"](
+                        "Workflow service unavailable for final report generation."
+                    )
                 generated_outputs.append(output_path)
             except Exception as exc:
                 failed_count += 1
@@ -276,6 +278,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             "failed_count": failed_count,
             "skipped_count": skipped_conflicts,
             "failed_files": failed_files,
+            "anomaly_warnings": anomaly_warnings,
         }
 
     def _on_finished(result: object) -> None:
@@ -286,6 +289,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         failed_count = int(cast(int, data.get("failed_count", 0)))
         skipped_count = int(cast(int, data.get("skipped_count", skipped_conflicts)))
         raw_failed_files = cast(list[object], data.get("failed_files", []))
+        anomaly_warnings = [str(item) for item in cast(list[object], data.get("anomaly_warnings", [])) if str(item)]
         failed_files = [
             {
                 "source_path": str(item.get("source_path", "")),
@@ -296,6 +300,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             if isinstance(item, dict)
         ]
         failure_summary = _format_failed_files_summary(failed_files)
+        warning_summary = _format_warning_summary(anomaly_warnings)
 
         typed_module.final_report_path = generated_outputs[-1] if generated_outputs else None
         typed_module.final_report_paths = list(generated_outputs)
@@ -316,12 +321,30 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             step_id=job_context.step_id if job_context else None,
         )
         if failure_summary:
-            typed_ns["_publish_status"](typed_module, f"Final report per-file failures: {failure_summary}")
+            typed_ns["_publish_status"](
+                typed_module,
+                t("instructor.status.step2_generate_per_file_failures", details=failure_summary),
+            )
+        if warning_summary:
+            typed_ns["_publish_status"](
+                typed_module,
+                t("instructor.status.step2_validation_warnings", details=warning_summary),
+            )
+            typed_ns["show_toast"](
+                typed_module,
+                t("instructor.toast.validation_warnings_body"),
+                title=t("instructor.toast.validation_warnings_title"),
+                level="warning",
+            )
         typed_ns["show_toast"](
             typed_module,
-            (
-                f"CO report generation complete: processed {processed_count}/{total_count}, "
-                f"generated {len(generated_outputs)}, failed {failed_count}, skipped {skipped_count}."
+            t(
+                "instructor.toast.step2_generate_summary",
+                processed=processed_count,
+                total=total_count,
+                generated=len(generated_outputs),
+                failed=failed_count,
+                skipped=skipped_count,
             ),
             title=t("instructor.step2.title"),
             level="success" if failed_count == 0 else "warning",
@@ -381,7 +404,9 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
         else None
     )
 
-    def _on_finished(_result: object) -> None:
+    def _on_finished(result: object) -> None:
+        data = cast(dict[str, object], result if isinstance(result, dict) else {})
+        anomaly_warnings = [str(item) for item in cast(list[object], data.get("anomaly_warnings", [])) if str(item)]
         replacing = typed_module.filled_marks_done
         typed_module.filled_marks_path = open_path
         typed_module.filled_marks_done = True
@@ -400,6 +425,20 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
             job_id=job_context.job_id if job_context else None,
             step_id=job_context.step_id if job_context else None,
         )
+        if anomaly_warnings:
+            typed_ns["_publish_status"](
+                typed_module,
+                t(
+                    "instructor.status.step2_validation_warnings",
+                    details=_format_warning_summary(anomaly_warnings),
+                ),
+            )
+            typed_ns["show_toast"](
+                typed_module,
+                t("instructor.toast.validation_warnings_body"),
+                title=t("instructor.toast.validation_warnings_title"),
+                level="warning",
+            )
         typed_module._show_step_success_toast(2)
 
     def _on_failed(exc: Exception) -> None:
@@ -415,11 +454,12 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
             show_validation_toast=typed_module._show_validation_error_toast,
         )
 
-    def _work() -> bool:
+    def _work() -> dict[str, object]:
         token.raise_if_cancelled()
         typed_ns["_validate_uploaded_filled_marks_workbook"](open_path)
+        anomaly_warnings = typed_ns["_consume_last_filled_marks_anomaly_warnings"]()
         token.raise_if_cancelled()
-        return True
+        return {"ok": True, "anomaly_warnings": anomaly_warnings}
 
     typed_ns["_start_async_operation"](
         typed_module,
@@ -482,7 +522,6 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
     source_path = typed_module.filled_marks_path
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
-    allow_copy_fallback = bool(typed_ns.get(_REPORT_COPY_FALLBACK_FLAG, False))
     token = typed_ns["CancellationToken"]()
     job_context = (
         workflow_service.create_job_context(
@@ -493,11 +532,15 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
         else None
     )
 
-    def _on_finished(_result: object) -> None:
-        typed_module.final_report_path = save_path
+    def _on_finished(result: object) -> None:
+        data = cast(dict[str, object], result if isinstance(result, dict) else {})
+        anomaly_warnings = [str(item) for item in cast(list[object], data.get("anomaly_warnings", [])) if str(item)]
+        output_path_raw = data.get("output_path", save_path)
+        output_path = str(output_path_raw)
+        typed_module.final_report_path = output_path
         typed_module.final_report_done = True
         typed_module.final_report_outdated = False
-        typed_module._remember_dialog_dir_safe(save_path)
+        typed_module._remember_dialog_dir_safe(output_path)
         typed_ns["_publish_status"](typed_module, t("instructor.status.step2_generated"))
         typed_ns["log_process_message"](
             process_name,
@@ -508,6 +551,20 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
             step_id=job_context.step_id if job_context else None,
         )
         typed_module._show_step_success_toast(2)
+        if anomaly_warnings:
+            typed_ns["_publish_status"](
+                typed_module,
+                t(
+                    "instructor.status.step2_validation_warnings",
+                    details=_format_warning_summary(anomaly_warnings),
+                ),
+            )
+            typed_ns["show_toast"](
+                typed_module,
+                t("instructor.toast.validation_warnings_body"),
+                title=t("instructor.toast.validation_warnings_title"),
+                level="warning",
+            )
 
     def _on_failed(exc: Exception) -> None:
         handle_step_failure(
@@ -522,20 +579,21 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
             show_validation_toast=typed_module._show_validation_error_toast,
         )
 
-    def _work() -> Path:
+    def _work() -> dict[str, object]:
         token.raise_if_cancelled()
         typed_ns["_validate_uploaded_filled_marks_workbook"](source_path)
+        anomaly_warnings = typed_ns["_consume_last_filled_marks_anomaly_warnings"]()
         token.raise_if_cancelled()
         if workflow_service is not None and job_context is not None:
-            return workflow_service.generate_final_report(
+            output_path = workflow_service.generate_final_report(
                 source_path,
                 save_path,
                 context=job_context,
                 cancel_token=token,
             )
-        if allow_copy_fallback:
-            return typed_ns["_atomic_copy_file"](source_path, save_path)
-        raise typed_ns["AppSystemError"]("Workflow service unavailable for final report generation.")
+        else:
+            raise typed_ns["AppSystemError"]("Workflow service unavailable for final report generation.")
+        return {"output_path": str(output_path), "anomaly_warnings": anomaly_warnings}
 
     typed_ns["_start_async_operation"](
         typed_module,

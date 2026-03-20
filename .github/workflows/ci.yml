@@ -53,5 +53,14 @@ jobs:
       - name: SAST (Bandit)
         run: python -m bandit -q -c .bandit.yaml -r common modules services
 
+      - name: Ruff
+        run: python -m ruff check .
+
+      - name: isort
+        run: python -m isort --check-only --diff .
+
+      - name: Pyright
+        run: python -m pyright
+
       - name: Run quality gate
         run: python scripts/quality_gate.py --mode fast

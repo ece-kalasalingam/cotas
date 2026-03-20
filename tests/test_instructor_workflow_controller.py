@@ -46,7 +46,7 @@ def test_workflow_controller_remaining_branches(monkeypatch) -> None:
     assert controller.can_run_step(2) == (False, "instructor.require.step1")
     mod.step2_upload_ready = True
     assert controller.can_run_step(2) == (True, "")
-    assert controller.can_run_step(99) == (True, "")
+    assert controller.can_run_step(99) == (False, "instructor.require.step1")
 
     controller.on_step_selected(2)
     assert mod.current_step == 2

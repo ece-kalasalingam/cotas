@@ -10,7 +10,7 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
 from common.jobs import CancellationToken
-from modules import coordinator_processing as coordinator_processing
+from domain import coordinator_engine as coordinator_processing
 from services.coordinator_workflow_service import CoordinatorWorkflowService
 from services.instructor_workflow_service import InstructorWorkflowService
 
@@ -143,7 +143,6 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
         [str(report_a), str(report_b)],
         existing_keys=set(),
         existing_paths=[],
-        analyze_dropped_files=coordinator_processing._analyze_dropped_files,
         context=collect_ctx,
         cancel_token=CancellationToken(),
     )
@@ -155,7 +154,6 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
     result = coordinator.calculate_attainment(
         [report_a, report_b],
         output,
-        generate_co_attainment_workbook=coordinator_processing._generate_co_attainment_workbook,
         context=calc_ctx,
         cancel_token=CancellationToken(),
     )
@@ -166,11 +164,11 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
     try:
         assert "CO1" in wb.sheetnames
         ws = wb["CO1"]
-        assert ws["A7"].value == "#"
-        assert ws["B7"].value == "Regno"
-        assert ws["C7"].value == "Student name"
-        assert ws["A8"].value == 1
-        assert isinstance(ws["B8"].value, str)
+        assert ws["A10"].value == "#"
+        assert ws["B10"].value == "Regno"
+        assert ws["C10"].value == "Student name"
+        assert ws["A11"].value == 1
+        assert isinstance(ws["B11"].value, str)
     finally:
         wb.close()
 

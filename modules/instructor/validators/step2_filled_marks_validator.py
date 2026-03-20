@@ -93,6 +93,10 @@ def validate_uploaded_filled_marks_workbook(workbook_path: str | Path) -> None:
         workbook.close()
 
 
+def consume_last_filled_marks_anomaly_warnings() -> list[str]:
+    return course_setup_v1.consume_last_marks_anomaly_warnings()
+
+
 def _read_system_manifest_payload(workbook: Any) -> tuple[str, str]:
     if SYSTEM_HASH_SHEET not in workbook.sheetnames:
         raise ValidationError(t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET))

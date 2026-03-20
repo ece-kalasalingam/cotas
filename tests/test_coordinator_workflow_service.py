@@ -32,21 +32,25 @@ def test_collect_files_honors_pre_cancel_before_work() -> None:
     def _fake_analyze(*_args, **_kwargs):
         called["count"] += 1
         return {}
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(service_mod, "_analyze_dropped_files", _fake_analyze)
 
-    with pytest.raises(JobCancelledError):
-        service.collect_files(
-            ["a.xlsx"],
-            existing_keys=set(),
-            existing_paths=[],
-            analyze_dropped_files=_fake_analyze,
-            context=context,
-            cancel_token=token,
-        )
+    try:
+        with pytest.raises(JobCancelledError):
+            service.collect_files(
+                ["a.xlsx"],
+                existing_keys=set(),
+                existing_paths=[],
+                context=context,
+                cancel_token=token,
+            )
+    finally:
+        monkeypatch.undo()
 
     assert called["count"] == 0
 
 
-def test_calculate_attainment_passes_token_to_generator(tmp_path: Path) -> None:
+def test_calculate_attainment_passes_token_to_generator(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     service = service_mod.CoordinatorWorkflowService()
     context = service.create_job_context(step_id="calc")
     source = [tmp_path / "in.xlsx"]
@@ -57,11 +61,11 @@ def test_calculate_attainment_passes_token_to_generator(tmp_path: Path) -> None:
     def _fake_generate(src_paths, output_path, *, token=None):
         seen["token"] = token
         return output_path
+    monkeypatch.setattr(service_mod, "_generate_co_attainment_workbook", _fake_generate)
 
     result = service.calculate_attainment(
         source,
         out,
-        generate_co_attainment_workbook=_fake_generate,
         context=context,
         cancel_token=CancellationToken(),
     )
@@ -89,22 +93,34 @@ def test_execute_with_telemetry_app_system_and_unexpected_error_paths() -> None:
     service = service_mod.CoordinatorWorkflowService()
     context = service.create_job_context(step_id="collect")
 
-    with pytest.raises(AppSystemError):
-        service.collect_files(
-            ["a.xlsx"],
-            existing_keys=set(),
-            existing_paths=[],
-            analyze_dropped_files=lambda *_a, **_k: (_ for _ in ()).throw(AppSystemError("system")),
-            context=context,
-            cancel_token=CancellationToken(),
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(
+            service_mod,
+            "_analyze_dropped_files",
+            lambda *_a, **_k: (_ for _ in ()).throw(AppSystemError("system")),
         )
+        with pytest.raises(AppSystemError):
+            service.collect_files(
+                ["a.xlsx"],
+                existing_keys=set(),
+                existing_paths=[],
+                context=context,
+                cancel_token=CancellationToken(),
+            )
 
-    with pytest.raises(ValueError):
-        service.collect_files(
-            ["a.xlsx"],
-            existing_keys=set(),
-            existing_paths=[],
-            analyze_dropped_files=lambda *_a, **_k: (_ for _ in ()).throw(ValueError("boom")),
-            context=context,
-            cancel_token=CancellationToken(),
+        monkeypatch.setattr(
+            service_mod,
+            "_analyze_dropped_files",
+            lambda *_a, **_k: (_ for _ in ()).throw(ValueError("boom")),
         )
+        with pytest.raises(ValueError):
+            service.collect_files(
+                ["a.xlsx"],
+                existing_keys=set(),
+                existing_paths=[],
+                context=context,
+                cancel_token=CancellationToken(),
+            )
+    finally:
+        monkeypatch.undo()

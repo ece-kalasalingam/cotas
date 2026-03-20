@@ -6,7 +6,6 @@ from typing import Protocol, cast
 
 from common.texts import t
 
-_STEP_RUN_ALWAYS = (1, 2)
 _EMPTY_REASON = ""
 
 
@@ -36,11 +35,13 @@ class InstructorWorkflowController:
         return t(key)
 
     def can_run_step(self, step: int) -> tuple[bool, str]:
-        if step in _STEP_RUN_ALWAYS:
-            if step == 2 and not self._m.step2_upload_ready:
+        if step == 1:
+            return True, _EMPTY_REASON
+        if step == 2:
+            if not self._m.step2_upload_ready:
                 return False, t("instructor.require.step1")
             return True, _EMPTY_REASON
-        return True, _EMPTY_REASON
+        return False, t("instructor.require.step1")
 
     def on_step_selected(self, step: int) -> None:
         self._m.current_step = step

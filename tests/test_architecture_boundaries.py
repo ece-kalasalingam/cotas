@@ -38,6 +38,12 @@ def test_domain_instructor_engine_does_not_import_ui_modules() -> None:
     assert not any(name == "modules" or name.startswith("modules.") for name in imports)
 
 
+def test_domain_coordinator_engine_does_not_import_ui_modules() -> None:
+    engine_file = REPO_ROOT / "domain" / "coordinator_engine.py"
+    imports = _imports_for(engine_file)
+    assert not any(name == "modules" or name.startswith("modules.") for name in imports)
+
+
 def test_template_engine_stays_within_size_budget() -> None:
     engine_file = REPO_ROOT / "domain" / "instructor_template_engine.py"
     line_count = len(engine_file.read_text(encoding="utf-8").splitlines())

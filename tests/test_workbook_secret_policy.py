@@ -123,6 +123,8 @@ def test_read_store_empty_and_decode_error_paths(monkeypatch: pytest.MonkeyPatch
 def test_get_password_fallback_and_empty_secret_branches(monkeypatch: pytest.MonkeyPatch) -> None:
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
+    monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "")
+    monkeypatch.setattr(workbook_secret_mod, "_write_workbook_password_to_keyring", lambda _s: False)
 
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "abc\x7fdef")
     monkeypatch.setattr(workbook_secret_mod, "_write_workbook_password_to_store", lambda _s: (_ for _ in ()).throw(OSError("locked")))
@@ -137,6 +139,38 @@ def test_get_password_fallback_and_empty_secret_branches(monkeypatch: pytest.Mon
     monkeypatch.setattr(workbook_secret_mod, "_default_workbook_password", lambda: "abc")
     monkeypatch.setattr(workbook_secret_mod, "_write_workbook_password_to_store", lambda _s: (_ for _ in ()).throw(OSError("io")))
     assert workbook_secret_mod.get_workbook_password() == "abc"
+
+
+def test_get_password_uses_posix_keyring_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    workbook_secret_mod = _reloaded_workbook_secret()
+    monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
+    monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "from-keyring")
+    monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "from-store")
+
+    assert workbook_secret_mod.get_workbook_password() == "from-keyring"
+
+
+def test_get_password_bootstrap_writes_to_keyring_and_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    workbook_secret_mod = _reloaded_workbook_secret()
+    monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
+    monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "")
+    monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "")
+    monkeypatch.setattr(workbook_secret_mod, "_default_workbook_password", lambda: "abc")
+    writes: dict[str, list[str]] = {"keyring": [], "store": []}
+    monkeypatch.setattr(
+        workbook_secret_mod,
+        "_write_workbook_password_to_keyring",
+        lambda s: writes["keyring"].append(s) or True,
+    )
+    monkeypatch.setattr(
+        workbook_secret_mod,
+        "_write_workbook_password_to_store",
+        lambda s: writes["store"].append(s),
+    )
+
+    assert workbook_secret_mod.get_workbook_password() == "abc"
+    assert writes["keyring"] == ["abc"]
+    assert writes["store"] == ["abc"]
 
 
 def test_ensure_workbook_secret_policy_raises_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:

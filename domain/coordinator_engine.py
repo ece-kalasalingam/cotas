@@ -84,7 +84,7 @@ _NORM_COURSE_SETUP_ID = normalize(ID_COURSE_SETUP)
 _NORM_COURSE_CODE_KEY = normalize(COURSE_METADATA_COURSE_CODE_KEY)
 _NORM_TOTAL_OUTCOMES_KEY = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
 _NORM_SECTION_KEY = normalize(COURSE_METADATA_SECTION_KEY)
-_DEDUP_SQLITE_THRESHOLD_ENTRIES = 1
+_DEDUP_SQLITE_THRESHOLD_ENTRIES = 10_000
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
 _INTEGRITY_SCHEMA_VERSION = 1
@@ -138,6 +138,8 @@ class _CoAttainmentWorkbookResult:
     output_path: Path
     duplicate_reg_count: int
     duplicate_entries: tuple[tuple[str, str, str], ...]
+    inner_join_drop_count: int = 0
+    inner_join_drop_details: tuple[str, ...] = ()
 
 
 class _RegisterDedupStore:
@@ -202,6 +204,11 @@ class _RegisterDedupStore:
             except OSError:
                 _logger.debug("Unable to remove dedup sqlite db: %s", self._db_path, exc_info=True)
             self._db_path = None
+
+
+def _should_use_sqlite_dedup(*, source_count: int, total_outcomes: int) -> bool:
+    estimated_entries = source_count * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET
+    return estimated_entries >= _DEDUP_SQLITE_THRESHOLD_ENTRIES
 
 
 def _cleanup_stale_dedup_sqlite_files() -> None:
@@ -409,6 +416,7 @@ def _analyze_dropped_files(
     added: list[str] = []
     duplicates = 0
     invalid_final_report: list[str] = []
+    invalid_final_report_details: list[dict[str, str]] = []
     existing_resolved = [Path(path).resolve() for path in existing_paths if path]
     baseline_signature: _FinalReportSignature | None = None
     seen_sections: set[str] = set()
@@ -457,6 +465,12 @@ def _analyze_dropped_files(
         signature = _cached_signature(path)
         if signature is None:
             invalid_final_report.append(str(path))
+            invalid_final_report_details.append(
+                {
+                    "path": str(path),
+                    "reason": "Invalid final CO report workbook (signature/manifest/metadata validation failed).",
+                }
+            )
             continue
         if baseline_signature is None:
             baseline_signature = signature
@@ -468,8 +482,21 @@ def _analyze_dropped_files(
                 or signature.direct_sheet_count != baseline_signature.direct_sheet_count
                 or signature.indirect_sheet_count != baseline_signature.indirect_sheet_count
             )
-            if is_mismatch or normalize(signature.section) in seen_sections:
+            section_already_seen = normalize(signature.section) in seen_sections
+            if is_mismatch or section_already_seen:
                 invalid_final_report.append(str(path))
+                if is_mismatch:
+                    reason = (
+                        "File does not match selected batch (template/course/CO-sheet structure mismatch)."
+                    )
+                else:
+                    reason = f"Duplicate section '{signature.section}' is not allowed in one batch."
+                invalid_final_report_details.append(
+                    {
+                        "path": str(path),
+                        "reason": reason,
+                    }
+                )
                 continue
         seen_sections.add(normalize(signature.section))
         seen.add(key)
@@ -480,6 +507,7 @@ def _analyze_dropped_files(
         "added": added,
         "duplicates": duplicates,
         "invalid_final_report": invalid_final_report,
+        "invalid_final_report_details": invalid_final_report_details,
         "ignored": ignored,
     }
 
@@ -513,6 +541,21 @@ def _metadata_rows_for_output(metadata: dict[str, str], co_index: int) -> list[t
         ("Semester", metadata.get(normalize(COURSE_METADATA_SEMESTER_KEY), "")),
         ("Academic Year", metadata.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")),
         ("CO Number", f"CO{co_index}"),
+    ]
+
+
+def _threshold_rows_for_output(
+    thresholds: tuple[float, float, float] | None,
+    *,
+    include: bool,
+) -> list[tuple[str, str]]:
+    if not include or thresholds is None:
+        return []
+    l1, l2, l3 = thresholds
+    return [
+        ("Threshold L1", f"{l1:g}"),
+        ("Threshold L2", f"{l2:g}"),
+        ("Threshold L3", f"{l3:g}"),
     ]
 
 
@@ -626,16 +669,33 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
         raise ValueError(f"Missing CO sheets for CO{co_index}.")
 
+    direct_lookup: dict[tuple[int, str], _ParsedScoreRow] = {}
+    for item in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO):
+        direct_lookup.setdefault((item.reg_hash, item.reg_key), item)
+
     indirect_lookup: dict[tuple[int, str], _ParsedScoreRow] = {}
     for item in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO):
         indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
 
-    for direct_row in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO):
-        key = (direct_row.reg_hash, direct_row.reg_key)
+    direct_only = [row.reg_no for key, row in direct_lookup.items() if key not in indirect_lookup]
+    indirect_only = [row.reg_no for key, row in indirect_lookup.items() if key not in direct_lookup]
+    if direct_only or indirect_only:
+        dropped_count = len(direct_only) + len(indirect_only)
+        direct_preview = ", ".join(direct_only[:5]) if direct_only else "-"
+        indirect_preview = ", ".join(indirect_only[:5]) if indirect_only else "-"
+        _logger.warning(
+            "CO join dropped unmatched students. workbook=%s, co_index=%s, dropped=%s, direct_only=%s, indirect_only=%s",
+            workbook_name,
+            co_index,
+            dropped_count,
+            direct_preview,
+            indirect_preview,
+        )
+
+    for key, direct_row in direct_lookup.items():
         match = indirect_lookup.get(key)
         if match is None:
             continue
-
         student_name = direct_row.student_name or match.student_name
         yield _CoAttainmentRow(
             reg_hash=direct_row.reg_hash,
@@ -708,10 +768,12 @@ def _create_co_attainment_sheet(
     *,
     co_index: int,
     metadata: dict[str, str],
+    thresholds: tuple[float, float, float] | None = None,
     ) -> _CoOutputSheetState:
     sheet = workbook.add_worksheet(f"CO{co_index}")
     formats = _xlsxwriter_formats(workbook)
     metadata_rows = _metadata_rows_for_output(metadata, co_index)
+    metadata_rows.extend(_threshold_rows_for_output(thresholds, include=bool(metadata)))
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
         sheet.write(row_idx, 1, label, formats["body"])
         sheet.write(row_idx, 2, value, formats["body_wrap"])
@@ -808,12 +870,14 @@ def _create_summary_sheet(
     workbook: Any,
     *,
     metadata: dict[str, str],
+    thresholds: tuple[float, float, float] | None,
     output_states: dict[int, _CoOutputSheetState],
     total_outcomes: int,
 ) -> tuple[int, int]:
     sheet = workbook.add_worksheet("Summary")
     formats = _xlsxwriter_formats(workbook)
     metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    metadata_rows.extend(_threshold_rows_for_output(thresholds, include=bool(metadata)))
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
         display_value = "All COs" if label == "CO Number" else value
         sheet.write(row_idx, 1, label, formats["body"])
@@ -863,12 +927,14 @@ def _create_graph_sheet(
     workbook: Any,
     *,
     metadata: dict[str, str],
+    thresholds: tuple[float, float, float] | None,
     summary_first_data_row: int,
     summary_last_data_row: int,
 ) -> None:
     graph_sheet = workbook.add_worksheet("Graph")
     formats = _xlsxwriter_formats(workbook)
     metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    metadata_rows.extend(_threshold_rows_for_output(thresholds, include=bool(metadata)))
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
         display_value = "All COs" if label == "CO Number" else value
         graph_sheet.write(row_idx, 1, label, formats["body"])
@@ -953,6 +1019,11 @@ def _score_to_attainment_level(
         return CO_REPORT_NOT_APPLICABLE_TOKEN
 
     total = float(score)
+    tolerance = 10 ** (-CO_REPORT_MAX_DECIMAL_PLACES)
+    if 100.0 < total <= (100.0 + tolerance):
+        total = 100.0
+    if (-tolerance) <= total < 0.0:
+        total = 0.0
     l1, l2, l3 = thresholds
     if 0.0 <= total < l1:
         return 0
@@ -1029,10 +1100,12 @@ def _generate_co_attainment_workbook_course_setup_v1(
     pending_rows: dict[int, list[_CoAttainmentRow]] = {}
     duplicate_reg_count = 0
     duplicate_entries: list[tuple[str, str, str]] = []
+    inner_join_drop_count = 0
+    inner_join_drop_details: list[str] = []
     level_thresholds = _attainment_thresholds(thresholds)
     dedup_store = _RegisterDedupStore(
         total_outcomes=total_outcomes,
-        use_sqlite=(len(source_paths) * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET) >= _DEDUP_SQLITE_THRESHOLD_ENTRIES,
+        use_sqlite=_should_use_sqlite_dedup(source_count=len(source_paths), total_outcomes=total_outcomes),
     )
 
     try:
@@ -1047,6 +1120,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
                             output_workbook,
                             co_index=co_index,
                             metadata=metadata,
+                            thresholds=level_thresholds,
                         )
                         pending_rows[co_index] = []
                 if not output_states:
@@ -1055,11 +1129,23 @@ def _generate_co_attainment_workbook_course_setup_v1(
                             output_workbook,
                             co_index=co_index,
                             metadata=metadata,
+                            thresholds=level_thresholds,
                         )
                         pending_rows[co_index] = []
                 for co_index in range(1, total_outcomes + 1):
                     row_bucket = pending_rows.setdefault(co_index, [])
-                    for row in _iter_co_rows_from_workbook(workbook, co_index=co_index, workbook_name=source.name):
+                    rows = list(_iter_co_rows_from_workbook(workbook, co_index=co_index, workbook_name=source.name))
+                    direct_name = f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}"
+                    indirect_name = f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}"
+                    direct_total = sum(1 for _ in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO))
+                    indirect_total = sum(1 for _ in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO))
+                    dropped_for_sheet = max(0, (direct_total + indirect_total) - (2 * len(rows)))
+                    if dropped_for_sheet:
+                        inner_join_drop_count += dropped_for_sheet
+                        inner_join_drop_details.append(
+                            f"{source.name} CO{co_index}: dropped={dropped_for_sheet} (direct_rows={direct_total}, indirect_rows={indirect_total})"
+                        )
+                    for row in rows:
                         if not dedup_store.add_if_absent(co_index=co_index, reg_hash=row.reg_hash):
                             duplicate_reg_count += 1
                             duplicate_entries.append((row.reg_no, row.worksheet_name, row.workbook_name))
@@ -1077,12 +1163,14 @@ def _generate_co_attainment_workbook_course_setup_v1(
         summary_first_data_row, summary_last_data_row = _create_summary_sheet(
             output_workbook,
             metadata=metadata,
+            thresholds=level_thresholds,
             output_states=output_states,
             total_outcomes=total_outcomes,
         )
         _create_graph_sheet(
             output_workbook,
             metadata=metadata,
+            thresholds=level_thresholds,
             summary_first_data_row=summary_first_data_row,
             summary_last_data_row=summary_last_data_row,
         )
@@ -1106,5 +1194,7 @@ def _generate_co_attainment_workbook_course_setup_v1(
         output_path=output_path,
         duplicate_reg_count=duplicate_reg_count,
         duplicate_entries=tuple(duplicate_entries),
+        inner_join_drop_count=inner_join_drop_count,
+        inner_join_drop_details=tuple(inner_join_drop_details),
     )
 

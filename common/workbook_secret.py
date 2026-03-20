@@ -6,6 +6,7 @@ import base64
 import ctypes
 import os
 from pathlib import Path
+from typing import Any
 
 from common.constants import APP_NAME
 from common.exceptions import ConfigurationError
@@ -20,6 +21,9 @@ _WORKBOOK_SECRET_OBFUSCATED = (
     15, 38, 42, 60, 58, 58, 36, 45, 59, 38, 100, 36, 49, 39, 30, 38, 42, 34, 59, 104, 111, 127
 )
 _workbook_password_cache: str | None = None
+_KEYRING_SERVICE_NAME = f"{APP_NAME}.workbook"
+_KEYRING_ACCOUNT_NAME = "workbook_secret"
+_WORKBOOK_SECRET_POSIX_USE_KEYRING_ENV_VAR = "FOCUS_WORKBOOK_SECRET_USE_KEYRING"
 
 WORKBOOK_SIGNATURE_VERSION_ENV_VAR = "FOCUS_WORKBOOK_SIGNATURE_VERSION"
 WORKBOOK_SIGNATURE_VERSION = os.getenv(WORKBOOK_SIGNATURE_VERSION_ENV_VAR, "v1").strip().lower() or "v1"
@@ -40,6 +44,48 @@ def _sanitize_workbook_secret(secret: str) -> str:
 
 def _workbook_secret_store_path() -> Path:
     return app_secrets_dir(APP_NAME) / _WORKBOOK_SECRET_STORE_FILENAME
+
+
+def _is_posix() -> bool:
+    return os.name == "posix"
+
+
+def _use_posix_keyring() -> bool:
+    if not _is_posix():
+        return False
+    raw = os.getenv(_WORKBOOK_SECRET_POSIX_USE_KEYRING_ENV_VAR, "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _get_keyring_module() -> Any | None:
+    try:
+        import keyring  # type: ignore[import-not-found]
+    except Exception:
+        return None
+    return keyring
+
+
+def _read_workbook_password_from_keyring() -> str:
+    if not _use_posix_keyring():
+        return ""
+    keyring = _get_keyring_module()
+    if keyring is None:
+        return ""
+    try:
+        secret = keyring.get_password(_KEYRING_SERVICE_NAME, _KEYRING_ACCOUNT_NAME)
+    except Exception:
+        return ""
+    return str(secret).strip() if secret else ""
+
+
+def _write_workbook_password_to_keyring(secret: str) -> bool:
+    if not _use_posix_keyring():
+        return False
+    keyring = _get_keyring_module()
+    if keyring is None:
+        return False
+    keyring.set_password(_KEYRING_SERVICE_NAME, _KEYRING_ACCOUNT_NAME, secret)
+    return True
 
 
 def _protect_secret_bytes(secret: bytes) -> bytes:
@@ -126,11 +172,27 @@ def _write_workbook_password_to_store(secret: str) -> None:
     store_path = _workbook_secret_store_path()
     store_path.parent.mkdir(parents=True, exist_ok=True)
     store_path.write_bytes(protected)
+    if _is_posix():
+        try:
+            os.chmod(store_path, 0o600)
+        except OSError:
+            pass
 
 
 def get_workbook_password() -> str:
     global _workbook_password_cache
     if _workbook_password_cache is not None:
+        return _workbook_password_cache
+
+    stored_secret = _read_workbook_password_from_keyring()
+    if stored_secret:
+        sanitized_stored_secret = _sanitize_workbook_secret(stored_secret)
+        if sanitized_stored_secret != stored_secret and sanitized_stored_secret:
+            try:
+                _write_workbook_password_to_keyring(sanitized_stored_secret)
+            except OSError:
+                pass
+        _workbook_password_cache = sanitized_stored_secret
         return _workbook_password_cache
 
     try:
@@ -152,7 +214,12 @@ def get_workbook_password() -> str:
         _workbook_password_cache = ""
         return _workbook_password_cache
     try:
-        _write_workbook_password_to_store(bootstrap_secret)
+        try:
+            _write_workbook_password_to_keyring(bootstrap_secret)
+        except OSError:
+            _write_workbook_password_to_store(bootstrap_secret)
+        else:
+            _write_workbook_password_to_store(bootstrap_secret)
     except OSError:
         # Allow in-memory bootstrap secret when profile storage is unavailable.
         pass

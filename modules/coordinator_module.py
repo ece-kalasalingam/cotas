@@ -85,6 +85,19 @@ from common.utils import (
     log_process_message,
     resolve_dialog_start_path,
 )
+from domain.coordinator_engine import (
+    _analyze_dropped_files,
+    _build_co_attainment_default_name,
+    _CoAttainmentWorkbookResult,
+    _extract_final_report_signature,
+    _generate_co_attainment_workbook,
+)
+from domain.coordinator_engine import (
+    _has_valid_final_co_report as _processing_has_valid_final_co_report,
+)
+from domain.coordinator_engine import (
+    _path_key,
+)
 from modules.coordinator.contracts import require_keys
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
 from modules.coordinator.messages import show_threshold_validation_toast
@@ -109,20 +122,6 @@ from modules.coordinator.steps.collect_files import (
 )
 from modules.coordinator.workflow_controller import CoordinatorWorkflowController
 from services import CoordinatorWorkflowService
-
-from .coordinator_processing import (
-    _analyze_dropped_files,
-    _build_co_attainment_default_name,
-    _CoAttainmentWorkbookResult,
-    _extract_final_report_signature,
-    _generate_co_attainment_workbook,
-)
-from .coordinator_processing import (
-    _has_valid_final_co_report as _processing_has_valid_final_co_report,
-)
-from .coordinator_processing import (
-    _path_key,
-)
 
 OUTPUT_LINK_MODE_FILE = "file"
 
