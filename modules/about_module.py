@@ -1,4 +1,4 @@
-"""About module with engine-based left/right pane composition."""
+"""About module using a single visible Module UI Engine pane."""
 
 from __future__ import annotations
 
@@ -7,12 +7,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from common.constants import (
     ABOUT_CONTRIBUTORS_FILE,
     ABOUT_ICON_SIZE,
-    APP_NAME,
     APP_REPOSITORY_URL,
     MODULE_LEFT_PANE_CONTENT_MARGINS,
     MODULE_LEFT_PANE_LAYOUT_SPACING,
@@ -41,16 +40,10 @@ class AboutModule(QWidget):
                 left_content_margins=MODULE_LEFT_PANE_CONTENT_MARGINS,
                 left_layout_spacing=MODULE_LEFT_PANE_LAYOUT_SPACING,
                 left_scrollbar_gutter=MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+                show_left=False,
                 show_footer=False,
             ),
         )
-
-        left_pane = QWidget()
-        left_pane.setObjectName("stepRail")
-        left_layout = QVBoxLayout(left_pane)
-        left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
-        left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
-        self._ui_engine.set_left_widget(left_pane)
 
         right_pane = QWidget()
         right_pane.setObjectName("coordinatorActiveCard")
@@ -59,26 +52,42 @@ class AboutModule(QWidget):
         right_layout.setSpacing(10)
         self._ui_engine.set_right_widget(right_pane)
 
+        header_block = QWidget()
+        header_layout = QHBoxLayout(header_block)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(14)
+
         self.icon_label = QLabel()
         self.icon_label.setFixedSize(ABOUT_ICON_SIZE, ABOUT_ICON_SIZE)
         icon = QIcon(resource_path("assets/kare-logo.ico"))
         self.icon_label.setPixmap(icon.pixmap(ABOUT_ICON_SIZE, ABOUT_ICON_SIZE))
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        header_layout.addWidget(self.icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
-        self.left_app_name = QLabel(APP_NAME)
+        header_text_block = QWidget()
+        header_text_layout = QVBoxLayout(header_text_block)
+        header_text_layout.setContentsMargins(0, 0, 0, 0)
+        header_text_layout.setSpacing(0)
+
+        self.left_app_name = QLabel()
         self.left_app_name.setObjectName("coordinatorTitle")
         self.left_subtitle = QLabel()
         self.left_subtitle.setWordWrap(True)
         self.left_version = QLabel()
-        self.left_copyright = QLabel()
-        self.left_copyright.setWordWrap(True)
+        self.left_app_name.setStyleSheet("font-size: 24px; font-weight: 700;")
+        self.left_subtitle.setStyleSheet("font-size: 15px;")
+        self.left_version.setStyleSheet("font-size: 9px;")
+        header_text_layout.addWidget(self.left_app_name)
+        header_text_layout.addWidget(self.left_subtitle)
+        header_text_layout.addWidget(self.left_version)
+        header_layout.addWidget(header_text_block, 1)
 
-        left_layout.addWidget(self.icon_label)
-        left_layout.addWidget(self.left_app_name)
-        left_layout.addWidget(self.left_subtitle)
-        left_layout.addWidget(self.left_version)
-        left_layout.addWidget(self.left_copyright)
-        left_layout.addStretch(1)
+        right_layout.addWidget(header_block)
+
+        divider_one = QFrame()
+        divider_one.setFrameShape(QFrame.Shape.HLine)
+        divider_one.setFrameShadow(QFrame.Shadow.Sunken)
+        right_layout.addWidget(divider_one)
 
         self.right_description = QLabel()
         self.right_description.setWordWrap(True)
@@ -89,12 +98,12 @@ class AboutModule(QWidget):
         divider_two.setFrameShadow(QFrame.Shadow.Sunken)
         right_layout.addWidget(divider_two)
 
-        self.contributors_title = QLabel()
-        self.contributors_title.setObjectName("coordinatorTitle")
+        self.institution_label = QLabel()
+        self.institution_label.setWordWrap(True)
         self.contributors_body = QLabel()
         self.contributors_body.setWordWrap(True)
         self.contributors_body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        right_layout.addWidget(self.contributors_title)
+        right_layout.addWidget(self.institution_label)
         right_layout.addWidget(self.contributors_body)
 
         divider_three = QFrame()
@@ -102,10 +111,11 @@ class AboutModule(QWidget):
         divider_three.setFrameShadow(QFrame.Shadow.Sunken)
         right_layout.addWidget(divider_three)
 
-        self.repository_link = QLabel()
-        self.repository_link.setOpenExternalLinks(True)
-        self.repository_link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        right_layout.addWidget(self.repository_link)
+        self.meta_line = QLabel()
+        self.meta_line.setWordWrap(True)
+        self.meta_line.setOpenExternalLinks(True)
+        self.meta_line.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        right_layout.addWidget(self.meta_line)
         right_layout.addStretch(1)
 
         self.retranslate_ui()
@@ -124,13 +134,14 @@ class AboutModule(QWidget):
 
     def retranslate_ui(self) -> None:
         current_year = datetime.now().year
-        subtitle = t("about.subtitle")
-        self.left_subtitle.setText(subtitle)
+        self.left_app_name.setText(t("app.main_window_title"))
+        self.left_subtitle.setText(t("about.subtitle"))
         self.left_version.setText(t("about.version", version=SYSTEM_VERSION))
-        self.left_copyright.setText(t("about.copyright", year=current_year))
 
-        self.right_description.setText(t("about.description", app_name=APP_NAME))
-        self.contributors_title.setText(t("about.contributors"))
+        self.right_description.setText(
+            t("about.description", app_name=t("app.main_window_title"))
+        )
+        self.institution_label.setText(t("about.institution"))
 
         contributors = self._contributors()
         if contributors:
@@ -139,4 +150,7 @@ class AboutModule(QWidget):
             self.contributors_body.setText(t("about.contributors.none"))
 
         link_text = t("about.repository.link_label")
-        self.repository_link.setText(f'<a href="{APP_REPOSITORY_URL}">{link_text}</a>')
+        copyright_text = t("about.copyright", year=current_year)
+        self.meta_line.setText(
+            f'{copyright_text} | <a href="{APP_REPOSITORY_URL}">{link_text}</a>'
+        )

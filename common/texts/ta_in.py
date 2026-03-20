@@ -6,7 +6,7 @@ TEXTS = {
     "app.unexpected_error": "எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.",
     "app.startup.workbook_secret_missing_frozen": "பணிப்புத்தகம் ரகசியம் கிடைக்கவில்லை. மென்பொருளை மீண்டும் நிறுவவும் அல்லது ஆதரவைக் தொடர்புகொள்ளவும்.",
     "app.startup.workbook_secret_missing_dev": "பணிப்புத்தகம் ரகசிய சேமிப்பகத்தை உள்ளூரில் நீக்கி பயன்பாட்டை மீண்டும் தொடங்கவும்.",
-    "app.main_window_title": "FOCUS",
+    "app.main_window_title": "ஃபோகஸ்",
     "splash.starting": "பயன்பாடு தொடங்குகிறது...",
     "splash.loading_main_window": "முதன்மை சாளரம் ஏற்றப்படுகிறது...",
     # Main window
@@ -26,9 +26,9 @@ TEXTS = {
     "language.switcher.applied_status": "மொழி {language} ஆக அமைக்கப்பட்டது.",
     # About
     "about.version": "பதிப்பு {version}",
-    "about.subtitle": "விளைவு கணக்கீடு மற்றும் ஒருங்கிணைப்பு அமைப்புக்கான கட்டமைப்பு",
+    "about.subtitle": "ஃப்ரேம்வொர்க் ஃபார் அவுட்கம் கம்ப்யூடேஷன் அண்ட் யூனிபிகேஷன் சிஸ்டம்",
     "about.description": (
-        "{app_name} என்பது Course Outcome (CO) அடைவை கணக்கிடவும், "
+        "{app_name} என்பது கோர்ஸ் அவுட்கம் (CO) அடைவை கணக்கிடவும், "
         "நேரடி மற்றும் மறைமுக மதிப்பீடுகளை அடிப்படையாகக் கொண்டு "
         "கட்டமைக்கப்பட்ட முடிவு பகுப்பாய்வை செய்யவும் வடிவமைக்கப்பட்ட மென்பொருள் கருவி."
     ),
@@ -36,7 +36,7 @@ TEXTS = {
     "about.copyright": "(c) {year} KARE. அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.",
     "about.contributors": "Contributors",
     "about.contributors.none": "Contributors information is not available.",
-    "about.repository.link_label": "GitHub Repository",
+    "about.repository.link_label": "கிட்ஹப் ரெப்போசிட்டரி",
     # Help module
     "help.doc_missing_title": "உதவி ஆவணம் இல்லை",
     "help.doc_missing_body": "உதவி PDF கிடைக்கவில்லை:\\n{path}",
