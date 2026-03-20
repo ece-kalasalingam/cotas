@@ -215,6 +215,7 @@ class ManagedDropFileWidget(QWidget):
     files_changed = Signal(list)
     files_rejected = Signal(list)
     browse_requested = Signal()
+    submit_requested = Signal()
 
     def __init__(
         self,
@@ -242,6 +243,7 @@ class ManagedDropFileWidget(QWidget):
         self._allowed_filenames = self._normalize_filenames(allowed_filenames)
         self._file_filter = file_filter
         self._summary_text_builder: Callable[[int], str] = lambda count: f"Files: {count}"
+        self._submit_allowed = True
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -279,18 +281,44 @@ class ManagedDropFileWidget(QWidget):
 
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setSpacing(8)
         self.summary_label = QLabel()
         controls_row.addWidget(self.summary_label)
-        controls_row.addStretch(1)
 
         self.clear_button = QPushButton("Clear All")
+        self.clear_button.setObjectName("clearAllLink")
         self.clear_button.setAutoDefault(False)
         self.clear_button.setDefault(False)
+        self.clear_button.setFlat(True)
+        self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_button.setStyleSheet(
+            """
+            QPushButton#clearAllLink {
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+                min-width: 0px;
+                min-height: 0px;
+            }
+            QPushButton#clearAllLink:enabled {
+                text-decoration: underline;
+            }
+            """
+        )
         self.clear_button.clicked.connect(self.clear_files)
         controls_row.addWidget(self.clear_button)
+        controls_row.addStretch(1)
+
+        self.submit_button = QPushButton("Submit")
+        self.submit_button.setAutoDefault(False)
+        self.submit_button.setDefault(False)
+        self.submit_button.clicked.connect(self.submit_requested.emit)
+        controls_row.addWidget(self.submit_button)
         root.addLayout(controls_row)
         self._update_summary_label()
         self._update_clear_button_state()
+        self._update_submit_button_state()
 
     def files(self) -> list[str]:
         return list(self._files)
@@ -301,6 +329,13 @@ class ManagedDropFileWidget(QWidget):
 
     def set_clear_button_text(self, text: str) -> None:
         self.clear_button.setText(text)
+
+    def set_submit_button_text(self, text: str) -> None:
+        self.submit_button.setText(text)
+
+    def set_submit_allowed(self, allowed: bool) -> None:
+        self._submit_allowed = bool(allowed)
+        self._update_submit_button_state()
 
     def set_allowed_extensions(self, extensions: Iterable[str] | None) -> None:
         self._allowed_extensions = self._normalize_extensions(extensions)
@@ -321,6 +356,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_list.clear()
         self._update_summary_label()
         self._update_clear_button_state()
+        self._update_submit_button_state()
         self.files_changed.emit(self.files())
 
     def set_files(self, paths: list[str]) -> None:
@@ -330,6 +366,7 @@ class ManagedDropFileWidget(QWidget):
         if not added:
             self._update_summary_label()
             self._update_clear_button_state()
+            self._update_submit_button_state()
             self.files_changed.emit(self.files())
 
     def add_files(self, paths: list[str], *, emit_drop: bool = True) -> list[str]:
@@ -373,6 +410,7 @@ class ManagedDropFileWidget(QWidget):
         if added:
             self._update_summary_label()
             self._update_clear_button_state()
+            self._update_submit_button_state()
             if emit_drop:
                 self.files_dropped.emit(list(added))
             self.files_changed.emit(self.files())
@@ -408,7 +446,12 @@ class ManagedDropFileWidget(QWidget):
                 self.drop_list.takeItem(row)
         self._update_summary_label()
         self._update_clear_button_state()
+        self._update_submit_button_state()
         self.files_changed.emit(self.files())
+
+    def setEnabled(self, enabled: bool) -> None:
+        super().setEnabled(enabled)
+        self._update_submit_button_state()
 
     def _on_files_dropped(self, paths: list[str]) -> None:
         self.add_files(paths, emit_drop=True)
@@ -447,7 +490,14 @@ class ManagedDropFileWidget(QWidget):
         return True
 
     def _update_summary_label(self) -> None:
-        self.summary_label.setText(self._summary_text_builder(len(self._files)))
+        count = len(self._files)
+        self.summary_label.setText(self._summary_text_builder(count))
+        self.summary_label.setEnabled(count > 0)
 
     def _update_clear_button_state(self) -> None:
         self.clear_button.setEnabled(bool(self._files))
+
+    def _update_submit_button_state(self) -> None:
+        self.submit_button.setEnabled(
+            bool(self._files) and self._submit_allowed and self.isEnabled()
+        )

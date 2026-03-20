@@ -10,10 +10,18 @@ from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
 from PySide6.QtWidgets import QFileDialog, QMenu, QStyleFactory, QVBoxLayout, QWidget
 
-from common.constants import APP_NAME
+from common.constants import (
+    APP_NAME,
+    MODULE_LEFT_PANE_CONTENT_MARGINS,
+    MODULE_LEFT_PANE_LAYOUT_SPACING,
+    MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+    MODULE_LEFT_PANE_WIDTH_OFFSET,
+)
+from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.texts import t
 from common.toast import show_toast
 from common.ui_logging import build_i18n_log_message
+from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
     emit_user_status,
     log_process_message,
@@ -21,6 +29,8 @@ from common.utils import (
     resolve_dialog_start_path,
     resource_path,
 )
+
+_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 
 
 class HelpModule(QWidget):
@@ -33,8 +43,24 @@ class HelpModule(QWidget):
         self._pdf_error_shown = False
         self._logger = logging.getLogger(__name__)
 
-        layout = QVBoxLayout(self)
+        self._ui_engine = ModuleUIEngine(
+            self,
+            config=ModuleUIEngineConfig(
+                left_width=_LEFT_PANE_WIDTH,
+                left_object_name="stepRail",
+                right_object_name="coordinatorActiveCard",
+                left_content_margins=MODULE_LEFT_PANE_CONTENT_MARGINS,
+                left_layout_spacing=MODULE_LEFT_PANE_LAYOUT_SPACING,
+                left_scrollbar_gutter=MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+                show_left=False,
+                show_footer=False,
+            ),
+        )
+        right_pane = QWidget()
+        right_pane.setObjectName("coordinatorActiveCard")
+        layout = QVBoxLayout(right_pane)
         layout.setContentsMargins(0, 0, 0, 0)
+        self._ui_engine.set_right_widget(right_pane)
 
         self.pdf_view = QPdfView()
         self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)

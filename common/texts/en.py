@@ -1,4 +1,4 @@
-"""English text catalog for user-facing strings."""
+﻿"""English text catalog for user-facing strings."""
 
 TEXTS = {
     # Startup / main
@@ -36,6 +36,9 @@ TEXTS = {
         "attainment and performing structured outcome analysis based on direct "
         "and indirect assessments."
     ),
+    "about.contributors": "Contributors",
+    "about.contributors.none": "Contributors information is not available.",
+    "about.repository.link_label": "GitHub Repository",
     "about.institution": "Developed at Kalasalingam Academy of Research and Education (KARE).",
     "about.copyright": "(c) {year} KARE. All rights reserved.",
     # Help module
@@ -63,12 +66,12 @@ TEXTS = {
     "help.status.save_failed": "Error happened while saving help PDF.",
     "help.status.open_success": "Help PDF opened in default viewer.",
     "help.status.open_failed": "Error happened while opening help PDF in default viewer.",
+    "outputs.none_generated": "No outputs generated.",
     # Instructor module
     "instructor.workflow_title": "CO Workflow",
     "instructor.step1.title": "Generate Marks Template",
     "instructor.step2.title": "Generate CO Marks Report",
     "instructor.step1.desc": "Upload the validated course-details file, then prepare and save the marks template.",
-    "instructor.step2.desc": "Upload and validate the filled marks workbook, then generate the final CO report.",
     "instructor.links.title": "Generated Outputs",
     "instructor.links.course_details_generated": "Course details template generated",
     "instructor.links.course_details_uploaded": "Course details file uploaded",
@@ -87,14 +90,11 @@ TEXTS = {
     "instructor.action.step1.prepare": "Prepare Marks Template",
     "instructor.action.step2.upload.default": "Upload Filled Marks",
     "instructor.action.step2.generate.default": "Generate Final CO Report",
-    "instructor.require.step2": "Complete Step 1 first.",
-    "instructor.require.step1": "Complete Step 1 first.",
     "instructor.msg.success_title": "Success",
     "instructor.msg.validation_title": "Validation Error",
     "instructor.msg.error_title": "Failed",
     "instructor.msg.step_completed": "Step {step} completed: {title}.",
     "instructor.msg.failed_to_do": "Failed to do {action}.",
-    "instructor.msg.step_required_title": "Step Required",
     "instructor.dialog.filter.excel": "Excel Files (*.xlsx)",
     "instructor.dialog.filter.excel_open": "Excel Files (*.xlsx *.xlsm *.xls)",
     "instructor.dialog.step1.title": "Save Course Details Template",
@@ -130,11 +130,9 @@ TEXTS = {
     "instructor.toast.step1_validation_summary": (
         "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input."
     ),
-    "instructor.toast.step1_prepare_no_outputs": "No output files selected for marks template generation.",
     "instructor.toast.step1_prepare_summary": (
         "Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}."
     ),
-    "instructor.toast.step2_generate_no_outputs": "No output files selected for CO report generation.",
     "instructor.toast.step2_generate_summary": (
         "CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}."
     ),

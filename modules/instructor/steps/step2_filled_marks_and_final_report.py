@@ -1,4 +1,4 @@
-"""Step 2 (row 2): upload filled marks and generate final report."""
+﻿"""Step 2 (row 2): upload filled marks and generate final report."""
 
 from __future__ import annotations
 
@@ -167,14 +167,6 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
     if not source_paths and getattr(typed_module, "filled_marks_path", None):
         source_paths = [cast(str, typed_module.filled_marks_path)]
     if not source_paths:
-        source_paths = list(getattr(typed_module, "step1_marks_template_paths", []) or [])
-    if not source_paths:
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.require.step2"),
-            title=t("instructor.msg.step_required_title"),
-            level="info",
-        )
         return
 
     output_dir = typed_ns["QFileDialog"].getExistingDirectory(
@@ -215,12 +207,6 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         planned_pairs.append((source_path, str(candidate)))
 
     if not planned_pairs:
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.toast.step2_generate_no_outputs"),
-            title=t("instructor.step2.title"),
-            level="warning",
-        )
         return
 
     workflow_service = cast(Any, getattr(typed_module, "_workflow_service", None))
@@ -482,22 +468,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
     user_success_message, user_error_message = typed_ns["_localized_log_messages"](
         "instructor.log.process.generate_final_co_report"
     )
-    can_run, reason = typed_module._can_run_step(2)
-    if not can_run:
-        typed_ns["show_toast"](
-            typed_module,
-            reason,
-            title=t("instructor.msg.step_required_title"),
-            level="info",
-        )
-        return
     if not typed_module.filled_marks_done or typed_module.filled_marks_outdated:
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.require.step2"),
-            title=t("instructor.msg.step_required_title"),
-            level="info",
-        )
         return
 
     default_name = typed_ns["_build_final_report_default_name"](typed_module.filled_marks_path)
@@ -512,12 +483,6 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
 
     if not typed_module.filled_marks_path or not Path(typed_module.filled_marks_path).exists():
         typed_ns["_logger"].warning(_LOG_FINAL_REPORT_SOURCE_MISSING, typed_module.filled_marks_path)
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.require.step2"),
-            title=t("instructor.msg.step_required_title"),
-            level="error",
-        )
         return
     source_path = typed_module.filled_marks_path
 
@@ -603,3 +568,10 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
         on_success=_on_finished,
         on_failure=_on_failed,
     )
+
+
+
+
+
+
+

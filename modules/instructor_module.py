@@ -13,13 +13,11 @@ from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
-    QScrollArea,
     QTabWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -30,6 +28,11 @@ from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
     ID_COURSE_SETUP,
+    MODULE_LEFT_PANE_CONTENT_MARGINS,
+    MODULE_LEFT_PANE_LAYOUT_SPACING,
+    MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+    MODULE_LEFT_PANE_WIDTH_OFFSET,
+    OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
@@ -38,6 +41,8 @@ from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
+from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
+from common.output_panel import OutputItem, OutputPanelData, open_output_link, render_output_panel_html
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -66,17 +71,6 @@ from modules.instructor.messages import (
     show_step_success_toast,
     show_system_error_toast,
     show_validation_error_toast,
-)
-from modules.instructor.output_links import (
-    InstructorOutputNamespace,
-)
-from modules.instructor.output_links import (
-    on_quick_link_activated as _on_quick_link_activated_impl,
-)
-from modules.instructor.output_links import quick_link_markup as _quick_link_markup_impl
-from modules.instructor.output_links import quick_links_html as _quick_links_html_impl
-from modules.instructor.output_links import (
-    refresh_quick_links as _refresh_quick_links_impl,
 )
 from modules.instructor.steps.shared_workbook_ops import (
     atomic_copy_file as _shared_atomic_copy_file,
@@ -107,18 +101,9 @@ from modules.instructor.validators.step2_filled_marks_validator import (
 from modules.instructor.workflow_controller import InstructorWorkflowController
 from services import InstructorWorkflowService
 
-OUTPUT_LINK_MODE_FILE = "file"
-_OUTPUT_LINK_RUNTIME_GLOBALS = (
-    OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_SEPARATOR,
-    QUrl,
-    QDesktopServices,
-    show_toast,
-)
-
 _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")
-_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + 72
+_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _ENABLE_SECOND_ROW_ACTIONS = True
 
 # Step handlers receive `ns=globals()`, so these names must stay module-visible.
@@ -136,18 +121,6 @@ _STEP_RUNTIME_GLOBALS = (
     validate_course_details_workbook,
     build_i18n_log_message,
 )
-
-def _output_link_namespace() -> InstructorOutputNamespace:
-    return {
-        "t": t,
-        "OUTPUT_LINK_MODE_FILE": OUTPUT_LINK_MODE_FILE,
-        "OUTPUT_LINK_MODE_FOLDER": OUTPUT_LINK_MODE_FOLDER,
-        "OUTPUT_LINK_SEPARATOR": OUTPUT_LINK_SEPARATOR,
-        "url_from_local_file": QUrl.fromLocalFile,
-        "open_url": QDesktopServices.openUrl,
-        "show_toast": show_toast,
-    }
-
 
 def _messages_namespace() -> dict[str, object]:
     return {
@@ -247,7 +220,6 @@ class InstructorModule(QWidget):
 
     STEP_DESC_KEYS = {
         1: "instructor.step1.desc",
-        2: "instructor.step2.desc",
     }
 
     PATH_ATTRS = {
@@ -322,11 +294,24 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _build_ui(self) -> None:
-        root = QHBoxLayout(self)
-
-        left = QFrame()
-        left.setObjectName("stepRail")
-        left_layout = QVBoxLayout(left)
+        self._ui_engine = ModuleUIEngine(
+            self,
+            config=ModuleUIEngineConfig(
+                left_width=_LEFT_PANE_WIDTH,
+                left_object_name="stepRail",
+                right_object_name="coordinatorActiveCard",
+                left_content_margins=MODULE_LEFT_PANE_CONTENT_MARGINS,
+                left_layout_spacing=MODULE_LEFT_PANE_LAYOUT_SPACING,
+                left_scrollbar_gutter=MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+            ),
+        )
+        self._ui_engine.left_scroll.setObjectName("instructorLeftScroll")
+        left_pane = QWidget()
+        left_pane.setObjectName("stepRail")
+        left_layout = QVBoxLayout(left_pane)
+        left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
+        left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
+        self._ui_engine.set_left_widget(left_pane)
 
         self.rail_title = QLabel(t("instructor.workflow_title"))
         left_layout.addWidget(self.rail_title)
@@ -350,18 +335,10 @@ class InstructorModule(QWidget):
             self._step_items.append(item)
         self.step_list.currentRowChanged.connect(self._on_step_row_changed)
         left_layout.addWidget(self.step_list, 1)
-        left_scroll = QScrollArea()
-        left_scroll.setObjectName("instructorLeftScroll")
-        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        left_scroll.setWidget(left)
-        left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
-
-        right = QFrame()
-        right.setObjectName("coordinatorActiveCard")
-        right_layout = QVBoxLayout(right)
+        right_pane = QWidget()
+        right_pane.setObjectName("coordinatorActiveCard")
+        right_layout = QVBoxLayout(right_pane)
+        self._ui_engine.set_right_widget(right_pane)
 
         self.active_title = QLabel()
         self.active_title.setWordWrap(True)
@@ -375,6 +352,9 @@ class InstructorModule(QWidget):
         self.active_note.setWordWrap(True)
         self.active_note.setObjectName("hintText")
         right_layout.addWidget(self.active_note)
+        self.active_title.setVisible(False)
+        self.active_desc.setVisible(False)
+        self.active_note.setVisible(False)
 
         self.primary_action = QPushButton()
         self.primary_action.setObjectName("secondaryAction")
@@ -405,23 +385,13 @@ class InstructorModule(QWidget):
         self.step1_drop_widget.browse_requested.connect(self._on_step1_upload_clicked)
         self.step1_drop_widget.files_changed.connect(self._on_step1_drop_files_changed)
         self.step1_drop_widget.clear_button.clicked.connect(self._on_step1_clear_all_clicked)
+        self.step1_drop_widget.submit_requested.connect(self._on_step1_prepare_clicked)
         self.step1_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.step1.drop.summary", count=count)
         )
         right_layout.addWidget(self.step1_drop_widget, 1)
-
-        self.step1_prepare_action = QPushButton()
+        self.step1_prepare_action = self.step1_drop_widget.submit_button
         self.step1_prepare_action.setObjectName("primaryAction")
-        self.step1_prepare_action.setAutoDefault(False)
-        self.step1_prepare_action.setDefault(False)
-        self.step1_prepare_action.clicked.connect(self._on_step1_prepare_clicked)
-        controls_row = QHBoxLayout()
-        controls_row.addWidget(self.step1_prepare_action)
-        controls_row.addStretch(1)
-        right_layout.addLayout(controls_row)
-
-        self.step2_action_row = QWidget()
-        step2_action_layout = QHBoxLayout(self.step2_action_row)
 
         # Hidden upload action used by keyboard shortcuts and test harness hooks.
         self.step2_upload_action = QPushButton()
@@ -429,15 +399,6 @@ class InstructorModule(QWidget):
         self.step2_upload_action.setDefault(True)
         self.step2_upload_action.clicked.connect(self._on_step2_upload_clicked)
         self.step2_upload_action.setVisible(False)
-        step2_action_layout.addWidget(self.step2_upload_action)
-
-        self.step2_generate_action = QPushButton()
-        self.step2_generate_action.setObjectName("primaryAction")
-        self.step2_generate_action.setAutoDefault(False)
-        self.step2_generate_action.setDefault(False)
-        self.step2_generate_action.clicked.connect(self._on_step2_generate_clicked)
-        step2_action_layout.addWidget(self.step2_generate_action)
-        step2_action_layout.addStretch(1)
 
         self.step2_drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
@@ -454,12 +415,13 @@ class InstructorModule(QWidget):
         self.step2_drop_widget.browse_requested.connect(self._on_step2_upload_clicked)
         self.step2_drop_widget.files_changed.connect(self._on_step2_drop_files_changed)
         self.step2_drop_widget.clear_button.clicked.connect(self._on_step2_clear_all_clicked)
+        self.step2_drop_widget.submit_requested.connect(self._on_step2_generate_clicked)
         self.step2_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.step1.drop.summary", count=count)
         )
+        self.step2_generate_action = self.step2_drop_widget.submit_button
+        self.step2_generate_action.setObjectName("primaryAction")
         right_layout.addWidget(self.step2_drop_widget, 1)
-        if _ENABLE_SECOND_ROW_ACTIONS:
-            right_layout.addWidget(self.step2_action_row)
 
         self.info_tabs = QTabWidget()
         self.info_tabs.setObjectName("instructorInfoTabs")
@@ -493,43 +455,72 @@ class InstructorModule(QWidget):
 
         self.info_tabs.addTab(log_tab, t("instructor.log.title"))
         self.info_tabs.addTab(links_tab, t(self.RAIL_LINK_TITLE_KEY))
-        right_layout.addWidget(self.info_tabs)
+        footer_pane = QWidget()
+        footer_layout = QVBoxLayout(footer_pane)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(0)
+        footer_layout.addWidget(self.info_tabs)
+        self._ui_engine.set_footer_widget(footer_pane)
 
         self.shortcut_open_workbook = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
         self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
         self.shortcut_save_output = QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
-        root.addWidget(left_scroll)
-        root.addWidget(right, 1)
-
-    def _quick_link_items(self) -> tuple[tuple[str, str | None], ...]:
-        rows: list[tuple[str, str | None]] = []
+    def _output_items(self) -> tuple[OutputItem, ...]:
+        allowed_attrs_by_step: dict[int, set[str]] = {
+            1: {"step1_path", "marks_template_path"},
+            2: {"final_report_path"},
+        }
+        allowed_attrs = allowed_attrs_by_step.get(
+            self.current_step,
+            {attr for _label_key, attr in self.RAIL_LINKS},
+        )
+        rows: list[OutputItem] = []
         for label_key, attr in self.RAIL_LINKS:
+            if attr not in allowed_attrs:
+                continue
             if attr == "marks_template_path":
                 batch_paths = [path for path in self.marks_template_paths if path]
                 if batch_paths:
-                    rows.extend((label_key, path) for path in batch_paths)
+                    rows.extend(OutputItem(label_key=label_key, path=path) for path in batch_paths)
                     continue
             if attr == "final_report_path":
                 batch_paths = [path for path in self.final_report_paths if path]
                 if batch_paths:
-                    rows.extend((label_key, path) for path in batch_paths)
+                    rows.extend(OutputItem(label_key=label_key, path=path) for path in batch_paths)
                     continue
-            rows.append((label_key, getattr(self, attr)))
+            value = getattr(self, attr)
+            if isinstance(value, str) and value:
+                rows.append(OutputItem(label_key=label_key, path=value))
         return tuple(rows)
 
-    def _quick_link_markup(self, label_key: str, path: str | None) -> str:
-        return _quick_link_markup_impl(self, label_key, path, ns=_output_link_namespace())
-
-    def _quick_links_html(self) -> str:
-        return _quick_links_html_impl(self, ns=_output_link_namespace())
-
     def _on_quick_link_activated(self, href: str) -> None:
-        _on_quick_link_activated_impl(self, href, ns=_output_link_namespace())
+        opened = open_output_link(
+            href,
+            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+            output_link_separator=OUTPUT_LINK_SEPARATOR,
+            open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
+        )
+        if opened:
+            return
+        show_toast(
+            self,
+            t(self.RAIL_LINK_OPEN_FAILED_KEY),
+            title=t("instructor.msg.error_title"),
+            level="error",
+        )
 
     def _refresh_quick_links(self) -> None:
-        _refresh_quick_links_impl(self, ns=_output_link_namespace())
+        self.generated_outputs_view.setHtml(
+            render_output_panel_html(
+                self.get_shared_outputs_data(),
+                translate=t,
+                output_link_mode_file=OUTPUT_LINK_MODE_FILE,
+                output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+                output_link_separator=OUTPUT_LINK_SEPARATOR,
+            )
+        )
 
     def _step_path(self, step: int) -> str | None:
         return self._workflow_controller.step_path(step)
@@ -575,8 +566,8 @@ class InstructorModule(QWidget):
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
         self.info_tabs.setVisible(not enabled)
 
-    def get_shared_outputs_html(self) -> str:
-        return self._quick_links_html()
+    def get_shared_outputs_data(self) -> OutputPanelData:
+        return OutputPanelData(items=self._output_items(), open_failed_key=self.RAIL_LINK_OPEN_FAILED_KEY)
 
     def _refresh_ui(self) -> None:
         if self.current_step not in self.WORKFLOW_STEPS:
@@ -591,75 +582,57 @@ class InstructorModule(QWidget):
         self.step_list.setCurrentRow(self.current_step - 1)
         self.step_list.blockSignals(False)
 
-        self.active_title.setText(t(self.STEP_TITLE_KEYS[self.current_step]))
-        self.active_desc.setText(t(self.STEP_DESC_KEYS[self.current_step]))
-        if self.current_step == 2 and not _ENABLE_SECOND_ROW_ACTIONS:
-            self.active_title.clear()
-            self.active_desc.clear()
         self.info_tabs.setTabText(0, t("instructor.log.title"))
         self.info_tabs.setTabText(1, t(self.RAIL_LINK_TITLE_KEY))
         self._refresh_quick_links()
-        can_run, reason = self._can_run_step(self.current_step)
+        can_run, _reason = self._can_run_step(self.current_step)
         is_step1 = self.current_step == 1
         is_step2 = self.current_step == 2
-        self.active_title.setVisible(not is_step1)
-        self.active_desc.setVisible(not is_step1)
-        self.active_note.setVisible(not is_step1)
+        self.active_title.clear()
+        self.active_desc.clear()
+        self.active_note.clear()
+        self.active_title.setVisible(False)
+        self.active_desc.setVisible(False)
+        self.active_note.setVisible(False)
 
         self.primary_action.setVisible(False)
         self.step1_drop_widget.setVisible(is_step1)
-        self.step1_prepare_action.setVisible(is_step1)
         self.step2_drop_widget.setVisible(is_step2 and _ENABLE_SECOND_ROW_ACTIONS)
-        self.step2_action_row.setVisible(is_step2 and _ENABLE_SECOND_ROW_ACTIONS)
 
         if is_step1:
             self.step1_upload_action.setText(t("instructor.action.step1.upload"))
             self.step1_drop_widget.set_clear_button_text(t("coordinator.clear_all"))
-            self.step1_prepare_action.setText(t("instructor.action.step1.prepare"))
+            self.step1_drop_widget.set_submit_button_text(t("instructor.action.step1.prepare"))
             self.step1_drop_widget.set_summary_text_builder(
                 lambda count: t("instructor.step1.drop.summary", count=count)
             )
-            self.step1_drop_widget.clear_button.setEnabled(bool(self.step1_drop_widget.files()))
-            self.step1_prepare_action.setEnabled(bool(self.step1_course_details_paths))
+            self.step1_drop_widget.set_submit_allowed(True)
         elif is_step2:
             self.step2_upload_action.setText(t("instructor.action.step2.upload.default"))
-            self.step2_generate_action.setText(t("instructor.action.step2.generate.default"))
+            self.step2_drop_widget.set_submit_button_text(t("instructor.action.step2.generate.default"))
             self.step2_drop_widget.set_clear_button_text(t("coordinator.clear_all"))
             self.step2_drop_widget.set_summary_text_builder(
                 lambda count: t("instructor.step1.drop.summary", count=count)
             )
             self.step2_upload_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and can_run)
-            self.step2_drop_widget.clear_button.setEnabled(bool(self.step2_drop_widget.files()))
-            self.step2_generate_action.setEnabled(_ENABLE_SECOND_ROW_ACTIONS and can_run and bool(self.filled_marks_paths))
-            self.step1_drop_widget.clear_button.setEnabled(False)
+            self.step2_drop_widget.set_submit_allowed(_ENABLE_SECOND_ROW_ACTIONS and can_run)
 
         self.step1_upload_action.setEnabled(is_step1)
         self.step1_drop_widget.setEnabled(is_step1 and not self.state.busy)
-        self.step2_upload_action.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and can_run and not self.state.busy)
-        self.step2_drop_widget.setEnabled(is_step2 and _ENABLE_SECOND_ROW_ACTIONS and can_run and not self.state.busy)
-        if not can_run:
-            self.active_note.setText(reason)
-        elif self.filled_marks_outdated or self.final_report_outdated:
-            if self._step_outdated(self.current_step):
-                self.active_note.setText(t("instructor.note.outdated_current"))
-            else:
-                self.active_note.setText(t("instructor.note.outdated_downstream"))
-        else:
-            self.active_note.setText(t("instructor.note.default"))
-        if is_step2 and not _ENABLE_SECOND_ROW_ACTIONS:
-            self.active_note.clear()
+        self.step2_upload_action.setEnabled(
+            is_step2 and _ENABLE_SECOND_ROW_ACTIONS and can_run and not self.state.busy
+        )
+        self.step2_drop_widget.setEnabled(
+            is_step2 and _ENABLE_SECOND_ROW_ACTIONS and not self.state.busy
+        )
 
         if self.state.busy:
             self.primary_action.setEnabled(False)
             self.download_course_template_button.setEnabled(False)
             self.step1_upload_action.setEnabled(False)
             self.step1_drop_widget.setEnabled(False)
-            self.step1_drop_widget.clear_button.setEnabled(False)
-            self.step1_prepare_action.setEnabled(False)
             self.step2_upload_action.setEnabled(False)
             self.step2_drop_widget.setEnabled(False)
-            self.step2_drop_widget.clear_button.setEnabled(False)
-            self.step2_generate_action.setEnabled(False)
         else:
             self.download_course_template_button.setEnabled(True)
 
@@ -923,15 +896,6 @@ class InstructorModule(QWidget):
     def _upload_filled_marks_from_dialog_async(self) -> None:
         if self.state.busy:
             return
-        can_run, reason = self._can_run_step(2)
-        if not can_run:
-            show_toast(
-                self,
-                reason,
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
-            return
         open_paths, _ = QFileDialog.getOpenFileNames(
             self,
             t("instructor.dialog.step2.upload.title"),
@@ -944,15 +908,6 @@ class InstructorModule(QWidget):
 
     def _upload_filled_marks_from_paths_async(self, open_paths: list[str]) -> None:
         if self.state.busy:
-            return
-        can_run, reason = self._can_run_step(2)
-        if not can_run:
-            show_toast(
-                self,
-                reason,
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
             return
         selected_paths = [path for path in open_paths if path]
         if not selected_paths:
@@ -1027,15 +982,6 @@ class InstructorModule(QWidget):
         self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
 
     def _generate_final_report_async(self) -> None:
-        can_run, reason = self._can_run_step(2)
-        if not can_run:
-            show_toast(
-                self,
-                reason,
-                title=t("instructor.msg.step_required_title"),
-                level="info",
-            )
-            return
         if self.filled_marks_paths:
             generate_final_reports_from_paths_async(self, ns=globals())
             return

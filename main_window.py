@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl
@@ -28,10 +27,12 @@ from common.constants import (
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_HIDDEN_ACTIVITY_MODULE_KEYS,
     MAIN_WINDOW_TITLE_TEXT_KEY,
+    OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
 )
 from common.module_plugins import ModulePluginSpec
+from common.output_panel import OutputPanelData, open_output_link, render_output_panel_html
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
 from common.ui_logging import (
@@ -436,25 +437,38 @@ class MainWindow(QMainWindow):
         if widget is None:
             self.shared_generated_outputs.setHtml("")
             return
-        provider = getattr(widget, "get_shared_outputs_html", None)
+        provider = getattr(widget, "get_shared_outputs_data", None)
         if callable(provider):
             value = provider()
-            self.shared_generated_outputs.setHtml(value if isinstance(value, str) else str(value))
+            payload = value if isinstance(value, OutputPanelData) else OutputPanelData(items=tuple())
+            self.shared_generated_outputs.setHtml(
+                render_output_panel_html(
+                    payload,
+                    translate=t,
+                    output_link_mode_file=OUTPUT_LINK_MODE_FILE,
+                    output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+                    output_link_separator=OUTPUT_LINK_SEPARATOR,
+                )
+            )
             return
         self.shared_generated_outputs.setHtml("")
 
     def _on_shared_output_link_activated(self, href: str) -> None:
-        mode, _, raw_path = href.partition(OUTPUT_LINK_SEPARATOR)
-        path = raw_path.strip()
-        if not path:
-            return
-        target = Path(path).parent if mode == OUTPUT_LINK_MODE_FOLDER else Path(path)
-        opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+        widget = self.stack.currentWidget()
+        payload_provider = getattr(widget, "get_shared_outputs_data", None) if widget is not None else None
+        payload_value = payload_provider() if callable(payload_provider) else None
+        payload = payload_value if isinstance(payload_value, OutputPanelData) else OutputPanelData(items=tuple())
+        opened = open_output_link(
+            href,
+            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+            output_link_separator=OUTPUT_LINK_SEPARATOR,
+            open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
+        )
         if opened:
             return
         show_toast(
             self,
-            t("instructor.links.open_failed"),
+            t(payload.open_failed_key),
             title=t("instructor.msg.error_title"),
             level="error",
         )

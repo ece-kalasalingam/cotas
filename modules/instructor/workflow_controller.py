@@ -38,10 +38,8 @@ class InstructorWorkflowController:
         if step == 1:
             return True, _EMPTY_REASON
         if step == 2:
-            if not self._m.step2_upload_ready:
-                return False, t("instructor.require.step1")
             return True, _EMPTY_REASON
-        return False, t("instructor.require.step1")
+        return False, _EMPTY_REASON
 
     def on_step_selected(self, step: int) -> None:
         self._m.current_step = step

@@ -34,6 +34,9 @@ TEXTS = {
     ),
     "about.institution": "கலசலிங்கம் ஆராய்ச்சி மற்றும் கல்வி கழகம் (KARE) இல் உருவாக்கப்பட்டது.",
     "about.copyright": "(c) {year} KARE. அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.",
+    "about.contributors": "Contributors",
+    "about.contributors.none": "Contributors information is not available.",
+    "about.repository.link_label": "GitHub Repository",
     # Help module
     "help.doc_missing_title": "உதவி ஆவணம் இல்லை",
     "help.doc_missing_body": "உதவி PDF கிடைக்கவில்லை:\\n{path}",
@@ -59,12 +62,12 @@ TEXTS = {
     "help.status.save_failed": "உதவி PDF சேமிக்கும் போது பிழை ஏற்பட்டது.",
     "help.status.open_success": "உதவி PDF இயல்புநிலை பார்வியில் திறக்கப்பட்டது.",
     "help.status.open_failed": "உதவி PDF திறக்கும் போது பிழை ஏற்பட்டது.",
+    "outputs.none_generated": "No outputs generated.",
     # Instructor module
     "instructor.workflow_title": "CO பணிச்சுற்று",
     "instructor.step1.title": "மதிப்பெண் வார்ப்புருவை உருவாக்கு",
     "instructor.step2.title": "CO மதிப்பெண் அறிக்கையை உருவாக்கு",
     "instructor.step1.desc": "சரிபார்க்கப்பட்ட பாட விவர கோப்பை பதிவேற்றி, மதிப்பெண் வார்ப்புருவை தயாரித்து சேமிக்கவும்.",
-    "instructor.step2.desc": "நிரப்பப்பட்ட மதிப்பெண் பணிப்புத்தகத்தை சரிபார்த்து பதிவேற்றி, இறுதி CO அறிக்கையை உருவாக்கவும்.",
     "instructor.links.title": "உருவாக்கப்பட்ட வெளியீடுகள்",
     "instructor.links.course_details_generated": "உருவாக்கப்பட்ட பாட விவர வார்ப்புரு",
     "instructor.links.course_details_uploaded": "பதிவேற்றப்பட்ட பாட விவர கோப்பு",
@@ -83,14 +86,11 @@ TEXTS = {
     "instructor.action.step1.prepare": "மதிப்பெண் வார்ப்புருவை தயாரி",
     "instructor.action.step2.upload.default": "நிரப்பப்பட்ட மதிப்பெண்களை பதிவேற்று",
     "instructor.action.step2.generate.default": "இறுதி CO அறிக்கையை உருவாக்கு",
-    "instructor.require.step2": "முதலில் படி 1 ஐ முடிக்கவும்.",
-    "instructor.require.step1": "முதலில் படி 1 ஐ முடிக்கவும்.",
     "instructor.msg.success_title": "வெற்றி",
     "instructor.msg.validation_title": "சரிபார்ப்பு பிழை",
     "instructor.msg.error_title": "தோல்வி",
     "instructor.msg.step_completed": "படி {step} முடிந்தது: {title}.",
     "instructor.msg.failed_to_do": "{action} செய்ய முடியவில்லை.",
-    "instructor.msg.step_required_title": "படி தேவை",
     "instructor.dialog.filter.excel": "Excel கோப்புகள் (*.xlsx)",
     "instructor.dialog.filter.excel_open": "Excel கோப்புகள் (*.xlsx *.xlsm *.xls)",
     "instructor.dialog.step1.title": "பாட விவர வார்ப்புருவை சேமிக்க",
@@ -124,9 +124,7 @@ TEXTS = {
     "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "கோப்புகள்: {count}",
     "instructor.toast.step1_validation_summary": "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.",
-    "instructor.toast.step1_prepare_no_outputs": "No output files selected for marks template generation.",
     "instructor.toast.step1_prepare_summary": "Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",
-    "instructor.toast.step2_generate_no_outputs": "No output files selected for CO report generation.",
     "instructor.toast.step2_generate_summary": "CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",
     "instructor.toast.step2_upload_reject_summary": "Some files were not accepted. Invalid={invalid}, duplicates={duplicates}.",
     "instructor.toast.validation_warnings_title": "Validation Warnings",
@@ -275,6 +273,8 @@ TEXTS = {
     "coordinator.regno_dedup.log_detail_unavailable": "நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.",
     "coordinator.join_drop.body": "Some rows were ignored because they existed only in Direct or only in Indirect sheets. Dropped rows: {count}. See activity log for details.",
 }
+
+
 
 
 

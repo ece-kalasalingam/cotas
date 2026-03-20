@@ -1,4 +1,4 @@
-"""Step 2: upload course details and prepare marks template."""
+﻿"""Step 2: upload course details and prepare marks template."""
 
 from __future__ import annotations
 
@@ -385,12 +385,6 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
     )
     source_paths = list(getattr(typed_module, "step1_course_details_paths", []) or [])
     if not source_paths:
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.require.step1"),
-            title=t("instructor.msg.step_required_title"),
-            level="info",
-        )
         return
 
     planned_pairs: list[tuple[str, str]] = []
@@ -431,12 +425,6 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         planned_pairs.append((source_path, str(candidate)))
 
     if not planned_pairs:
-        typed_ns["show_toast"](
-            typed_module,
-            t("instructor.toast.step1_prepare_no_outputs"),
-            title=t("instructor.step1.title"),
-            level="warning",
-        )
         return
 
     output_base = (
@@ -592,3 +580,8 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         on_success=_on_finished,
         on_failure=_on_failed,
     )
+
+
+
+
+
