@@ -32,6 +32,13 @@ from common.constants import (
     OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
     OUTPUT_LINK_SEPARATOR,
+    WINDOW_ADAPTIVE_HEIGHT_CAP_MAX,
+    WINDOW_ADAPTIVE_HEIGHT_CAP_RATIO,
+    STATUS_FLASH_TIMEOUT_MS,
+    WINDOW_HEIGHT_CAP,
+    WINDOW_MIN_WIDTH,
+    WINDOW_TARGET_HEIGHT_RATIO,
+    WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
 from common.module_plugins import ModulePluginSpec
 from common.output_panel import (
@@ -54,13 +61,6 @@ from common.utils import (
 )
 from modules.module_catalog import build_module_catalog
 
-WINDOW_TARGET_HEIGHT_RATIO = 0.8
-WINDOW_HEIGHT_CAP = 640
-WINDOW_WIDTH_TO_HEIGHT_RATIO = 1.57
-WINDOW_MIN_WIDTH = 1005
-WINDOW_MIN_HEIGHT = 640
-STATUS_FLASH_TIMEOUT_MS = 3000
-
 _logger = logging.getLogger(__name__)
 
 
@@ -73,17 +73,26 @@ class MainWindow(QMainWindow):
         # Window Setup
         # ----------------------------
         self.setWindowTitle(t(MAIN_WINDOW_TITLE_TEXT_KEY))
-        screen = QApplication.primaryScreen().geometry()
-        s_height = screen.height()
+        primary_screen = QApplication.primaryScreen()
+        available_geometry = primary_screen.availableGeometry() if primary_screen is not None else self.geometry()
+        s_height = available_geometry.height()
 
-        # 2. Target 80% of the screen height to be safe but look "Full"
-        target_h = min(int(s_height * WINDOW_TARGET_HEIGHT_RATIO), WINDOW_HEIGHT_CAP)
+        adaptive_height_cap = min(
+            max(WINDOW_HEIGHT_CAP, int(s_height * WINDOW_ADAPTIVE_HEIGHT_CAP_RATIO)),
+            WINDOW_ADAPTIVE_HEIGHT_CAP_MAX,
+        )
+
+        # Scale from HD to UHD while staying inside a bounded cap.
+        target_h = min(int(s_height * WINDOW_TARGET_HEIGHT_RATIO), adaptive_height_cap)
+        target_h = max(1, target_h)
         # 3. Maintain your aesthetic ratio
         target_w = int(target_h * WINDOW_WIDTH_TO_HEIGHT_RATIO)
 
         # 4. Apply
         self.resize(target_w, target_h)
-        self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT) # Minimum for HD screens
+        # Clamp minimum height to available screen area so status/footer never fall behind taskbar.
+        min_height = target_h
+        self.setMinimumSize(WINDOW_MIN_WIDTH, min_height)
 
         # ----------------------------
         # Central Container

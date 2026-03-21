@@ -32,7 +32,7 @@ TEXTS = {
         "நேரடி மற்றும் மறைமுக மதிப்பீடுகளை அடிப்படையாகக் கொண்டு "
         "கட்டமைக்கப்பட்ட முடிவு பகுப்பாய்வை செய்யவும் வடிவமைக்கப்பட்ட மென்பொருள் கருவி."
     ),
-    "about.institution": "கலசலிங்கம் ஆராய்ச்சி மற்றும் கல்வி கழகம் (KARE) இல் உருவாக்கப்பட்டது.",
+    "about.institution": "கலசலிங்கம் ஆராய்ச்சி மற்றும் கல்வி கழகத்தில் (KARE) பின்வரும் பங்களிப்பாளர்களால் உருவாக்கப்பட்டது:",
     "about.copyright": "(c) {year} KARE. அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.",
     "about.contributors.none": "பங்களிப்பாளர் தகவல் கிடைக்கவில்லை.",
     "about.repository.link_label": "கிட்ஹப் ரெப்போசிட்டரி",
@@ -77,7 +77,7 @@ TEXTS = {
     "instructor.note.default": "முடித்த எந்த படியையும் மீண்டும் திறந்து மாற்றலாம்.",
     "instructor.note.outdated_current": "இந்த படி காலாவதியானது. இந்த படியை மீண்டும் இயக்கவும்.",
     "instructor.note.outdated_downstream": "மேல்நிலை மாற்றம் செய்யப்பட்டுள்ளது. அடுத்த படிகளை மீண்டும் உருவாக்க வேண்டி இருக்கலாம்.",
-    "instructor.action.step1.default": "வார்ப்புருவை பதிவிறக்கு",
+    "instructor.action.step1.default": "பாட வார்ப்புருவை பதிவிறக்கு",
     "instructor.action.step1.upload": "பாட விவரங்களை பதிவேற்று",
     "instructor.action.step1.prepare": "மதிப்பெண் வார்ப்புருவை தயாரி",
     "instructor.action.step2.upload.default": "நிரப்பப்பட்ட மதிப்பெண்களை பதிவேற்று",
@@ -227,7 +227,7 @@ TEXTS = {
     # Instructor template headers / labels
     # Coordinator module
     "coordinator.title": "பாட அடைவு",
-    "coordinator.drop_hint": "பயிற்றுநர் தொகுதியின் இறுதி படியில் உருவாக்கப்பட்ட Final CO report பணிப்புத்தகம்-களை சேகரிக்கவும்.",
+    "coordinator.drop_hint": "பயிற்றுநர் தொகுதியின் இறுதி படியில் உருவாக்கப்பட்ட Final CO report பணிப்புத்தகம்-களை பதிவேற்றவும்.",
     "coordinator.calculate": "CO அடைவை கணக்கிடு",
     "coordinator.thresholds.title": "CO அடைவு வரம்புகள்",
     "coordinator.thresholds.description": (

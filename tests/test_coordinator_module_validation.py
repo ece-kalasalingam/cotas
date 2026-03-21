@@ -24,9 +24,9 @@ from common.constants import (
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
-    SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
-    SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-    SYSTEM_REPORT_INTEGRITY_SHEET,
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
+    SYSTEM_LAYOUT_SHEET,
 )
 from common.jobs import CancellationToken
 from common.workbook_signing import sign_payload
@@ -99,10 +99,10 @@ def _build_valid_final_report(
             ],
         }
         manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        integrity = wb.create_sheet(SYSTEM_REPORT_INTEGRITY_SHEET)
+        integrity = wb.create_sheet(SYSTEM_LAYOUT_SHEET)
         integrity.sheet_state = "hidden"
-        integrity["A1"] = SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER
-        integrity["B1"] = SYSTEM_REPORT_INTEGRITY_HASH_HEADER
+        integrity["A1"] = SYSTEM_LAYOUT_MANIFEST_HEADER
+        integrity["B1"] = SYSTEM_LAYOUT_MANIFEST_HASH_HEADER
         integrity["A2"] = manifest_text
         integrity["B2"] = sign_payload(manifest_text)
 
@@ -121,7 +121,7 @@ def test_has_valid_final_co_report_rejects_missing_integrity_sheet(tmp_path: Pat
     report = _build_valid_final_report(tmp_path / "final_co_report.xlsx")
     wb = openpyxl.load_workbook(report)
     try:
-        wb.remove(wb[SYSTEM_REPORT_INTEGRITY_SHEET])
+        wb.remove(wb[SYSTEM_LAYOUT_SHEET])
         wb.save(report)
     finally:
         wb.close()
@@ -222,11 +222,13 @@ def test_has_valid_final_co_report_rejects_unsupported_template_id(tmp_path: Pat
 @pytest.mark.parametrize(
     ("input_name", "section", "expected"),
     [
-        ("ECE000_III_A_2025-26_COReport.xlsx", "A", "ECE000_III_2025-26_CO_Attainment.xlsx"),
-        ("ECE000_III_A_2025-26_CO_Report.xlsx", "A", "ECE000_III_2025-26_CO_Attainment.xlsx"),
-        ("ECE000_III_A_2025-26_CO Report.xlsx", "A", "ECE000_III_2025-26_CO_Attainment.xlsx"),
-        ("ECE000_III_A_2025-26.xlsx", "A", "ECE000_III_2025-26_CO_Attainment.xlsx"),
-        ("ECE000_III_B_2025-26.xlsx", "A", "ECE000_III_B_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_III_A_2025-26_COReport.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_III_A_2025-26_CO_Report.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_III_A_2025-26_CO Report.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_III_A_2025-26.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_III_B_2025-26.xlsx", "A", "ECE000_B_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_Sem5_A_2025-26.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
+        ("ECE000_Semester-6_A_2025-26.xlsx", "A", "ECE000_2025-26_CO_Attainment.xlsx"),
     ],
 )
 def test_build_co_attainment_default_name_strips_co_report_token(
@@ -325,9 +327,9 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert "Summary" in wb.sheetnames
         assert "Graph" in wb.sheetnames
         assert SYSTEM_HASH_SHEET in wb.sheetnames
-        assert SYSTEM_REPORT_INTEGRITY_SHEET in wb.sheetnames
+        assert SYSTEM_LAYOUT_SHEET in wb.sheetnames
         assert wb[SYSTEM_HASH_SHEET].sheet_state == "hidden"
-        assert wb[SYSTEM_REPORT_INTEGRITY_SHEET].sheet_state == "hidden"
+        assert wb[SYSTEM_LAYOUT_SHEET].sheet_state == "hidden"
 
         hash_sheet = wb[SYSTEM_HASH_SHEET]
         assert hash_sheet["A1"].value == SYSTEM_HASH_TEMPLATE_ID_HEADER
@@ -337,9 +339,9 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert template_id
         assert template_hash == sign_payload(template_id)
 
-        integrity_ws = wb[SYSTEM_REPORT_INTEGRITY_SHEET]
-        assert integrity_ws["A1"].value == SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER
-        assert integrity_ws["B1"].value == SYSTEM_REPORT_INTEGRITY_HASH_HEADER
+        integrity_ws = wb[SYSTEM_LAYOUT_SHEET]
+        assert integrity_ws["A1"].value == SYSTEM_LAYOUT_MANIFEST_HEADER
+        assert integrity_ws["B1"].value == SYSTEM_LAYOUT_MANIFEST_HASH_HEADER
         manifest_text = integrity_ws["A2"].value
         manifest_hash = integrity_ws["B2"].value
         assert isinstance(manifest_text, str) and manifest_text
@@ -430,51 +432,47 @@ def test_generate_co_attainment_workbook_filters_na_and_keeps_unique_registers(t
         assert summary["C1"].value == "ECE000"
         assert summary["B2"].value == "Course Name"
         assert summary["C2"].value == "Signals and Systems"
-        assert summary["B3"].value == "Semester"
-        assert summary["C3"].value == "III"
-        assert summary["B4"].value == "Academic Year"
-        assert summary["C4"].value == "2025-26"
-        assert summary["B5"].value == "CO Number"
-        assert summary["C5"].value == "All COs"
-        assert summary["B6"].value == "Threshold L1"
-        assert summary["C6"].value == "40"
-        assert summary["B7"].value == "Threshold L2"
-        assert summary["C7"].value == "60"
-        assert summary["B8"].value == "Threshold L3"
-        assert summary["C8"].value == "75"
-        assert summary["A10"].value == "CO"
-        assert summary["B10"].value == "Level 0"
-        assert summary["C10"].value == "Level 1"
-        assert summary["D10"].value == "Level 2"
-        assert summary["E10"].value == "Level 3"
-        assert summary["F10"].value == "Attended"
-        assert summary["G10"].value == "CO%"
-        assert summary["A11"].value == "CO1"
-        assert summary["B11"].value == 0
-        assert summary["C11"].value == 0
-        assert summary["D11"].value == 0
-        assert summary["E11"].value == 2
-        assert summary["F11"].value == 2
-        assert summary["G11"].value == 100
-        assert summary.print_title_rows == "$1:$10"
+        assert summary["B3"].value == "Academic Year"
+        assert summary["C3"].value == "2025-26"
+        assert summary["B4"].value == "Total Outcomes"
+        assert summary["C4"].value == "1"
+        assert summary["B5"].value == "Threshold L1"
+        assert summary["C5"].value == "40"
+        assert summary["B6"].value == "Threshold L2"
+        assert summary["C6"].value == "60"
+        assert summary["B7"].value == "Threshold L3"
+        assert summary["C7"].value == "75"
+        assert summary["B9"].value == "CO"
+        assert summary["C9"].value == "Attended"
+        assert summary["D9"].value == "Level 0"
+        assert summary["E9"].value == "Level 1"
+        assert summary["F9"].value == "Level 2"
+        assert summary["G9"].value == "Level 3"
+        assert summary["H9"].value == "CO%"
+        assert summary["B10"].value == "ECE000.1"
+        assert summary["C10"].value == 2
+        assert summary["D10"].value == 0
+        assert summary["E10"].value == 0
+        assert summary["F10"].value == 0
+        assert summary["G10"].value == 2
+        assert summary["H10"].value == 100
+        assert summary.print_title_rows == "$1:$9"
         graph = wb["Graph"]
         assert graph["B1"].value == "Course Code"
         assert graph["C1"].value == "ECE000"
         assert graph["B2"].value == "Course Name"
         assert graph["C2"].value == "Signals and Systems"
-        assert graph["B3"].value == "Semester"
-        assert graph["C3"].value == "III"
-        assert graph["B4"].value == "Academic Year"
-        assert graph["C4"].value == "2025-26"
-        assert graph["B5"].value == "CO Number"
-        assert graph["C5"].value == "All COs"
-        assert graph["B6"].value == "Threshold L1"
-        assert graph["C6"].value == "40"
-        assert graph["B7"].value == "Threshold L2"
-        assert graph["C7"].value == "60"
-        assert graph["B8"].value == "Threshold L3"
-        assert graph["C8"].value == "75"
-        assert graph.print_title_rows == "$1:$8"
+        assert graph["B3"].value == "Academic Year"
+        assert graph["C3"].value == "2025-26"
+        assert graph["B4"].value == "Total Outcomes"
+        assert graph["C4"].value == "1"
+        assert graph["B5"].value == "Threshold L1"
+        assert graph["C5"].value == "40"
+        assert graph["B6"].value == "Threshold L2"
+        assert graph["C6"].value == "60"
+        assert graph["B7"].value == "Threshold L3"
+        assert graph["C7"].value == "75"
+        assert graph.print_title_rows == "$1:$7"
         assert len(graph._charts) == 1
         assert graph._charts[0].series[0].dLbls is not None
     finally:
@@ -548,4 +546,5 @@ def test_generate_co_attainment_workbook_rejects_unsupported_template_id(tmp_pat
         match=r"^Invalid final CO report file:",
     ):
         coordinator._generate_co_attainment_workbook([report], out, token=CancellationToken())
+
 

@@ -52,12 +52,11 @@ from common.constants import (
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
     SYSTEM_LAYOUT_MANIFEST_KEY,
     SYSTEM_LAYOUT_SHEET,
-    SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
-    SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-    SYSTEM_REPORT_INTEGRITY_SHEET,
     WORKBOOK_TEMP_SUFFIX,
 )
 from common.excel_sheet_layout import color_without_hash as _color_without_hash
@@ -962,6 +961,11 @@ def _xlsxwriter_write_indirect_sheet(
 
     _xlsxwriter_apply_layout(ws, header_row_index=header_row_index, paper_size=9, landscape=False)
 
+def _add_system_layout_sheet(workbook: Any, manifest_text: str, manifest_hash: str) -> None:
+    layout_ws = workbook.add_worksheet(SYSTEM_LAYOUT_SHEET)
+    layout_ws.write_row(0, 0, [SYSTEM_LAYOUT_MANIFEST_HEADER, SYSTEM_LAYOUT_MANIFEST_HASH_HEADER])
+    layout_ws.write_row(1, 0, [manifest_text, manifest_hash])
+    layout_ws.hide()
 def _write_final_report_workbook_xlsxwriter(
     *,
     xlsxwriter_module: Any,
@@ -1017,12 +1021,7 @@ def _write_final_report_workbook_xlsxwriter(
         }
         manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         manifest_hash = sign_payload(manifest_text)
-        integrity_ws = workbook.add_worksheet(SYSTEM_REPORT_INTEGRITY_SHEET)
-        integrity_ws.write(0, 0, SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
-        integrity_ws.write(0, 1, SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
-        integrity_ws.write(1, 0, manifest_text)
-        integrity_ws.write(1, 1, manifest_hash)
-        integrity_ws.hide()
+        _add_system_layout_sheet(workbook, manifest_text, manifest_hash)
     finally:
         workbook.close()
 
@@ -1035,7 +1034,7 @@ def _normalize_page_setup_fit(path: Path) -> None:
         wb = openpyxl.load_workbook(handle)
     try:
         for ws in wb.worksheets:
-            if ws.title in {SYSTEM_HASH_SHEET, SYSTEM_REPORT_INTEGRITY_SHEET}:
+            if ws.title in {SYSTEM_HASH_SHEET, SYSTEM_LAYOUT_SHEET}:
                 continue
             ws.page_setup.fitToWidth = 1
             ws.page_setup.fitToHeight = 0

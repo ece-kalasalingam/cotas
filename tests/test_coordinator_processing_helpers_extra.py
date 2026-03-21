@@ -156,18 +156,18 @@ def test_read_report_sheet_counts_invalid_paths(monkeypatch) -> None:
     assert cp._read_report_sheet_counts(wb) is None
 
     wb2 = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
-        {cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey({"A1": "bad", "B1": "bad"})},
+        [cp.SYSTEM_LAYOUT_SHEET],
+        {cp.SYSTEM_LAYOUT_SHEET: _SheetByKey({"A1": "bad", "B1": "bad"})},
     )
     assert cp._read_report_sheet_counts(wb2) is None
 
     wb3 = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
                 {
-                    "A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-                    "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
+                    "A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER,
+                    "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
                     "A2": "{}",
                     "B2": "sig",
                 }
@@ -328,16 +328,16 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
     assert cp._read_template_id_from_hash_sheet(wb_missing_payload) is None
 
     wb_bad_b1 = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
-        {cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey({"A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER, "B1": "bad"})},
+        [cp.SYSTEM_LAYOUT_SHEET],
+        {cp.SYSTEM_LAYOUT_SHEET: _SheetByKey({"A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER, "B1": "bad"})},
     )
     assert cp._read_report_sheet_counts(wb_bad_b1) is None
 
     wb_empty_manifest = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
-                {"A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER, "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER, "A2": "", "B2": ""}
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
+                {"A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER, "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER, "A2": "", "B2": ""}
             )
         },
     )
@@ -345,10 +345,10 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
 
     monkeypatch.setattr(cp, "verify_payload_signature", lambda *_a, **_k: False)
     wb_sig_invalid = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
-                {"A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER, "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER, "A2": "{}", "B2": "x"}
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
+                {"A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER, "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER, "A2": "{}", "B2": "x"}
             )
         },
     )
@@ -356,22 +356,22 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
 
     monkeypatch.setattr(cp, "verify_payload_signature", lambda *_a, **_k: True)
     wb_manifest_not_dict = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
-                {"A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER, "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER, "A2": "[]", "B2": "x"}
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
+                {"A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER, "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER, "A2": "[]", "B2": "x"}
             )
         },
     )
     assert cp._read_report_sheet_counts(wb_manifest_not_dict) is None
 
     wb_sheet_order_not_list = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
                 {
-                    "A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-                    "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
+                    "A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER,
+                    "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
                     "A2": '{"sheet_order":"bad"}',
                     "B2": "x",
                 }
@@ -381,12 +381,12 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
     assert cp._read_report_sheet_counts(wb_sheet_order_not_list) is None
 
     wb_sheet_order_empty = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
                 {
-                    "A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-                    "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
+                    "A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER,
+                    "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
                     "A2": '{"sheet_order":[" ", 1]}',
                     "B2": "x",
                 }
@@ -396,12 +396,12 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
     assert cp._read_report_sheet_counts(wb_sheet_order_empty) is None
 
     wb_sheet_order_non_str_only = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
                 {
-                    "A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-                    "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
+                    "A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER,
+                    "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
                     "A2": '{"sheet_order":[1,2]}',
                     "B2": "x",
                 }
@@ -411,12 +411,12 @@ def test_read_template_id_and_report_sheet_counts_more_invalid_branches(monkeypa
     assert cp._read_report_sheet_counts(wb_sheet_order_non_str_only) is None
 
     wb_mismatch_counts = _WB(
-        [cp.SYSTEM_REPORT_INTEGRITY_SHEET],
+        [cp.SYSTEM_LAYOUT_SHEET],
         {
-            cp.SYSTEM_REPORT_INTEGRITY_SHEET: _SheetByKey(
+            cp.SYSTEM_LAYOUT_SHEET: _SheetByKey(
                 {
-                    "A1": cp.SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-                    "B1": cp.SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
+                    "A1": cp.SYSTEM_LAYOUT_MANIFEST_HEADER,
+                    "B1": cp.SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
                     "A2": '{"sheet_order":["CO1_Direct","CO2_Direct","CO1_Indirect"]}',
                     "B2": "x",
                 }
@@ -725,7 +725,9 @@ def test_generate_co_attainment_workbook_course_setup_v1_remaining_branches(
     monkeypatch.setattr(cp, "_append_co_attainment_summary", lambda *_a, **_k: None)
     monkeypatch.setattr(cp, "_create_summary_sheet", lambda *_a, **_k: (1, 1))
     monkeypatch.setattr(cp, "_create_graph_sheet", lambda *_a, **_k: None)
-    monkeypatch.setattr(cp, "_write_system_integrity_sheets", lambda *_a, **_k: None)
+    monkeypatch.setattr(cp, "_add_system_hash_sheet", lambda *_a, **_k: None)
+    monkeypatch.setattr(cp, "_build_system_layout_manifest", lambda **_k: ("{}", "sig"))
+    monkeypatch.setattr(cp, "_add_system_layout_sheet", lambda *_a, **_k: None)
 
     import sys
     import types
@@ -758,3 +760,4 @@ def test_generate_co_attainment_workbook_course_setup_v1_remaining_branches(
             total_outcomes=1,
             template_id=cp.ID_COURSE_SETUP,
         )
+

@@ -510,7 +510,7 @@ All five modules registered via `build_module_catalog()` returning `tuple[Module
 | Formatting | `CO_REPORT_MAX_DECIMAL_PLACES` | 2 | Rounding precision |
 | System | `SYSTEM_HASH_SHEET` | `__SYSTEM_HASH__` | Hidden integrity sheet name |
 | System | `SYSTEM_LAYOUT_SHEET` | `__SYSTEM_LAYOUT__` | Hidden manifest sheet name |
-| System | `SYSTEM_REPORT_INTEGRITY_SHEET` | `__REPORT_INTEGRITY__` | Hidden report integrity sheet name |
+| System | `SYSTEM_LAYOUT_SHEET` | `__SYSTEM_LAYOUT__` | Hidden report integrity sheet name |
 
 ### 6.2 Contract Validation (`common/contracts.py`)
 
@@ -700,7 +700,7 @@ Declarative schema-as-code: blueprints define sheet structure, header layout, va
 | CRD-03 | Duplicate registrations deduplicated per CO (first occurrence wins) | `_RegisterDedupStore.add_if_absent()` |
 | CRD-04 | Attainment thresholds must satisfy `0 < L1 < L2 < L3 < 100` | `has_valid_attainment_thresholds()` |
 | CRD-05 | CO% = (Level2 + Level3) / Attended × 100 | Summary sheet generation |
-| CRD-06 | Output workbook must include system integrity sheets | `_write_system_integrity_sheets()` |
+| CRD-06 | Output workbook must include system integrity sheets | `_add_system_layout_sheet()` |
 
 ---
 
@@ -775,7 +775,7 @@ Marks Template Generation:
 
 Final Report Generation:
   template_id hash (preserved)
-  report_manifest (JSON with per-sheet hashes) ──→ HMAC-SHA256 ──→ stored in __REPORT_INTEGRITY__
+  Layout_Manifest (JSON with per-sheet hashes) ──→ HMAC-SHA256 ──→ stored in __SYSTEM_LAYOUT__
 
 Coordinator Collection:
   All source files verified against signing chain before acceptance
@@ -896,7 +896,7 @@ Coordinator Collection:
 |-------------|------|------------|---------|
 | `SYSTEM_HASH_SHEET` | `__SYSTEM_HASH__` | Hidden | Template ID + HMAC signature |
 | `SYSTEM_LAYOUT_SHEET` | `__SYSTEM_LAYOUT__` | Hidden | JSON layout manifest + signature |
-| `SYSTEM_REPORT_INTEGRITY_SHEET` | `__REPORT_INTEGRITY__` | Hidden | Per-sheet hashes + manifest |
+| `SYSTEM_LAYOUT_SHEET` | `__SYSTEM_LAYOUT__` | Hidden | Per-sheet hashes + manifest |
 | `COURSE_METADATA_SHEET` | `Course_Metadata` | Visible | Course code, name, instructor, etc. |
 | `ASSESSMENT_CONFIG_SHEET` | `Assessment_Config` | Visible | Component definitions + weights |
 | `QUESTION_MAP_SHEET` | `Question_Map` | Visible | Question → CO mappings |
@@ -966,3 +966,4 @@ Coordinator Collection:
 ---
 
 *End of Business Logic Deep Analysis Report*
+

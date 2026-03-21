@@ -46,6 +46,12 @@ QListWidget#stepList::item:selected,
 QListWidget#stepList::item:selected:!active {
     border-left: 4px solid palette(highlight);
 }
+QLabel#coordinatorTitle,
+QLabel#coordinatorThresholdTitle,
+QLabel#coordinatorThresholdInputLabel,
+QLabel#instructorRailTitle {
+    font-weight: 700;
+}
 
 QPushButton#primaryAction:enabled {
     background-color: palette(highlight);

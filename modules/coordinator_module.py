@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import (
-    QKeySequence,
-    QShortcut,
-)
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
@@ -324,7 +321,7 @@ class CoordinatorModule(QWidget):
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
         self.hint_label.setWordWrap(True)
-        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop)
         left_layout.addWidget(self.hint_label)
         thresholds_layout = QVBoxLayout()
         thresholds_layout.setContentsMargins(0, 0, 0, 0)
@@ -334,6 +331,9 @@ class CoordinatorModule(QWidget):
         thresholds_layout.addWidget(self.threshold_title_label)
         self.threshold_description_label = QLabel()
         self.threshold_description_label.setWordWrap(True)
+        self.threshold_description_label.setAlignment(
+            Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop
+        )
         thresholds_layout.addWidget(self.threshold_description_label)
 
         threshold_rows = QGridLayout()
@@ -341,6 +341,7 @@ class CoordinatorModule(QWidget):
         threshold_rows.setColumnStretch(1, 1)
 
         self.threshold_l1_label = QLabel()
+        self.threshold_l1_label.setObjectName("coordinatorThresholdInputLabel")
         self.threshold_l1_input = QDoubleSpinBox()
         self.threshold_l1_input.setRange(0.0, 100.0)
         self.threshold_l1_input.setDecimals(2)
@@ -355,6 +356,7 @@ class CoordinatorModule(QWidget):
         )
 
         self.threshold_l2_label = QLabel()
+        self.threshold_l2_label.setObjectName("coordinatorThresholdInputLabel")
         self.threshold_l2_input = QDoubleSpinBox()
         self.threshold_l2_input.setRange(0.0, 100.0)
         self.threshold_l2_input.setDecimals(2)
@@ -369,6 +371,7 @@ class CoordinatorModule(QWidget):
         )
 
         self.threshold_l3_label = QLabel()
+        self.threshold_l3_label.setObjectName("coordinatorThresholdInputLabel")
         self.threshold_l3_input = QDoubleSpinBox()
         self.threshold_l3_input.setRange(0.0, 100.0)
         self.threshold_l3_input.setDecimals(2)

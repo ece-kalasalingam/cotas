@@ -337,12 +337,18 @@ class InstructorModule(QWidget):
         top_layout.addWidget(left_scroll, 0)
 
         self.rail_title = QLabel(t("instructor.workflow_title"))
+        self.rail_title.setObjectName("instructorRailTitle")
         left_layout.addWidget(self.rail_title)
 
-        self.download_course_template_button = QPushButton(t("instructor.action.step1.default"))
-        self.download_course_template_button.setObjectName("secondaryAction")
-        self.download_course_template_button.clicked.connect(self._on_download_course_template_clicked)
-        left_layout.addWidget(self.download_course_template_button)
+        self.download_course_template_link = QLabel()
+        self.download_course_template_link.setTextFormat(Qt.TextFormat.RichText)
+        self.download_course_template_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self.download_course_template_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.download_course_template_link.setOpenExternalLinks(False)
+        self.download_course_template_link.linkActivated.connect(self._on_download_course_template_link_activated)
+        left_layout.addWidget(self.download_course_template_link)
 
         self.step_list = QListWidget()
         self.step_list.setObjectName("stepList")
@@ -534,7 +540,7 @@ class InstructorModule(QWidget):
             self.current_step = self.WORKFLOW_STEPS[0]
             self.state.current_step = self.current_step
         self.rail_title.setText(t("instructor.workflow_title"))
-        self.download_course_template_button.setText(t("instructor.action.step1.default"))
+        self._set_download_course_template_link_enabled(not self.state.busy)
 
         self.step_list.blockSignals(True)
         for index, item in enumerate(self._step_items, start=1):
@@ -598,13 +604,10 @@ class InstructorModule(QWidget):
 
         if self.state.busy:
             self.primary_action.setEnabled(False)
-            self.download_course_template_button.setEnabled(False)
             self.step1_upload_action.setEnabled(False)
             self.step1_drop_widget.setEnabled(False)
             self.step2_upload_action.setEnabled(False)
             self.step2_drop_widget.setEnabled(False)
-        else:
-            self.download_course_template_button.setEnabled(True)
 
     def retranslate_ui(self) -> None:
         self.step1_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
@@ -625,7 +628,15 @@ class InstructorModule(QWidget):
             return
         self._refresh_ui()
 
-    def _on_download_course_template_clicked(self) -> None:
+    def _set_download_course_template_link_enabled(self, enabled: bool) -> None:
+        text = t("instructor.action.step1.default")
+        if enabled:
+            self.download_course_template_link.setText(f'<a href="download-course-template">{text}</a>')
+        else:
+            self.download_course_template_link.setText(text)
+        self.download_course_template_link.setEnabled(enabled)
+
+    def _on_download_course_template_link_activated(self, _href: str) -> None:
         if self.state.busy:
             return
         self._download_course_template_async()

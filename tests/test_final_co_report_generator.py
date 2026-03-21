@@ -261,13 +261,13 @@ def test_generate_final_co_report_writes_hidden_integrity_system_sheets(tmp_path
     wb = openpyxl.load_workbook(output)
     try:
         assert "__SYSTEM_HASH__" in wb.sheetnames
-        assert "__REPORT_INTEGRITY__" in wb.sheetnames
+        assert "__SYSTEM_LAYOUT__" in wb.sheetnames
         assert wb["__SYSTEM_HASH__"].sheet_state == "hidden"
-        assert wb["__REPORT_INTEGRITY__"].sheet_state == "hidden"
+        assert wb["__SYSTEM_LAYOUT__"].sheet_state == "hidden"
 
-        integrity_ws = wb["__REPORT_INTEGRITY__"]
-        assert integrity_ws["A1"].value == "Report_Manifest"
-        assert integrity_ws["B1"].value == "Report_Hash"
+        integrity_ws = wb["__SYSTEM_LAYOUT__"]
+        assert integrity_ws["A1"].value == "Layout_Manifest"
+        assert integrity_ws["B1"].value == "Layout_Hash"
         manifest_text = integrity_ws["A2"].value
         manifest_hash = integrity_ws["B2"].value
         assert isinstance(manifest_text, str) and manifest_text
@@ -280,3 +280,4 @@ def test_generate_final_co_report_writes_hidden_integrity_system_sheets(tmp_path
         assert isinstance(manifest.get("sheets"), list)
     finally:
         wb.close()
+

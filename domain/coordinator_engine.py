@@ -41,9 +41,9 @@ from common.constants import (
     SYSTEM_HASH_SHEET,
     SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_TEMPLATE_ID_HEADER,
-    SYSTEM_REPORT_INTEGRITY_HASH_HEADER,
-    SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER,
-    SYSTEM_REPORT_INTEGRITY_SHEET,
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
+    SYSTEM_LAYOUT_SHEET,
 )
 from common.excel_sheet_layout import color_without_hash as _color_without_hash
 from common.excel_sheet_layout import (
@@ -74,12 +74,14 @@ _STYLE_KEY_BOLD = "bold"
 _ALIGN_CENTER = "center"
 _ALIGN_VCENTER = "vcenter"
 _CO_REPORT_NAME_TOKEN_RE = re.compile(r"(?:[_\-\s]*co[_\-\s]*report)+$", re.IGNORECASE)
+_SEMESTER_PREFIX_TOKEN_RE = re.compile(r"^sem(?:ester)?[\s\-_]*([0-9]{1,2}|[ivxlcdm]+)$", re.IGNORECASE)
+_SEMESTER_VALUE_TOKEN_RE = re.compile(r"^(?:[0-9]{1,2}|[ivxlcdm]+)$", re.IGNORECASE)
 _HEADER_SCAN_MAX_ROWS = 200
 _COORDINATOR_STUDENTS_PER_SHEET = 150
 _NORM_SYSTEM_HASH_TEMPLATE_ID_HEADER = normalize(SYSTEM_HASH_TEMPLATE_ID_HEADER)
 _NORM_SYSTEM_HASH_TEMPLATE_HASH_HEADER = normalize(SYSTEM_HASH_TEMPLATE_HASH_HEADER)
-_NORM_SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER = normalize(SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
-_NORM_SYSTEM_REPORT_INTEGRITY_HASH_HEADER = normalize(SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
+_NORM_SYSTEM_LAYOUT_MANIFEST_HEADER = normalize(SYSTEM_LAYOUT_MANIFEST_HEADER)
+_NORM_SYSTEM_LAYOUT_MANIFEST_HASH_HEADER = normalize(SYSTEM_LAYOUT_MANIFEST_HASH_HEADER)
 _NORM_COURSE_SETUP_ID = normalize(ID_COURSE_SETUP)
 _NORM_COURSE_CODE_KEY = normalize(COURSE_METADATA_COURSE_CODE_KEY)
 _NORM_TOTAL_OUTCOMES_KEY = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
@@ -242,6 +244,24 @@ def _build_co_attainment_default_name(source_path: Path, *, section: str = "") -
     if section_token:
         parts = [part for part in cleaned.split("_") if normalize(part) != normalize(section_token)]
         cleaned = "_".join(parts).strip("_- ")
+    tokens = [token.strip() for token in cleaned.split("_") if token.strip()]
+    filtered_tokens: list[str] = []
+    semester_removed = False
+    for index, token in enumerate(tokens):
+        normalized_token = normalize(token)
+        if _SEMESTER_PREFIX_TOKEN_RE.match(normalized_token):
+            semester_removed = True
+            continue
+        if (
+            not semester_removed
+            and index > 0
+            and _SEMESTER_VALUE_TOKEN_RE.match(normalized_token)
+            and len(normalized_token) <= 4
+        ):
+            semester_removed = True
+            continue
+        filtered_tokens.append(token)
+    cleaned = "_".join(filtered_tokens).strip("_- ")
     base = cleaned if cleaned else stem
     return f"{base}_CO_Attainment.xlsx"
 
@@ -291,12 +311,12 @@ def _read_template_id_from_hash_sheet(workbook: Any) -> str | None:
 
 
 def _read_report_sheet_counts(workbook: Any) -> tuple[int, int] | None:
-    if SYSTEM_REPORT_INTEGRITY_SHEET not in workbook.sheetnames:
+    if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
         return None
-    integrity_sheet = workbook[SYSTEM_REPORT_INTEGRITY_SHEET]
-    if normalize(integrity_sheet["A1"].value) != _NORM_SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER:
+    integrity_sheet = workbook[SYSTEM_LAYOUT_SHEET]
+    if normalize(integrity_sheet["A1"].value) != _NORM_SYSTEM_LAYOUT_MANIFEST_HEADER:
         return None
-    if normalize(integrity_sheet["B1"].value) != _NORM_SYSTEM_REPORT_INTEGRITY_HASH_HEADER:
+    if normalize(integrity_sheet["B1"].value) != _NORM_SYSTEM_LAYOUT_MANIFEST_HASH_HEADER:
         return None
     manifest_text_raw = integrity_sheet["A2"].value
     manifest_hash_raw = integrity_sheet["B2"].value
@@ -541,6 +561,22 @@ def _metadata_rows_for_output(metadata: dict[str, str], co_index: int) -> list[t
         ("Semester", metadata.get(normalize(COURSE_METADATA_SEMESTER_KEY), "")),
         ("Academic Year", metadata.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")),
         ("CO Number", f"CO{co_index}"),
+    ]
+
+
+def _metadata_rows_for_summary_graph(
+    metadata: dict[str, str],
+    *,
+    total_outcomes: int,
+) -> list[tuple[str, str]]:
+    total_outcomes_value = metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "").strip()
+    if not total_outcomes_value:
+        total_outcomes_value = str(total_outcomes)
+    return [
+        ("Course Code", metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")),
+        ("Course Name", metadata.get(normalize(_COURSE_METADATA_COURSE_NAME_KEY), "")),
+        ("Academic Year", metadata.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")),
+        ("Total Outcomes", total_outcomes_value),
     ]
 
 
@@ -876,41 +912,41 @@ def _create_summary_sheet(
 ) -> tuple[int, int]:
     sheet = workbook.add_worksheet("Summary")
     formats = _xlsxwriter_formats(workbook)
-    metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    metadata_rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
     metadata_rows.extend(_threshold_rows_for_output(thresholds, include=bool(metadata)))
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
-        display_value = "All COs" if label == "CO Number" else value
         sheet.write(row_idx, 1, label, formats["body"])
-        sheet.write(row_idx, 2, display_value, formats["body_wrap"])
+        sheet.write(row_idx, 2, value, formats["body_wrap"])
 
     header_row_index = len(metadata_rows) + 1
-    headers = ["CO", "Level 0", "Level 1", "Level 2", "Level 3", "Attended", "CO%"]
+    headers = ["CO", "Attended", "Level 0", "Level 1", "Level 2", "Level 3", "CO%"]
+    table_start_col = 1  # Start summary table at column B.
     for col_idx, header in enumerate(headers, start=0):
-        sheet.write(header_row_index, col_idx, header, formats["header"])
+        sheet.write(header_row_index, table_start_col + col_idx, header, formats["header"])
 
     first_data_row = header_row_index + 1
+    course_code = metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "").strip()
     for co_index in range(1, total_outcomes + 1):
         state = output_states.get(co_index)
         level_counts = state.level_counts if state is not None else {0: 0, 1: 0, 2: 0, 3: 0}
         attended = state.attended if state is not None else 0
+        co_label = f"{course_code}.{co_index}" if course_code else f"CO{co_index}"
         row_values: list[Any] = [
-            f"CO{co_index}",
+            co_label,
+            attended,
             level_counts.get(0, 0),
             level_counts.get(1, 0),
             level_counts.get(2, 0),
             level_counts.get(3, 0),
-            attended,
             _co_percentage(level_2=level_counts.get(2, 0), level_3=level_counts.get(3, 0), attended=attended),
         ]
         row_index = header_row_index + co_index
-        sheet.write_row(row_index, 0, row_values, formats["body_center"])
+        sheet.write_row(row_index, table_start_col, row_values, formats["body_center"])
 
     sampled_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
     sampled_rows.extend(["", field, value] for field, value in metadata_rows)
-    sampled_rows.append(headers)
-    widths = _compute_sampled_column_widths(sampled_rows, len(headers))
-    for col_idx in range(len(headers)):
-        sheet.set_column(col_idx, col_idx, widths.get(col_idx, 10))
+    sampled_rows.append(["", headers[0], headers[1]])
+    widths = _compute_sampled_column_widths(sampled_rows, 2)
     sheet.set_column(1, 1, widths.get(1, 8))
     sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
 
@@ -918,8 +954,10 @@ def _create_summary_sheet(
     sheet.set_paper(9)  # A4
     sheet.fit_to_pages(1, 0)
     sheet.repeat_rows(0, header_row_index)
+    # Match CO-sheet freeze behavior for header rows and left reference columns.
+    sheet.freeze_panes(header_row_index + 1, 3)
     sheet.protect()
-    sheet.set_selection(header_row_index, 0, header_row_index, 0)
+    sheet.set_selection(header_row_index, table_start_col, header_row_index, table_start_col)
     return first_data_row, first_data_row + max(0, total_outcomes - 1)
 
 
@@ -927,18 +965,18 @@ def _create_graph_sheet(
     workbook: Any,
     *,
     metadata: dict[str, str],
+    total_outcomes: int,
     thresholds: tuple[float, float, float] | None,
     summary_first_data_row: int,
     summary_last_data_row: int,
 ) -> None:
     graph_sheet = workbook.add_worksheet("Graph")
     formats = _xlsxwriter_formats(workbook)
-    metadata_rows = _metadata_rows_for_output(metadata, co_index=0)
+    metadata_rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
     metadata_rows.extend(_threshold_rows_for_output(thresholds, include=bool(metadata)))
     for row_idx, (label, value) in enumerate(metadata_rows, start=0):
-        display_value = "All COs" if label == "CO Number" else value
         graph_sheet.write(row_idx, 1, label, formats["body"])
-        graph_sheet.write(row_idx, 2, display_value, formats["body_wrap"])
+        graph_sheet.write(row_idx, 2, value, formats["body_wrap"])
     sampled_rows: list[list[Any]] = [["", COURSE_METADATA_HEADERS[0], COURSE_METADATA_HEADERS[1]]]
     sampled_rows.extend(["", field, value] for field, value in metadata_rows)
     widths = _compute_sampled_column_widths(sampled_rows, 2)
@@ -946,16 +984,30 @@ def _create_graph_sheet(
     graph_sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
 
     chart = workbook.add_chart({"type": "column"})
+    summary_table_start_col = 1
+    summary_co_percent_col = summary_table_start_col + 6
     chart.add_series(
         {
             "name": "CO%",
-            "categories": ["Summary", summary_first_data_row, 0, summary_last_data_row, 0],
-            "values": ["Summary", summary_first_data_row, 6, summary_last_data_row, 6],
+            "categories": [
+                "Summary",
+                summary_first_data_row,
+                summary_table_start_col,
+                summary_last_data_row,
+                summary_table_start_col,
+            ],
+            "values": [
+                "Summary",
+                summary_first_data_row,
+                summary_co_percent_col,
+                summary_last_data_row,
+                summary_co_percent_col,
+            ],
             "data_labels": {"value": True},
         }
     )
     x_axis_name = "CO"
-    y_axis_name = "% Attainment"
+    y_axis_name = "Attinment %"
     chart.set_title({"name": f"{x_axis_name} {y_axis_name}"})
     chart.set_x_axis({"name": x_axis_name})
     chart.set_y_axis({"name": y_axis_name, "min": 0, "max": 100, "major_unit": 10})
@@ -969,12 +1021,7 @@ def _create_graph_sheet(
     graph_sheet.protect()
 
 
-def _write_system_integrity_sheets(
-    workbook: Any,
-    *,
-    template_id: str,
-    sheet_order: list[str],
-) -> None:
+def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
     template_hash = sign_payload(template_id)
     hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET)
     hash_ws.write(0, 0, SYSTEM_HASH_TEMPLATE_ID_HEADER)
@@ -983,6 +1030,22 @@ def _write_system_integrity_sheets(
     hash_ws.write(1, 1, template_hash)
     hash_ws.hide()
 
+
+def _add_system_layout_sheet(workbook: Any, manifest_text: str, manifest_hash: str) -> None:
+    layout_ws = workbook.add_worksheet(SYSTEM_LAYOUT_SHEET)
+    layout_ws.write(0, 0, SYSTEM_LAYOUT_MANIFEST_HEADER)
+    layout_ws.write(0, 1, SYSTEM_LAYOUT_MANIFEST_HASH_HEADER)
+    layout_ws.write(1, 0, manifest_text)
+    layout_ws.write(1, 1, manifest_hash)
+    layout_ws.hide()
+
+
+def _build_system_layout_manifest(
+    *,
+    template_id: str,
+    sheet_order: list[str],
+) -> tuple[str, str]:
+    template_hash = sign_payload(template_id)
     signed_sheet_order = [*sheet_order, SYSTEM_HASH_SHEET]
     manifest = {
         "schema_version": _INTEGRITY_SCHEMA_VERSION,
@@ -993,12 +1056,7 @@ def _write_system_integrity_sheets(
     }
     manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     manifest_hash = sign_payload(manifest_text)
-    integrity_ws = workbook.add_worksheet(SYSTEM_REPORT_INTEGRITY_SHEET)
-    integrity_ws.write(0, 0, SYSTEM_REPORT_INTEGRITY_MANIFEST_HEADER)
-    integrity_ws.write(0, 1, SYSTEM_REPORT_INTEGRITY_HASH_HEADER)
-    integrity_ws.write(1, 0, manifest_text)
-    integrity_ws.write(1, 1, manifest_hash)
-    integrity_ws.hide()
+    return manifest_text, manifest_hash
 
 
 def _attainment_thresholds(
@@ -1170,17 +1228,19 @@ def _generate_co_attainment_workbook_course_setup_v1(
         _create_graph_sheet(
             output_workbook,
             metadata=metadata,
+            total_outcomes=total_outcomes,
             thresholds=level_thresholds,
             summary_first_data_row=summary_first_data_row,
             summary_last_data_row=summary_last_data_row,
         )
         sheet_order = [f"CO{co_index}" for co_index in range(1, total_outcomes + 1)]
         sheet_order.extend(["Summary", "Graph"])
-        _write_system_integrity_sheets(
-            output_workbook,
+        _add_system_hash_sheet(output_workbook, template_id)
+        manifest_text, manifest_hash = _build_system_layout_manifest(
             template_id=template_id,
             sheet_order=sheet_order,
         )
+        _add_system_layout_sheet(output_workbook, manifest_text, manifest_hash)
         output_workbook.close()
         workbook_closed = True
     finally:

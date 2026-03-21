@@ -79,11 +79,6 @@ class AboutModule(QWidget):
         self.right_description.setWordWrap(True)
         right_layout.addWidget(self.right_description)
 
-        divider_two = QFrame()
-        divider_two.setFrameShape(QFrame.Shape.HLine)
-        divider_two.setFrameShadow(QFrame.Shadow.Sunken)
-        right_layout.addWidget(divider_two)
-
         self.institution_label = QLabel()
         self.institution_label.setWordWrap(True)
         self.contributors_body = QLabel()

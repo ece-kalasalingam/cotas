@@ -292,14 +292,14 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     module.retranslate_ui()
     assert called == {"refresh": 1}
 
-    # Download course template click busy/idle branches.
+    # Download course template link busy/idle branches.
     called_dl = {"count": 0, "refresh": 0}
     monkeypatch.setattr(module, "_download_course_template_async", lambda: called_dl.__setitem__("count", called_dl["count"] + 1))
     monkeypatch.setattr(module, "_refresh_ui", lambda: called_dl.__setitem__("refresh", called_dl["refresh"] + 1))
     module.state.busy = True
-    module._on_download_course_template_clicked()
+    module._on_download_course_template_link_activated("download-course-template")
     module.state.busy = False
-    module._on_download_course_template_clicked()
+    module._on_download_course_template_link_activated("download-course-template")
     assert called_dl["count"] == 1
     assert called_dl["refresh"] == 1
 

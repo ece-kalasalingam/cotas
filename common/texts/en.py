@@ -38,7 +38,7 @@ TEXTS = {
     ),
     "about.contributors.none": "Contributors information is not available.",
     "about.repository.link_label": "GitHub Repository",
-    "about.institution": "Developed at Kalasalingam Academy of Research and Education (KARE).",
+    "about.institution": "Developed at Kalasalingam Academy of Research and Education (KARE) by the following contributors:",
     "about.copyright": "(c) {year} KARE. All rights reserved.",
     # Help module
     "help.doc_missing_title": "Help Document Missing",
@@ -81,7 +81,7 @@ TEXTS = {
     "instructor.note.default": "You can return and replace any completed step.",
     "instructor.note.outdated_current": "This step is outdated. Run this step again.",
     "instructor.note.outdated_downstream": "An upstream change was made. Downstream steps may need regeneration.",
-    "instructor.action.step1.default": "Download Template",
+    "instructor.action.step1.default": "Download Course Template",
     "instructor.action.step1.upload": "Upload Course Details",
     "instructor.action.step1.prepare": "Prepare Marks Template",
     "instructor.action.step2.upload.default": "Upload Filled Marks",
@@ -241,7 +241,7 @@ TEXTS = {
     # Instructor template headers / labels
     # Coordinator module
     "coordinator.title": "Course Attainment",
-    "coordinator.drop_hint": "Collect Final CO report workbooks generated from the Instructor module.",
+    "coordinator.drop_hint": "Upload Final CO report workbooks generated from the Instructor module.",
     "coordinator.calculate": "Calculate CO Attainment",
     "coordinator.thresholds.title": "CO Attainment Thresholds",
     "coordinator.thresholds.description": (
