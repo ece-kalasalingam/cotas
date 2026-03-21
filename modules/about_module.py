@@ -13,18 +13,11 @@ from common.constants import (
     ABOUT_CONTRIBUTORS_FILE,
     ABOUT_ICON_SIZE,
     APP_REPOSITORY_URL,
-    MODULE_LEFT_PANE_CONTENT_MARGINS,
-    MODULE_LEFT_PANE_LAYOUT_SPACING,
-    MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
-    MODULE_LEFT_PANE_WIDTH_OFFSET,
     SYSTEM_VERSION,
 )
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.texts import t
-from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import resource_path
-
-_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 
 
 class AboutModule(QWidget):
@@ -34,13 +27,7 @@ class AboutModule(QWidget):
         self._ui_engine = ModuleUIEngine(
             self,
             config=ModuleUIEngineConfig(
-                left_width=_LEFT_PANE_WIDTH,
-                left_object_name="stepRail",
-                right_object_name="coordinatorActiveCard",
-                left_content_margins=MODULE_LEFT_PANE_CONTENT_MARGINS,
-                left_layout_spacing=MODULE_LEFT_PANE_LAYOUT_SPACING,
-                left_scrollbar_gutter=MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
-                show_left=False,
+                top_object_name="coordinatorActiveCard",
                 show_footer=False,
             ),
         )
@@ -50,7 +37,7 @@ class AboutModule(QWidget):
         right_layout = QVBoxLayout(right_pane)
         right_layout.setContentsMargins(16, 12, 16, 12)
         right_layout.setSpacing(10)
-        self._ui_engine.set_right_widget(right_pane)
+        self._ui_engine.set_top_widget(right_pane)
 
         header_block = QWidget()
         header_layout = QHBoxLayout(header_block)

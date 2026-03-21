@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import (
     QDesktopServices,
     QKeySequence,
+    QPalette,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -18,11 +19,13 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -32,12 +35,12 @@ from PySide6.QtWidgets import (
 from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
+    INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
     MODULE_LEFT_PANE_CONTENT_MARGINS,
     MODULE_LEFT_PANE_LAYOUT_SPACING,
-    MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
     OUTPUT_LINK_MODE_FILE,
     OUTPUT_LINK_MODE_FOLDER,
@@ -72,17 +75,7 @@ from common.ui_logging import (
 )
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
-    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-    COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_WIDTH,
-    COORDINATOR_DROPZONE_INNER_RADIUS,
-    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
-    COORDINATOR_DROPZONE_OUTER_RADIUS,
-    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
-    COORDINATOR_LIST_PLACEHOLDER_COLOR,
     COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
     GLOBAL_QPUSHBUTTON_MIN_WIDTH,
 )
@@ -115,11 +108,17 @@ from modules.coordinator.steps.collect_files import (
     process_files_async,
 )
 from modules.coordinator.workflow_controller import CoordinatorWorkflowController
+from modules.coordinator.output_links import (
+    output_link_markup as _legacy_output_link_markup,
+)
+from modules.coordinator.output_links import (
+    output_links_html as _legacy_output_links_html,
+)
 from services import CoordinatorWorkflowService
 
 _logger = logging.getLogger(__name__)
-_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _QT_COMPAT_EXPORTS = (QListWidget,)
+_LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 
 
 @dataclass(slots=True)
@@ -189,6 +188,59 @@ def _calculate_attainment_namespace() -> dict[str, object]:
     }
 
 
+def _output_links_namespace() -> dict[str, object]:
+    return {
+        "t": t,
+        "OUTPUT_LINK_MODE_FILE": OUTPUT_LINK_MODE_FILE,
+        "OUTPUT_LINK_MODE_FOLDER": OUTPUT_LINK_MODE_FOLDER,
+        "OUTPUT_LINK_SEPARATOR": OUTPUT_LINK_SEPARATOR,
+        "show_toast": show_toast,
+    }
+
+
+def _output_link_markup_impl(module: object, label: str, path: str | None, ns: dict[str, object]) -> str:
+    return _legacy_output_link_markup(module, label, path, ns=ns)
+
+
+def _output_links_html_impl(module: object, ns: dict[str, object]) -> str:
+    return _legacy_output_links_html(module, ns=ns)
+
+
+def _refresh_output_links_impl(module: object, ns: dict[str, object]) -> None:
+    typed_module = module if isinstance(module, CoordinatorModule) else None
+    if typed_module is None:
+        return
+    typed_module.generated_outputs_view.setHtml(
+        render_output_panel_html(
+            typed_module.get_shared_outputs_data(),
+            translate=t,
+            output_link_mode_file=OUTPUT_LINK_MODE_FILE,
+            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+            output_link_separator=OUTPUT_LINK_SEPARATOR,
+        )
+    )
+
+
+def _on_output_link_activated_impl(module: object, href: str, ns: dict[str, object]) -> None:
+    typed_module = module if isinstance(module, CoordinatorModule) else None
+    if typed_module is None:
+        return
+    opened = open_output_link(
+        href,
+        output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
+        output_link_separator=OUTPUT_LINK_SEPARATOR,
+        open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
+    )
+    if opened:
+        return
+    show_toast(
+        typed_module,
+        t(typed_module.OUTPUT_LINK_OPEN_FAILED_KEY),
+        title=t("instructor.msg.error_title"),
+        level="error",
+    )
+
+
 def _validate_coordinator_namespaces() -> None:
     require_keys(
         _collect_files_namespace(),
@@ -228,7 +280,6 @@ def _validate_coordinator_namespaces() -> None:
 class _ExcelDropList(DragDropFileList):
     def __init__(self, *, drop_mode: Literal["single", "multiple"] = "multiple") -> None:
         super().__init__(
-            placeholder_color=COORDINATOR_LIST_PLACEHOLDER_COLOR,
             placeholder_margins=COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
             placeholder_bottom_margins=COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
             item_spacing=COORDINATOR_DROP_LIST_ITEM_SPACING,
@@ -238,19 +289,7 @@ class _ExcelDropList(DragDropFileList):
 
 class _DropZoneFrame(DragDropZoneFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(
-            outer_radius=COORDINATOR_DROPZONE_OUTER_RADIUS,
-            inner_radius=COORDINATOR_DROPZONE_INNER_RADIUS,
-            bg_active_alpha=COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-            outer_rect_adjust=COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
-            inner_rect_adjust=COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
-            border_width=COORDINATOR_DROPZONE_BORDER_WIDTH,
-            border_dash_pattern=COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-            border_inactive_alpha=COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
-            border_active_alpha=COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
-            background_from_parent_window=True,
-            parent=parent,
-        )
+        super().__init__(parent=parent)
         self.setObjectName("coordinatorDropZone")
 
 
@@ -315,21 +354,45 @@ class CoordinatorModule(QWidget):
         self._ui_engine = ModuleUIEngine(
             self,
             config=ModuleUIEngineConfig(
-                left_width=_LEFT_PANE_WIDTH,
-                left_object_name="coordinatorLeftCard",
-                right_object_name="coordinatorActiveCard",
-                left_content_margins=MODULE_LEFT_PANE_CONTENT_MARGINS,
-                left_layout_spacing=MODULE_LEFT_PANE_LAYOUT_SPACING,
-                left_scrollbar_gutter=MODULE_LEFT_PANE_SCROLLBAR_GUTTER,
+                top_object_name="coordinatorTopRegion",
+                footer_height=INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
             ),
         )
-        self._ui_engine.left_scroll.setObjectName("coordinatorLeftScroll")
-        left_pane = QWidget()
+        top_pane = QWidget()
+        top_layout = QHBoxLayout(top_pane)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(0)
+        self._ui_engine.set_top_widget(top_pane)
+        left_pane = QFrame()
         left_pane.setObjectName("coordinatorLeftCard")
+        left_pane.setFrameShape(QFrame.Shape.StyledPanel)
+        left_pane.setFrameShadow(QFrame.Shadow.Raised)
+        left_palette = left_pane.palette()
+        left_palette.setColor(
+            QPalette.ColorRole.Window,
+            left_palette.color(QPalette.ColorRole.Base),
+        )
+        left_pane.setPalette(left_palette)
+        left_pane.setAutoFillBackground(True)
         left_layout = QVBoxLayout(left_pane)
         left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
         left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
-        self._ui_engine.set_left_widget(left_pane)
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("coordinatorLeftScroll")
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.viewport().setAutoFillBackground(True)
+        left_scroll_viewport_palette = left_scroll.viewport().palette()
+        left_scroll_viewport_palette.setColor(
+            QPalette.ColorRole.Window,
+            left_scroll_viewport_palette.color(QPalette.ColorRole.Base),
+        )
+        left_scroll.viewport().setPalette(left_scroll_viewport_palette)
+        left_scroll.setWidget(left_pane)
+        left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
+        top_layout.addWidget(left_scroll, 0)
         self.title_label = QLabel()
         self.title_label.setObjectName("coordinatorTitle")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -404,7 +467,14 @@ class CoordinatorModule(QWidget):
         right_pane = QWidget()
         right_pane.setObjectName("coordinatorActiveCard")
         right_layout = QVBoxLayout(right_pane)
-        self._ui_engine.set_right_widget(right_pane)
+        right_scroll = QScrollArea()
+        right_scroll.setObjectName("coordinatorRightScroll")
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        right_scroll.setWidget(right_pane)
+        top_layout.addWidget(right_scroll, 1)
 
         self.drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
@@ -505,12 +575,16 @@ class CoordinatorModule(QWidget):
         self._refresh_ui()
 
     def _refresh_ui(self) -> None:
+        has_files = bool(self._files)
+        can_submit = has_files and self._has_valid_attainment_thresholds() and (not self.state.busy)
         self.drop_widget.setEnabled(not self.state.busy)
-        self.drop_widget.set_submit_allowed(self._has_valid_attainment_thresholds())
+        self.drop_widget.set_submit_allowed(can_submit)
         self.threshold_l1_input.setEnabled(not self.state.busy)
         self.threshold_l2_input.setEnabled(not self.state.busy)
         self.threshold_l3_input.setEnabled(not self.state.busy)
         self.drop_list.setEnabled(not self.state.busy)
+        self.clear_button.setEnabled(has_files and (not self.state.busy))
+        self.calculate_button.setEnabled(can_submit)
         for row in range(self.drop_list.count()):
             item = self.drop_list.item(row)
             widget = self.drop_list.itemWidget(item)
@@ -636,31 +710,10 @@ class CoordinatorModule(QWidget):
         return tuple(items)
 
     def _refresh_output_links(self) -> None:
-        self.generated_outputs_view.setHtml(
-            render_output_panel_html(
-                self.get_shared_outputs_data(),
-                translate=t,
-                output_link_mode_file=OUTPUT_LINK_MODE_FILE,
-                output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-                output_link_separator=OUTPUT_LINK_SEPARATOR,
-            )
-        )
+        _refresh_output_links_impl(self, ns=_output_links_namespace())
 
     def _on_output_link_activated(self, href: str) -> None:
-        opened = open_output_link(
-            href,
-            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-            output_link_separator=OUTPUT_LINK_SEPARATOR,
-            open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
-        )
-        if opened:
-            return
-        show_toast(
-            self,
-            t(self.OUTPUT_LINK_OPEN_FAILED_KEY),
-            title=t("instructor.msg.error_title"),
-            level="error",
-        )
+        _on_output_link_activated_impl(self, href, ns=_output_links_namespace())
 
     def _clear_info_text_selection(self) -> None:
         for view in (self.user_log_view, self.generated_outputs_view):
@@ -683,9 +736,19 @@ class CoordinatorModule(QWidget):
 
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
         self.info_tabs.setVisible(not enabled)
+        self._ui_engine.set_footer_visible(not enabled)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
         return OutputPanelData(items=self._output_items(), open_failed_key=self.OUTPUT_LINK_OPEN_FAILED_KEY)
+
+    def _output_link_markup(self, label: str, path: str | None) -> str:
+        return _output_link_markup_impl(self, label, path, ns=_output_links_namespace())
+
+    def _output_links_html(self) -> str:
+        return _output_links_html_impl(self, ns=_output_links_namespace())
+
+    def get_shared_outputs_html(self) -> str:
+        return self._output_links_html()
 
     def _remove_file_by_path(self, file_path: str) -> None:
         remove_file_by_path(self, file_path, ns=_file_actions_namespace())

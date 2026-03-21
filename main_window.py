@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QTabWidget,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from common.constants import (
     APP_NAME,
+    INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     MAIN_ACTIVITY_ICON_SIZE,
     MAIN_HIDDEN_ACTIVITY_MODULE_KEYS,
     MAIN_WINDOW_TITLE_TEXT_KEY,
@@ -122,7 +124,11 @@ class MainWindow(QMainWindow):
 
         self.shared_activity_frame = QFrame()
         self.shared_activity_frame.setObjectName("sharedActivityFrame")
+        self.shared_activity_frame.setFixedHeight(INSTRUCTOR_INFO_TAB_FIXED_HEIGHT)
+        self.shared_activity_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         shared_layout = QVBoxLayout(self.shared_activity_frame)
+        shared_layout.setContentsMargins(0, 0, 0, 0)
+        shared_layout.setSpacing(0)
 
         self.shared_info_tabs = QTabWidget()
         self.shared_info_tabs.setObjectName("sharedInfoTabs")
@@ -172,6 +178,8 @@ class MainWindow(QMainWindow):
         shared_row = QHBoxLayout()
         shared_row.addWidget(self.shared_activity_frame)
         central_layout.addLayout(shared_row)
+        central_layout.setStretch(0, 1)
+        central_layout.setStretch(1, 0)
 
         self.current_module: Any | None = None
         self._shared_activity_entries: list[dict[str, object]] = []

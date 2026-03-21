@@ -8,14 +8,12 @@ from typing import Literal
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
-    QColor,
     QDragEnterEvent,
     QDragLeaveEvent,
     QDragMoveEvent,
     QDropEvent,
     QPainter,
     QPalette,
-    QPen,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -24,6 +22,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyle,
+    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
@@ -33,17 +33,7 @@ from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
     COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
     COORDINATOR_DROP_ZONE_LAYOUT_SPACING,
-    COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-    COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
-    COORDINATOR_DROPZONE_BORDER_WIDTH,
-    COORDINATOR_DROPZONE_INNER_RADIUS,
-    COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
-    COORDINATOR_DROPZONE_OUTER_RADIUS,
-    COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
-    COORDINATOR_LIST_PLACEHOLDER_COLOR,
     COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
 )
 
@@ -57,7 +47,6 @@ class DragDropFileList(QListWidget):
     def __init__(
         self,
         *,
-        placeholder_color: str,
         placeholder_margins: tuple[int, int, int, int],
         placeholder_bottom_margins: tuple[int, int, int, int] | None = None,
         item_spacing: int = 0,
@@ -65,7 +54,6 @@ class DragDropFileList(QListWidget):
     ) -> None:
         super().__init__()
         self._placeholder_text = self.DEFAULT_PLACEHOLDER_TEXT
-        self._placeholder_color = placeholder_color
         self._placeholder_margins = placeholder_margins
         self._placeholder_bottom_margins = placeholder_bottom_margins
         self._drop_mode: Literal["single", "multiple"] = drop_mode
@@ -77,6 +65,17 @@ class DragDropFileList(QListWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Keep list background aligned with surrounding container (avoid white Base block).
+        window_color = self.palette().color(QPalette.ColorRole.Window)
+        list_palette = self.palette()
+        list_palette.setColor(QPalette.ColorRole.Base, window_color)
+        self.setPalette(list_palette)
+        self.setAutoFillBackground(True)
+        viewport = self.viewport()
+        viewport_palette = viewport.palette()
+        viewport_palette.setColor(QPalette.ColorRole.Base, window_color)
+        viewport.setPalette(viewport_palette)
+        viewport.setAutoFillBackground(True)
 
     def set_placeholder_text(self, text: str) -> None:
         self._placeholder_text = text
@@ -87,7 +86,7 @@ class DragDropFileList(QListWidget):
         if not self._placeholder_text:
             return
         painter = QPainter(self.viewport())
-        painter.setPen(QColor(self._placeholder_color))
+        painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
         if self.count() == 0 or self._placeholder_bottom_margins is None:
             draw_rect = self.viewport().rect().adjusted(*self._placeholder_margins)
             draw_flags = Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap
@@ -135,77 +134,12 @@ class DragDropFileList(QListWidget):
 
 
 class DragDropZoneFrame(QFrame):
-    def __init__(
-        self,
-        *,
-        outer_radius: int,
-        inner_radius: int,
-        bg_active_alpha: int,
-        outer_rect_adjust: tuple[int, int, int, int],
-        inner_rect_adjust: tuple[int, int, int, int],
-        border_width: int,
-        border_dash_pattern: tuple[int, int],
-        border_inactive_alpha: int,
-        border_active_alpha: int,
-        background_from_parent_window: bool = True,
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._outer_radius = outer_radius
-        self._inner_radius = inner_radius
-        self._bg_active_alpha = bg_active_alpha
-        self._outer_rect_adjust = outer_rect_adjust
-        self._inner_rect_adjust = inner_rect_adjust
-        self._border_width = border_width
-        self._border_dash_pattern = border_dash_pattern
-        self._border_inactive_alpha = border_inactive_alpha
-        self._border_active_alpha = border_active_alpha
-        self._background_from_parent_window = background_from_parent_window
 
     def set_drag_active(self, active: bool) -> None:
         self.setProperty("dragActive", active)
         self.update()
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        palette = self.palette()
-        host = self.parentWidget()
-        host_palette = host.palette() if isinstance(host, QWidget) else palette
-        active = bool(self.property("dragActive"))
-        if self._background_from_parent_window:
-            bg_color = host_palette.color(QPalette.ColorRole.Window)
-        else:
-            bg_color = palette.color(QPalette.ColorRole.AlternateBase)
-        if active:
-            bg_color.setAlpha(self._bg_active_alpha)
-        border_color = (
-            palette.color(QPalette.ColorRole.Highlight)
-            if active
-            else palette.color(QPalette.ColorRole.WindowText)
-        )
-        border_color.setAlpha(
-            self._border_active_alpha if active else self._border_inactive_alpha
-        )
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(bg_color)
-        painter.drawRoundedRect(
-            self.rect().adjusted(*self._outer_rect_adjust),
-            self._outer_radius,
-            self._outer_radius,
-        )
-        pen = QPen(border_color, self._border_width, Qt.PenStyle.DashLine)
-        pen.setDashPattern(list(self._border_dash_pattern))
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(
-            self.rect().adjusted(*self._inner_rect_adjust),
-            self._inner_radius,
-            self._inner_radius,
-        )
-        painter.end()
 
 
 class ManagedDropFileWidget(QWidget):
@@ -249,25 +183,23 @@ class ManagedDropFileWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.drop_zone = DragDropZoneFrame(
-            outer_radius=COORDINATOR_DROPZONE_OUTER_RADIUS,
-            inner_radius=COORDINATOR_DROPZONE_INNER_RADIUS,
-            bg_active_alpha=COORDINATOR_DROPZONE_BG_ACTIVE_ALPHA,
-            outer_rect_adjust=COORDINATOR_DROPZONE_OUTER_RECT_ADJUST,
-            inner_rect_adjust=COORDINATOR_DROPZONE_INNER_RECT_ADJUST,
-            border_width=COORDINATOR_DROPZONE_BORDER_WIDTH,
-            border_dash_pattern=COORDINATOR_DROPZONE_BORDER_DASH_PATTERN,
-            border_inactive_alpha=COORDINATOR_DROPZONE_BORDER_INACTIVE_ALPHA,
-            border_active_alpha=COORDINATOR_DROPZONE_BORDER_ACTIVE_ALPHA,
-            background_from_parent_window=True,
-            parent=self,
-        )
+        self.drop_zone = DragDropZoneFrame(parent=self)
         self.drop_zone.setProperty("dragActive", False)
+        self.drop_zone_frame = QFrame(self)
+        self.drop_zone_frame.setObjectName("managedDropZoneFrame")
+        self.drop_zone_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.drop_zone_frame.setFrameShadow(QFrame.Shadow.Raised)
+        self.drop_zone_frame.setMouseTracking(True)
+        self.drop_zone_frame.installEventFilter(self)
+        frame_layout = QVBoxLayout(self.drop_zone_frame)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(0)
+        frame_layout.addWidget(self.drop_zone)
+
         zone_layout = QVBoxLayout(self.drop_zone)
         zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
         zone_layout.setSpacing(COORDINATOR_DROP_ZONE_LAYOUT_SPACING)
         self.drop_list = DragDropFileList(
-            placeholder_color=COORDINATOR_LIST_PLACEHOLDER_COLOR,
             placeholder_margins=COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
             placeholder_bottom_margins=COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
             item_spacing=COORDINATOR_DROP_LIST_ITEM_SPACING,
@@ -277,7 +209,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_list.files_dropped.connect(self._on_files_dropped)
         self.drop_list.browse_requested.connect(self.browse_requested.emit)
         zone_layout.addWidget(self.drop_list)
-        root.addWidget(self.drop_zone)
+        root.addWidget(self.drop_zone_frame)
 
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
@@ -319,6 +251,34 @@ class ManagedDropFileWidget(QWidget):
         self._update_summary_label()
         self._update_clear_button_state()
         self._update_submit_button_state()
+
+    def eventFilter(self, watched: object, event) -> bool:
+        if watched is self.drop_zone_frame:
+            event_type = event.type()
+            if event_type == event.Type.Enter:
+                self.drop_zone_frame.setProperty("hoverActive", True)
+                self.drop_zone_frame.update()
+            elif event_type == event.Type.Leave:
+                self.drop_zone_frame.setProperty("hoverActive", False)
+                self.drop_zone_frame.update()
+            elif event_type == event.Type.Paint:
+                painter = QPainter(self.drop_zone_frame)
+                opt = QStyleOptionButton()
+                opt.initFrom(self.drop_zone_frame)
+                opt.rect = self.drop_zone_frame.rect()
+                opt.state |= QStyle.StateFlag.State_Raised
+                if bool(self.drop_zone_frame.property("hoverActive")):
+                    opt.state |= QStyle.StateFlag.State_MouseOver
+                if bool(self.drop_zone.property("dragActive")):
+                    opt.state |= QStyle.StateFlag.State_Sunken
+                self.drop_zone_frame.style().drawPrimitive(
+                    QStyle.PrimitiveElement.PE_PanelButtonCommand,
+                    opt,
+                    painter,
+                    self.drop_zone_frame,
+                )
+                return True
+        return super().eventFilter(watched, event)
 
     def files(self) -> list[str]:
         return list(self._files)
