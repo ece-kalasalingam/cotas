@@ -179,7 +179,7 @@ class ManagedDropFileWidget(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root.setSpacing(10)
 
         self.drop_zone = DragDropZoneFrame(parent=self)
         self.drop_zone.setObjectName("managedDropZoneFrame")
@@ -218,21 +218,6 @@ class ManagedDropFileWidget(QWidget):
         self.clear_button.setDefault(False)
         self.clear_button.setFlat(True)
         self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clear_button.setStyleSheet(
-            """
-            QPushButton#clearAllLink {
-                background: transparent;
-                border: none;
-                padding: 0px;
-                margin: 0px;
-                min-width: 0px;
-                min-height: 0px;
-            }
-            QPushButton#clearAllLink:enabled {
-                text-decoration: underline;
-            }
-            """
-        )
         self.clear_button.clicked.connect(self.clear_files)
         controls_row.addWidget(self.clear_button)
         controls_row.addStretch(1)

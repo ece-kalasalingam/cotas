@@ -23,7 +23,6 @@ from common.constants import (
 from common.ui_stylings import (
     COORDINATOR_FILE_ITEM_LAYOUT_MARGINS,
     COORDINATOR_FILE_ITEM_LAYOUT_SPACING,
-    COORDINATOR_REMOVE_BUTTON_STYLESHEET,
 )
 
 
@@ -90,7 +89,6 @@ class RemovableFileItemWidget(QWidget):
             COORDINATOR_REMOVE_BUTTON_SIZE,
             COORDINATOR_REMOVE_BUTTON_SIZE,
         )
-        self.open_file_btn.setStyleSheet(COORDINATOR_REMOVE_BUTTON_STYLESHEET)
         self.open_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         file_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
         if not file_icon.isNull():
@@ -114,7 +112,6 @@ class RemovableFileItemWidget(QWidget):
             COORDINATOR_REMOVE_BUTTON_SIZE,
             COORDINATOR_REMOVE_BUTTON_SIZE,
         )
-        self.open_folder_btn.setStyleSheet(COORDINATOR_REMOVE_BUTTON_STYLESHEET)
         self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         folder_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
         if not folder_icon.isNull():
@@ -138,7 +135,6 @@ class RemovableFileItemWidget(QWidget):
             COORDINATOR_REMOVE_BUTTON_SIZE,
             COORDINATOR_REMOVE_BUTTON_SIZE,
         )
-        self.remove_btn.setStyleSheet(COORDINATOR_REMOVE_BUTTON_STYLESHEET)
         self.remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
         if not icon.isNull():

@@ -58,7 +58,6 @@ from common.ui_logging import (
 )
 from common.ui_stylings import (
     GLOBAL_QPUSHBUTTON_MIN_WIDTH,
-    INSTRUCTOR_PANEL_STYLESHEET,
 )
 from common.utils import (
     emit_user_status,
@@ -491,8 +490,6 @@ class InstructorModule(QWidget):
         self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
         self.shortcut_save_output = QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
-
-        self.setStyleSheet(INSTRUCTOR_PANEL_STYLESHEET)
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         allowed_attrs_by_step: dict[int, set[str]] = {

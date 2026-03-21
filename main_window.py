@@ -57,27 +57,6 @@ WINDOW_MIN_WIDTH = 1005
 WINDOW_MIN_HEIGHT = 640
 STATUS_FLASH_TIMEOUT_MS = 3000
 
-MAIN_ACTIVITYBAR_STYLESHEET = """
-QToolBar {
-    spacing: 0px;
-    padding: 5px;
-}
-QToolButton {
-    min-width: 80px;
-    max-width: 80px;
-    padding: 5px;
-    border: none;
-    border-radius: 4px;
-}
-QToolButton:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-QToolButton:checked {
-    background-color: rgba(22, 160, 133, 0.2);
-    border-bottom: 2px solid #16A085;
-}
-"""
-
 _logger = logging.getLogger(__name__)
 
 
@@ -157,20 +136,6 @@ class MainWindow(QMainWindow):
         shared_log_layout.setContentsMargins(0, 0, 0, 0)
         shared_outputs_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.shared_info_tabs.setStyleSheet("""
-            #sharedActivityLog, #sharedGeneratedOutputs {
-                border: none;
-                outline: none;
-            }
-            #sharedActivityLog:focus, #sharedGeneratedOutputs:focus {
-                border: none;
-                outline: none;
-            }
-            #sharedActivityLog:hover, #sharedGeneratedOutputs:hover {
-                border: none;
-            }
-        """)
-
         self.shared_info_tabs.addTab(shared_log_tab, t("instructor.log.title"))
         self.shared_info_tabs.addTab(shared_outputs_tab, t("instructor.links.title"))
         shared_layout.addWidget(self.shared_info_tabs)
@@ -188,12 +153,12 @@ class MainWindow(QMainWindow):
         # Activity Bar
         # ----------------------------
         self.activitybar = QToolBar(t("toolbar.navigation"))
+        self.activitybar.setObjectName("mainActivityBar")
         self.activitybar.setMovable(True)
         self.activitybar.setFloatable(False)
         self.activitybar.setIconSize(QSize(MAIN_ACTIVITY_ICON_SIZE, MAIN_ACTIVITY_ICON_SIZE))
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.activitybar)
         self.activitybar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        self.activitybar.setStyleSheet(MAIN_ACTIVITYBAR_STYLESHEET)
 
         # Exclusive selection
         self.nav_group = QActionGroup(self)

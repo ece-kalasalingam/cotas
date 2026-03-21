@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 
 GLOBAL_QPUSHBUTTON_MIN_WIDTH = 150
@@ -27,26 +25,11 @@ COORDINATOR_FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
 COORDINATOR_FILE_ITEM_LAYOUT_SPACING = 12
 COORDINATOR_DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
 COORDINATOR_DROP_ZONE_LAYOUT_SPACING = 0
-COORDINATOR_REMOVE_BUTTON_STYLESHEET = """
-QPushButton {
-    background-color: transparent;
-    border: none;
-    padding: 0px;
-    margin: 0px;
-    min-width: 24px;
-    min-height: 24px;
-    max-width: 24px;
-    max-height: 24px;
-}
-QPushButton:hover {
-    background-color: rgba(231, 76, 60, 0.15);
-    border-radius: 4px;
-}
-""".strip()
 
 _MANAGED_BLOCK_TEMPLATE = "/* COTAS:{id}:BEGIN */\n{body}\n/* COTAS:{id}:END */"
 
 INSTRUCTOR_PANEL_STYLESHEET = """
+QFrame#coordinatorLeftCard,
 QFrame#stepRail {
     border: 1px solid palette(mid);
     border-radius: 12px;
@@ -103,6 +86,89 @@ QTabWidget#instructorInfoTabs QTextBrowser {
 }
 """
 
+MAIN_ACTIVITYBAR_STYLESHEET = """
+QToolBar#mainActivityBar {
+    spacing: 0px;
+    padding: 5px;
+}
+QToolBar#mainActivityBar QToolButton {
+    min-width: 80px;
+    max-width: 80px;
+    padding: 5px;
+    border: none;
+    border-radius: 4px;
+}
+QToolBar#mainActivityBar QToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+QToolBar#mainActivityBar QToolButton:checked {
+    background-color: rgba(22, 160, 133, 0.2);
+    border-bottom: 2px solid #16A085;
+}
+""".strip()
+
+SHARED_INFO_PANE_STYLESHEET = """
+#sharedActivityLog, #sharedGeneratedOutputs {
+    border: none;
+    outline: none;
+}
+#sharedActivityLog:focus, #sharedGeneratedOutputs:focus {
+    border: none;
+    outline: none;
+}
+#sharedActivityLog:hover, #sharedGeneratedOutputs:hover {
+    border: none;
+}
+""".strip()
+
+CLEAR_ALL_LINK_STYLESHEET = """
+QPushButton#clearAllLink {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    min-width: 0px;
+    min-height: 0px;
+}
+QPushButton#clearAllLink:enabled {
+    text-decoration: underline;
+}
+""".strip()
+
+COORDINATOR_FILE_ACTION_BUTTONS_STYLESHEET = """
+QPushButton#coordinatorFileOpenButton,
+QPushButton#coordinatorFolderOpenButton,
+QPushButton#coordinatorFileRemoveButton {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+}
+QPushButton#coordinatorFileOpenButton:hover,
+QPushButton#coordinatorFolderOpenButton:hover,
+QPushButton#coordinatorFileRemoveButton:hover {
+    background-color: rgba(231, 76, 60, 0.15);
+    border-radius: 4px;
+}
+""".strip()
+
+ABOUT_HEADER_TEXT_STYLESHEET = """
+QLabel#aboutLeftAppName {
+    font-size: 24px;
+    font-weight: 700;
+}
+QLabel#aboutLeftSubtitle {
+    font-size: 15px;
+}
+QLabel#aboutLeftVersion {
+    font-size: 9px;
+}
+""".strip()
+
 
 def _upsert_managed_block(stylesheet: str, block_id: str, body: str) -> str:
     pattern = re.compile(
@@ -115,26 +181,14 @@ def _upsert_managed_block(stylesheet: str, block_id: str, body: str) -> str:
     return f"{stylesheet}\n\n{block}".strip() if stylesheet else block
 
 
-def _is_dark_theme(app: QApplication) -> bool:
-    color_scheme = app.styleHints().colorScheme()
-    if color_scheme == Qt.ColorScheme.Dark:
-        return True
-    if color_scheme == Qt.ColorScheme.Light:
-        return False
-    window_color = app.palette().color(QPalette.ColorRole.Window)
-    return window_color.lightness() < 128
-
-
-def _build_theme_adaptive_surface_styles() -> str:
-    return f"""
-
-
-""".strip()
-
-
-
 def apply_global_ui_styles(app: QApplication) -> None:
-    """Apply shared stylesheet rules at application scope."""
+    """Apply managed global stylesheet blocks at application scope.
+
+    Hybrid styling model:
+    - qdarktheme owns base palette/theme state.
+    - this function overlays stable app-specific UI/UX rules by managed block ids.
+    - repeated calls are safe; existing blocks are replaced in-place.
+    """
     get_stylesheet = getattr(app, "styleSheet", None)
     set_stylesheet = getattr(app, "setStyleSheet", None)
     if not callable(set_stylesheet):
@@ -150,8 +204,33 @@ def apply_global_ui_styles(app: QApplication) -> None:
     )
     merged_stylesheet = _upsert_managed_block(
         merged_stylesheet,
-        "theme-adaptive-surfaces",
-        _build_theme_adaptive_surface_styles(),
+        "instructor-panel",
+        INSTRUCTOR_PANEL_STYLESHEET,
+    )
+    merged_stylesheet = _upsert_managed_block(
+        merged_stylesheet,
+        "main-activitybar",
+        MAIN_ACTIVITYBAR_STYLESHEET,
+    )
+    merged_stylesheet = _upsert_managed_block(
+        merged_stylesheet,
+        "shared-info-pane",
+        SHARED_INFO_PANE_STYLESHEET,
+    )
+    merged_stylesheet = _upsert_managed_block(
+        merged_stylesheet,
+        "clear-all-link",
+        CLEAR_ALL_LINK_STYLESHEET,
+    )
+    merged_stylesheet = _upsert_managed_block(
+        merged_stylesheet,
+        "coordinator-file-action-buttons",
+        COORDINATOR_FILE_ACTION_BUTTONS_STYLESHEET,
+    )
+    merged_stylesheet = _upsert_managed_block(
+        merged_stylesheet,
+        "about-header-text",
+        ABOUT_HEADER_TEXT_STYLESHEET,
     )
     if merged_stylesheet == current_stylesheet:
         return

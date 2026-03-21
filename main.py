@@ -52,6 +52,9 @@ from common.workbook_secret import ensure_workbook_secret_policy
 from main_window import MainWindow
 
 _logger = logging.getLogger(__name__)
+_THEME_REFRESH_DEBOUNCE_MS = 180
+_theme_apply_in_progress = False
+_theme_refresh_pending = False
 
 
 def _build_splash_pixmap() -> QPixmap:
@@ -161,32 +164,73 @@ def _install_activation_server(window: MainWindow) -> QLocalServer:
 
 
 def _setup_system_theme() -> None:
+    """Apply qdarktheme using OS-follow mode.
+
+    Hybrid styling contract:
+    1) qdarktheme owns base palette/theme negotiation with the OS.
+    2) app-managed stylesheet blocks are layered separately by `apply_global_ui_styles`.
+    """
+    global _theme_apply_in_progress
     if qdarktheme is None:
         return
+    if _theme_apply_in_progress:
+        return
+    _theme_apply_in_progress = True
     try:
         qdarktheme.setup_theme("auto")
     except (RuntimeError, AttributeError, TypeError, ValueError) as exc:
         _logger.warning("Failed to apply qdarktheme.", exc_info=exc)
     except Exception as exc:
         _logger.exception("Unexpected error while applying qdarktheme.", exc_info=exc)
+    finally:
+        _theme_apply_in_progress = False
+
+
+def _schedule_system_theme_refresh(app: QApplication) -> None:
+    """Debounced fallback refresh for missed OS theme transitions.
+
+    This must stay debounced to avoid recursive palette/style storms.
+    """
+    global _theme_refresh_pending
+    if qdarktheme is None or _theme_refresh_pending:
+        return
+    _theme_refresh_pending = True
+    _logger.debug("Theme refresh scheduled (debounced).")
+
+    def _run() -> None:
+        global _theme_refresh_pending
+        _theme_refresh_pending = False
+        # Hybrid path: refresh qdarktheme (OS-aware) and then reapply our managed app styles.
+        _setup_system_theme()
+        apply_global_ui_styles(app)
+        _logger.debug("Theme refresh executed (qdarktheme + managed styles).")
+
+    QTimer.singleShot(_THEME_REFRESH_DEBOUNCE_MS, _run)
 
 
 class _UiStyleRefreshFilter(QObject):
+    """Event bridge that keeps managed styles in sync with runtime UI changes."""
     def __init__(self, app: QApplication) -> None:
         super().__init__()
         self._app = app
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if event.type() in (
+        event_type = event.type()
+        if event_type in (
             QEvent.Type.ApplicationPaletteChange,
             QEvent.Type.StyleChange,
             QEvent.Type.ThemeChange,
         ):
             apply_global_ui_styles(self._app)
+            _logger.debug("Managed styles reapplied due to app event: %s", event_type.name)
+            # Hybrid fallback: only escalate to qdarktheme refresh on actual theme change.
+            if event_type == QEvent.Type.ThemeChange:
+                _schedule_system_theme_refresh(self._app)
         return super().eventFilter(watched, event)
 
 
 def _wire_global_style_refresh(app: QApplication) -> None:
+    """Wire the hybrid theme/styling refresh hooks once per QApplication."""
     app_refresher = _UiStyleRefreshFilter(app)
     install_filter = getattr(app, "installEventFilter", None)
     if callable(install_filter):
@@ -195,7 +239,12 @@ def _wire_global_style_refresh(app: QApplication) -> None:
     palette_changed = getattr(app, "paletteChanged", None)
     connect = getattr(palette_changed, "connect", None)
     if callable(connect):
-        connect(lambda *_args: apply_global_ui_styles(app))
+        def _on_palette_changed(*_args) -> None:
+            apply_global_ui_styles(app)
+            _logger.debug("Managed styles reapplied due to paletteChanged signal.")
+
+        connect(_on_palette_changed)
+    _logger.debug("Hybrid UI style refresh wiring initialized.")
 
 
 def _install_excepthook() -> None:
