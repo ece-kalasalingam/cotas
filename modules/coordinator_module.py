@@ -383,6 +383,7 @@ class CoordinatorModule(QWidget):
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.viewport().setObjectName("coordinatorLeftScrollViewport")
         left_scroll.viewport().setAutoFillBackground(True)
         left_scroll_viewport_palette = left_scroll.viewport().palette()
         left_scroll_viewport_palette.setColor(

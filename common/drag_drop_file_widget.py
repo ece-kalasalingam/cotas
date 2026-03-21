@@ -182,18 +182,13 @@ class ManagedDropFileWidget(QWidget):
         root.setSpacing(0)
 
         self.drop_zone = DragDropZoneFrame(parent=self)
+        self.drop_zone.setObjectName("managedDropZoneFrame")
+        self.drop_zone.setFrameShape(QFrame.Shape.StyledPanel)
+        self.drop_zone.setFrameShadow(QFrame.Shadow.Raised)
+        self.drop_zone.setMouseTracking(True)
+        self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         self.drop_zone.setProperty("dragActive", False)
-        self.drop_zone_frame = QFrame(self)
-        self.drop_zone_frame.setObjectName("managedDropZoneFrame")
-        self.drop_zone_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.drop_zone_frame.setFrameShadow(QFrame.Shadow.Raised)
-        self.drop_zone_frame.setMouseTracking(True)
-        self.drop_zone_frame.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.drop_zone_frame.installEventFilter(self)
-        frame_layout = QVBoxLayout(self.drop_zone_frame)
-        frame_layout.setContentsMargins(0, 0, 0, 0)
-        frame_layout.setSpacing(0)
-        frame_layout.addWidget(self.drop_zone)
+        self.drop_zone.installEventFilter(self)
 
         zone_layout = QVBoxLayout(self.drop_zone)
         zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
@@ -209,7 +204,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_list.browse_requested.connect(self.browse_requested.emit)
         self.drop_list.setCursor(Qt.CursorShape.PointingHandCursor)
         zone_layout.addWidget(self.drop_list)
-        root.addWidget(self.drop_zone_frame)
+        root.addWidget(self.drop_zone)
 
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
@@ -253,14 +248,14 @@ class ManagedDropFileWidget(QWidget):
         self._update_submit_button_state()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if watched is self.drop_zone_frame:
+        if watched is self.drop_zone:
             event_type = event.type()
             if event_type == event.Type.Enter:
-                self.drop_zone_frame.setProperty("hoverActive", True)
-                self.drop_zone_frame.update()
+                self.drop_zone.setProperty("hoverActive", True)
+                self.drop_zone.update()
             elif event_type == event.Type.Leave:
-                self.drop_zone_frame.setProperty("hoverActive", False)
-                self.drop_zone_frame.update()
+                self.drop_zone.setProperty("hoverActive", False)
+                self.drop_zone.update()
         return super().eventFilter(watched, event)
 
     def files(self) -> list[str]:

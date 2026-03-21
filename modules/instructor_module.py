@@ -56,7 +56,9 @@ from common.ui_logging import (
     parse_i18n_log_message,
     resolve_i18n_log_message,
 )
-from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
+from common.ui_stylings import (
+    GLOBAL_QPUSHBUTTON_MIN_WIDTH,
+)
 from common.utils import (
     emit_user_status,
     log_process_message,
@@ -329,6 +331,7 @@ class InstructorModule(QWidget):
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.viewport().setObjectName("instructorLeftScrollViewport")
         left_scroll.viewport().setAutoFillBackground(True)
         left_scroll_viewport_palette = left_scroll.viewport().palette()
         left_scroll_viewport_palette.setColor(
