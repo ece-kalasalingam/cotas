@@ -22,8 +22,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QStyle,
-    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
@@ -190,6 +188,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_zone_frame.setFrameShape(QFrame.Shape.StyledPanel)
         self.drop_zone_frame.setFrameShadow(QFrame.Shadow.Raised)
         self.drop_zone_frame.setMouseTracking(True)
+        self.drop_zone_frame.setCursor(Qt.CursorShape.PointingHandCursor)
         self.drop_zone_frame.installEventFilter(self)
         frame_layout = QVBoxLayout(self.drop_zone_frame)
         frame_layout.setContentsMargins(0, 0, 0, 0)
@@ -208,6 +207,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_list.drag_state_changed.connect(self.drop_zone.set_drag_active)
         self.drop_list.files_dropped.connect(self._on_files_dropped)
         self.drop_list.browse_requested.connect(self.browse_requested.emit)
+        self.drop_list.setCursor(Qt.CursorShape.PointingHandCursor)
         zone_layout.addWidget(self.drop_list)
         root.addWidget(self.drop_zone_frame)
 
@@ -261,23 +261,6 @@ class ManagedDropFileWidget(QWidget):
             elif event_type == event.Type.Leave:
                 self.drop_zone_frame.setProperty("hoverActive", False)
                 self.drop_zone_frame.update()
-            elif event_type == event.Type.Paint:
-                painter = QPainter(self.drop_zone_frame)
-                opt = QStyleOptionButton()
-                opt.initFrom(self.drop_zone_frame)
-                opt.rect = self.drop_zone_frame.rect()
-                opt.state |= QStyle.StateFlag.State_Raised
-                if bool(self.drop_zone_frame.property("hoverActive")):
-                    opt.state |= QStyle.StateFlag.State_MouseOver
-                if bool(self.drop_zone.property("dragActive")):
-                    opt.state |= QStyle.StateFlag.State_Sunken
-                self.drop_zone_frame.style().drawPrimitive(
-                    QStyle.PrimitiveElement.PE_PanelButtonCommand,
-                    opt,
-                    painter,
-                    self.drop_zone_frame,
-                )
-                return True
         return super().eventFilter(watched, event)
 
     def files(self) -> list[str]:
