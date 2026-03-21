@@ -35,8 +35,6 @@ QFrame#stepRail {
     border-radius: 12px;
     background-color: palette(base);
 }
-QFrame#activeCard {
-}
 QListWidget#stepList {
     outline: none;
     background-color: transparent;
@@ -48,12 +46,7 @@ QListWidget#stepList::item:selected,
 QListWidget#stepList::item:selected:!active {
     border-left: 4px solid palette(highlight);
 }
-QPushButton#primaryAction {
-    padding: 6px 12px;
-    min-width: 150px;
-    min-height: 30px;
-    border-radius: 6px;
-}
+
 QPushButton#primaryAction:enabled {
     background-color: palette(highlight);
     color: palette(highlighted-text);
@@ -69,20 +62,6 @@ QPushButton {
 }
 QPushButton:disabled {
     border: 1px solid palette(mid);
-}
-QTabWidget#instructorInfoTabs::pane {
-    border: none;
-    background: palette(base);
-}
-QTabWidget#instructorInfoTabs QTabBar::tab:first {
-    margin-left: 8px;
-}
-QTabWidget#instructorInfoTabs QPlainTextEdit,
-QTabWidget#instructorInfoTabs QTextBrowser {
-    border: 1px solid palette(mid);
-    border-radius: 8px;
-    background: palette(base);
-    padding: 8px;
 }
 """
 

@@ -177,7 +177,11 @@ def test_step1_drop_signal_handlers_publish_log_and_update_count(
 
     published: list[str] = []
     uploads: list[list[str]] = []
-    monkeypatch.setattr(module, "_publish_status", lambda message: published.append(message))
+    monkeypatch.setattr(
+        module,
+        "_publish_status_key",
+        lambda key, **kwargs: published.append(f"{key}:{kwargs.get('count', '')}"),
+    )
     monkeypatch.setattr(module, "_upload_course_details_from_paths_async", lambda paths: uploads.append(list(paths)))
     monkeypatch.setattr(module, "_refresh_ui", lambda: None)
 

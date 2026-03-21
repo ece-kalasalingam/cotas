@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
-    QDesktopServices,
     QKeySequence,
     QShortcut,
 )
@@ -22,11 +21,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QTabWidget,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -41,9 +37,6 @@ from common.constants import (
     MODULE_LEFT_PANE_CONTENT_MARGINS,
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
-    OUTPUT_LINK_MODE_FILE,
-    OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_SEPARATOR,
 )
 from common.drag_drop_file_widget import (
     DragDropFileList,
@@ -55,7 +48,7 @@ from common.jobs import CancellationToken
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.output_panel import OutputItem, OutputPanelData, open_output_link, render_output_panel_html
+from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
 from common.removable_file_item_widget import (
     ElidedFileNameLabel as _SharedElidedFileNameLabel,
@@ -107,12 +100,6 @@ from modules.coordinator.steps.collect_files import (
     process_files_async,
 )
 from modules.coordinator.workflow_controller import CoordinatorWorkflowController
-from modules.coordinator.output_links import (
-    output_link_markup as _legacy_output_link_markup,
-)
-from modules.coordinator.output_links import (
-    output_links_html as _legacy_output_links_html,
-)
 from services import CoordinatorWorkflowService
 
 _logger = logging.getLogger(__name__)
@@ -187,57 +174,12 @@ def _calculate_attainment_namespace() -> dict[str, object]:
     }
 
 
-def _output_links_namespace() -> dict[str, object]:
-    return {
-        "t": t,
-        "OUTPUT_LINK_MODE_FILE": OUTPUT_LINK_MODE_FILE,
-        "OUTPUT_LINK_MODE_FOLDER": OUTPUT_LINK_MODE_FOLDER,
-        "OUTPUT_LINK_SEPARATOR": OUTPUT_LINK_SEPARATOR,
-        "show_toast": show_toast,
-    }
-
-
-def _output_link_markup_impl(module: object, label: str, path: str | None, ns: dict[str, object]) -> str:
-    return _legacy_output_link_markup(module, label, path, ns=ns)
-
-
-def _output_links_html_impl(module: object, ns: dict[str, object]) -> str:
-    return _legacy_output_links_html(module, ns=ns)
-
-
-def _refresh_output_links_impl(module: object, ns: dict[str, object]) -> None:
-    typed_module = module if isinstance(module, CoordinatorModule) else None
-    if typed_module is None:
+class _LogSink:
+    def appendPlainText(self, _text: str) -> None:  # noqa: N802 - Qt-style name
         return
-    typed_module.generated_outputs_view.setHtml(
-        render_output_panel_html(
-            typed_module.get_shared_outputs_data(),
-            translate=t,
-            output_link_mode_file=OUTPUT_LINK_MODE_FILE,
-            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-            output_link_separator=OUTPUT_LINK_SEPARATOR,
-        )
-    )
 
-
-def _on_output_link_activated_impl(module: object, href: str, ns: dict[str, object]) -> None:
-    typed_module = module if isinstance(module, CoordinatorModule) else None
-    if typed_module is None:
+    def clear(self) -> None:
         return
-    opened = open_output_link(
-        href,
-        output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-        output_link_separator=OUTPUT_LINK_SEPARATOR,
-        open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
-    )
-    if opened:
-        return
-    show_toast(
-        typed_module,
-        t(typed_module.OUTPUT_LINK_OPEN_FAILED_KEY),
-        title=t("instructor.msg.error_title"),
-        level="error",
-    )
 
 
 def _validate_coordinator_namespaces() -> None:
@@ -310,9 +252,6 @@ class _CoordinatorFileItemWidget(_SharedRemovableFileItemWidget):
 
 class CoordinatorModule(QWidget):
     status_changed = Signal(str)
-    OUTPUT_LINK_OPEN_FILE_KEY = "instructor.links.open_file"
-    OUTPUT_LINK_OPEN_FOLDER_KEY = "instructor.links.open_folder"
-    OUTPUT_LINK_NOT_AVAILABLE_KEY = "instructor.links.not_available"
     OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
 
@@ -491,41 +430,8 @@ class CoordinatorModule(QWidget):
         self.calculate_button.setAutoDefault(False)
         self.calculate_button.setDefault(False)
 
-        self.info_tabs = QTabWidget()
-        self.info_tabs.setObjectName("instructorInfoTabs")
-        self.info_tabs.currentChanged.connect(self._on_info_tab_changed)
-
-        log_tab = QWidget()
-        log_tab_layout = QVBoxLayout(log_tab)
-
-        self.user_log_view = QPlainTextEdit()
-        self.user_log_view.setReadOnly(True)
-        self.user_log_view.setObjectName("userLogView")
-        self.user_log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.user_log_view.setFrameShape(QFrame.Shape.NoFrame)
-        log_tab_layout.addWidget(self.user_log_view)
-
-        links_tab = QWidget()
-        links_tab_layout = QVBoxLayout(links_tab)
-
-        self.generated_outputs_view = QTextBrowser()
-        self.generated_outputs_view.setObjectName("generatedOutputsView")
-        self.generated_outputs_view.setOpenExternalLinks(False)
-        self.generated_outputs_view.setOpenLinks(False)
-        self.generated_outputs_view.setFrameShape(QFrame.Shape.NoFrame)
-        self.generated_outputs_view.anchorClicked.connect(
-            lambda url: self._on_output_link_activated(url.toString())
-        )
-        links_tab_layout.addWidget(self.generated_outputs_view)
-
-        self.info_tabs.addTab(log_tab, t("instructor.log.title"))
-        self.info_tabs.addTab(links_tab, t("instructor.links.title"))
-        footer_pane = QWidget()
-        footer_layout = QVBoxLayout(footer_pane)
-        footer_layout.setContentsMargins(0, 0, 0, 0)
-        footer_layout.setSpacing(0)
-        footer_layout.addWidget(self.info_tabs)
-        self._ui_engine.set_footer_widget(footer_pane)
+        self.user_log_view = _LogSink()
+        self._ui_engine.set_footer_visible(False)
 
         self.shortcut_add_file = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
         self.shortcut_add_file.activated.connect(self._browse_files)
@@ -533,7 +439,6 @@ class CoordinatorModule(QWidget):
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
     def retranslate_ui(self) -> None:
-        self._rerender_user_log()
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
         self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
@@ -547,9 +452,6 @@ class CoordinatorModule(QWidget):
         self.threshold_l1_label.setText(t("coordinator.thresholds.l1.label"))
         self.threshold_l2_label.setText(t("coordinator.thresholds.l2.label"))
         self.threshold_l3_label.setText(t("coordinator.thresholds.l3.label"))
-        self.info_tabs.setTabText(0, t("instructor.log.title"))
-        self.info_tabs.setTabText(1, t("instructor.links.title"))
-        self._refresh_output_links()
         self._refresh_summary()
 
     def _publish_status(self, message: str) -> None:
@@ -578,7 +480,6 @@ class CoordinatorModule(QWidget):
             widget = self.drop_list.itemWidget(item)
             if isinstance(widget, _CoordinatorFileItemWidget):
                 widget.remove_btn.setEnabled(not self.state.busy)
-        self._refresh_output_links()
         self._refresh_summary()
 
     def _read_attainment_thresholds(self) -> tuple[float, float, float]:
@@ -697,22 +598,6 @@ class CoordinatorModule(QWidget):
         )
         return tuple(items)
 
-    def _refresh_output_links(self) -> None:
-        _refresh_output_links_impl(self, ns=_output_links_namespace())
-
-    def _on_output_link_activated(self, href: str) -> None:
-        _on_output_link_activated_impl(self, href, ns=_output_links_namespace())
-
-    def _clear_info_text_selection(self) -> None:
-        for view in (self.user_log_view, self.generated_outputs_view):
-            cursor = view.textCursor()
-            if cursor.hasSelection():
-                cursor.clearSelection()
-                view.setTextCursor(cursor)
-
-    def _on_info_tab_changed(self, _index: int) -> None:
-        self._clear_info_text_selection()
-
     def _refresh_summary(self) -> None:
         self.drop_widget.set_summary_text_builder(
             lambda _count: t("coordinator.summary", count=len(self._files))
@@ -723,20 +608,10 @@ class CoordinatorModule(QWidget):
         self.drop_zone.set_drag_active(active)
 
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
-        self.info_tabs.setVisible(not enabled)
-        self._ui_engine.set_footer_visible(not enabled)
+        self._ui_engine.set_footer_visible(False)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
         return OutputPanelData(items=self._output_items(), open_failed_key=self.OUTPUT_LINK_OPEN_FAILED_KEY)
-
-    def _output_link_markup(self, label: str, path: str | None) -> str:
-        return _output_link_markup_impl(self, label, path, ns=_output_links_namespace())
-
-    def _output_links_html(self) -> str:
-        return _output_links_html_impl(self, ns=_output_links_namespace())
-
-    def get_shared_outputs_html(self) -> str:
-        return self._output_links_html()
 
     def _remove_file_by_path(self, file_path: str) -> None:
         remove_file_by_path(self, file_path, ns=_file_actions_namespace())

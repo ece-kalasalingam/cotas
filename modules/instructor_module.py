@@ -8,8 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -17,12 +17,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QStackedWidget,
-    QTabWidget,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -35,9 +32,6 @@ from common.constants import (
     MODULE_LEFT_PANE_CONTENT_MARGINS,
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
-    OUTPUT_LINK_MODE_FILE,
-    OUTPUT_LINK_MODE_FOLDER,
-    OUTPUT_LINK_SEPARATOR,
 )
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
@@ -45,7 +39,7 @@ from common.jobs import CancellationToken
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.output_panel import OutputItem, OutputPanelData, open_output_link, render_output_panel_html
+from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
 from common.texts import t
 from common.toast import show_toast
@@ -202,20 +196,24 @@ def _filled_marks_manifest_validators() -> dict[str, Callable[[object, object], 
     return filled_marks_manifest_validators()
 
 
+class _LogSink:
+    def appendPlainText(self, _text: str) -> None:  # noqa: N802 - Qt-style name
+        return
+
+    def clear(self) -> None:
+        return
+
+
 class InstructorModule(QWidget):
     """Simple wizard-like UI for CO score workflow."""
 
     status_changed = Signal(str)
     WORKFLOW_STEPS = (1, 2)
-    RAIL_LINK_TITLE_KEY = "instructor.links.title"
     RAIL_LINKS = (
         ("instructor.links.course_details_generated", "step1_path"),
         ("instructor.links.marks_template_generated", "marks_template_path"),
         ("instructor.links.final_co_report_generated", "final_report_path"),
     )
-    RAIL_LINK_OPEN_FILE_KEY = "instructor.links.open_file"
-    RAIL_LINK_OPEN_FOLDER_KEY = "instructor.links.open_folder"
-    RAIL_LINK_NOT_AVAILABLE_KEY = "instructor.links.not_available"
     RAIL_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
 
     STEP_TITLE_KEYS = {
@@ -447,44 +445,8 @@ class InstructorModule(QWidget):
         self.step_drop_stack.addWidget(self.step2_drop_widget)
         right_layout.addWidget(self.step_drop_stack, 1)
 
-        self.info_tabs = QTabWidget()
-        self.info_tabs.setObjectName("instructorInfoTabs")
-        self.info_tabs.currentChanged.connect(self._on_info_tab_changed)
-
-        log_tab = QWidget()
-        log_tab_layout = QVBoxLayout(log_tab)
-
-        self.user_log_view = QPlainTextEdit()
-        self.user_log_view.setReadOnly(True)
-        self.user_log_view.setObjectName("userLogView")
-        self.user_log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.user_log_view.setFrameShape(QFrame.Shape.NoFrame)
-        log_tab_layout.addWidget(self.user_log_view)
-
-        links_tab = QWidget()
-        links_tab_layout = QVBoxLayout(links_tab)
-
-        self.generated_outputs_view = QTextBrowser()
-        self.generated_outputs_view.setObjectName("generatedOutputsView")
-        self.generated_outputs_view.setOpenExternalLinks(False)
-        self.generated_outputs_view.setOpenLinks(False)
-        self.generated_outputs_view.setFrameShape(QFrame.Shape.NoFrame)
-        self.generated_outputs_view.anchorClicked.connect(
-            lambda url: self._on_quick_link_activated(url.toString())
-        )
-        links_tab_layout.addWidget(self.generated_outputs_view)
-
-        # Retained for test doubles that call _refresh_quick_links directly.
-        self.quick_link_labels: dict[str, QLabel] = {}
-
-        self.info_tabs.addTab(log_tab, t("instructor.log.title"))
-        self.info_tabs.addTab(links_tab, t(self.RAIL_LINK_TITLE_KEY))
-        footer_pane = QWidget()
-        footer_layout = QVBoxLayout(footer_pane)
-        footer_layout.setContentsMargins(0, 0, 0, 0)
-        footer_layout.setSpacing(0)
-        footer_layout.addWidget(self.info_tabs)
-        self._ui_engine.set_footer_widget(footer_pane)
+        self.user_log_view = _LogSink()
+        self._ui_engine.set_footer_visible(False)
 
         self.shortcut_open_workbook = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
         self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
@@ -519,25 +481,6 @@ class InstructorModule(QWidget):
                 rows.append(OutputItem(label_key=label_key, path=value))
         return tuple(rows)
 
-    def _on_quick_link_activated(self, href: str) -> None:
-        opened = open_output_link(
-            href,
-            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-            output_link_separator=OUTPUT_LINK_SEPARATOR,
-            open_path=lambda target: QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))),
-        )
-        if opened:
-            return
-        show_toast(
-            self,
-            t(self.RAIL_LINK_OPEN_FAILED_KEY),
-            title=t("instructor.msg.error_title"),
-            level="error",
-        )
-
-    def _refresh_quick_links(self) -> None:
-        self.generated_outputs_view.setHtml(self._quick_links_html())
-
     def _step_path(self, step: int) -> str | None:
         return self._workflow_controller.step_path(step)
 
@@ -569,34 +512,11 @@ class InstructorModule(QWidget):
             return
         self._on_step_selected(row + 1)
 
-    def _clear_info_text_selection(self) -> None:
-        for view in (self.user_log_view, self.generated_outputs_view):
-            cursor = view.textCursor()
-            if cursor.hasSelection():
-                cursor.clearSelection()
-                view.setTextCursor(cursor)
-
-    def _on_info_tab_changed(self, _index: int) -> None:
-        self._clear_info_text_selection()
-
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
-        self.info_tabs.setVisible(not enabled)
-        self._ui_engine.set_footer_visible(not enabled)
+        self._ui_engine.set_footer_visible(False)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
         return OutputPanelData(items=self._output_items(), open_failed_key=self.RAIL_LINK_OPEN_FAILED_KEY)
-
-    def _quick_links_html(self) -> str:
-        return render_output_panel_html(
-            self.get_shared_outputs_data(),
-            translate=t,
-            output_link_mode_file=OUTPUT_LINK_MODE_FILE,
-            output_link_mode_folder=OUTPUT_LINK_MODE_FOLDER,
-            output_link_separator=OUTPUT_LINK_SEPARATOR,
-        )
-
-    def get_shared_outputs_html(self) -> str:
-        return self._quick_links_html()
 
     def _refresh_ui(self) -> None:
         if self.current_step not in self.WORKFLOW_STEPS:
@@ -611,9 +531,6 @@ class InstructorModule(QWidget):
         self.step_list.setCurrentRow(self.current_step - 1)
         self.step_list.blockSignals(False)
 
-        self.info_tabs.setTabText(0, t("instructor.log.title"))
-        self.info_tabs.setTabText(1, t(self.RAIL_LINK_TITLE_KEY))
-        self._refresh_quick_links()
         can_run, reason = self._can_run_step(self.current_step)
         is_step1 = self.current_step == 1
         is_step2 = self.current_step == 2
@@ -681,9 +598,7 @@ class InstructorModule(QWidget):
     def retranslate_ui(self) -> None:
         self.step1_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.step2_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
-        self._rerender_user_log()
         self._refresh_ui()
-        self._clear_info_text_selection()
 
     def _run_current_step_action(self) -> None:
         if self.current_step == 1:

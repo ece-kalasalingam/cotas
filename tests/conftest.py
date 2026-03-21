@@ -158,3 +158,4 @@ def _disable_native_file_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *_a, **_k: ("", "")), raising=False)
     monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(lambda *_a, **_k: ([], "")), raising=False)
 
+

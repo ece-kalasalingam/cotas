@@ -26,6 +26,16 @@ def _build_module_no_setup_stub(monkeypatch: pytest.MonkeyPatch) -> coordinator_
     return coordinator_ui.CoordinatorModule()
 
 
+def _dispose_widget(widget: object, qapp: QApplication) -> None:
+    close = getattr(widget, "close", None)
+    if callable(close):
+        close()
+    delete_later = getattr(widget, "deleteLater", None)
+    if callable(delete_later):
+        delete_later()
+    qapp.processEvents()
+
+
 def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     dl = coordinator_ui._ExcelDropList()
 
@@ -99,14 +109,7 @@ def test_excel_drop_list_paint_and_event_edges(monkeypatch: pytest.MonkeyPatch, 
     assert drop_evt.ignored == 1
     assert dropped_events == []
 
-    dbl_calls = {"count": 0}
-    monkeypatch.setattr(
-        coordinator_ui.DragDropFileList,
-        "mouseDoubleClickEvent",
-        lambda self, e: dbl_calls.__setitem__("count", dbl_calls["count"] + 1),
-    )
-    dl.mouseDoubleClickEvent(_Evt(_Mime(False), button=Qt.MouseButton.RightButton))
-    assert dbl_calls["count"] == 1
+    _dispose_widget(dl, qapp)
 
 
 def test_drop_zone_and_elided_label_paint_and_resize(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -122,6 +125,8 @@ def test_drop_zone_and_elided_label_paint_and_resize(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(label, "contentsRect", lambda: QRect(0, 0, 80, 10))
     label.resizeEvent(None)
+    _dispose_widget(frame, qapp)
+    _dispose_widget(label, qapp)
 
 
 def test_file_item_widget_fallback_icon_and_emit(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -146,6 +151,7 @@ def test_file_item_widget_fallback_icon_and_emit(monkeypatch: pytest.MonkeyPatch
     assert removed == ["C:/a.xlsx"]
     assert hasattr(item_widget, "open_file_btn")
     assert hasattr(item_widget, "open_folder_btn")
+    _dispose_widget(item_widget, qapp)
 
 
 def test_refresh_ui_disables_remove_buttons_and_new_widget_factory(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -165,7 +171,8 @@ def test_refresh_ui_disables_remove_buttons_and_new_widget_factory(monkeypatch: 
     module.state.busy = False
     module._refresh_ui()
     assert row_widget.remove_btn.isEnabled() is True
-    module.close()
+    _dispose_widget(row_widget, qapp)
+    _dispose_widget(module, qapp)
 
 
 def test_setup_ui_logging_wrapper_invokes_impl(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -180,10 +187,11 @@ def test_setup_ui_logging_wrapper_invokes_impl(monkeypatch: pytest.MonkeyPatch, 
 
     module = coordinator_ui.CoordinatorModule()
     assert seen["count"] >= 1
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_excel_drop_list_paint_returns_when_no_placeholder(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     dl = coordinator_ui._ExcelDropList()
     dl.set_placeholder_text("")
     assert dl._placeholder_text == ""
+    _dispose_widget(dl, qapp)

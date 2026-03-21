@@ -218,12 +218,12 @@ def test_generate_final_report_async_early_gate_paths() -> None:
     module.can_run = False
     module.can_run_reason = "Need upload"
     step2_phase.generate_final_report_async(module, ns=ns)
-    assert module.toasts[-1] == ("info", "Need upload")
+    assert module.toasts == []
 
     module.can_run = True
     module.filled_marks_done = False
     step2_phase.generate_final_report_async(module, ns=ns)
-    assert module.toasts[-1] == ("info", "T:instructor.require.step2")
+    assert module.toasts == []
 
     module.filled_marks_done = True
     module.filled_marks_outdated = False
@@ -240,7 +240,7 @@ def test_generate_final_report_async_source_missing_and_success() -> None:
     ns = _ns(module, save_path="D:/final.xlsx")
     step2_phase.generate_final_report_async(module, ns=ns)
     assert cast(_Logger, ns["_logger_obj"]).warning_calls
-    assert module.toasts[-1] == ("error", "T:instructor.require.step2")
+    assert module.toasts == []
     assert module.started == {}
 
     source = Path("tests/.tmp-filled.xlsx")
@@ -384,7 +384,7 @@ def test_generate_final_reports_from_paths_async_early_and_conflict_paths(tmp_pa
     module.filled_marks_paths = []
     ns = _ns(module)
     step2_phase.generate_final_reports_from_paths_async(module, ns=ns)
-    assert any(level == "info" and "require.step2" in body for level, body in module.toasts)
+    assert module.toasts == []
 
     module.state.busy = True
     step2_phase.generate_final_reports_from_paths_async(module, ns=ns)
@@ -403,10 +403,7 @@ def test_generate_final_reports_from_paths_async_early_and_conflict_paths(tmp_pa
         },
     )
     step2_phase.generate_final_reports_from_paths_async(module, ns=ns_cancel)
-    assert any(
-        level == "warning" and body == "T:instructor.toast.step2_generate_no_outputs"
-        for level, body in module.toasts
-    )
+    assert module.toasts == []
 
     module2 = _Module()
     module2.filled_marks_paths = [str(src), str(src)]

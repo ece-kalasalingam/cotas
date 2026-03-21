@@ -233,14 +233,17 @@ class ManagedDropFileWidget(QWidget):
         self._update_submit_button_state()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if watched is self.drop_zone:
+        drop_zone = getattr(self, "drop_zone", None)
+        if drop_zone is None:
+            return super().eventFilter(watched, event)
+        if watched is drop_zone:
             event_type = event.type()
             if event_type == event.Type.Enter:
-                self.drop_zone.setProperty("hoverActive", True)
-                self.drop_zone.update()
+                drop_zone.setProperty("hoverActive", True)
+                drop_zone.update()
             elif event_type == event.Type.Leave:
-                self.drop_zone.setProperty("hoverActive", False)
-                self.drop_zone.update()
+                drop_zone.setProperty("hoverActive", False)
+                drop_zone.update()
         return super().eventFilter(watched, event)
 
     def files(self) -> list[str]:

@@ -1,4 +1,4 @@
-﻿"""English text catalog for user-facing strings."""
+"""English text catalog for user-facing strings."""
 
 TEXTS = {
     # Startup / main
@@ -74,9 +74,7 @@ TEXTS = {
     "instructor.step1.desc": "Upload the validated course-details file, then prepare and save the marks template.",
     "instructor.links.title": "Generated Outputs",
     "instructor.links.course_details_generated": "Course details template generated",
-    "instructor.links.course_details_uploaded": "Course details file uploaded",
     "instructor.links.marks_template_generated": "Marks template generated",
-    "instructor.links.marks_template_uploaded": "Marks template uploaded",
     "instructor.links.final_co_report_generated": "Final CO report generated",
     "instructor.links.open_file": "Open file",
     "instructor.links.open_folder": "Open folder",

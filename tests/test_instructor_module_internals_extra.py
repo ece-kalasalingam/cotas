@@ -60,7 +60,6 @@ def test_top_level_step_helpers_delegate(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_refresh_ui_step_specific_paths_and_busy_disable(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-    monkeypatch.setattr(module, "_refresh_quick_links", lambda: None)
 
     module.current_step = 1
     module.step2_upload_ready = False
@@ -180,16 +179,10 @@ def test_misc_wrappers_shortcuts_and_close_cleanup(monkeypatch: pytest.MonkeyPat
     assert calls["p2"] >= 1
     assert calls["g3"] >= 1
 
-    monkeypatch.setattr(module, "_quick_links_html", lambda: "outputs")
     module.set_shared_activity_log_mode(True)
-    assert module.info_tabs.isHidden() is True
+    assert module._ui_engine.footer_widget.isHidden() is True
     module.set_shared_activity_log_mode(False)
-    assert module.info_tabs.isHidden() is False
-    assert module.get_shared_outputs_html() == "outputs"
-
-    # _on_quick_link_activated empty path early-return
-    monkeypatch.setattr(instructor_ui.QDesktopServices, "openUrl", lambda _url: (_ for _ in ()).throw(AssertionError("should not open")))
-    module._on_quick_link_activated("file::   ")
+    assert module._ui_engine.footer_widget.isHidden() is True
 
     # _start_async_operation wrapper
     seen_start: list[str] = []
@@ -265,8 +258,6 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     assert instructor_ui._atomic_copy_file("a", "b") == "copied"
 
     module = _build_module(monkeypatch)
-    monkeypatch.setattr(module, "_refresh_quick_links", lambda: None)
-    assert module._quick_links_html() is not None
     assert module._step_path(1) == module._workflow_controller.step_path(1)
     assert module._step_done(1) == module._workflow_controller.step_done(1)
     assert module._step_outdated(2) == module._workflow_controller.step_outdated(2)
@@ -277,19 +268,6 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     monkeypatch.setattr(module._workflow_controller, "on_step_selected", lambda step: selected.__setitem__("step", step))
     module._on_step_selected(2)
     assert selected["step"] == 2
-
-    # Cover selection clearing branch.
-    module.user_log_view.setPlainText("one")
-    module.generated_outputs_view.setPlainText("two")
-    c1 = module.user_log_view.textCursor()
-    c1.select(c1.SelectionType.Document)
-    module.user_log_view.setTextCursor(c1)
-    c2 = module.generated_outputs_view.textCursor()
-    c2.select(c2.SelectionType.Document)
-    module.generated_outputs_view.setTextCursor(c2)
-    module._clear_info_text_selection()
-    assert module.user_log_view.textCursor().hasSelection() is False
-    assert module.generated_outputs_view.textCursor().hasSelection() is False
 
     # Invalid step branch resets to first workflow step.
     module.current_step = 99
@@ -309,12 +287,10 @@ def test_additional_wrapper_and_ui_branches(monkeypatch: pytest.MonkeyPatch, qap
     assert module.active_note.text() == "instructor.note.outdated_downstream"
 
     # Retranslate wrapper.
-    called = {"rerender": 0, "refresh": 0, "clear": 0}
-    monkeypatch.setattr(module, "_rerender_user_log", lambda: called.__setitem__("rerender", called["rerender"] + 1))
+    called = {"refresh": 0}
     monkeypatch.setattr(module, "_refresh_ui", lambda: called.__setitem__("refresh", called["refresh"] + 1))
-    monkeypatch.setattr(module, "_clear_info_text_selection", lambda: called.__setitem__("clear", called["clear"] + 1))
     module.retranslate_ui()
-    assert called == {"rerender": 1, "refresh": 1, "clear": 1}
+    assert called == {"refresh": 1}
 
     # Download course template click busy/idle branches.
     called_dl = {"count": 0, "refresh": 0}

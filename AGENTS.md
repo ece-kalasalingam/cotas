@@ -40,8 +40,9 @@
   top must expand to fill remaining space;
   root stretch should remain top=`1`, footer=`0`;
   pane-visibility validation should rely on hidden-state semantics (`isHidden`).
-- Modules with visible footer should collapse footer in shared activity mode using
-  `self._ui_engine.set_footer_visible(not enabled)` so top expands fully.
+- Shared activity tabs are centralized in `MainWindow` (`sharedInfoTabs`).
+- Instructor/Coordinator must not render a separate visible footer tab panel.
+- In module shared-activity mode hooks, keep module footer hidden so top expands fully.
 - Do not keep temporary debug border styling in engine code after debugging.
 - Footer height source of truth must be `INSTRUCTOR_INFO_TAB_FIXED_HEIGHT` in `common/constants.py`.
 - The global visible footer (`shared_activity_frame` in `main_window.py`) must stay fixed-height
@@ -61,6 +62,5 @@
   - emit `build_i18n_log_message(...)` payloads (directly or through `publish_status_key`) when writing to logs.
   - do not pre-localize and store message text if the line is expected to retranslate later.
 - Footer/shared activity rendering expectations:
-  - module footer logs rerender via `common/module_messages.py`
-  - shared footer log rerender in `main_window.py`
+  - shared footer log rerender happens in `main_window.py`
   - rerender path should resolve from stored i18n payload/raw message, not only from pre-localized text.

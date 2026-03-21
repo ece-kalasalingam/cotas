@@ -62,9 +62,6 @@ def test_main_window_reuses_module_instance_across_repeated_switches(
         def set_shared_activity_log_mode(self, enabled: bool) -> None:
             mode_calls.append(enabled)
 
-        def get_shared_outputs_html(self) -> str:
-            return "outputs"
-
     class HelpModule(QWidget):
         def __init__(self) -> None:
             super().__init__()

@@ -1,8 +1,8 @@
 # UI Layout Guardrails (Top/Footer Engine)
 
-This project now uses `ModuleUIEngine` as a two-region container:
-- Top region (`top_widget`) for module content.
-- Footer region (`footer_widget`) for module-local tabs/log/output panels.
+This project uses:
+- `ModuleUIEngine` as a two-region container for module content/layout wiring.
+- `MainWindow.shared_activity_frame` (`sharedInfoTabs`) as the single visible bottom activity panel.
 
 ## Incident Summary
 
@@ -13,8 +13,7 @@ We hit a multi-day layout regression where:
 - Visibility validation used `isVisible()` and produced false negatives before widgets were shown.
 
 Latest stabilization (March 21, 2026):
-- The user-visible bottom panel height is controlled by `main_window.py` (`shared_activity_frame`),
-  not only by module-local footers.
+- The user-visible bottom panel is controlled by `main_window.py` (`shared_activity_frame`) only.
 - `shared_activity_frame` is now enforced with:
   - `setFixedHeight(INSTRUCTOR_INFO_TAB_FIXED_HEIGHT)`
   - `setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)`
@@ -42,17 +41,13 @@ Keep these invariants in `common/module_ui_engine.py`:
    - Keep it bound to `INSTRUCTOR_INFO_TAB_FIXED_HEIGHT`.
    - Do not apply per-module or ad-hoc footer height overrides in `main_window.py` or modules.
 
-## Module Usage Rule
+## Shared Panel Rule
 
-Modules with a local footer panel must collapse engine footer in shared-activity mode:
-
-```python
-def set_shared_activity_log_mode(self, enabled: bool) -> None:
-    self.info_tabs.setVisible(not enabled)
-    self._ui_engine.set_footer_visible(not enabled)
-```
-
-This is required so the top region stretches fully when shared logs are shown.
+- Keep Activity Log in `MainWindow.sharedInfoTabs` common across modules.
+- Keep Generated Outputs in `MainWindow.sharedInfoTabs` module-specific by reading
+  each module's `get_shared_outputs_data()`.
+- Instructor/Coordinator should not render their own visible footer tabs.
+- Module footers may exist structurally via `ModuleUIEngine`, but must remain hidden.
 
 ## Debugging Note
 

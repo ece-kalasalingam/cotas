@@ -67,7 +67,6 @@ class _Evt:
 
 def test_drag_drop_file_list_multiple_mode_emits_all_local_paths(qapp: QApplication) -> None:
     dl = DragDropFileList(
-        placeholder_color="gray",
         placeholder_margins=(0, 0, 0, 0),
         drop_mode="multiple",
     )
@@ -90,7 +89,6 @@ def test_drag_drop_file_list_multiple_mode_emits_all_local_paths(qapp: QApplicat
 
 def test_drag_drop_file_list_single_mode_emits_first_local_path_only(qapp: QApplication) -> None:
     dl = DragDropFileList(
-        placeholder_color="gray",
         placeholder_margins=(0, 0, 0, 0),
         drop_mode="single",
     )

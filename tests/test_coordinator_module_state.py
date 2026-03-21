@@ -26,6 +26,16 @@ def _build_module(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.Coordinator
     return coordinator_ui.CoordinatorModule()
 
 
+def _dispose_widget(widget: object, qapp: QApplication) -> None:
+    close = getattr(widget, "close", None)
+    if callable(close):
+        close()
+    delete_later = getattr(widget, "deleteLater", None)
+    if callable(delete_later):
+        delete_later()
+    qapp.processEvents()
+
+
 def test_save_shortcut_runs_only_when_not_busy_and_enabled(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
     calls = {"count": 0}
@@ -43,7 +53,7 @@ def test_save_shortcut_runs_only_when_not_busy_and_enabled(monkeypatch: pytest.M
     module.calculate_button.setEnabled(True)
     module._on_save_shortcut_activated()
     assert calls["count"] == 1
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_drain_next_batch_pops_only_when_idle(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -61,7 +71,7 @@ def test_drain_next_batch_pops_only_when_idle(monkeypatch: pytest.MonkeyPatch, q
     module._drain_next_batch()
     assert got == [["a.xlsx"]]
     assert module._pending_drop_batches == [["b.xlsx"]]
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_browse_files_respects_busy_and_processes_selection(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -83,21 +93,21 @@ def test_browse_files_respects_busy_and_processes_selection(monkeypatch: pytest.
     module.state.busy = False
     module._browse_files()
     assert called == {"dialog": 1, "remember": 1, "process": 1}
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_remember_dialog_dir_safe_fallback(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
     calls = {"fallback": 0}
 
-    def _fallback(*_args, **_kwargs):
-        calls["fallback"] += 1
+    class _Runtime:
+        def remember_dialog_dir_safe(self, *_args, **_kwargs):
+            calls["fallback"] += 1
 
-    monkeypatch.setattr(module._runtime, "remember_dialog_dir_safe", _fallback)
-
+    module._runtime = cast(Any, _Runtime())
     module._remember_dialog_dir_safe("C:/tmp/a.xlsx")
     assert calls == {"fallback": 1}
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_close_event_cancels_token_and_removes_handler(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -117,7 +127,7 @@ def test_close_event_cancels_token_and_removes_handler(monkeypatch: pytest.Monke
     removed = {"count": 0}
     monkeypatch.setattr(module._logger, "removeHandler", lambda _h: removed.__setitem__("count", removed["count"] + 1))
 
-    module.close()
+    _dispose_widget(module, qapp)
 
     assert token.cancelled is True
     assert module._cancel_token is None
@@ -145,7 +155,7 @@ def test_refresh_ui_toggles_controls_with_file_state(monkeypatch: pytest.MonkeyP
     assert module.clear_button.isEnabled() is False
     assert module.calculate_button.isEnabled() is False
     assert module.drop_list.isEnabled() is False
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_threshold_changes_revalidate_calculate_button(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -164,7 +174,7 @@ def test_threshold_changes_revalidate_calculate_button(monkeypatch: pytest.Monke
 
     module.threshold_l2_input.setValue(70.0)
     assert module.calculate_button.isEnabled() is True
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_threshold_violation_emits_toast_and_activity_log(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -199,4 +209,4 @@ def test_threshold_violation_emits_toast_and_activity_log(monkeypatch: pytest.Mo
     module.threshold_l2_input.setValue(80.0)
     assert len(toasts) == initial_count + 1
     assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
-    module.close()
+    _dispose_widget(module, qapp)

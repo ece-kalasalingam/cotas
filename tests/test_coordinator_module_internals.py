@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QApplication
 
 from common.jobs import CancellationToken
@@ -26,6 +26,16 @@ def _build_module(monkeypatch: pytest.MonkeyPatch) -> coordinator_ui.Coordinator
     monkeypatch.setattr(coordinator_ui, "t", lambda key, **kwargs: key)
     monkeypatch.setattr(coordinator_ui.CoordinatorModule, "_setup_ui_logging", lambda self: None)
     return coordinator_ui.CoordinatorModule()
+
+
+def _dispose_widget(widget: object, qapp: QApplication) -> None:
+    close = getattr(widget, "close", None)
+    if callable(close):
+        close()
+    delete_later = getattr(widget, "deleteLater", None)
+    if callable(delete_later):
+        delete_later()
+    qapp.processEvents()
 
 
 def test_processing_wrapper_uses_underlying_validator(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,7 +62,7 @@ def test_publish_and_delegate_helpers(monkeypatch: pytest.MonkeyPatch, qapp: QAp
     assert any(tag == "key" and args == ("coordinator.status.added",) for tag, args, _ in seen)
     assert any(tag == "calc" for tag, *_ in seen)
     assert any(tag == "process" for tag, *_ in seen)
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -66,10 +76,6 @@ def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch
     module._async_runner = cast(Any, _Runner())
 
     monkeypatch.setattr(coordinator_ui, "_add_uploaded_paths_impl", lambda _m, paths, ns: seen.append(f"add:{len(paths)}"))
-    monkeypatch.setattr(coordinator_ui, "_output_link_markup_impl", lambda _m, label, path, ns: f"M:{label}:{path}")
-    monkeypatch.setattr(coordinator_ui, "_output_links_html_impl", lambda _m, ns: "HTML")
-    monkeypatch.setattr(coordinator_ui, "_refresh_output_links_impl", lambda _m, ns: seen.append("refresh"))
-    monkeypatch.setattr(coordinator_ui, "_on_output_link_activated_impl", lambda _m, href, ns: seen.append(f"open:{href}"))
 
     module._start_async_operation(
         token=CancellationToken(),
@@ -79,16 +85,10 @@ def test_async_and_output_link_wrappers_delegate(monkeypatch: pytest.MonkeyPatch
         on_failure=lambda _e: None,
     )
     module._add_uploaded_paths([Path("a.xlsx")])
-    assert module._output_link_markup("L", "P") == "M:L:P"
-    assert module._output_links_html() == "HTML"
-    module._refresh_output_links()
-    module._on_output_link_activated("file::x")
 
     assert "runner" in seen
     assert "add:1" in seen
-    assert "refresh" in seen
-    assert "open:file::x" in seen
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_on_files_dropped_remembers_first_path(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -101,30 +101,18 @@ def test_on_files_dropped_remembers_first_path(monkeypatch: pytest.MonkeyPatch, 
 
     assert seen["remember"] == "C:/x.xlsx"
     assert seen["process"] == ["C:/x.xlsx", "C:/y.xlsx"]
-    module.close()
+    _dispose_widget(module, qapp)
 
 
-def test_clear_info_selection_and_drop_active(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+def test_drop_active(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
     module = _build_module(monkeypatch)
-
-    for view in (module.user_log_view, module.generated_outputs_view):
-        if hasattr(view, "setPlainText"):
-            view.setPlainText("hello")
-        else:
-            cast(Any, view).setText("hello")
-        cursor = view.textCursor()
-        cursor.select(cursor.SelectionType.Document)
-        view.setTextCursor(cursor)
-
-    module._clear_info_text_selection()
-    assert all(not v.textCursor().hasSelection() for v in (module.user_log_view, module.generated_outputs_view))
 
     updates = {"count": 0}
     monkeypatch.setattr(module.drop_zone, "update", lambda: updates.__setitem__("count", updates["count"] + 1))
     module._set_drop_active(True)
     assert bool(module.drop_zone.property("dragActive")) is True
     assert updates["count"] == 1
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_drop_list_event_branches(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -178,6 +166,9 @@ def test_drop_list_event_branches(monkeypatch: pytest.MonkeyPatch, qapp: QApplic
         def accept(self):
             self.accepted += 1
 
+        def pos(self):
+            return QPoint(-1, -1)
+
     e1 = _Evt(_Mime(True))
     dl.dragEnterEvent(cast(Any, e1))
     assert e1.accepted == 1
@@ -191,8 +182,9 @@ def test_drop_list_event_branches(monkeypatch: pytest.MonkeyPatch, qapp: QApplic
     assert any(tag == "drop" and payload == ("C:/a.xlsx",) for tag, payload in events)
 
     e4 = _Evt(_Mime(False))
-    dl.mouseDoubleClickEvent(e4)
+    dl.mousePressEvent(cast(Any, e4))
     assert any(tag == "browse" for tag, _ in events)
+    _dispose_widget(dl, qapp)
 
 
 def test_on_files_dropped_skips_remember_when_all_paths_empty(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -210,7 +202,7 @@ def test_on_files_dropped_skips_remember_when_all_paths_empty(monkeypatch: pytes
 
     assert seen["remember"] == 0
     assert seen["process"] == ["", ""]
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -220,7 +212,6 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(module._runtime, "setup_ui_logging", lambda: seen.append("setup"))
     monkeypatch.setattr(module._runtime, "append_user_log", lambda message: seen.append(f"append:{message}"))
     monkeypatch.setattr(coordinator_ui, "_rerender_user_log_impl", lambda _m, ns: seen.append("rerender"))
-    monkeypatch.setattr(module, "_output_links_html", lambda: "outputs")
     monkeypatch.setattr(coordinator_ui, "remove_file_by_path", lambda _m, path, ns: seen.append(f"remove:{path}"))
     monkeypatch.setattr(coordinator_ui, "clear_all", lambda _m, ns: seen.append("clear"))
 
@@ -228,10 +219,9 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     module._append_user_log("x")
     module._rerender_user_log()
     module.set_shared_activity_log_mode(True)
-    assert module.info_tabs.isHidden() is True
+    assert module._ui_engine.footer_widget.isHidden() is True
     module.set_shared_activity_log_mode(False)
-    assert module.info_tabs.isHidden() is False
-    assert module.get_shared_outputs_html() == "outputs"
+    assert module._ui_engine.footer_widget.isHidden() is True
     module._remove_file_by_path("C:/a.xlsx")
     module._clear_all()
 
@@ -239,7 +229,7 @@ def test_misc_wrapper_methods_delegate_and_toggle(monkeypatch: pytest.MonkeyPatc
     assert "rerender" in seen
     assert "remove:C:/a.xlsx" in seen
     assert "clear" in seen
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_set_busy_calls_state_and_refresh(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -256,7 +246,7 @@ def test_set_busy_calls_state_and_refresh(monkeypatch: pytest.MonkeyPatch, qapp:
     assert module.state.busy is False
     assert module.state.active_job_id is None
     assert calls["refresh"] == 2
-    module.close()
+    _dispose_widget(module, qapp)
 
 
 def test_get_attainment_thresholds_enforces_strict_bounds(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -283,5 +273,5 @@ def test_get_attainment_thresholds_enforces_strict_bounds(monkeypatch: pytest.Mo
         "error",
     )
     assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
-    module.close()
+    _dispose_widget(module, qapp)
 

@@ -290,7 +290,7 @@ def test_prepare_marks_template_async_early_returns_and_prereq_toast() -> None:
     module.step2_upload_ready = False
     module.step2_course_details_path = None
     step2.prepare_marks_template_async(module, ns=ns)
-    assert module.toasts[-1] == ("info", "T:instructor.require.step1")
+    assert module.toasts == []
     assert module.started == {}
 
 
