@@ -19,8 +19,6 @@
     "dist",
     "htmlcov"
   ],
-  "venvPath": "C:/Users/jprak/miniconda3/envs",
-  "venv": "obe",
   "pythonVersion": "3.10",
   "typeCheckingMode": "standard",
   "reportMissingImports": "warning"

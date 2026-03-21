@@ -7,6 +7,7 @@ import locale
 import logging
 import sys
 from collections.abc import Mapping
+from typing import Any
 
 from common.texts.en import TEXTS as EN_TEXTS
 from common.texts.hi_in import TEXTS as HI_IN_TEXTS
@@ -55,7 +56,11 @@ def _get_windows_ui_lcid() -> int | None:
     try:
         from ctypes import wintypes
 
-        get_ui_lang = ctypes.windll.kernel32.GetUserDefaultUILanguage
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            return None
+        kernel32: Any = windll.kernel32
+        get_ui_lang = kernel32.GetUserDefaultUILanguage
         get_ui_lang.argtypes = []
         get_ui_lang.restype = wintypes.USHORT
         return int(get_ui_lang())
