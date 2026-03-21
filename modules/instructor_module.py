@@ -419,6 +419,7 @@ class InstructorModule(QWidget):
         self.step1_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.step1_prepare_action = self.step1_drop_widget.submit_button
         self.step1_prepare_action.setObjectName("primaryAction")
+        self.step1_prepare_action.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Hidden upload action used by keyboard shortcuts and test harness hooks.
         self.step2_upload_action = QPushButton()
@@ -449,6 +450,7 @@ class InstructorModule(QWidget):
         self.step2_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.step2_generate_action = self.step2_drop_widget.submit_button
         self.step2_generate_action.setObjectName("primaryAction")
+        self.step2_generate_action.setCursor(Qt.CursorShape.PointingHandCursor)
         self.step_drop_stack = QStackedWidget()
         self.step_drop_stack.addWidget(self.step1_drop_widget)
         self.step_drop_stack.addWidget(self.step2_drop_widget)

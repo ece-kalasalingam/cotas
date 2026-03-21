@@ -36,6 +36,7 @@ htmlcov/
 
 # Logs and local runtime files
 *.log
+*.log.*
 *.stackdump
 core
 core.*

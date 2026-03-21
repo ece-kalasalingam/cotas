@@ -216,16 +216,9 @@ class _UiStyleRefreshFilter(QObject):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         event_type = event.type()
-        if event_type in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.StyleChange,
-            QEvent.Type.ThemeChange,
-        ):
-            apply_global_ui_styles(self._app)
-            _logger.debug("Managed styles reapplied due to app event: %s", event_type.name)
-            # Hybrid fallback: only escalate to qdarktheme refresh on actual theme change.
-            if event_type == QEvent.Type.ThemeChange:
-                _schedule_system_theme_refresh(self._app)
+        if event_type == QEvent.Type.ThemeChange:
+            # Keep runtime updates lightweight: only react to concrete theme changes.
+            _schedule_system_theme_refresh(self._app)
         return super().eventFilter(watched, event)
 
 
@@ -236,14 +229,6 @@ def _wire_global_style_refresh(app: QApplication) -> None:
     if callable(install_filter):
         install_filter(app_refresher)
     setattr(app, "_ui_style_refresh_filter", app_refresher)
-    palette_changed = getattr(app, "paletteChanged", None)
-    connect = getattr(palette_changed, "connect", None)
-    if callable(connect):
-        def _on_palette_changed(*_args) -> None:
-            apply_global_ui_styles(app)
-            _logger.debug("Managed styles reapplied due to paletteChanged signal.")
-
-        connect(_on_palette_changed)
     _logger.debug("Hybrid UI style refresh wiring initialized.")
 
 

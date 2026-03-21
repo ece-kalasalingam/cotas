@@ -128,7 +128,10 @@ QPushButton#coordinatorFileRemoveButton {
     max-height: 24px;
 }
 QPushButton#coordinatorFileOpenButton:hover,
-QPushButton#coordinatorFolderOpenButton:hover,
+QPushButton#coordinatorFolderOpenButton:hover {
+    background-color: palette(mid);
+    border-radius: 4px;
+}
 QPushButton#coordinatorFileRemoveButton:hover {
     background-color: rgba(231, 76, 60, 0.15);
     border-radius: 4px;
