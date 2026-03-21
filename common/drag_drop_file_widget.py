@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Literal
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import (
     QDragEnterEvent,
     QDragLeaveEvent,
@@ -252,7 +252,7 @@ class ManagedDropFileWidget(QWidget):
         self._update_clear_button_state()
         self._update_submit_button_state()
 
-    def eventFilter(self, watched: object, event) -> bool:
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if watched is self.drop_zone_frame:
             event_type = event.type()
             if event_type == event.Type.Enter:
