@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
-import urllib.error
-import urllib.request
+from http.client import HTTPSConnection
 from pathlib import Path
 
 
@@ -19,42 +17,31 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _gh_api_json(path: str) -> object | None:
-    """Try GitHub CLI first (handles auth/session better)."""
-    cmd = ["gh", "api", path]
+def _github_api_json(path: str) -> object | None:
+    """Unauthenticated GitHub API call over explicit HTTPS."""
+    conn = HTTPSConnection("api.github.com", timeout=30)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    except Exception:
+        conn.request(
+            "GET",
+            f"/{path.lstrip('/')}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "focus-contributors-fetcher",
+            },
+        )
+        response = conn.getresponse()
+        if response.status != 200:
+            return None
+        return json.loads(response.read().decode("utf-8"))
+    except (OSError, TimeoutError, json.JSONDecodeError):
         return None
-    if proc.returncode != 0:
-        return None
-    try:
-        return json.loads(proc.stdout)
-    except Exception:
-        return None
-
-
-def _http_json(url: str) -> object | None:
-    """Fallback unauthenticated HTTP call."""
-    req = urllib.request.Request(
-        url=url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "focus-contributors-fetcher",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        return None
+    finally:
+        conn.close()
 
 
 def _from_stats(owner: str, repo: str) -> set[str]:
     path = f"repos/{owner}/{repo}/stats/contributors"
-    data = _gh_api_json(path)
-    if data is None:
-        data = _http_json(f"https://api.github.com/{path}")
+    data = _github_api_json(path)
     if not isinstance(data, list):
         return set()
     names: set[str] = set()
@@ -75,9 +62,7 @@ def _from_stats(owner: str, repo: str) -> set[str]:
 
 def _from_contributors(owner: str, repo: str) -> set[str]:
     path = f"repos/{owner}/{repo}/contributors?per_page=100"
-    data = _gh_api_json(path)
-    if data is None:
-        data = _http_json(f"https://api.github.com/{path}")
+    data = _github_api_json(path)
     if not isinstance(data, list):
         return set()
     names: set[str] = set()
