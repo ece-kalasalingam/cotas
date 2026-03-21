@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -145,7 +146,7 @@ def test_analyze_dropped_files_marks_non_final_reports_invalid(tmp_path: Path) -
     assert result["added"] == [str(good.resolve())]
     assert result["duplicates"] == 0
     assert result["invalid_final_report"] == [str(bad.resolve())]
-    details = result.get("invalid_final_report_details", [])
+    details = cast(list[dict[str, Any]], result.get("invalid_final_report_details", []))
     assert len(details) == 1
     assert details[0]["path"] == str(bad.resolve())
     assert "invalid final co report workbook" in details[0]["reason"].lower()
@@ -170,7 +171,7 @@ def test_analyze_dropped_files_rejects_mismatched_template_id_against_base(tmp_p
 
     assert result["added"] == []
     assert result["invalid_final_report"] == [str(mismatch.resolve())]
-    details = result.get("invalid_final_report_details", [])
+    details = cast(list[dict[str, Any]], result.get("invalid_final_report_details", []))
     assert len(details) == 1
     assert "mismatch" in details[0]["reason"].lower()
 
@@ -188,7 +189,7 @@ def test_analyze_dropped_files_rejects_same_section_across_files(tmp_path: Path)
 
     assert result["added"] == []
     assert result["invalid_final_report"] == [str(same_section.resolve())]
-    details = result.get("invalid_final_report_details", [])
+    details = cast(list[dict[str, Any]], result.get("invalid_final_report_details", []))
     assert len(details) == 1
     assert "duplicate section" in details[0]["reason"].lower()
 

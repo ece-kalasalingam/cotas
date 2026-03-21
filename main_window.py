@@ -34,7 +34,11 @@ from common.constants import (
     OUTPUT_LINK_SEPARATOR,
 )
 from common.module_plugins import ModulePluginSpec
-from common.output_panel import OutputPanelData, open_output_link, render_output_panel_html
+from common.output_panel import (
+    OutputPanelData,
+    open_output_link,
+    render_output_panel_html,
+)
 from common.texts import get_available_languages, get_language, t
 from common.toast import show_toast
 from common.ui_logging import (

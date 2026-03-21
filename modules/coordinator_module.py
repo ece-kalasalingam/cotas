@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -428,7 +427,8 @@ class CoordinatorModule(QWidget):
         self.drop_list = self.drop_widget.drop_list
         self.clear_button = self.drop_widget.clear_button
         self.calculate_button = self.drop_widget.submit_button
-        self.calculate_button.setObjectName("coordinatorCalculateButton")
+        self.calculate_button.setObjectName("primaryAction")
+        #self.calculate_button.setObjectName("coordinatorCalculateButton")
         self.calculate_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.calculate_button.setAutoDefault(False)
         self.calculate_button.setDefault(False)
@@ -595,10 +595,6 @@ class CoordinatorModule(QWidget):
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         items: list[OutputItem] = []
-        items.extend(
-            OutputItem(label_key="coordinator.links.uploaded_report", path=str(path))
-            for path in self._files
-        )
         items.extend(
             OutputItem(label_key="coordinator.links.downloaded_output", path=str(path))
             for path in self._downloaded_outputs
