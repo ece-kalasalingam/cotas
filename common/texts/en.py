@@ -38,6 +38,7 @@ TEXTS = {
     ),
     "about.contributors.none": "Contributors information is not available.",
     "about.repository.link_label": "GitHub Repository",
+    "about.meta_line_html": '{copyright} | <a href="{url}">{link_label}</a>',
     "about.institution": "Developed at Kalasalingam Academy of Research and Education (KARE) by the following contributors:",
     "about.copyright": "(c) {year} KARE. All rights reserved.",
     # Help module
@@ -82,6 +83,7 @@ TEXTS = {
     "instructor.note.outdated_current": "This step is outdated. Run this step again.",
     "instructor.note.outdated_downstream": "An upstream change was made. Downstream steps may need regeneration.",
     "instructor.action.step1.default": "Download Course Template",
+    "instructor.action.step1.link_html": '<a href="{href}">{text}</a>',
     "instructor.action.step1.upload": "Upload Course Details",
     "instructor.action.step1.prepare": "Prepare Marks Template",
     "instructor.action.step2.upload.default": "Upload Filled Marks",

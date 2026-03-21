@@ -133,5 +133,10 @@ class AboutModule(QWidget):
         link_text = t("about.repository.link_label")
         copyright_text = t("about.copyright", year=current_year)
         self.meta_line.setText(
-            f'{copyright_text} | <a href="{APP_REPOSITORY_URL}">{link_text}</a>'
+            t(
+                "about.meta_line_html",
+                copyright=copyright_text,
+                url=APP_REPOSITORY_URL,
+                link_label=link_text,
+            )
         )

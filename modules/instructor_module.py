@@ -104,6 +104,7 @@ _logger = logging.getLogger(__name__)
 shutil = importlib.import_module("shutil")
 _ENABLE_SECOND_ROW_ACTIONS = True
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
+_DOWNLOAD_COURSE_TEMPLATE_HREF = "download-course-template"
 
 # Step handlers receive `ns=globals()`, so these names must stay module-visible.
 _STEP_RUNTIME_GLOBALS = (
@@ -631,7 +632,13 @@ class InstructorModule(QWidget):
     def _set_download_course_template_link_enabled(self, enabled: bool) -> None:
         text = t("instructor.action.step1.default")
         if enabled:
-            self.download_course_template_link.setText(f'<a href="download-course-template">{text}</a>')
+            self.download_course_template_link.setText(
+                t(
+                    "instructor.action.step1.link_html",
+                    href=_DOWNLOAD_COURSE_TEMPLATE_HREF,
+                    text=text,
+                )
+            )
         else:
             self.download_course_template_link.setText(text)
         self.download_course_template_link.setEnabled(enabled)

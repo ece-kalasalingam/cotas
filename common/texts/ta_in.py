@@ -36,6 +36,7 @@ TEXTS = {
     "about.copyright": "(c) {year} KARE. அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.",
     "about.contributors.none": "பங்களிப்பாளர் தகவல் கிடைக்கவில்லை.",
     "about.repository.link_label": "கிட்ஹப் ரெப்போசிட்டரி",
+    "about.meta_line_html": '{copyright} | <a href="{url}">{link_label}</a>',
     # Help module
     "help.doc_missing_title": "உதவி ஆவணம் இல்லை",
     "help.doc_missing_body": "உதவி PDF கிடைக்கவில்லை:\\n{path}",
@@ -78,6 +79,7 @@ TEXTS = {
     "instructor.note.outdated_current": "இந்த படி காலாவதியானது. இந்த படியை மீண்டும் இயக்கவும்.",
     "instructor.note.outdated_downstream": "மேல்நிலை மாற்றம் செய்யப்பட்டுள்ளது. அடுத்த படிகளை மீண்டும் உருவாக்க வேண்டி இருக்கலாம்.",
     "instructor.action.step1.default": "பாட வார்ப்புருவை பதிவிறக்கு",
+    "instructor.action.step1.link_html": '<a href="{href}">{text}</a>',
     "instructor.action.step1.upload": "பாட விவரங்களை பதிவேற்று",
     "instructor.action.step1.prepare": "மதிப்பெண் வார்ப்புருவை தயாரி",
     "instructor.action.step2.upload.default": "நிரப்பப்பட்ட மதிப்பெண்களை பதிவேற்று",
