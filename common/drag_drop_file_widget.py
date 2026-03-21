@@ -42,7 +42,7 @@ class DragDropFileList(QListWidget):
     files_dropped = Signal(list)
     drag_state_changed = Signal(bool)
     browse_requested = Signal()
-    DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or double-click to add files"
+    DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or single-click to add files"
 
     def __init__(
         self,
@@ -125,12 +125,12 @@ class DragDropFileList(QListWidget):
             return
         event.ignore()
 
-    def mouseDoubleClickEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
             self.browse_requested.emit()
             event.accept()
             return
-        super().mouseDoubleClickEvent(event)
+        super().mousePressEvent(event)
 
 
 class DragDropZoneFrame(QFrame):

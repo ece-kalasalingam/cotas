@@ -113,6 +113,7 @@ TEXTS = {
     'instructor.status.step1_prepare_progress': 'Processed marks templates: {processed}/{total}.',
     'instructor.status.step1_prepare_per_file_failures': 'Marks-template per-file failures: {details}',
     'instructor.step1.drop.summary': 'ఫైల్‌లు: {count}',
+    'common.dropzone.placeholder': 'ఫైళ్లను జోడించడానికి Drag and Drop చేయండి, లేదా Ctrl + O నొక్కండి, లేదా ఒక్కసారి క్లిక్ చేయండి',
     'instructor.toast.step1_validation_summary': 'Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.',
     'instructor.toast.step1_prepare_summary': 'Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.',
     'instructor.toast.step2_generate_summary': 'CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.',

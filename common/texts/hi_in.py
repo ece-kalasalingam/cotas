@@ -113,6 +113,7 @@ TEXTS = {
     'instructor.status.step1_prepare_progress': 'Processed marks templates: {processed}/{total}.',
     'instructor.status.step1_prepare_per_file_failures': 'Marks-template per-file failures: {details}',
     'instructor.step1.drop.summary': 'फ़ाइलें: {count}',
+    'common.dropzone.placeholder': 'फ़ाइलें जोड़ने के लिए Drag and Drop करें, या Ctrl + O दबाएँ, या एक बार क्लिक करें',
     'instructor.toast.step1_validation_summary': 'Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.',
     'instructor.toast.step1_prepare_summary': 'Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.',
     'instructor.toast.step2_generate_summary': 'CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.',

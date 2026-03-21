@@ -104,13 +104,20 @@ def append_user_log(module: object, message: str, *, ns: Mapping[str, object]) -
     localized = typed_ns["resolve_i18n_log_message"](message)
     timestamp = datetime.now()
     if parsed is None:
-        typed_module._user_log_entries.append({"timestamp": timestamp, "message": localized})
+        typed_module._user_log_entries.append(
+            {
+                "timestamp": timestamp,
+                "message": localized,
+                "raw_message": message,
+            }
+        )
     else:
         key, kwargs, fallback = parsed
         typed_module._user_log_entries.append(
             {
                 "timestamp": timestamp,
                 "message": localized,
+                "raw_message": message,
                 "text_key": key,
                 "kwargs": kwargs,
                 "fallback": fallback,
@@ -132,6 +139,7 @@ def rerender_user_log(module: object, *, ns: Mapping[str, object]) -> None:
         fallback = entry.get("fallback")
         kwargs = entry.get("kwargs")
         message = entry.get("message")
+        raw_message = entry.get("raw_message")
         if isinstance(text_key, str):
             safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
             try:
@@ -139,7 +147,10 @@ def rerender_user_log(module: object, *, ns: Mapping[str, object]) -> None:
             except Exception:
                 resolved = fallback if isinstance(fallback, str) else str(message or "")
         else:
-            resolved = str(message or "")
+            if isinstance(raw_message, str):
+                resolved = typed_ns["resolve_i18n_log_message"](raw_message)
+            else:
+                resolved = str(message or "")
         ts = timestamp if isinstance(timestamp, datetime) else None
         line = _format_log_line(typed_ns, resolved, timestamp=ts)
         if line is None:

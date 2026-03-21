@@ -127,6 +127,7 @@ TEXTS = {
     "instructor.status.step1_prepare_progress": "Processed marks templates: {processed}/{total}.",
     "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "Files: {count}",
+    "common.dropzone.placeholder": "Drag and Drop, or press Ctrl + O, or single-click to add files",
     "instructor.toast.step1_validation_summary": (
         "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input."
     ),

@@ -420,6 +420,7 @@ class InstructorModule(QWidget):
         self.step1_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.step1.drop.summary", count=count)
         )
+        self.step1_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.step1_prepare_action = self.step1_drop_widget.submit_button
         self.step1_prepare_action.setObjectName("primaryAction")
 
@@ -449,6 +450,7 @@ class InstructorModule(QWidget):
         self.step2_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.step1.drop.summary", count=count)
         )
+        self.step2_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.step2_generate_action = self.step2_drop_widget.submit_button
         self.step2_generate_action.setObjectName("primaryAction")
         self.step_drop_stack = QStackedWidget()
@@ -688,6 +690,8 @@ class InstructorModule(QWidget):
             self.download_course_template_button.setEnabled(True)
 
     def retranslate_ui(self) -> None:
+        self.step1_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
+        self.step2_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self._rerender_user_log()
         self._refresh_ui()
         self._clear_info_text_selection()
@@ -717,11 +721,11 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _on_step1_drop_browse_requested(self) -> None:
-        self._publish_status(t("instructor.status.step1_drop_browse_requested"))
+        self._publish_status_key("instructor.status.step1_drop_browse_requested")
 
     def _on_step1_course_details_dropped(self, dropped_files: list[str]) -> None:
         dropped_count = len([path for path in dropped_files if path])
-        self._publish_status(t("instructor.status.step1_drop_files_dropped", count=dropped_count))
+        self._publish_status_key("instructor.status.step1_drop_files_dropped", count=dropped_count)
         if self.state.busy:
             return
         selected_paths = [path for path in dropped_files if path]
@@ -743,7 +747,7 @@ class InstructorModule(QWidget):
         self.step1_drop_widget.set_files(file_paths)
 
     def _on_step1_drop_files_changed(self, files: list[str]) -> None:
-        self._publish_status(t("instructor.status.step1_drop_files_changed", count=len(files)))
+        self._publish_status_key("instructor.status.step1_drop_files_changed", count=len(files))
         if self.state.busy:
             return
         current_valid = [*self.step1_course_details_paths]
@@ -783,7 +787,7 @@ class InstructorModule(QWidget):
         rejected_count = len([path for path in files if path])
         if rejected_count <= 0:
             return
-        self._publish_status(t("instructor.status.step1_drop_files_rejected", count=rejected_count))
+        self._publish_status_key("instructor.status.step1_drop_files_rejected", count=rejected_count)
 
     def _on_step1_prepare_clicked(self) -> None:
         self._prepare_marks_template_async()
@@ -802,11 +806,11 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _on_step2_drop_browse_requested(self) -> None:
-        self._publish_status(t("instructor.status.step2_drop_browse_requested"))
+        self._publish_status_key("instructor.status.step2_drop_browse_requested")
 
     def _on_step2_filled_marks_dropped(self, dropped_files: list[str]) -> None:
         dropped_count = len([path for path in dropped_files if path])
-        self._publish_status(t("instructor.status.step2_drop_files_dropped", count=dropped_count))
+        self._publish_status_key("instructor.status.step2_drop_files_dropped", count=dropped_count)
         if self.state.busy:
             return
         selected_paths = [path for path in dropped_files if path]
@@ -819,7 +823,7 @@ class InstructorModule(QWidget):
         rejected_count = len([path for path in files if path])
         if rejected_count <= 0:
             return
-        self._publish_status(t("instructor.status.step2_drop_files_rejected", count=rejected_count))
+        self._publish_status_key("instructor.status.step2_drop_files_rejected", count=rejected_count)
 
     def _on_step2_clear_all_clicked(self) -> None:
         if self.state.busy:
@@ -828,7 +832,7 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _on_step2_drop_files_changed(self, files: list[str]) -> None:
-        self._publish_status(t("instructor.status.step2_drop_files_changed", count=len(files)))
+        self._publish_status_key("instructor.status.step2_drop_files_changed", count=len(files))
         if self.state.busy:
             return
         current_valid = [*self.filled_marks_paths]
@@ -886,6 +890,9 @@ class InstructorModule(QWidget):
 
     def _publish_status(self, message: str) -> None:
         self._runtime.publish_status(message)
+
+    def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
+        self._runtime.publish_status_key(text_key, **kwargs)
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())

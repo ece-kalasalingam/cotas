@@ -123,6 +123,7 @@ TEXTS = {
     "instructor.status.step1_prepare_progress": "Processed marks templates: {processed}/{total}.",
     "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "கோப்புகள்: {count}",
+    "common.dropzone.placeholder": "கோப்புகளை சேர்க்க Drag and Drop செய்யவும், அல்லது Ctrl + O அழுத்தவும், அல்லது ஒருமுறை கிளிக் செய்யவும்",
     "instructor.toast.step1_validation_summary": "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.",
     "instructor.toast.step1_prepare_summary": "Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",
     "instructor.toast.step2_generate_summary": "CO report generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.",

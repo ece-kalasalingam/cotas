@@ -486,6 +486,7 @@ class CoordinatorModule(QWidget):
         self.drop_widget.set_summary_text_builder(
             lambda _count: t("coordinator.summary", count=len(self._files))
         )
+        self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.drop_widget.drop_list.setObjectName("coordinatorDropList")
         self.drop_widget.files_dropped.connect(self._on_files_dropped)
         self.drop_widget.browse_requested.connect(self._browse_files)
@@ -549,6 +550,7 @@ class CoordinatorModule(QWidget):
         self._rerender_user_log()
         self.title_label.setText(t("coordinator.title"))
         self.hint_label.setText(t("coordinator.drop_hint"))
+        self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
         self.drop_widget.set_summary_text_builder(
             lambda _count: t("coordinator.summary", count=len(self._files))

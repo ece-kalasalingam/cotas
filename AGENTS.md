@@ -47,3 +47,20 @@
 - The global visible footer (`shared_activity_frame` in `main_window.py`) must stay fixed-height
   and use `QSizePolicy(Expanding, Fixed)` with zero inner margins/spacing.
 - Do not hardcode footer heights in modules or in `MainWindow`; update only the constant.
+
+## Footer Log I18N Guardrail
+
+- Incident fixed: some drag/drop footer log lines were emitted as plain localized strings, so they did not
+  retranslate on language switch.
+- Rule: any user-facing status/log message that must remain translatable after language change must be emitted
+  as an i18n payload, not as `t(...)` plain text.
+- In modules, prefer key-based logging:
+  - use `self._runtime.publish_status_key(...)` (or module helper wrappers like `_publish_status_key(...)`)
+  - avoid `self._publish_status(t("..."))` for translatable lifecycle/status lines.
+- For helpers/widgets/step modules:
+  - emit `build_i18n_log_message(...)` payloads (directly or through `publish_status_key`) when writing to logs.
+  - do not pre-localize and store message text if the line is expected to retranslate later.
+- Footer/shared activity rendering expectations:
+  - module footer logs rerender via `common/module_messages.py`
+  - shared footer log rerender in `main_window.py`
+  - rerender path should resolve from stored i18n payload/raw message, not only from pre-localized text.

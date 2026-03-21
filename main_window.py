@@ -399,6 +399,7 @@ class MainWindow(QMainWindow):
                 {
                     "timestamp": timestamp,
                     "message": localized,
+                    "raw_message": message,
                 }
             )
         else:
@@ -407,6 +408,7 @@ class MainWindow(QMainWindow):
                 {
                     "timestamp": timestamp,
                     "message": localized,
+                    "raw_message": message,
                     "text_key": key,
                     "kwargs": kwargs,
                     "fallback": fallback,
@@ -425,6 +427,7 @@ class MainWindow(QMainWindow):
             fallback = entry.get("fallback")
             kwargs = entry.get("kwargs")
             message = entry.get("message")
+            raw_message = entry.get("raw_message")
             if isinstance(text_key, str):
                 safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
                 try:
@@ -432,7 +435,10 @@ class MainWindow(QMainWindow):
                 except Exception:
                     resolved = fallback if isinstance(fallback, str) else str(message or "")
             else:
-                resolved = str(message or "")
+                if isinstance(raw_message, str):
+                    resolved = resolve_i18n_log_message(raw_message)
+                else:
+                    resolved = str(message or "")
 
             ts = timestamp if isinstance(timestamp, datetime) else None
             line = format_log_line_at(resolved, timestamp=ts)
