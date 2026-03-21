@@ -385,6 +385,9 @@ class CoordinatorModule(QWidget):
         self.threshold_l1_input.valueChanged.connect(self._on_threshold_value_changed)
         self.threshold_l2_input.valueChanged.connect(self._on_threshold_value_changed)
         self.threshold_l3_input.valueChanged.connect(self._on_threshold_value_changed)
+        self.threshold_l1_input.editingFinished.connect(self._on_threshold_editing_finished)
+        self.threshold_l2_input.editingFinished.connect(self._on_threshold_editing_finished)
+        self.threshold_l3_input.editingFinished.connect(self._on_threshold_editing_finished)
 
         thresholds_layout.addLayout(threshold_rows)
         left_layout.addLayout(thresholds_layout)
@@ -509,6 +512,10 @@ class CoordinatorModule(QWidget):
 
     def _on_threshold_value_changed(self, _value: float) -> None:
         self._workflow_controller.on_threshold_value_changed()
+        self._refresh_ui()
+
+    def _on_threshold_editing_finished(self) -> None:
+        self._workflow_controller.on_threshold_editing_finished()
         self._refresh_ui()
 
     def _on_calculate_clicked(self) -> None:

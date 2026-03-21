@@ -136,6 +136,15 @@ def _messages_namespace() -> dict[str, object]:
 def _publish_status(target: object, message: str) -> None:
     cast("InstructorModule", target)._publish_status(message)
 
+def _publish_status_key(target: object, text_key: str, **kwargs: object) -> None:
+    publish_key = getattr(target, "_publish_status_key", None)
+    if callable(publish_key):
+        publish_key(text_key, **kwargs)
+        return
+    publish_plain = getattr(target, "_publish_status", None)
+    if callable(publish_plain):
+        publish_plain(t(text_key, **kwargs))
+
 
 def _start_async_operation(
     target: object,
@@ -684,7 +693,7 @@ class InstructorModule(QWidget):
         self.filled_marks_outdated = self.filled_marks_done
         self.final_report_outdated = self.final_report_done
         if self.filled_marks_outdated or self.final_report_outdated:
-            self._publish_status(t("instructor.status.step1_changed"))
+            self._publish_status_key("instructor.status.step1_changed")
         self._refresh_ui()
 
     def _on_step1_drop_files_rejected(self, files: list[str]) -> None:
@@ -762,7 +771,7 @@ class InstructorModule(QWidget):
         self.filled_marks_done = False
         self.final_report_outdated = self.final_report_done
         if self.final_report_outdated:
-            self._publish_status(t("instructor.status.step2_changed_filled"))
+            self._publish_status_key("instructor.status.step2_changed_filled")
         self._refresh_ui()
 
     def _on_open_shortcut_activated(self) -> None:
@@ -923,9 +932,9 @@ class InstructorModule(QWidget):
             self.step2_drop_widget.set_files(self.filled_marks_paths)
             if replacing and self.filled_marks_done:
                 self.final_report_outdated = True
-                self._publish_status(t("instructor.status.step2_changed_filled"))
+                self._publish_status_key("instructor.status.step2_changed_filled")
             elif self.filled_marks_done:
-                self._publish_status(t("instructor.status.step2_uploaded_filled"))
+                self._publish_status_key("instructor.status.step2_uploaded_filled")
             if invalid or duplicates:
                 show_toast(
                     self,

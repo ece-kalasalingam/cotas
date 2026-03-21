@@ -36,7 +36,6 @@ TEXTS = {
         "attainment and performing structured outcome analysis based on direct "
         "and indirect assessments."
     ),
-    "about.contributors": "Contributors",
     "about.contributors.none": "Contributors information is not available.",
     "about.repository.link_label": "GitHub Repository",
     "about.institution": "Developed at Kalasalingam Academy of Research and Education (KARE).",
@@ -126,6 +125,8 @@ TEXTS = {
     "instructor.status.step1_prepare_per_file_failures": "Marks-template per-file failures: {details}",
     "instructor.step1.drop.summary": "Files: {count}",
     "common.dropzone.placeholder": "Drag and Drop, or press Ctrl + O, or single-click to add files",
+    "common.validation_failed_invalid_data": "Validation failed due to invalid data.",
+    "common.error_while_process": "Error happened while {process}.",
     "instructor.toast.step1_validation_summary": (
         "Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input."
     ),

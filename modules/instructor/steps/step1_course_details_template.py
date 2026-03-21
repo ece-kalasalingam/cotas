@@ -89,11 +89,21 @@ class _Step1Namespace(TypedDict):
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
     _publish_status: Callable[..., None]
+    _publish_status_key: Callable[..., None]
     log_process_message: Callable[..., None]
     _logger: _Logger
     build_i18n_log_message: Callable[..., str]
     generate_course_details_template: Callable[..., None]
     _start_async_operation: _StartAsyncOperation
+
+def _emit_status_key(typed_ns: _Step1Namespace, typed_module: _InstructorStep1Module, key: str, **kwargs: object) -> None:
+    publish_key = cast(Callable[..., None] | None, typed_ns.get("_publish_status_key"))
+    if callable(publish_key):
+        publish_key(typed_module, key, **kwargs)
+        return
+    publish_plain = cast(Callable[..., None] | None, typed_ns.get("_publish_status"))
+    if callable(publish_plain):
+        publish_plain(typed_module, typed_ns["t"](key, **kwargs))
 
 
 def download_course_template_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -133,7 +143,7 @@ def download_course_template_async(module: object, *, ns: Mapping[str, object]) 
     def _on_finished(_result: object) -> None:
         typed_module.step1_path = save_path
         typed_module.step1_done = True
-        typed_ns["_publish_status"](typed_module, t("instructor.status.step1_selected"))
+        _emit_status_key(typed_ns, typed_module, "instructor.status.step1_selected")
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],

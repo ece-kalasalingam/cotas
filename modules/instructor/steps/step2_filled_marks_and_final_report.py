@@ -120,6 +120,7 @@ class _Step2Namespace(TypedDict):
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
     _publish_status: Callable[..., None]
+    _publish_status_key: Callable[..., None]
     _start_async_operation: _StartAsyncOperation
     log_process_message: Callable[..., None]
     build_i18n_log_message: Callable[..., str]
@@ -129,6 +130,15 @@ class _Step2Namespace(TypedDict):
     _build_final_report_default_name: Callable[[str | None], str]
     _atomic_copy_file: Callable[[str, str], Path]
     _logger: _Logger
+
+def _emit_status_key(typed_ns: _Step2Namespace, typed_module: _InstructorStep2Module, key: str, **kwargs: object) -> None:
+    publish_key = cast(Callable[..., None] | None, typed_ns.get("_publish_status_key"))
+    if callable(publish_key):
+        publish_key(typed_module, key, **kwargs)
+        return
+    publish_plain = cast(Callable[..., None] | None, typed_ns.get("_publish_status"))
+    if callable(publish_plain):
+        publish_plain(typed_module, typed_ns["t"](key, **kwargs))
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -293,7 +303,7 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
         typed_module.final_report_done = bool(generated_outputs)
         typed_module.final_report_outdated = False
         if generated_outputs:
-            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_generated"))
+            _emit_status_key(typed_ns, typed_module, "instructor.status.step2_generated")
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -307,14 +317,18 @@ def generate_final_reports_from_paths_async(module: object, *, ns: Mapping[str, 
             step_id=job_context.step_id if job_context else None,
         )
         if failure_summary:
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t("instructor.status.step2_generate_per_file_failures", details=failure_summary),
+                "instructor.status.step2_generate_per_file_failures",
+                details=failure_summary,
             )
         if warning_summary:
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t("instructor.status.step2_validation_warnings", details=warning_summary),
+                "instructor.status.step2_validation_warnings",
+                details=warning_summary,
             )
             typed_ns["show_toast"](
                 typed_module,
@@ -400,9 +414,9 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
 
         if replacing and typed_module.filled_marks_done:
             typed_module.final_report_outdated = True
-            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_changed_filled"))
+            _emit_status_key(typed_ns, typed_module, "instructor.status.step2_changed_filled")
         else:
-            typed_ns["_publish_status"](typed_module, t("instructor.status.step2_uploaded_filled"))
+            _emit_status_key(typed_ns, typed_module, "instructor.status.step2_uploaded_filled")
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -412,12 +426,11 @@ def upload_filled_marks_async(module: object, *, ns: Mapping[str, object]) -> No
             step_id=job_context.step_id if job_context else None,
         )
         if anomaly_warnings:
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t(
-                    "instructor.status.step2_validation_warnings",
-                    details=_format_warning_summary(anomaly_warnings),
-                ),
+                "instructor.status.step2_validation_warnings",
+                details=_format_warning_summary(anomaly_warnings),
             )
             typed_ns["show_toast"](
                 typed_module,
@@ -506,7 +519,7 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
         typed_module.final_report_done = True
         typed_module.final_report_outdated = False
         typed_module._remember_dialog_dir_safe(output_path)
-        typed_ns["_publish_status"](typed_module, t("instructor.status.step2_generated"))
+        _emit_status_key(typed_ns, typed_module, "instructor.status.step2_generated")
         typed_ns["log_process_message"](
             process_name,
             logger=typed_ns["_logger"],
@@ -517,12 +530,11 @@ def generate_final_report_async(module: object, *, ns: Mapping[str, object]) -> 
         )
         typed_module._show_step_success_toast(2)
         if anomaly_warnings:
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t(
-                    "instructor.status.step2_validation_warnings",
-                    details=_format_warning_summary(anomaly_warnings),
-                ),
+                "instructor.status.step2_validation_warnings",
+                details=_format_warning_summary(anomaly_warnings),
             )
             typed_ns["show_toast"](
                 typed_module,

@@ -34,7 +34,11 @@ def handle_step_failure(
         status_key = "instructor.status.operation_cancelled"
         user_message = t(status_key)
         user_message_payload = ns["build_i18n_log_message"](status_key, fallback=user_message)
-        ns["_publish_status"](module, user_message)
+        publish_key = ns.get("_publish_status_key")
+        if callable(publish_key):
+            publish_key(module, status_key)
+        else:
+            ns["_publish_status"](module, user_message)
         ns["_logger"].info(
             PROCESS_MESSAGE_CANCELLED_TEMPLATE,
             process_name,

@@ -149,6 +149,7 @@ class _Step2Namespace(TypedDict):
     ValidationError: type[Exception]
     AppSystemError: type[Exception]
     _publish_status: Callable[..., None]
+    _publish_status_key: Callable[..., None]
     _start_async_operation: _StartAsyncOperation
     log_process_message: Callable[..., None]
     build_i18n_log_message: Callable[..., str]
@@ -158,6 +159,15 @@ class _Step2Namespace(TypedDict):
     validate_course_details_workbook: Callable[[str], str]
     _build_marks_template_default_name: Callable[[str], str]
     generate_marks_template_from_course_details: Callable[[str, str], None]
+
+def _emit_status_key(typed_ns: _Step2Namespace, typed_module: _InstructorStep2Module, key: str, **kwargs: object) -> None:
+    publish_key = cast(Callable[..., None] | None, typed_ns.get("_publish_status_key"))
+    if callable(publish_key):
+        publish_key(typed_module, key, **kwargs)
+        return
+    publish_plain = cast(Callable[..., None] | None, typed_ns.get("_publish_status"))
+    if callable(publish_plain):
+        publish_plain(typed_module, typed_ns["t"](key, **kwargs))
 
 
 def upload_course_details_async(module: object, *, ns: Mapping[str, object]) -> None:
@@ -231,9 +241,12 @@ def upload_course_details_from_paths_async(
         def _publish_progress_if_needed(*, force: bool = False) -> None:
             if not force and processed % _PROGRESS_UPDATE_BATCH_SIZE != 0:
                 return
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t("instructor.status.step1_validating_progress", processed=processed, total=total_unique),
+                "instructor.status.step1_validating_progress",
+                processed=processed,
+                total=total_unique,
             )
 
         for path in unique_paths:
@@ -313,13 +326,16 @@ def upload_course_details_from_paths_async(
             typed_module.final_report_outdated = typed_module.final_report_done
             typed_module.filled_marks_outdated = typed_module.filled_marks_done
             if typed_module.filled_marks_outdated or typed_module.final_report_outdated:
-                typed_ns["_publish_status"](typed_module, t("instructor.status.step1_changed"))
+                _emit_status_key(typed_ns, typed_module, "instructor.status.step1_changed")
         elif merged_paths:
-            typed_ns["_publish_status"](typed_module, t("instructor.status.step1_validated"))
+            _emit_status_key(typed_ns, typed_module, "instructor.status.step1_validated")
 
-        typed_ns["_publish_status"](
+        _emit_status_key(
+            typed_ns,
             typed_module,
-            t("instructor.status.step1_validated_progress", valid=len(valid_paths), total=total),
+            "instructor.status.step1_validated_progress",
+            valid=len(valid_paths),
+            total=total,
         )
         typed_ns["log_process_message"](
             process_name,
@@ -476,10 +492,13 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
         typed_module.filled_marks_outdated = typed_module.filled_marks_done
         typed_module.final_report_outdated = typed_module.final_report_done
         if generated_outputs:
-            typed_ns["_publish_status"](typed_module, t("instructor.status.step1_prepared"))
-        typed_ns["_publish_status"](
+            _emit_status_key(typed_ns, typed_module, "instructor.status.step1_prepared")
+        _emit_status_key(
+            typed_ns,
             typed_module,
-            t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
+            "instructor.status.step1_prepare_progress",
+            processed=processed_count,
+            total=total_count,
         )
         typed_ns["log_process_message"](
             process_name,
@@ -494,9 +513,11 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             step_id=job_context.step_id if job_context else None,
         )
         if failure_summary:
-            typed_ns["_publish_status"](
+            _emit_status_key(
+                typed_ns,
                 typed_module,
-                t("instructor.status.step1_prepare_per_file_failures", details=failure_summary),
+                "instructor.status.step1_prepare_per_file_failures",
+                details=failure_summary,
             )
         typed_ns["show_toast"](
             typed_module,
@@ -559,9 +580,12 @@ def prepare_marks_template_async(module: object, *, ns: Mapping[str, object]) ->
             finally:
                 processed_count += 1
                 if processed_count % _PROGRESS_UPDATE_BATCH_SIZE == 0 or processed_count == total_count:
-                    typed_ns["_publish_status"](
+                    _emit_status_key(
+                        typed_ns,
                         typed_module,
-                        t("instructor.status.step1_prepare_progress", processed=processed_count, total=total_count),
+                        "instructor.status.step1_prepare_progress",
+                        processed=processed_count,
+                        total=total_count,
                     )
         return {
             "generated_outputs": generated_outputs,

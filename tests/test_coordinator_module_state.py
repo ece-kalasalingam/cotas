@@ -194,6 +194,7 @@ def test_threshold_violation_emits_toast_and_activity_log(monkeypatch: pytest.Mo
     module.threshold_l3_input.setValue(80.0)
 
     module.threshold_l2_input.setValue(40.0)
+    module.threshold_l2_input.editingFinished.emit()
     assert toasts[-1] == (
         coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY,
         "coordinator.title",
@@ -203,10 +204,12 @@ def test_threshold_violation_emits_toast_and_activity_log(monkeypatch: pytest.Mo
     initial_count = len(toasts)
 
     module.threshold_l2_input.setValue(30.0)
+    module.threshold_l2_input.editingFinished.emit()
     assert len(toasts) == initial_count
 
     module.threshold_l2_input.setValue(70.0)
     module.threshold_l2_input.setValue(80.0)
+    module.threshold_l2_input.editingFinished.emit()
     assert len(toasts) == initial_count + 1
     assert status_keys[-1] == coordinator_ui.CoordinatorModule._THRESHOLD_VALIDATION_KEY
     _dispose_widget(module, qapp)

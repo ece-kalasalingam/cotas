@@ -14,6 +14,7 @@ from typing import Any, Callable, Literal
 
 from common.error_catalog import resolve_validation_error_message
 from common.exceptions import AppSystemError, ValidationError
+from common.texts import t
 
 SETTINGS_FILE_NAME = "settings.json"
 DEFAULT_LOG_FILE_NAME = "focus.log"
@@ -554,7 +555,7 @@ def log_process_message(
             if resolved and resolved != str(code):
                 detail = resolved
         if not detail:
-            detail = "Validation failed due to invalid data."
+            detail = t("common.validation_failed_invalid_data")
         user_message = user_validation_message or detail
         logger.warning(
             "%s failed due to data error.",
@@ -570,7 +571,7 @@ def log_process_message(
             notify(user_message, "error")
         return False
 
-    user_message = user_error_message or f"Error happened while {process_name}."
+    user_message = user_error_message or t("common.error_while_process", process=process_name)
     if isinstance(error, AppSystemError):
         logger.error(
             "%s failed due to a system/application error.",

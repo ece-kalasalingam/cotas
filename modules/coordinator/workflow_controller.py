@@ -34,8 +34,12 @@ class CoordinatorWorkflowController:
     def on_threshold_value_changed(self) -> None:
         if self.has_valid_attainment_thresholds():
             self._m._threshold_violation_active = False
-        else:
-            self.notify_threshold_violation(force=False)
+
+    def on_threshold_editing_finished(self) -> None:
+        if self.has_valid_attainment_thresholds():
+            self._m._threshold_violation_active = False
+            return
+        self.notify_threshold_violation(force=False)
 
 
 class _ThresholdInput(Protocol):
