@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 GLOBAL_QPUSHBUTTON_MIN_WIDTH = 150
 
-QPUSHBUTTON_GLOBAL_STYLESHEET = """
+_QPUSHBUTTON_GLOBAL_STYLESHEET = """
 QPushButton {
     padding: 6px 12px;
     min-width: %dpx;
@@ -44,16 +44,72 @@ QPushButton:hover {
 }
 """.strip()
 
-_MANAGED_BLOCK_RE = r"/\* COTAS:{id}:BEGIN \*/.*?/\* COTAS:{id}:END \*/"
+_MANAGED_BLOCK_TEMPLATE = "/* COTAS:{id}:BEGIN */\n{body}\n/* COTAS:{id}:END */"
 
-
-def _managed_block(block_id: str, body: str) -> str:
-    return f"/* COTAS:{block_id}:BEGIN */\n{body}\n/* COTAS:{block_id}:END */"
+INSTRUCTOR_PANEL_STYLESHEET = """
+QFrame#stepRail {
+    border: 1px solid palette(mid);
+    border-radius: 12px;
+    background-color: palette(base);
+}
+QFrame#activeCard {
+}
+QListWidget#stepList {
+    outline: none;
+    background-color: transparent;
+}
+QListWidget#stepList::item {
+    padding: 8px 8px;
+}
+QListWidget#stepList::item:selected,
+QListWidget#stepList::item:selected:!active {
+    border-left: 4px solid palette(highlight);
+}
+QPushButton#primaryAction {
+    padding: 6px 12px;
+    min-width: 150px;
+    min-height: 30px;
+    border-radius: 6px;
+}
+QPushButton#primaryAction:enabled {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+    border: none;
+    font-weight: 600;
+}
+QPushButton {
+    padding: 6px 12px;
+    min-width: 150px;
+    min-height: 30px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton:disabled {
+    border: 1px solid palette(mid);
+}
+QTabWidget#instructorInfoTabs::pane {
+    border: none;
+    background: palette(base);
+}
+QTabWidget#instructorInfoTabs QTabBar::tab:first {
+    margin-left: 8px;
+}
+QTabWidget#instructorInfoTabs QPlainTextEdit,
+QTabWidget#instructorInfoTabs QTextBrowser {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+    padding: 8px;
+}
+"""
 
 
 def _upsert_managed_block(stylesheet: str, block_id: str, body: str) -> str:
-    pattern = re.compile(_MANAGED_BLOCK_RE.format(id=re.escape(block_id)), re.DOTALL)
-    block = _managed_block(block_id, body.strip())
+    pattern = re.compile(
+        rf"/\* COTAS:{re.escape(block_id)}:BEGIN \*/.*?/\* COTAS:{re.escape(block_id)}:END \*/",
+        re.DOTALL,
+    )
+    block = _MANAGED_BLOCK_TEMPLATE.format(id=block_id, body=body.strip())
     if pattern.search(stylesheet):
         return pattern.sub(block, stylesheet)
     return f"{stylesheet}\n\n{block}".strip() if stylesheet else block
@@ -69,28 +125,12 @@ def _is_dark_theme(app: QApplication) -> bool:
     return window_color.lightness() < 128
 
 
-def _build_theme_adaptive_surface_styles(*, dark: bool) -> str:
-    pane_bg = "#1f242c" if dark else "#FFFFFF"
-    pane_border = "#d0d7e2" if dark else "#3b4352"
-    selected_bg = "#374151" if dark else "#dbe4f3"
-    selected_fg = "#ffffff" if dark else "#111827"
+def _build_theme_adaptive_surface_styles() -> str:
     return f"""
-QFrame#coordinatorLeftCard,
-QFrame#stepRail {{
-    background-color: {pane_bg};
-    border: 1px solid {pane_border};
-    border-radius: 10px;
-}}
-QWidget#coordinatorLeftScrollViewport,
-QWidget#instructorLeftScrollViewport,
-QListWidget#stepList {{
-    background-color: {pane_bg};
-}}
-QListWidget#stepList::item:selected {{
-    background-color: {selected_bg};
-    color: {selected_fg};
-}}
+
+
 """.strip()
+
 
 
 def apply_global_ui_styles(app: QApplication) -> None:
@@ -106,12 +146,12 @@ def apply_global_ui_styles(app: QApplication) -> None:
     merged_stylesheet = _upsert_managed_block(
         current_stylesheet,
         "pushbutton-global",
-        QPUSHBUTTON_GLOBAL_STYLESHEET,
+        _QPUSHBUTTON_GLOBAL_STYLESHEET,
     )
     merged_stylesheet = _upsert_managed_block(
         merged_stylesheet,
         "theme-adaptive-surfaces",
-        _build_theme_adaptive_surface_styles(dark=_is_dark_theme(app)),
+        _build_theme_adaptive_surface_styles(),
     )
     if merged_stylesheet == current_stylesheet:
         return

@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import (
     QDesktopServices,
     QKeySequence,
-    QPalette,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -367,13 +366,6 @@ class CoordinatorModule(QWidget):
         left_pane.setObjectName("coordinatorLeftCard")
         left_pane.setFrameShape(QFrame.Shape.StyledPanel)
         left_pane.setFrameShadow(QFrame.Shadow.Raised)
-        left_palette = left_pane.palette()
-        left_palette.setColor(
-            QPalette.ColorRole.Window,
-            left_palette.color(QPalette.ColorRole.Base),
-        )
-        left_pane.setPalette(left_palette)
-        left_pane.setAutoFillBackground(True)
         left_layout = QVBoxLayout(left_pane)
         left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
         left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
@@ -384,13 +376,6 @@ class CoordinatorModule(QWidget):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.viewport().setObjectName("coordinatorLeftScrollViewport")
-        left_scroll.viewport().setAutoFillBackground(True)
-        left_scroll_viewport_palette = left_scroll.viewport().palette()
-        left_scroll_viewport_palette.setColor(
-            QPalette.ColorRole.Window,
-            left_scroll_viewport_palette.color(QPalette.ColorRole.Base),
-        )
-        left_scroll.viewport().setPalette(left_scroll_viewport_palette)
         left_scroll.setWidget(left_pane)
         left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
         top_layout.addWidget(left_scroll, 0)

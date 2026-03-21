@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QKeySequence, QPalette, QShortcut
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -58,6 +58,7 @@ from common.ui_logging import (
 )
 from common.ui_stylings import (
     GLOBAL_QPUSHBUTTON_MIN_WIDTH,
+    INSTRUCTOR_PANEL_STYLESHEET,
 )
 from common.utils import (
     emit_user_status,
@@ -315,13 +316,6 @@ class InstructorModule(QWidget):
         left_pane.setObjectName("stepRail")
         left_pane.setFrameShape(QFrame.Shape.StyledPanel)
         left_pane.setFrameShadow(QFrame.Shadow.Raised)
-        left_palette = left_pane.palette()
-        left_palette.setColor(
-            QPalette.ColorRole.Window,
-            left_palette.color(QPalette.ColorRole.Base),
-        )
-        left_pane.setPalette(left_palette)
-        left_pane.setAutoFillBackground(True)
         left_layout = QVBoxLayout(left_pane)
         left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
         left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
@@ -332,13 +326,6 @@ class InstructorModule(QWidget):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.viewport().setObjectName("instructorLeftScrollViewport")
-        left_scroll.viewport().setAutoFillBackground(True)
-        left_scroll_viewport_palette = left_scroll.viewport().palette()
-        left_scroll_viewport_palette.setColor(
-            QPalette.ColorRole.Window,
-            left_scroll_viewport_palette.color(QPalette.ColorRole.Base),
-        )
-        left_scroll.viewport().setPalette(left_scroll_viewport_palette)
         left_scroll.setWidget(left_pane)
         left_scroll.setFixedWidth(_LEFT_PANE_WIDTH)
         top_layout.addWidget(left_scroll, 0)
@@ -504,6 +491,8 @@ class InstructorModule(QWidget):
         self.shortcut_open_workbook.activated.connect(self._on_open_shortcut_activated)
         self.shortcut_save_output = QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self)
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
+
+        self.setStyleSheet(INSTRUCTOR_PANEL_STYLESHEET)
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         allowed_attrs_by_step: dict[int, set[str]] = {
