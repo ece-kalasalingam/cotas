@@ -108,7 +108,7 @@ The system enforces **workbook integrity** through HMAC-SHA256 signatures, **tem
 │  │  constants · contracts · exceptions · sheet_schema · registry       │  │
 │  │  workbook_signing · workbook_secret · excel_sheet_layout            │  │
 │  │  jobs · async_operation_runner · module_runtime · module_messages   │  │
-│  │  module_plugins · error_catalog · output_markup · utils · texts     │  │
+│  │  module_plugins · error_catalog · utils · texts                      │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
