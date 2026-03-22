@@ -60,7 +60,7 @@ class _FileDialog:
 class _WorkflowService:
     def __init__(self) -> None:
         self.context_payloads: list[dict[str, object]] = []
-        self.calculate_calls: list[tuple[list[Path], Path, object, object, object]] = []
+        self.calculate_calls: list[tuple[list[Path], Path, object, object, object, object, object]] = []
 
     def create_job_context(self, *, step_id: str, payload: dict[str, object]) -> _JobContext:
         self.context_payloads.append({"step_id": step_id, "payload": payload})
@@ -74,8 +74,12 @@ class _WorkflowService:
         context: object,
         cancel_token: object,
         thresholds: object,
+        co_attainment_percent: object,
+        co_attainment_level: object,
     ) -> str:
-        self.calculate_calls.append((files, output, context, cancel_token, thresholds))
+        self.calculate_calls.append(
+            (files, output, context, cancel_token, thresholds, co_attainment_percent, co_attainment_level)
+        )
         return "workflow-service-result"
 
 
@@ -90,9 +94,13 @@ class _Module:
         self._started: dict[str, object] = {}
         self._workflow_service: _WorkflowService | None = None
         self._thresholds: tuple[float, float, float] | None = (40.0, 60.0, 75.0)
+        self._co_target: tuple[float, int] | None = (80.0, 2)
 
     def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
         return self._thresholds
+
+    def get_co_attainment_target(self) -> tuple[float, int] | None:
+        return self._co_target
 
     def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
         self._published.append((text_key, kwargs))
@@ -172,6 +180,12 @@ def test_calculate_attainment_returns_when_dialog_cancelled_or_thresholds_missin
 
     module = _Module()
     module._thresholds = None
+    ns, _ctx = _make_ns(module)
+    step.calculate_attainment_async(module, ns=ns)
+    assert module._started == {}
+
+    module = _Module()
+    module._co_target = None
     ns, _ctx = _make_ns(module)
     step.calculate_attainment_async(module, ns=ns)
     assert module._started == {}

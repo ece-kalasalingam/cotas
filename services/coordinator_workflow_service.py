@@ -75,6 +75,8 @@ class CoordinatorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
         thresholds: tuple[float, float, float] | None = None,
+        co_attainment_percent: float | None = None,
+        co_attainment_level: int | None = None,
     ):
         return self._execute_with_telemetry(
             context=context,
@@ -86,12 +88,14 @@ class CoordinatorWorkflowService(WorkflowServiceBase):
                     output_path,
                     token=effective_cancel_token,
                 )
-                if thresholds is None
+                if thresholds is None and co_attainment_percent is None and co_attainment_level is None
                 else _generate_co_attainment_workbook(
                     source_paths,
                     output_path,
                     token=effective_cancel_token,
                     thresholds=thresholds,
+                    co_attainment_percent=co_attainment_percent,
+                    co_attainment_level=co_attainment_level,
                 )
             ),
         )

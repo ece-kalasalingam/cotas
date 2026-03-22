@@ -79,6 +79,8 @@ INDIRECT_RATIO: float = 0.2
 LEVEL_1_THRESHOLD: float = 40.0
 LEVEL_2_THRESHOLD: float = 60.0
 LEVEL_3_THRESHOLD: float = 75.0
+CO_ATTAINMENT_PERCENT_DEFAULT: float = 80.0
+CO_ATTAINMENT_LEVEL_DEFAULT: int = 2
 
 
 # ==========================================================

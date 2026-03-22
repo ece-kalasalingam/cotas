@@ -164,11 +164,11 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
     try:
         assert "CO1" in wb.sheetnames
         ws = wb["CO1"]
-        assert ws["A10"].value == "#"
-        assert ws["B10"].value == "Regno"
-        assert ws["C10"].value == "Student name"
-        assert ws["A11"].value == 1
-        assert isinstance(ws["B11"].value, str)
+        assert ws["A12"].value == "#"
+        assert ws["B12"].value == "Regno"
+        assert ws["C12"].value == "Student name"
+        assert ws["A13"].value == 1
+        assert isinstance(ws["B13"].value, str)
     finally:
         wb.close()
 

@@ -10,6 +10,7 @@ from typing import Any, Literal
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
@@ -26,6 +27,8 @@ from PySide6.QtWidgets import (
 from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
+    CO_ATTAINMENT_LEVEL_DEFAULT,
+    CO_ATTAINMENT_PERCENT_DEFAULT,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
@@ -250,6 +253,7 @@ class CoordinatorModule(QWidget):
     status_changed = Signal(str)
     OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
+    _CO_ATTAINMENT_TARGET_VALIDATION_KEY = "coordinator.co_attainment.invalid_percent"
 
     def __init__(
         self,
@@ -392,6 +396,57 @@ class CoordinatorModule(QWidget):
         self.threshold_l3_input.editingFinished.connect(self._on_threshold_editing_finished)
 
         thresholds_layout.addLayout(threshold_rows)
+
+        self.co_attainment_title_label = QLabel()
+        self.co_attainment_title_label.setObjectName("coordinatorThresholdTitle")
+        thresholds_layout.addWidget(self.co_attainment_title_label)
+        self.co_attainment_description_label = QLabel()
+        self.co_attainment_description_label.setWordWrap(True)
+        self.co_attainment_description_label.setAlignment(
+            Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop
+        )
+        thresholds_layout.addWidget(self.co_attainment_description_label)
+
+        co_attainment_rows = QGridLayout()
+        co_attainment_rows.setColumnStretch(0, 0)
+        co_attainment_rows.setColumnStretch(1, 1)
+
+        self.co_attainment_percent_label = QLabel()
+        self.co_attainment_percent_label.setObjectName("coordinatorThresholdInputLabel")
+        self.co_attainment_percent_input = QDoubleSpinBox()
+        self.co_attainment_percent_input.setRange(0.0, 100.0)
+        self.co_attainment_percent_input.setDecimals(2)
+        self.co_attainment_percent_input.setSingleStep(0.5)
+        self.co_attainment_percent_input.setValue(float(CO_ATTAINMENT_PERCENT_DEFAULT))
+        co_attainment_rows.addWidget(self.co_attainment_percent_label, 0, 0)
+        co_attainment_rows.addWidget(
+            self.co_attainment_percent_input,
+            0,
+            1,
+            alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        self.co_attainment_level_label = QLabel()
+        self.co_attainment_level_label.setObjectName("coordinatorThresholdInputLabel")
+        self.co_attainment_level_input = QComboBox()
+        self.co_attainment_level_input.addItem("L1", 1)
+        self.co_attainment_level_input.addItem("L2", 2)
+        self.co_attainment_level_input.addItem("L3", 3)
+        default_level_index = max(0, min(self.co_attainment_level_input.count() - 1, CO_ATTAINMENT_LEVEL_DEFAULT - 1))
+        self.co_attainment_level_input.setCurrentIndex(default_level_index)
+        co_attainment_rows.addWidget(self.co_attainment_level_label, 1, 0)
+        co_attainment_rows.addWidget(
+            self.co_attainment_level_input,
+            1,
+            1,
+            alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        self.co_attainment_percent_input.valueChanged.connect(self._on_threshold_value_changed)
+        self.co_attainment_percent_input.editingFinished.connect(self._on_threshold_editing_finished)
+        self.co_attainment_level_input.currentIndexChanged.connect(lambda _idx: self._on_threshold_value_changed(0.0))
+        self.co_attainment_level_input.activated.connect(lambda _idx: self._on_threshold_editing_finished())
+        thresholds_layout.addLayout(co_attainment_rows)
         left_layout.addLayout(thresholds_layout)
         left_layout.addStretch(1)
         right_pane = QWidget()
@@ -458,6 +513,10 @@ class CoordinatorModule(QWidget):
         self.threshold_l1_label.setText(t("coordinator.thresholds.l1.label"))
         self.threshold_l2_label.setText(t("coordinator.thresholds.l2.label"))
         self.threshold_l3_label.setText(t("coordinator.thresholds.l3.label"))
+        self.co_attainment_title_label.setText(t("coordinator.co_attainment.title"))
+        self.co_attainment_description_label.setText(t("coordinator.co_attainment.description"))
+        self.co_attainment_percent_label.setText(t("coordinator.co_attainment.percent.label"))
+        self.co_attainment_level_label.setText(t("coordinator.co_attainment.level.label"))
         self._refresh_summary()
 
     def _publish_status(self, message: str) -> None:
@@ -472,12 +531,19 @@ class CoordinatorModule(QWidget):
 
     def _refresh_ui(self) -> None:
         has_files = bool(self._files)
-        can_submit = has_files and self._has_valid_attainment_thresholds() and (not self.state.busy)
+        can_submit = (
+            has_files
+            and self._has_valid_attainment_thresholds()
+            and self._has_valid_co_attainment_target()
+            and (not self.state.busy)
+        )
         self.drop_widget.setEnabled(not self.state.busy)
         self.drop_widget.set_submit_allowed(can_submit)
         self.threshold_l1_input.setEnabled(not self.state.busy)
         self.threshold_l2_input.setEnabled(not self.state.busy)
         self.threshold_l3_input.setEnabled(not self.state.busy)
+        self.co_attainment_percent_input.setEnabled(not self.state.busy)
+        self.co_attainment_level_input.setEnabled(not self.state.busy)
         self.drop_list.setEnabled(not self.state.busy)
         self.clear_button.setEnabled(has_files and (not self.state.busy))
         self.calculate_button.setEnabled(can_submit)
@@ -494,6 +560,12 @@ class CoordinatorModule(QWidget):
     def _has_valid_attainment_thresholds(self) -> bool:
         return self._workflow_controller.has_valid_attainment_thresholds()
 
+    def _read_co_attainment_target(self) -> tuple[float, int]:
+        return self._workflow_controller.read_co_attainment_target()
+
+    def _has_valid_co_attainment_target(self) -> bool:
+        return self._workflow_controller.has_valid_co_attainment_target()
+
     def get_attainment_thresholds(self) -> tuple[float, float, float] | None:
         thresholds = self._read_attainment_thresholds()
         if not self._has_valid_attainment_thresholds():
@@ -501,13 +573,20 @@ class CoordinatorModule(QWidget):
             return None
         return thresholds
 
+    def get_co_attainment_target(self) -> tuple[float, int] | None:
+        target = self._read_co_attainment_target()
+        if not self._has_valid_co_attainment_target():
+            self._notify_threshold_violation(force=True)
+            return None
+        return target
+
     def _notify_threshold_violation(self, *, force: bool) -> None:
         self._workflow_controller.notify_threshold_violation(force=force)
 
-    def _show_threshold_validation_toast(self) -> None:
+    def _show_threshold_validation_toast(self, *, message_key: str) -> None:
         show_threshold_validation_toast(
             self,
-            message_key=self._THRESHOLD_VALIDATION_KEY,
+            message_key=message_key,
             title_key="coordinator.title",
             toast_fn=show_toast,
             translate=t,

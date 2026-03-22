@@ -275,7 +275,13 @@ class _FreezeWorkbook:
 def test_create_co_attainment_sheet_freezes_headers_and_student_columns() -> None:
     workbook = _FreezeWorkbook()
 
-    state = cp._create_co_attainment_sheet(workbook, co_index=1, metadata={})
+    state = cp._create_co_attainment_sheet(
+        workbook,
+        co_index=1,
+        metadata={},
+        co_attainment_percent=80.0,
+        co_attainment_level=2,
+    )
 
     assert workbook.sheet.freeze_calls == [(state.header_row_index + 1, 3)]
 
@@ -662,7 +668,10 @@ def test_small_helper_branches_and_thresholds(monkeypatch, tmp_path: Path) -> No
     assert cp._ratio_percent_token(0.335) == "33.5"
     assert cp._coerce_numeric_score(True) is None
     assert cp._coerce_numeric_score("not-a-number") is None
-    assert cp._co_percentage(level_2=1, level_3=1, attended=0) == cp.CO_REPORT_NOT_APPLICABLE_TOKEN
+    assert (
+        cp._co_percentage(level_counts={0: 0, 1: 1, 2: 1, 3: 0}, attended=0, co_attainment_level=2)
+        == cp.CO_REPORT_NOT_APPLICABLE_TOKEN
+    )
     assert cp._attainment_thresholds((10, 20, 30)) == (10.0, 20.0, 30.0)
 
     token = CancellationToken()

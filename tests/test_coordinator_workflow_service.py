@@ -58,7 +58,15 @@ def test_calculate_attainment_passes_token_to_generator(monkeypatch: pytest.Monk
 
     seen = {"token": None}
 
-    def _fake_generate(src_paths, output_path, *, token=None):
+    def _fake_generate(
+        src_paths,
+        output_path,
+        *,
+        token=None,
+        thresholds=None,
+        co_attainment_percent=None,
+        co_attainment_level=None,
+    ):
         seen["token"] = token
         return output_path
     monkeypatch.setattr(service_mod, "_generate_co_attainment_workbook", _fake_generate)

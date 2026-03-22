@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from common.constants import (
+    CO_ATTAINMENT_LEVEL_DEFAULT,
+    CO_ATTAINMENT_PERCENT_DEFAULT,
     DIRECT_RATIO,
     INDIRECT_RATIO,
     LEVEL_1_THRESHOLD,
@@ -70,6 +72,14 @@ def _validate_attainment_threshold_contracts() -> None:
         raise ConfigurationError("Level thresholds must be in the range 0 to 100.")
     if not (LEVEL_1_THRESHOLD <= LEVEL_2_THRESHOLD <= LEVEL_3_THRESHOLD):
         raise ConfigurationError("Level thresholds must be non-decreasing (L1 <= L2 <= L3).")
+    if not isinstance(CO_ATTAINMENT_PERCENT_DEFAULT, (int, float)):
+        raise ConfigurationError("CO_ATTAINMENT_PERCENT_DEFAULT must be numeric.")
+    if not (0.0 <= float(CO_ATTAINMENT_PERCENT_DEFAULT) <= 100.0):
+        raise ConfigurationError("CO_ATTAINMENT_PERCENT_DEFAULT must be in the range 0 to 100.")
+    if not isinstance(CO_ATTAINMENT_LEVEL_DEFAULT, int):
+        raise ConfigurationError("CO_ATTAINMENT_LEVEL_DEFAULT must be an integer level index.")
+    if not (1 <= CO_ATTAINMENT_LEVEL_DEFAULT <= len(thresholds)):
+        raise ConfigurationError("CO_ATTAINMENT_LEVEL_DEFAULT must map to a configured attainment level.")
 
 
 def _validate_indirect_tool_policy_contracts() -> None:

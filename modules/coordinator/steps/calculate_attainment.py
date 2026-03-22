@@ -54,6 +54,9 @@ class _CoordinatorModule(Protocol):
     def get_attainment_thresholds(self) -> Sequence[float] | None:
         ...
 
+    def get_co_attainment_target(self) -> tuple[float, int] | None:
+        ...
+
     def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
         ...
 
@@ -118,6 +121,11 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
     if raw_thresholds is None:
         return
     thresholds = cast(Sequence[float], raw_thresholds)
+    target_reader = cast(Any, getattr(typed_module, "get_co_attainment_target", None))
+    raw_target = target_reader() if callable(target_reader) else None
+    if raw_target is None:
+        return
+    co_attainment_percent, co_attainment_level = cast(tuple[float, int], raw_target)
 
     process_name = COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT
     token = CancellationToken()
@@ -130,6 +138,8 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
                 WORKFLOW_PAYLOAD_KEY_SOURCE: [str(path) for path in typed_module._files],
                 WORKFLOW_PAYLOAD_KEY_OUTPUT: save_path,
                 "thresholds": list(thresholds),
+                "co_attainment_percent": co_attainment_percent,
+                "co_attainment_level": co_attainment_level,
             },
         )
         if workflow_service is not None
@@ -159,6 +169,7 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
         typed_module._remember_dialog_dir_safe(str(output_path))
         typed_module._publish_status_key("coordinator.status.calculate_completed")
         threshold_summary = f"thresholds=({thresholds[0]:g},{thresholds[1]:g},{thresholds[2]:g})"
+        target_summary = f"co_at_target=({co_attainment_percent:g},L{co_attainment_level})"
         typed_ns["log_process_message"](
             process_name,
             logger=typed_module._logger,
@@ -167,7 +178,7 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
                 f"duplicates_removed={duplicate_reg_count}, "
                 f"inner_join_dropped={inner_join_drop_count}, "
                 f"inner_join_details={list(inner_join_drop_details)}, "
-                f"{threshold_summary}"
+                f"{threshold_summary}, {target_summary}"
             ),
             user_success_message=typed_ns["build_i18n_log_message"](
                 "coordinator.status.calculate_completed",
@@ -234,6 +245,8 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
                 context=job_context,
                 cancel_token=token,
                 thresholds=thresholds,
+                co_attainment_percent=co_attainment_percent,
+                co_attainment_level=co_attainment_level,
             )
             if workflow_service is not None and job_context is not None
             else typed_ns["_generate_co_attainment_workbook"](
@@ -241,6 +254,8 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
                 Path(save_path),
                 token=token,
                 thresholds=thresholds,
+                co_attainment_percent=co_attainment_percent,
+                co_attainment_level=co_attainment_level,
             )
         ),
         on_success=_on_finished,
