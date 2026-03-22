@@ -8,7 +8,15 @@ from typing import Any, Sequence
 
 from common.constants import (
     ASSESSMENT_CONFIG_HEADERS,
+    ASSESSMENT_FORMAT_OPTIONS,
+    ASSESSMENT_MODE_OPTIONS,
+    ASSESSMENT_PARTICIPATION_OPTIONS,
     ASSESSMENT_CONFIG_SHEET,
+    ASSESSMENT_TYPE_OPTIONS,
+    CO_DESCRIPTION_HEADERS,
+    CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
+    CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
+    CO_DESCRIPTION_SHEET,
     COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
@@ -29,6 +37,7 @@ from common.constants import (
     LIKERT_MAX,
     LIKERT_MIN,
     MIN_MARK_VALUE,
+    QUESTION_DOMAIN_LEVEL_OPTIONS,
     QUESTION_MAP_HEADERS,
     QUESTION_MAP_SHEET,
     STUDENTS_HEADERS,
@@ -52,6 +61,15 @@ _LOG_STEP3_NEAR_CONSTANT = (
     "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s"
 )
 _last_marks_anomaly_warnings: list[str] = []
+_ASSESSMENT_TYPE_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_TYPE_OPTIONS}
+_ASSESSMENT_FORMAT_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_FORMAT_OPTIONS}
+_ASSESSMENT_MODE_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_MODE_OPTIONS}
+_ASSESSMENT_PARTICIPATION_OPTION_TOKENS = {
+    normalize(value) for value in ASSESSMENT_PARTICIPATION_OPTIONS
+}
+_QUESTION_DOMAIN_LEVEL_OPTION_TOKENS = {
+    normalize(value) for value in QUESTION_DOMAIN_LEVEL_OPTIONS
+}
 
 
 def _reset_marks_anomaly_warnings() -> None:
@@ -68,11 +86,13 @@ def validate_course_details_rules(workbook: Any) -> None:
     metadata_sheet = workbook[COURSE_METADATA_SHEET]
     assessment_sheet = workbook[ASSESSMENT_CONFIG_SHEET]
     question_map_sheet = workbook[QUESTION_MAP_SHEET]
+    co_description_sheet = workbook[CO_DESCRIPTION_SHEET]
     students_sheet = workbook[STUDENTS_SHEET]
 
     total_outcomes = _validate_course_metadata(metadata_sheet)
     component_config = _validate_assessment_config(assessment_sheet)
     _validate_question_map(question_map_sheet, component_config, total_outcomes)
+    _validate_co_description(co_description_sheet)
     _validate_students(students_sheet)
 
 
@@ -346,6 +366,29 @@ def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str)
     return token == "yes"
 
 
+def _parse_allowed_option(
+    value: Any,
+    *,
+    sheet_name: str,
+    row_number: int,
+    field_name: str,
+    allowed_tokens: set[str],
+    allowed_display: Sequence[str],
+) -> str:
+    token = normalize(value)
+    if token not in allowed_tokens:
+        raise ValidationError(
+            t(
+                "instructor.validation.allowed_values_required",
+                sheet_name=sheet_name,
+                row=row_number,
+                field=field_name,
+                allowed=", ".join(allowed_display),
+            )
+        )
+    return token
+
+
 def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     assessment_headers = ASSESSMENT_CONFIG_HEADERS
     expected_headers = list(assessment_headers)
@@ -355,6 +398,10 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     cia_header = normalize(assessment_headers[2])
     co_wise_header = normalize(assessment_headers[3])
     direct_header = normalize(assessment_headers[4])
+    assessment_type_header = normalize(assessment_headers[5])
+    assessment_format_header = normalize(assessment_headers[6])
+    mode_header = normalize(assessment_headers[7])
+    participation_header = normalize(assessment_headers[8])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
@@ -408,6 +455,38 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
             ASSESSMENT_CONFIG_SHEET,
             row_number,
             assessment_headers[2],
+        )
+        _parse_allowed_option(
+            row[header_map[assessment_type_header]],
+            sheet_name=ASSESSMENT_CONFIG_SHEET,
+            row_number=row_number,
+            field_name=assessment_headers[5],
+            allowed_tokens=_ASSESSMENT_TYPE_OPTION_TOKENS,
+            allowed_display=ASSESSMENT_TYPE_OPTIONS,
+        )
+        _parse_allowed_option(
+            row[header_map[assessment_format_header]],
+            sheet_name=ASSESSMENT_CONFIG_SHEET,
+            row_number=row_number,
+            field_name=assessment_headers[6],
+            allowed_tokens=_ASSESSMENT_FORMAT_OPTION_TOKENS,
+            allowed_display=ASSESSMENT_FORMAT_OPTIONS,
+        )
+        _parse_allowed_option(
+            row[header_map[mode_header]],
+            sheet_name=ASSESSMENT_CONFIG_SHEET,
+            row_number=row_number,
+            field_name=assessment_headers[7],
+            allowed_tokens=_ASSESSMENT_MODE_OPTION_TOKENS,
+            allowed_display=ASSESSMENT_MODE_OPTIONS,
+        )
+        _parse_allowed_option(
+            row[header_map[participation_header]],
+            sheet_name=ASSESSMENT_CONFIG_SHEET,
+            row_number=row_number,
+            field_name=assessment_headers[8],
+            allowed_tokens=_ASSESSMENT_PARTICIPATION_OPTION_TOKENS,
+            allowed_display=ASSESSMENT_PARTICIPATION_OPTIONS,
         )
 
         if is_direct:
@@ -475,6 +554,7 @@ def _validate_question_map(
     question_header = normalize(expected_headers[1])
     max_marks_header = normalize(expected_headers[2])
     co_header = normalize(expected_headers[3])
+    domain_level_header = normalize(expected_headers[4])
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
@@ -523,6 +603,14 @@ def _validate_question_map(
                     total_outcomes=total_outcomes,
                 )
             )
+        _parse_allowed_option(
+            row[header_map[domain_level_header]],
+            sheet_name=QUESTION_MAP_SHEET,
+            row_number=row_number,
+            field_name=expected_headers[4],
+            allowed_tokens=_QUESTION_DOMAIN_LEVEL_OPTION_TOKENS,
+            allowed_display=QUESTION_DOMAIN_LEVEL_OPTIONS,
+        )
 
         is_co_wise = bool(component_config[component_key]["co_wise_breakup"])
         if is_co_wise:
@@ -545,6 +633,61 @@ def _validate_question_map(
                     )
                 )
             seen_co_wise_questions.add(question_id)
+
+
+def _validate_co_description(worksheet: Any) -> None:
+    expected_headers = list(CO_DESCRIPTION_HEADERS)
+    header_map = _header_index_map(worksheet, expected_headers)
+    co_number_header = normalize(expected_headers[0])
+    description_header = normalize(expected_headers[1])
+    domain_level_header = normalize(expected_headers[2])
+    summary_header = normalize(expected_headers[3])
+    rows = _iter_data_rows(worksheet, len(expected_headers))
+
+    if not rows:
+        raise ValidationError(t("instructor.validation.co_description_row_required_one"))
+
+    seen_co_numbers: set[int] = set()
+    for row_number, row in enumerate(rows, start=2):
+        co_number_raw = row[header_map[co_number_header]]
+        co_number = coerce_excel_number(co_number_raw)
+        if isinstance(co_number, bool) or not isinstance(co_number, int) or co_number <= 0:
+            raise ValidationError(
+                t(
+                    "instructor.validation.co_description_number_positive_int_required",
+                    row=row_number,
+                )
+            )
+        if co_number in seen_co_numbers:
+            raise ValidationError(
+                t(
+                    "instructor.validation.co_description_number_duplicate",
+                    row=row_number,
+                    co_number=co_number,
+                )
+            )
+        seen_co_numbers.add(co_number)
+
+        _ = row[header_map[description_header]]
+        _parse_allowed_option(
+            row[header_map[domain_level_header]],
+            sheet_name=CO_DESCRIPTION_SHEET,
+            row_number=row_number,
+            field_name=expected_headers[2],
+            allowed_tokens=_QUESTION_DOMAIN_LEVEL_OPTION_TOKENS,
+            allowed_display=QUESTION_DOMAIN_LEVEL_OPTIONS,
+        )
+        summary_text = str(row[header_map[summary_header]]).strip() if row[header_map[summary_header]] is not None else ""
+        summary_length = len(summary_text)
+        if summary_length < CO_DESCRIPTION_SUMMARY_MIN_LENGTH or summary_length > CO_DESCRIPTION_SUMMARY_MAX_LENGTH:
+            raise ValidationError(
+                t(
+                    "instructor.validation.co_description_summary_length_invalid",
+                    row=row_number,
+                    minimum=CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
+                    maximum=CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
+                )
+            )
 
 
 def _validate_students(worksheet: Any) -> None:

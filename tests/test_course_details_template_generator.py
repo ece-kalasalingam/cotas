@@ -177,10 +177,11 @@ def test_sheet_order_and_count_match_blueprint(monkeypatch: pytest.MonkeyPatch, 
         "Course_Metadata",
         "Assessment_Config",
         "Question_Map",
+        "CO_Description",
         "Students",
         "__SYSTEM_HASH__",
     ]
-    assert len(created["wb"].worksheets) == 5
+    assert len(created["wb"].worksheets) == 6
 
 
 def test_course_metadata_header_cells_written(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

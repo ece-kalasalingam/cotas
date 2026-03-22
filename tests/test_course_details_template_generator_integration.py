@@ -23,6 +23,7 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
             "Course_Metadata",
             "Assessment_Config",
             "Question_Map",
+            "CO_Description",
             "Students",
             "__SYSTEM_HASH__",
         ]
@@ -40,6 +41,16 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
         validations = list(assessment_sheet.data_validations.dataValidation)
         assert validations
         assert "E2:E301" in str(validations[0].sqref)
+
+        co_desc_sheet = workbook["CO_Description"]
+        assert co_desc_sheet["A1"].value == "CO#"
+        assert co_desc_sheet["C1"].value == "Domain_Level"
+        assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
+        co_validations = list(co_desc_sheet.data_validations.dataValidation)
+        assert co_validations
+        assert any("A2:A301" in str(validation.sqref) for validation in co_validations)
+        assert any("C2:C301" in str(validation.sqref) for validation in co_validations)
+        assert any("D2:D301" in str(validation.sqref) for validation in co_validations)
 
         hash_sheet = workbook["__SYSTEM_HASH__"]
         assert hash_sheet.sheet_state == "hidden"

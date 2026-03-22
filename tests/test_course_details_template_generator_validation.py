@@ -9,6 +9,7 @@ pytest.importorskip("xlsxwriter")
 
 from common.constants import (
     ASSESSMENT_CONFIG_SHEET,
+    CO_DESCRIPTION_SHEET,
     COURSE_METADATA_HEADERS,
     COURSE_METADATA_SHEET,
     ID_COURSE_SETUP,
@@ -116,6 +117,7 @@ def test_generation_is_schema_stable_when_language_changes_mid_process(
                 COURSE_METADATA_SHEET,
                 ASSESSMENT_CONFIG_SHEET,
                 QUESTION_MAP_SHEET,
+                CO_DESCRIPTION_SHEET,
                 STUDENTS_SHEET,
                 SYSTEM_HASH_SHEET,
             ]

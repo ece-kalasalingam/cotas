@@ -183,6 +183,9 @@ TEXTS = {
     "instructor.validation.course_metadata_field_must_be_non_empty_str": "Course_Metadata field '{field}' must be a non-empty string.",
     "instructor.validation.course_metadata_total_outcomes_invalid": "Course_Metadata field 'Total_Outcomes' must be an integer > 0.",
     "instructor.validation.yes_no_required": "{sheet_name} row {row}: '{field}' must be YES or NO.",
+    "instructor.validation.allowed_values_required": (
+        "{sheet_name} row {row}: '{field}' must be one of [{allowed}]."
+    ),
     "instructor.validation.assessment_component_required_one": "Assessment_Config must contain at least one component.",
     "instructor.validation.assessment_component_required": "Assessment_Config row {row}: Component is required.",
     "instructor.validation.assessment_component_duplicate": "Assessment_Config row {row}: duplicate component '{component}'.",
@@ -202,6 +205,12 @@ TEXTS = {
     "instructor.validation.question_co_out_of_range": "Question_Map row {row}: CO value out of range 1..{total_outcomes}.",
     "instructor.validation.question_co_wise_requires_one": "Question_Map row {row}: component '{component}' requires exactly one CO per question.",
     "instructor.validation.question_duplicate_for_component": "Question_Map row {row}: duplicate question '{question}' for component '{component}'.",
+    "instructor.validation.co_description_row_required_one": "CO_Description must contain at least one row.",
+    "instructor.validation.co_description_number_positive_int_required": "CO_Description row {row}: 'CO#' must be a whole number greater than zero.",
+    "instructor.validation.co_description_number_duplicate": "CO_Description row {row}: duplicate CO# '{co_number}'.",
+    "instructor.validation.co_description_summary_length_invalid": (
+        "CO_Description row {row}: 'Summary_of_Topics/Expts./Project' must be between {minimum} and {maximum} characters."
+    ),
     "instructor.validation.students_row_required_one": "Students sheet must contain at least one student row.",
     "instructor.validation.students_reg_and_name_required": "Students row {row}: both Reg_No and Student_Name are required.",
     "instructor.validation.students_duplicate_reg_no": "Students row {row}: duplicate Reg_No '{reg_no}'.",

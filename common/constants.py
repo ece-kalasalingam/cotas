@@ -201,16 +201,56 @@ SYSTEM_LAYOUT_SHEET = "__SYSTEM_LAYOUT__"
 COURSE_METADATA_SHEET = "Course_Metadata"
 ASSESSMENT_CONFIG_SHEET = "Assessment_Config"
 QUESTION_MAP_SHEET = "Question_Map"
+CO_DESCRIPTION_SHEET = "CO_Description"
 STUDENTS_SHEET = "Students"
 
 COURSE_METADATA_HEADERS = ("Field", "Value")
-ASSESSMENT_CONFIG_HEADERS = ("Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct")
-QUESTION_MAP_HEADERS = ("Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO")
+ASSESSMENT_CONFIG_HEADERS = ("Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct", "Assessment_Type", "Assessment_Format", "Mode", "Participation"  )
+QUESTION_MAP_HEADERS = ("Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO", "Bloom_Level")
+CO_DESCRIPTION_HEADERS = ("CO#", "Description", "Domain_Level", "Summary_of_Topics/Expts./Project")
 STUDENTS_HEADERS = ("Reg_No", "Student_Name")
 
 ASSESSMENT_VALIDATION_YES_NO_OPTIONS = ("YES", "NO")
 ASSESSMENT_VALIDATION_INPUT_TITLE = "Direct"
 ASSESSMENT_VALIDATION_INPUT_MESSAGE = "Select YES or NO"
+ASSESSMENT_TYPE_OPTIONS = ("FORMATIVE", "SUMMATIVE")
+ASSESSMENT_FORMAT_OPTIONS = (
+    "THEORY_EXAM",
+    "LAB_WORK",
+    "PROJECT",
+    "VIVA",
+    "PRACTICAL_EXAM",
+    "SURVEY",
+)
+ASSESSMENT_MODE_OPTIONS = (
+    "WRITTEN",
+    "HANDS_ON",
+    "ORAL",
+    "PRESENTATION",
+    "WRITTEN+ORAL",
+    "HANDS_ON+WRITTEN",
+    "HANDS_ON+ORAL",
+    "HANDS_ON+WRITTEN+ORAL",
+    "PRESENTATION+ORAL",
+    "WRITTEN+PRESENTATION",
+)
+ASSESSMENT_PARTICIPATION_OPTIONS = (
+    "INDIVIDUAL",
+    "GROUP",
+    "INDIVIDUAL+GROUP",
+)
+QUESTION_DOMAIN_LEVEL_OPTIONS = (
+    "REMEMBER",
+    "UNDERSTAND",
+    "APPLY",
+    "ANALYZE",
+    "EVALUATE",
+    "CREATE",
+    "SKILL_DEVELOPMENT",
+    "MULTIPLE_LEVELS",
+)
+CO_DESCRIPTION_SUMMARY_MIN_LENGTH = 100
+CO_DESCRIPTION_SUMMARY_MAX_LENGTH = 200
 ASSESSMENT_VALIDATION_LAST_ROW = 300
 
 SYSTEM_HASH_TEMPLATE_ID_HEADER = "Template_ID"

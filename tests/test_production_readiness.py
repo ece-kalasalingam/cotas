@@ -83,7 +83,7 @@ def test_high_volume_workbook_generation_validation_and_step2_schema(tmp_path: P
 
         assessment = wb["Assessment_Config"]
         for row in range(2, 400):
-            for col in "ABCDE":
+            for col in "ABCDEFGHI":
                 assessment[f"{col}{row}"] = None
         row = 2
         for idx in range(1, 10):
@@ -92,12 +92,20 @@ def test_high_volume_workbook_generation_validation_and_step2_schema(tmp_path: P
             assessment[f"C{row}"] = "YES"
             assessment[f"D{row}"] = "YES"
             assessment[f"E{row}"] = "YES"
+            assessment[f"F{row}"] = "FORMATIVE"
+            assessment[f"G{row}"] = "THEORY_EXAM"
+            assessment[f"H{row}"] = "WRITTEN"
+            assessment[f"I{row}"] = "INDIVIDUAL"
             row += 1
         assessment[f"A{row}"] = "DNON"
         assessment[f"B{row}"] = 10
         assessment[f"C{row}"] = "YES"
         assessment[f"D{row}"] = "NO"
         assessment[f"E{row}"] = "YES"
+        assessment[f"F{row}"] = "FORMATIVE"
+        assessment[f"G{row}"] = "PROJECT"
+        assessment[f"H{row}"] = "PRESENTATION"
+        assessment[f"I{row}"] = "GROUP"
         row += 1
         for idx in range(1, 6):
             assessment[f"A{row}"] = f"I{idx:02d}"
@@ -105,11 +113,15 @@ def test_high_volume_workbook_generation_validation_and_step2_schema(tmp_path: P
             assessment[f"C{row}"] = "NO"
             assessment[f"D{row}"] = "YES"
             assessment[f"E{row}"] = "NO"
+            assessment[f"F{row}"] = "SUMMATIVE"
+            assessment[f"G{row}"] = "SURVEY"
+            assessment[f"H{row}"] = "WRITTEN+ORAL"
+            assessment[f"I{row}"] = "INDIVIDUAL+GROUP"
             row += 1
 
         question_map = wb["Question_Map"]
         for row in range(2, 1000):
-            for col in "ABCD":
+            for col in "ABCDE":
                 question_map[f"{col}{row}"] = None
         row = 2
         for idx in range(1, 10):
@@ -117,11 +129,13 @@ def test_high_volume_workbook_generation_validation_and_step2_schema(tmp_path: P
             question_map[f"B{row}"] = "Q1"
             question_map[f"C{row}"] = 10
             question_map[f"D{row}"] = idx
+            question_map[f"E{row}"] = "APPLY"
             row += 1
         question_map[f"A{row}"] = "DNON"
         question_map[f"B{row}"] = "Q1"
         question_map[f"C{row}"] = 100
         question_map[f"D{row}"] = "1,2,3,4"
+        question_map[f"E{row}"] = "MULTIPLE_LEVELS"
 
         students = wb["Students"]
         for row in range(2, 1500):
