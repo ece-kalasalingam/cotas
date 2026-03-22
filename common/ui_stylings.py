@@ -52,6 +52,20 @@ QLabel#coordinatorThresholdInputLabel,
 QLabel#instructorRailTitle {
     font-weight: 700;
 }
+QScrollArea#coordinatorLeftScroll,
+QScrollArea#coordinatorRightScroll,
+QScrollArea#instructorLeftScroll,
+QScrollArea#instructorRightScroll {
+    border: none;
+    background: transparent;
+}
+QWidget#coordinatorLeftScrollViewport,
+QWidget#coordinatorRightScrollViewport,
+QWidget#instructorLeftScrollViewport,
+QWidget#instructorRightScrollViewport {
+    border: none;
+    background: transparent;
+}
 
 QPushButton#primaryAction:enabled {
     background-color: palette(highlight);
