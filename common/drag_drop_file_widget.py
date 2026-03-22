@@ -41,7 +41,7 @@ class DragDropFileList(QListWidget):
     items_reordered = Signal(list)
     drag_state_changed = Signal(bool)
     browse_requested = Signal()
-    DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or single-click to add files"
+    DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or click to add files"
 
     def __init__(
         self,
