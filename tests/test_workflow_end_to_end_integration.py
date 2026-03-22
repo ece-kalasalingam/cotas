@@ -101,27 +101,27 @@ def _build_final_report(
     marks_template = root / f"marks_template_{section}.xlsx"
     final_report = root / f"final_report_{section}.xlsx"
 
-    context_step1 = instructor.create_job_context(step_id=f"step1_{section}")
-    instructor.generate_course_details_template(course_details, context=context_step1, cancel_token=CancellationToken())
+    context_template = instructor.create_job_context(step_id=f"generate_course_template_{section}")
+    instructor.generate_course_details_template(course_details, context=context_template, cancel_token=CancellationToken())
     _set_course_section(course_details, section)
     if reg_prefix:
         _prefix_student_regnos(course_details, reg_prefix)
 
-    context_step2 = instructor.create_job_context(step_id=f"step2_{section}")
-    instructor.validate_course_details_workbook(course_details, context=context_step2, cancel_token=CancellationToken())
+    context_prepare = instructor.create_job_context(step_id=f"prepare_marks_{section}")
+    instructor.validate_course_details_workbook(course_details, context=context_prepare, cancel_token=CancellationToken())
     instructor.generate_marks_template(
         course_details,
         marks_template,
-        context=context_step2,
+        context=context_prepare,
         cancel_token=CancellationToken(),
     )
 
     _fill_marks_workbook(marks_template, mark_value=1.0)
-    context_step2 = instructor.create_job_context(step_id=f"step2_{section}")
+    context_report = instructor.create_job_context(step_id=f"generate_final_report_{section}")
     instructor.generate_final_report(
         marks_template,
         final_report,
-        context=context_step2,
+        context=context_report,
         cancel_token=CancellationToken(),
     )
     return final_report

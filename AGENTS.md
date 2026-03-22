@@ -13,10 +13,137 @@
 
 ## Complexity Guardrails (Do Not "Optimize" These)
 
-- Do not cache parsed workbook metadata across Instructor Step 1 and Step 2 runs.
-  Step 1 and Step 2 can be executed for different courses, by different users, and on different days on shared systems.
+- Do not cache parsed workbook metadata across independent Instructor runs.
+  Runs can be executed for different courses, by different users, and on different days on shared systems.
 - Do not trim workbook output structure/formatting/protection.
   Current formatting, hidden/system sheets, and protection behavior are part of required output compatibility for this release.
+
+## Single Source Of Truth Guardrail (Sheet Configuration)
+
+- Any sheet configuration that is not strictly template-version implementation detail must be centralized in
+  `common/registry.py` + `common/sheet_schema.py`.
+- Do not introduce or maintain duplicate sheet-structure truth points in module/domain/service code.
+- New sheet additions, header changes, validation ranges, and structural metadata must be declared in the common schema/registry layer first.
+
+## Single Source Of Truth Guardrail (Path Identity Helper)
+
+- Filesystem path identity normalization must use `common/utils.py::canonical_path_key` as the single source of truth.
+- Do not introduce module/domain/service-local path key helpers (for example `_path_key`) that duplicate canonicalization behavior.
+
+## Single Source Of Truth Guardrail (CO Direct/Indirect Sheet Generation)
+
+- `domain/co_report_sheet_generator.py` is the single source of truth for generating `COx_Direct` and `COx_Indirect` sheets.
+- Do not add or keep duplicate direct/indirect sheet write logic in `instructor_report_engine.py`, `coordinator_engine.py`, `co_analysis_engine.py`, or module-layer code.
+- Always use shared helpers from `co_report_sheet_generator.py`:
+  - `write_co_outcome_sheets(...)` for writing both sheets
+  - `co_direct_sheet_name(...)` and `co_indirect_sheet_name(...)` for sheet naming
+- Template-specific behavior must be expressed through data/adapters (strategy or mapping inputs), not by cloning generator logic.
+- If CO sheet layout/headers/formulas/metadata behavior changes, update `co_report_sheet_generator.py` first and keep downstream callers thin.
+
+## Single Source Of Truth Guardrail (Excel Layout Helpers)
+
+- Keep shared Excel layout/styling/protection/copy helpers centralized in `common/excel_sheet_layout.py`.
+- Do not introduce standalone duplicate layout helper implementations in engine/module files for:
+  - xlsxwriter page/layout/protection routines
+  - openpyxl sheet protection and style-copy behavior
+  - column width sampling helpers and column-name utilities
+- If a workflow needs slightly different layout behavior, extend `common/excel_sheet_layout.py` and reuse it from callers.
+- Engine-local helper wrappers are allowed only as thin delegates to shared helpers, without divergent logic.
+
+## Workbook Secret/Protection Guardrail
+
+- Workbook sheet protection policy must be enforced through shared helpers in `common/excel_sheet_layout.py`:
+  - `protect_openpyxl_sheet(...)`
+  - `protect_xlsxwriter_sheet(...)`
+- Do not call `ensure_workbook_secret_policy()` or `get_workbook_password()` directly from module/domain/service workbook-generation code.
+- Direct `workbook_secret` usage is allowed only in:
+  - `common/excel_sheet_layout.py` (sheet protection primitives)
+  - `common/workbook_signing.py` (signature primitives)
+  - startup/bootstrap policy check in `main.py`
+- Keep `workbook.security.lockStructure` behavior where required, but do not duplicate password/policy wiring outside shared helpers.
+
+## Single Source Of Truth Guardrail (Xlsxwriter Format Bundles)
+
+- Shared setup/workbook format-bundle construction must use `common/excel_sheet_layout.py::build_template_xlsxwriter_formats(..., template_id=...)`.
+- Do not duplicate header/body/body_wrap/body_center/column_wrap format-bundle assembly logic in engine files.
+- Engine `_xlsxwriter_formats(...)` helpers (if retained) must be thin delegates to shared helpers and local cache-attr wiring only.
+- If a module needs additional reusable format variants, extend `build_template_xlsxwriter_formats(...)` (or add a shared adjacent helper) instead of cloning per-engine builders.
+
+## Template-ID Styling Rule
+
+- Course template generation may use current `ID_COURSE_SETUP` as the active template id.
+- For uploaded/source workbooks (marks/final-report/coordinator/co-analysis), styling and format-bundle resolution must use the template id read from that workbook `SYSTEM_HASH`.
+- Do not resolve uploaded-workbook styles via global/current template constants.
+- Shared helpers must be template-id aware:
+  - use `common/excel_sheet_layout.py::style_registry_for_template(template_id)`
+  - use `common/excel_sheet_layout.py::build_template_xlsxwriter_formats(..., template_id=...)`
+
+## Template Strategy Routing Guardrail
+
+- Module-layer code must stay template-agnostic: collect inputs, read `SYSTEM_HASH` template id (except course-template generation), and delegate.
+- Route worksheet generation/validation operations via `domain/template_strategy_router.py`; do not branch on template id inside modules.
+- Route workbook-generation entrypoints through `domain/template_strategy_router.py::generate_workbook(...)`.
+- `generate_workbook(...)` is the shared router entrypoint intended for workbook generation across modules; prefer extending strategy handlers over adding module-local generators.
+- Router responsibility is limited to strategy resolution + operation dispatch + fail-fast contract checks.
+- Template-specific orchestration must live in `domain/template_versions/<template_id>.py` strategy classes.
+- Strategy classes may call shared/common helpers or template-specific helpers, but modules must not import template-version modules directly.
+
+## Single Source Of Truth Guardrail (Validation Issues)
+
+- Validation issue semantics (code -> category/severity/i18n/default) must be centralized in `common/error_catalog.py`.
+- UI/toast/log rendering for validation failures must resolve through `common/error_catalog.py::resolve_validation_issue(...)` (directly or via shared utility wrappers).
+- Prefer raising `ValidationError` through `common/error_catalog.py::validation_error_from_key(...)` so translation key, category, severity, and code stay centralized.
+- Shared cross-module validation failures (dependency/system-hash/layout/template/workbook/mark rules) must reuse shared codes; do not create module-prefixed duplicates for the same business failure.
+- Shared translation keys must use the generic `validation.*` namespace (not module-specific namespaces) when the same failure can occur in multiple modules.
+- Avoid direct `raise ValidationError(t(\"...\"))` patterns in module/domain code.
+- `common/utils.py::log_process_message(...)` is the shared process-status path and must remain aligned with catalog-driven validation resolution.
+
+## Exception Contract Guardrail
+
+- Use typed app exceptions from `common/exceptions.py` across runtime code.
+- Validation/business-rule failures must raise `ValidationError` (prefer via `validation_error_from_key(...)` from `common/error_catalog.py`).
+- Static config/contract failures must raise `ConfigurationError`.
+- Unexpected internal/runtime failures should raise `AppSystemError`.
+- Cancellation paths must use `JobCancelledError`; do not invent module-local cancellation exception classes.
+- Do not raise generic `ValueError`/`RuntimeError`/`KeyError` for user-facing validation paths in module/domain/service runtime code.
+
+## Job Contract Guardrail
+
+- `common/jobs.py` is the shared source of truth for job metadata and cancellation primitives.
+- Use `JobContext` for workflow/service execution context (`job_id`, `step_id`, language, payload).
+- Use `CancellationToken` for cancellable work and call `raise_if_cancelled()` in long-running loops.
+- Use `generate_job_id()` from `common/jobs.py` when explicit job IDs are needed.
+- Do not introduce duplicate per-module token/context/job-id helpers.
+
+## Module Message Guardrail
+
+- Module/MainWindow UI messaging must use `common/module_messages.py` (directly or via `common/module_runtime.py`).
+- Preferred dispatch path is unified routing via:
+  - `notify_message(...)`
+  - `notify_message_key(...)`
+  where `channels` controls target surfaces (`status`, `toast`, `activity_log`) in any combination.
+- Prefer key-based status emission (`publish_status_key`) over raw localized strings for retranslation-safe logs.
+- `publish_status(...)` / `publish_status_key(...)` remain valid compatibility wrappers.
+- Modules that render logs must keep compatible message state fields:
+  - `status_changed`
+  - `_user_log_entries`
+  - `_ui_log_handler`
+  - `user_log_view`
+- Avoid direct `emit_user_status(...)` calls from module code when the same behavior can be routed via `module_messages`.
+- Keep log payload creation/rerender through `module_messages` helpers:
+  - `default_messages_namespace(...)`
+  - `build_status_message(...)`
+  - `resolve_status_message(...)`
+  - `append_user_log(...)` / `rerender_user_log(...)`
+- Use centralized toast helpers from `module_messages` for UI toasts:
+  - `notify_message(..., channels=(\"toast\", ...))`
+  - `notify_message_key(..., channels=(\"toast\", ...))`
+  - `show_toast_key(...)`
+  - `show_toast_plain(...)`
+- Do not import `common/ui_logging.py` directly in module/runtime UI files; `ui_logging` is an internal dependency of `module_messages`.
+- Do not import `common/toast.py` directly in module/runtime UI files; route toasts through `module_messages`.
+- Keep startup/crash bootstrap paths (for example `main.py`) as exceptions where direct low-level wiring may remain.
+- Shared ready message key for activity log bootstrap must be generic (`activity.log.ready`), not module-specific.
 
 ## Compulsory UI Content Constraints
 
@@ -41,6 +168,9 @@
   root stretch should remain top=`1`, footer=`0`;
   pane-visibility validation should rely on hidden-state semantics (`isHidden`).
 - Shared activity tabs are centralized in `MainWindow` (`sharedInfoTabs`).
+- `MainWindow.shared_activity_frame` is the only visible bottom activity panel; module-local visible footer panels are not allowed.
+- Keep Activity Log shared/common in `MainWindow.sharedInfoTabs` across modules.
+- Keep Generated Outputs module-specific through each module `get_shared_outputs_data()` payload.
 - Instructor/Coordinator must not render a separate visible footer tab panel.
 - In module shared-activity mode hooks, keep module footer hidden so top expands fully.
 - Do not keep temporary debug border styling in engine code after debugging.
@@ -56,11 +186,27 @@
 - Rule: any user-facing status/log message that must remain translatable after language change must be emitted
   as an i18n payload, not as `t(...)` plain text.
 - In modules, prefer key-based logging:
+  - use `self._runtime.notify_message_key(..., channels=(\"status\", \"activity_log\"))` for combined status+activity log emission.
   - use `self._runtime.publish_status_key(...)` (or module helper wrappers like `_publish_status_key(...)`)
   - avoid `self._publish_status(t("..."))` for translatable lifecycle/status lines.
 - For helpers/widgets/step modules:
-  - emit `build_i18n_log_message(...)` payloads (directly or through `publish_status_key`) when writing to logs.
+  - emit i18n payloads through `module_messages`/`ModuleRuntime` abstractions.
   - do not pre-localize and store message text if the line is expected to retranslate later.
 - Footer/shared activity rendering expectations:
   - shared footer log rerender happens in `main_window.py`
   - rerender path should resolve from stored i18n payload/raw message, not only from pre-localized text.
+
+## Release Entry Gate
+
+- Before any release promotion, all entry checks must pass:
+  - CI green across configured OS matrix jobs.
+  - Security checks pass.
+  - Quality checks pass.
+  - Artifact checksum manifest generated.
+  - Module catalog validation complete (`modules/module_catalog.py` contains expected modules and labels).
+- Run the executable gate checklist from `docs/QUALITY_GATE.md` as the source of truth for release commands.
+- Promotion flow must follow immutable-artifact practice:
+  - build in `dev`, verify/sign in `stage`, promote same verified artifact to `prod` without rebuild.
+- Release metadata requirements:
+  - tag release commit
+  - attach checksum/manifest artifacts with the release tag.

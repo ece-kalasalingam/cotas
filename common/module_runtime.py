@@ -8,9 +8,15 @@ from typing import Mapping
 
 from common.jobs import CancellationToken
 from common.module_messages import (
+    NotificationChannel,
+    ToastLevel,
     append_user_log,
+    notify_message,
+    notify_message_key,
     publish_status,
     publish_status_key,
+    show_toast_key,
+    show_toast_plain,
     setup_ui_logging,
 )
 from common.utils import remember_dialog_dir_safe
@@ -55,6 +61,90 @@ class ModuleRuntime:
 
     def publish_status_key(self, text_key: str, **kwargs: object) -> None:
         publish_status_key(self._module, text_key, ns=self._messages_namespace_factory(), **kwargs)
+
+    def notify_message(
+        self,
+        message: str,
+        *,
+        channels: tuple[NotificationChannel, ...] = ("status", "activity_log"),
+        toast_title: str = "",
+        toast_level: ToastLevel = "info",
+        toast_duration_ms: int | None = None,
+    ) -> None:
+        notify_message(
+            self._module,
+            message,
+            ns=self._messages_namespace_factory(),
+            channels=channels,
+            toast_title=toast_title,
+            toast_level=toast_level,
+            toast_duration_ms=toast_duration_ms,
+        )
+
+    def notify_message_key(
+        self,
+        text_key: str,
+        *,
+        channels: tuple[NotificationChannel, ...] = ("status", "activity_log"),
+        kwargs: Mapping[str, object] | None = None,
+        fallback: str | None = None,
+        toast_title: str = "",
+        toast_title_key: str | None = None,
+        toast_title_kwargs: Mapping[str, object] | None = None,
+        toast_level: ToastLevel = "info",
+        toast_duration_ms: int | None = None,
+    ) -> None:
+        notify_message_key(
+            self._module,
+            text_key,
+            ns=self._messages_namespace_factory(),
+            channels=channels,
+            kwargs=kwargs,
+            fallback=fallback,
+            toast_title=toast_title,
+            toast_title_key=toast_title_key,
+            toast_title_kwargs=toast_title_kwargs,
+            toast_level=toast_level,
+            toast_duration_ms=toast_duration_ms,
+        )
+
+    def show_toast_key(
+        self,
+        *,
+        text_key: str,
+        title_key: str,
+        translate: Callable[..., str],
+        level: ToastLevel = "info",
+        text_kwargs: Mapping[str, object] | None = None,
+        title_kwargs: Mapping[str, object] | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        show_toast_key(
+            self._module,
+            text_key=text_key,
+            title_key=title_key,
+            translate=translate,
+            level=level,
+            text_kwargs=text_kwargs,
+            title_kwargs=title_kwargs,
+            duration_ms=duration_ms,
+        )
+
+    def show_toast_plain(
+        self,
+        message: str,
+        *,
+        title: str,
+        level: ToastLevel = "info",
+        duration_ms: int | None = None,
+    ) -> None:
+        show_toast_plain(
+            self._module,
+            message,
+            title=title,
+            level=level,
+            duration_ms=duration_ms,
+        )
 
     def start_async_operation(
         self,

@@ -6,8 +6,8 @@ from typing import Callable, cast
 
 from PySide6.QtWidgets import QWidget
 
+from common.module_messages import show_toast_plain
 from common.texts import t
-from common.toast import show_toast
 
 
 def show_threshold_validation_toast(
@@ -15,7 +15,7 @@ def show_threshold_validation_toast(
     *,
     message_key: str,
     title_key: str,
-    toast_fn: Callable[..., None] = show_toast,
+    toast_fn: Callable[..., None] = show_toast_plain,
     translate: Callable[..., str] = t,
 ) -> None:
     toast_fn(

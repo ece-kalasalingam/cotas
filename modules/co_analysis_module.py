@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -38,10 +37,14 @@ from common.constants import (
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
+from common.contracts import require_keys
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken
+from common.module_messages import build_status_message as _build_status_message
+from common.module_messages import default_messages_namespace as _default_messages_namespace
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
+from common.module_messages import show_toast_plain as _show_toast_plain
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
@@ -50,26 +53,18 @@ from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
 from common.texts import t
-from common.toast import show_toast
-from common.ui_logging import (
-    UILogHandler,
-    build_i18n_log_message,
-    format_log_line_at,
-    parse_i18n_log_message,
-    resolve_i18n_log_message,
-)
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
-    emit_user_status,
+    canonical_path_key,
     log_process_message,
     normalize,
     resolve_dialog_start_path,
+    sanitize_filename_token,
 )
+from domain import BusyWorkflowState
 from domain.co_analysis_engine import (
     extract_course_metadata_and_students,
 )
-from domain.coordinator_engine import _path_key
-from modules.co_analysis.contracts import require_keys
 from modules.co_analysis.file_actions import clear_all, remove_file_by_path
 from modules.co_analysis.messages import show_threshold_validation_toast
 from modules.co_analysis.steps.collect_files import collect_files_async
@@ -79,31 +74,18 @@ from modules.co_analysis.validators.uploaded_workbook_validator import (
     validate_uploaded_source_workbook,
 )
 from modules.co_analysis.workflow_controller import COAnalysisWorkflowController
-from modules.instructor.steps.shared_workbook_ops import sanitize_filename_token
 from services import CoAnalysisWorkflowService
 
 _logger = logging.getLogger(__name__)
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
-@dataclass(slots=True)
-class COAnalysisWorkflowState:
-    busy: bool = False
-    active_job_id: str | None = None
-
-    def set_busy(self, value: bool, *, job_id: str | None = None) -> None:
-        self.busy = value
-        self.active_job_id = job_id if value else None
 
 
 def _messages_namespace() -> dict[str, object]:
-    return {
-        "emit_user_status": emit_user_status,
-        "t": t,
-        "build_i18n_log_message": build_i18n_log_message,
-        "parse_i18n_log_message": parse_i18n_log_message,
-        "resolve_i18n_log_message": resolve_i18n_log_message,
-        "format_log_line_at": format_log_line_at,
-        "UILogHandler": UILogHandler,
-    }
+    return dict(_default_messages_namespace(translate=t))
+
+
+def _build_i18n_message(text_key: str, *, kwargs: dict[str, object] | None = None, fallback: str | None = None) -> str:
+    return _build_status_message(text_key, translate=t, kwargs=kwargs, fallback=fallback)
 
 
 def _collect_files_namespace() -> dict[str, object]:
@@ -111,9 +93,9 @@ def _collect_files_namespace() -> dict[str, object]:
         "_validate_uploaded_source_workbook": validate_uploaded_source_workbook,
         "_consume_last_source_anomaly_warnings": consume_last_source_anomaly_warnings,
         "t": t,
-        "show_toast": show_toast,
+        "show_toast": _show_toast_plain,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
+        "build_i18n_log_message": _build_i18n_message,
         "JobCancelledError": JobCancelledError,
     }
 
@@ -124,12 +106,12 @@ def _generate_workbook_namespace() -> dict[str, object]:
         "APP_NAME": APP_NAME,
         "t": t,
         "resolve_dialog_start_path": resolve_dialog_start_path,
-        "_path_key": _path_key,
+        "canonical_path_key": canonical_path_key,
         "_extract_course_metadata_and_students": extract_course_metadata_and_students,
         "_sanitize_filename_token": sanitize_filename_token,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
-        "show_toast": show_toast,
+        "build_i18n_log_message": _build_i18n_message,
+        "show_toast": _show_toast_plain,
         "normalize": normalize,
         "COURSE_METADATA_COURSE_CODE_KEY": COURSE_METADATA_COURSE_CODE_KEY,
         "COURSE_METADATA_ACADEMIC_YEAR_KEY": COURSE_METADATA_ACADEMIC_YEAR_KEY,
@@ -139,10 +121,10 @@ def _generate_workbook_namespace() -> dict[str, object]:
 
 def _file_actions_namespace() -> dict[str, object]:
     return {
-        "_path_key": _path_key,
+        "canonical_path_key": canonical_path_key,
         "user_role": Qt.ItemDataRole.UserRole,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
+        "build_i18n_log_message": _build_i18n_message,
         "t": t,
     }
 
@@ -160,8 +142,8 @@ class _COAnalysisFileItemWidget(_SharedRemovableFileItemWidget):
         super().__init__(
             file_path,
             remove_fallback_text=t("coordinator.file.remove_fallback"),
-            open_file_tooltip=t("instructor.links.open_file"),
-            open_folder_tooltip=t("instructor.links.open_folder"),
+            open_file_tooltip=t("outputs.open_file"),
+            open_folder_tooltip=t("outputs.open_folder"),
             remove_tooltip=t("coordinator.file.remove_tooltip"),
             parent=parent,
         )
@@ -188,7 +170,7 @@ def _validate_co_analysis_namespaces() -> None:
             "APP_NAME",
             "t",
             "resolve_dialog_start_path",
-            "_path_key",
+            "canonical_path_key",
             "_extract_course_metadata_and_students",
             "_sanitize_filename_token",
             "log_process_message",
@@ -204,7 +186,7 @@ def _validate_co_analysis_namespaces() -> None:
     require_keys(
         _file_actions_namespace(),
         keys=(
-            "_path_key",
+            "canonical_path_key",
             "user_role",
             "log_process_message",
             "build_i18n_log_message",
@@ -216,7 +198,6 @@ def _validate_co_analysis_namespaces() -> None:
 
 class COAnalysisModule(QWidget):
     status_changed = Signal(str)
-    OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
     _CO_ATTAINMENT_TARGET_VALIDATION_KEY = "coordinator.co_attainment.invalid_percent"
 
@@ -231,12 +212,12 @@ class COAnalysisModule(QWidget):
         self._files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
         self._logger = _logger
-        self.state = COAnalysisWorkflowState()
+        self.state = BusyWorkflowState()
         self._workflow_service = workflow_service or CoAnalysisWorkflowService()
         self._cancel_token: CancellationToken | None = None
         self._active_jobs: list[object] = []
         self._pending_drop_batches: list[list[str]] = []
-        self._ui_log_handler: UILogHandler | None = None
+        self._ui_log_handler: logging.Handler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
         self._workflow_controller = COAnalysisWorkflowController(self)
@@ -443,8 +424,8 @@ class COAnalysisModule(QWidget):
         self.drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
             remove_fallback_text=t("coordinator.file.remove_fallback"),
-            open_file_tooltip=t("instructor.links.open_file"),
-            open_folder_tooltip=t("instructor.links.open_folder"),
+            open_file_tooltip=t("outputs.open_file"),
+            open_folder_tooltip=t("outputs.open_folder"),
             remove_tooltip=t("coordinator.file.remove_tooltip"),
         )
         self.drop_widget.set_summary_text_builder(
@@ -576,7 +557,7 @@ class COAnalysisModule(QWidget):
             self,
             message_key=message_key,
             title_key="coordinator.title",
-            toast_fn=show_toast,
+            toast_fn=_show_toast_plain,
             translate=t,
         )
 
@@ -600,10 +581,10 @@ class COAnalysisModule(QWidget):
         self._collect_valid_files(dropped_files)
 
     def _on_drop_list_reordered(self, ordered_paths: list[str]) -> None:
-        key_to_path = {_path_key(path): path for path in self._files}
+        key_to_path = {canonical_path_key(path): path for path in self._files}
         reordered: list[Path] = []
         for raw_path in ordered_paths:
-            key = _path_key(Path(raw_path))
+            key = canonical_path_key(Path(raw_path))
             matched = key_to_path.get(key)
             if matched is not None:
                 reordered.append(matched)
@@ -616,7 +597,7 @@ class COAnalysisModule(QWidget):
             return
         selected_files, _ = QFileDialog.getOpenFileNames(
             self,
-            t("instructor.dialog.step2.upload.title"),
+            t("co_analysis.dialog.select_files"),
             resolve_dialog_start_path(APP_NAME),
             t("instructor.dialog.filter.excel_open"),
         )
@@ -686,7 +667,7 @@ class COAnalysisModule(QWidget):
         self._ui_engine.set_footer_visible(False)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
-        return OutputPanelData(items=self._output_items(), open_failed_key=self.OUTPUT_LINK_OPEN_FAILED_KEY)
+        return OutputPanelData(items=self._output_items())
 
     def closeEvent(self, event) -> None:
         if self._cancel_token is not None:

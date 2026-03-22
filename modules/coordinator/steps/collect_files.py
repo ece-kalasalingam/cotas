@@ -12,6 +12,7 @@ from common.constants import (
     COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES,
     WORKFLOW_PAYLOAD_KEY_PATH,
 )
+from common.exceptions import AppSystemError
 from common.jobs import CancellationToken, generate_job_id
 from modules.coordinator.steps.shared_execution import handle_step_failure
 
@@ -138,7 +139,7 @@ def process_files_async(module: object, dropped_files: list[str], *, ns: Mapping
 
     def _on_finished(result: object) -> None:
         if not isinstance(result, dict):
-            raise RuntimeError("Coordinator processing returned unexpected result type.")
+            raise AppSystemError("Coordinator processing returned unexpected result type.")
         typed_result = cast(_AnalyzeResult, result)
         added_paths = [Path(value) for value in typed_result.get("added", [])]
         duplicates = int(typed_result.get("duplicates", 0))

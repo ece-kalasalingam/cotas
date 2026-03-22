@@ -40,7 +40,7 @@ FOCUS (Framework for Outcome Computation and Unification System) is a desktop OB
 | Workflow | Actors | Purpose |
 |----------|--------|---------|
 | **Instructor Step 1** | Faculty member | Generate course-details template → Validate filled details → Generate marks-entry template |
-| **Instructor Step 2** | Faculty member | Validate filled marks → Generate final CO report (per-student direct/indirect achievement) |
+| **Instructor** | Faculty member | Generate course template → Validate course details → Generate marks template |
 | **Coordinator** | Program coordinator | Collect final CO reports from multiple instructors → Aggregate and compute attainment levels → Generate consolidated attainment workbook with charts |
 
 The system enforces **workbook integrity** through HMAC-SHA256 signatures, **template versioning** through dispatch registries, and **business rule validation** through multi-pass schema + rule checking. All computations follow an **80/20 direct/indirect** contribution model with configurable attainment thresholds.
@@ -62,8 +62,7 @@ The system enforces **workbook integrity** through HMAC-SHA256 signatures, **tem
 │  │  └──────┬───────┘ └──────┬───────┘ └──────┘ └────┘ └─────┘     │   │
 │  │         │                │                                        │   │
 │  │  ┌──────┴────────────────┴───────────────────────────────────┐   │   │
-│  │  │  Sub-packages: steps/, validators/,                        │   │   │
-│  │  │  workflow_controller, messages, file_actions               │   │   │
+│  │  │  Sub-packages: steps/, validators/, messages               │   │   │
 │  │  └───────────────────────────────────────────────────────────┘   │   │
 │  └──────────────────────────────┬───────────────────────────────────┘   │
 │                                 │                                        │
@@ -262,15 +261,18 @@ Ratio total = Total_100 × INDIRECT_RATIO (0.2)
 
 **File:** `domain/template_versions/course_setup_v1.py`
 
-Implements the **Strategy pattern** — validators, extractors, and writers are registered in dispatch maps keyed by `template_id`:
+Implements the **Strategy pattern** with router-based dispatch:
 
 ```python
-_template_rule_validators()      # template_id → course-details validator
-_template_context_extractors()   # template_id → context extractor
-_template_marks_writers()        # template_id → marks workbook writer
+domain/template_strategy_router.py
+  -> get_template_strategy(template_id)
+  -> operation dispatch (validate/extract/write/generate)
+
+domain/template_versions/course_setup_v1.py
+  -> CourseSetupV1Strategy (template-specific orchestration)
 ```
 
-Currently only `COURSE_SETUP` (v1) is registered. This architecture supports adding future template versions (e.g., different institution formats) without modifying core engine code.
+Currently only `COURSE_SETUP_V1` is registered. Future versions (for example `COURSE_SETUP_V2`) are added as new strategy files and registered in the router, without module-layer template branching.
 
 **Key v1 Validators:**
 
@@ -368,17 +370,14 @@ The coordinator service now uses **direct domain imports**. Coordinator business
 Step 1: Course Template Download
   └─ State: step1_path, step1_done
 
-Step 2a: Course Details Upload → Marks Template Generation
-  └─ State: step2_course_details_path, step2_upload_ready, marks_template_path, marks_template_done
-
-Step 2b: Filled Marks Upload → Final Report Generation  
-  └─ State: filled_marks_path, filled_marks_done, final_report_path, final_report_done, final_report_outdated
+Course Details Upload → Marks Template Generation
+  └─ State: course_details_path(s), marks_template_path(s)
 ```
 
 **Key Business Behaviors:**
 
-1. **Step gating:** Step 2 requires `step2_upload_ready` (course details uploaded and validated)
-2. **Invalidation cascade:** Changing course details invalidates marks template; changing filled marks sets `final_report_outdated`
+1. **Workflow gating:** Marks-template generation requires validated course-details inputs.
+2. **Invalidation cascade:** Changing course details invalidates previously generated marks templates.
 3. **Multi-file support:** Upload dialogs accept multiple files; each validated independently
 4. **Deduplication:** Files deduplicated by resolved path before validation
 5. **Default naming:** Output filenames derived from workbook metadata: `CODE_SEM_SECTION_YEAR_<suffix>.xlsx`
@@ -388,9 +387,8 @@ Step 2b: Filled Marks Upload → Final Report Generation
 
 | Handler | Responsibility |
 |---------|---------------|
-| `step1_course_details_template.py` | Template download with save dialog |
-| `step2_course_details_and_marks_template.py` | Multi-file upload, validation loop, marks generation |
-| `step2_filled_marks_and_final_report.py` | Filled marks validation, iterative report generation with conflict resolution |
+| `instructor_module.py` | Template download with save dialog |
+| `instructor_module.py` | Single-flow upload, validation loop, and marks-template generation |
 | `shared_workbook_ops.py` | Filename building, token sanitization, atomic copy |
 
 ### 5.2 Coordinator Module
@@ -939,7 +937,7 @@ Coordinator Collection:
 
 | # | Recommendation | Status | Affected Files |
 |---|---------------|--------|----------------|
-| 1 | Close GAP-02: surface per-file batch report errors. | **Completed** | `modules/instructor/steps/step2_filled_marks_and_final_report.py` |
+| 1 | Close GAP-02: surface per-file batch generation errors. | **Completed** | `modules/instructor_module.py` |
 | 2 | Move coordinator processing logic to domain layer. | **Completed** | `domain/coordinator_engine.py`, `modules/coordinator/steps/*` |
 
 ### 15.2 Medium Priority
@@ -953,7 +951,7 @@ Coordinator Collection:
 | # | Recommendation | Status | Affected Files |
 |---|---------------|--------|----------------|
 | 4 | Add threshold configuration metadata to coordinator output sheets. | **Completed** | `domain/coordinator_engine.py` |
-| 5 | Surface anomaly warnings in instructor UI during Step 2 validation/report generation. | **Completed** | `domain/template_versions/course_setup_v1.py`, `modules/instructor/steps/step2_filled_marks_and_final_report.py`, `modules/instructor_module.py` |
+| 5 | Surface anomaly warnings in workflow validation/generation. | **Completed** | `domain/template_versions/course_setup_v1.py`, `modules/instructor_module.py` |
 | 6 | Evaluate and tune SQLite dedup threshold usage. | **Completed** | `domain/coordinator_engine.py` |
 
 ### 15.4 Current Follow-Ups

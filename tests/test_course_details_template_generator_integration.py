@@ -7,6 +7,7 @@ import pytest
 pytest.importorskip("xlsxwriter")
 openpyxl = pytest.importorskip("openpyxl")
 
+from common.constants import ID_COURSE_SETUP
 from domain.instructor_template_engine import (
     _compute_template_hash,
     generate_course_details_template,
@@ -56,8 +57,8 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
         assert hash_sheet.sheet_state == "hidden"
         assert hash_sheet["A1"].value == "Template_ID"
         assert hash_sheet["B1"].value == "Template_Hash"
-        assert hash_sheet["A2"].value == "COURSE_SETUP_V1"
-        assert hash_sheet["B2"].value == _compute_template_hash("COURSE_SETUP_V1")
+        assert hash_sheet["A2"].value == ID_COURSE_SETUP
+        assert hash_sheet["B2"].value == _compute_template_hash(ID_COURSE_SETUP)
     finally:
         workbook.close()
 

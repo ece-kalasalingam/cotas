@@ -9,11 +9,12 @@ from common.constants import (
     CO_ANALYSIS_WORKFLOW_OPERATION_COLLECT_FILES,
     CO_ANALYSIS_WORKFLOW_OPERATION_GENERATE_WORKBOOK,
 )
+from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken, JobContext
 from domain.co_analysis_engine import (
     analyze_uploaded_workbooks,
-    generate_co_analysis_workbook,
 )
+from domain.template_strategy_router import generate_workbook, read_valid_template_id_from_system_hash_sheet
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
 _logger = logging.getLogger(__name__)
@@ -69,16 +70,56 @@ class CoAnalysisWorkflowService(WorkflowServiceBase):
         source_paths: list[Path],
         output_path: Path,
         *,
+        thresholds: tuple[float, float, float] | None = None,
+        co_attainment_percent: float | None = None,
+        co_attainment_level: int | None = None,
         context: JobContext,
         cancel_token: CancellationToken | None = None,
-    ) -> Path:
+    ) -> object:
+        if not source_paths:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="COA_SOURCE_WORKBOOK_REQUIRED",
+            )
+        template_id = self._resolve_template_id_from_workbook(source_paths[0])
         return self._execute_with_telemetry(
             context=context,
             operation=CO_ANALYSIS_WORKFLOW_OPERATION_GENERATE_WORKBOOK,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: generate_co_analysis_workbook(
-                source_paths,
-                output_path,
-                token=effective_cancel_token,
+            work=lambda effective_cancel_token: generate_workbook(
+                template_id=template_id,
+                output_path=output_path,
+                workbook_name=output_path.name,
+                workbook_kind="co_analysis",
+                cancel_token=effective_cancel_token,
+                context={
+                    "source_paths": [str(path) for path in source_paths],
+                    "thresholds": tuple(thresholds) if thresholds is not None else None,
+                    "co_attainment_percent": co_attainment_percent,
+                    "co_attainment_level": co_attainment_level,
+                },
             ),
         )
+
+    @staticmethod
+    def _resolve_template_id_from_workbook(workbook_path: str | Path) -> str:
+        try:
+            import openpyxl
+        except ModuleNotFoundError as exc:
+            raise validation_error_from_key(
+                "validation.dependency.openpyxl_missing",
+                code="OPENPYXL_MISSING",
+            ) from exc
+        source = Path(workbook_path)
+        try:
+            workbook = openpyxl.load_workbook(source, data_only=False, read_only=True)
+        except Exception as exc:
+            raise validation_error_from_key(
+                "validation.workbook.open_failed",
+                code="WORKBOOK_OPEN_FAILED",
+                workbook=str(source),
+            ) from exc
+        try:
+            return read_valid_template_id_from_system_hash_sheet(workbook)
+        finally:
+            workbook.close()

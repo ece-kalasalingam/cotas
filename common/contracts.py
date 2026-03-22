@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from common.constants import (
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
@@ -15,6 +17,13 @@ from common.constants import (
 )
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
+
+
+def require_keys(namespace: Mapping[str, object], *, keys: tuple[str, ...], context: str) -> None:
+    missing = [key for key in keys if key not in namespace]
+    if missing:
+        ordered = ", ".join(sorted(missing))
+        raise ConfigurationError(f"{context} namespace is missing required keys: {ordered}")
 
 
 def validate_blueprint_registry_contracts() -> None:
@@ -34,7 +43,17 @@ def validate_blueprint_registry_contracts() -> None:
             raise ConfigurationError(f"Blueprint '{type_id}' must define at least one sheet.")
 
         seen_sheet_names: set[str] = set()
+        seen_sheet_keys: set[str] = set()
         for sheet in blueprint.sheets:
+            normalized_key = sheet.key.strip().lower()
+            if not normalized_key:
+                raise ConfigurationError(f"Blueprint '{type_id}' has an empty sheet key.")
+            if normalized_key in seen_sheet_keys:
+                raise ConfigurationError(
+                    f"Blueprint '{type_id}' contains duplicate sheet key '{sheet.key}'."
+                )
+            seen_sheet_keys.add(normalized_key)
+
             normalized_name = sheet.name.strip().lower()
             if not normalized_name:
                 raise ConfigurationError(f"Blueprint '{type_id}' has an empty sheet name.")
@@ -44,19 +63,36 @@ def validate_blueprint_registry_contracts() -> None:
                 )
             seen_sheet_names.add(normalized_name)
 
-            if not sheet.header_matrix or not sheet.header_matrix[0]:
+            header_kind = str(sheet.header_kind).strip().lower()
+            if header_kind not in {"fixed", "dynamic"}:
                 raise ConfigurationError(
-                    f"Sheet '{sheet.name}' in blueprint '{type_id}' must define headers."
+                    f"Sheet '{sheet.name}' in blueprint '{type_id}' has invalid header_kind '{sheet.header_kind}'."
                 )
-            headers = [str(header).strip() for header in sheet.header_matrix[0]]
-            if any(not header for header in headers):
-                raise ConfigurationError(
-                    f"Sheet '{sheet.name}' in blueprint '{type_id}' has empty header values."
-                )
-            if len(set(h.lower() for h in headers)) != len(headers):
-                raise ConfigurationError(
-                    f"Sheet '{sheet.name}' in blueprint '{type_id}' has duplicate headers."
-                )
+
+            if header_kind == "fixed":
+                if not sheet.header_matrix or not sheet.header_matrix[0]:
+                    raise ConfigurationError(
+                        f"Sheet '{sheet.name}' in blueprint '{type_id}' must define fixed headers."
+                    )
+                headers = [str(header).strip() for header in sheet.header_matrix[0]]
+                if any(not header for header in headers):
+                    raise ConfigurationError(
+                        f"Sheet '{sheet.name}' in blueprint '{type_id}' has empty header values."
+                    )
+                if len(set(h.lower() for h in headers)) != len(headers):
+                    raise ConfigurationError(
+                        f"Sheet '{sheet.name}' in blueprint '{type_id}' has duplicate headers."
+                    )
+            else:
+                if not str(sheet.header_resolver or "").strip():
+                    raise ConfigurationError(
+                        f"Sheet '{sheet.name}' in blueprint '{type_id}' declares dynamic headers but no header_resolver."
+                    )
+
+        if blueprint.workbook_rules and not isinstance(blueprint.workbook_rules, dict):
+            raise ConfigurationError(
+                f"Blueprint '{type_id}' has invalid workbook_rules; expected a dict."
+            )
 
 
 def _validate_attainment_policy_contracts() -> None:

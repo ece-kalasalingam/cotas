@@ -3,31 +3,44 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Callable
 
 from common.constants import (
-    ALLOW_FILTER,
-    ALLOW_SELECT_LOCKED,
-    ALLOW_SELECT_UNLOCKED,
-    ALLOW_SORT,
     CO_REPORT_HEADER_REG_NO,
+    CO_REPORT_HEADER_SERIAL,
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
-    COURSE_METADATA_HEADERS,
     COURSE_METADATA_SECTION_KEY,
     COURSE_METADATA_SEMESTER_KEY,
-    COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
-    STUDENTS_HEADERS,
-    STUDENTS_SHEET,
-    SYSTEM_HASH_SHEET,
     SYSTEM_LAYOUT_SHEET,
+    ID_COURSE_SETUP,
 )
-from common.exceptions import ValidationError
+from common.error_catalog import validation_error_from_key
+from common.excel_sheet_layout import color_without_hash as _color_without_hash
+from common.excel_sheet_layout import style_registry_for_template as _style_registry_for_template
+from common.excel_sheet_layout import (
+    copy_openpyxl_cell_style as _copy_openpyxl_cell_style,
+    copy_openpyxl_sheet as _copy_openpyxl_sheet,
+    find_header_row_by_value as _find_header_row_by_value,
+    protect_openpyxl_sheet as _protect_openpyxl_sheet,
+)
+from common.exceptions import AppSystemError, ValidationError
 from common.jobs import CancellationToken
-from common.utils import coerce_excel_number, normalize
-from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
-from domain.coordinator_engine import _path_key
+from common.utils import canonical_path_key, coerce_excel_number, normalize
+from common.registry import (
+    COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
+    COURSE_SETUP_SHEET_KEY_STUDENTS,
+    SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
+    get_sheet_headers_by_key,
+    get_sheet_name_by_key,
+)
+from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
+from domain.template_strategy_router import (
+    get_template_strategy,
+    read_valid_template_id_from_system_hash_sheet,
+)
 
 _SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xls"}
 _COURSE_METADATA_DUPLICATE_FIELDS = (
@@ -51,6 +64,16 @@ _VALIDATION_REASON_LAYOUT_OR_MANIFEST = "layout_or_manifest"
 _VALIDATION_REASON_TEMPLATE_MISMATCH = "template_mismatch"
 _VALIDATION_REASON_MARK_VALUE = "mark_value"
 _VALIDATION_REASON_OTHER = "other_validation"
+COURSE_METADATA_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+STUDENTS_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_STUDENTS)
+
+
+def _course_metadata_headers(template_id: str) -> tuple[str, ...]:
+    return get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+
+
+def _students_headers(template_id: str) -> tuple[str, ...]:
+    return get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
 
 
 def analyze_uploaded_workbooks(
@@ -61,7 +84,7 @@ def analyze_uploaded_workbooks(
     consume_last_source_anomaly_warnings: Callable[[], list[str]],
     token: CancellationToken | None = None,
 ) -> dict[str, object]:
-    existing_keys = {_path_key(Path(path)) for path in existing_paths}
+    existing_keys = {canonical_path_key(Path(path)) for path in existing_paths}
     seen_metadata_signatures: set[tuple[str, ...]] = set()
     seen_register_numbers: set[str] = set()
     for existing_path in existing_paths:
@@ -97,7 +120,7 @@ def analyze_uploaded_workbooks(
             unsupported_or_missing_files += 1
             invalid += 1
             continue
-        key = _path_key(path)
+        key = canonical_path_key(path)
         try:
             validate_uploaded_source_workbook(path)
             warnings = consume_last_source_anomaly_warnings()
@@ -272,14 +295,20 @@ def extract_course_metadata_signature(path: Path) -> tuple[str, ...] | None:
     except Exception:
         return None
     try:
+        template_id = ID_COURSE_SETUP
+        try:
+            template_id = read_valid_template_id_from_system_hash_sheet(workbook)
+        except Exception:
+            template_id = ID_COURSE_SETUP
+        metadata_headers = _course_metadata_headers(template_id)
         if COURSE_METADATA_SHEET not in workbook.sheetnames:
             return None
         sheet = workbook[COURSE_METADATA_SHEET]
         field_header = normalize(sheet.cell(row=1, column=1).value)
         value_header = normalize(sheet.cell(row=1, column=2).value)
-        if field_header != normalize(COURSE_METADATA_HEADERS[0]):
+        if field_header != normalize(metadata_headers[0]):
             return None
-        if value_header != normalize(COURSE_METADATA_HEADERS[1]):
+        if value_header != normalize(metadata_headers[1]):
             return None
         metadata: dict[str, str] = {}
         row = 2
@@ -310,6 +339,12 @@ def extract_course_metadata_and_students(path: Path) -> tuple[set[str], dict[str
     unique_students: set[str] = set()
     metadata_map: dict[str, str] = {}
     try:
+        template_id = ID_COURSE_SETUP
+        try:
+            template_id = read_valid_template_id_from_system_hash_sheet(workbook)
+        except Exception:
+            template_id = ID_COURSE_SETUP
+        students_headers = _students_headers(template_id)
         if COURSE_METADATA_SHEET in workbook.sheetnames:
             metadata_sheet = workbook[COURSE_METADATA_SHEET]
             row = 2
@@ -331,7 +366,7 @@ def extract_course_metadata_and_students(path: Path) -> tuple[set[str], dict[str
                 key = normalize(students_sheet.cell(row=1, column=col).value)
                 if key and key not in header_map:
                     header_map[key] = col
-            reg_col = header_map.get(normalize(STUDENTS_HEADERS[0])) or header_map.get(normalize(CO_REPORT_HEADER_REG_NO))
+            reg_col = header_map.get(normalize(students_headers[0])) or header_map.get(normalize(CO_REPORT_HEADER_REG_NO))
             if reg_col is not None:
                 max_row = int(students_sheet.max_row)
                 for row in range(2, max_row + 1):
@@ -341,7 +376,7 @@ def extract_course_metadata_and_students(path: Path) -> tuple[set[str], dict[str
                     if reg_text:
                         unique_students.add(normalize(reg_text))
         if not unique_students:
-            unique_students = _extract_students_from_report_sheets(workbook)
+            unique_students = _extract_students_from_report_sheets(workbook, template_id=template_id)
     finally:
         workbook.close()
     return unique_students, metadata_map
@@ -352,30 +387,61 @@ def generate_co_analysis_workbook(
     output_path: Path,
     *,
     token: CancellationToken | None = None,
+    thresholds: tuple[float, float, float] | None = None,
+    co_attainment_percent: float | None = None,
+    co_attainment_level: int | None = None,
 ) -> Path:
     extracted: list[tuple[set[str], dict[str, str]]] = []
     for path in source_paths:
         if token is not None:
             token.raise_if_cancelled()
         extracted.append(extract_course_metadata_and_students(path))
-    return build_co_analysis_workbook(output_path, extracted)
+    return build_co_analysis_workbook(
+        output_path,
+        extracted,
+        source_paths=source_paths,
+        token=token,
+        thresholds=thresholds,
+        co_attainment_percent=co_attainment_percent,
+        co_attainment_level=co_attainment_level,
+    )
 
 
 def build_co_analysis_workbook(
     output_path: Path,
     extracted: list[tuple[set[str], dict[str, str]]],
+    *,
+    source_paths: list[Path],
+    token: CancellationToken | None = None,
+    thresholds: tuple[float, float, float] | None = None,
+    co_attainment_percent: float | None = None,
+    co_attainment_level: int | None = None,
 ) -> Path:
-    from openpyxl import Workbook
+    from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
+    if not source_paths:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COA_SOURCE_WORKBOOK_REQUIRED",
+        )
+    probe_wb = load_workbook(source_paths[0], data_only=False, read_only=True)
+    try:
+        resolved_template_id = read_valid_template_id_from_system_hash_sheet(probe_wb)
+    finally:
+        probe_wb.close()
+
     workbook = Workbook()
+    metadata_headers = _course_metadata_headers(resolved_template_id)
     course_metadata_sheet = workbook.active
     if course_metadata_sheet is None:
-        raise RuntimeError("Failed to create Course Metadata worksheet.")
+        raise AppSystemError("Failed to create Course Metadata worksheet.")
     course_metadata_sheet.title = COURSE_METADATA_SHEET
-    course_metadata_sheet.cell(row=1, column=1, value=COURSE_METADATA_HEADERS[0])
-    course_metadata_sheet.cell(row=1, column=2, value=COURSE_METADATA_HEADERS[1])
-    header_fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    course_metadata_sheet.cell(row=1, column=1, value=metadata_headers[0])
+    course_metadata_sheet.cell(row=1, column=2, value=metadata_headers[1])
+    header_style, _ = _style_registry_for_template(resolved_template_id)
+    header_bg = _color_without_hash(str(header_style.get("bg_color", "")))
+    header_fill = PatternFill(fill_type="solid", fgColor=header_bg)
     header_font = Font(bold=True)
     thin = Side(border_style="thin", color="000000")
     header_border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -388,8 +454,8 @@ def build_co_analysis_workbook(
         header_cell.alignment = Alignment(horizontal="center", vertical="center")
 
     row_cursor = 2
-    max_col1_len = max(len(COURSE_METADATA_HEADERS[0]), len("Students On-Roll"))
-    max_col2_len = len(COURSE_METADATA_HEADERS[1])
+    max_col1_len = max(len(metadata_headers[0]), len("Students On-Roll"))
+    max_col2_len = len(metadata_headers[1])
     seen_dedup_values: dict[str, set[str]] = {}
     for unique_students, metadata_map in extracted:
         for field_key_raw, label in _ORDERED_METADATA_FIELDS:
@@ -437,20 +503,95 @@ def build_co_analysis_workbook(
                 continue
             cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-    ensure_workbook_secret_policy()
     workbook.security.lockStructure = True
-    course_metadata_sheet.protection.sheet = True
-    course_metadata_sheet.protection.password = get_workbook_password()
-    course_metadata_sheet.protection.sort = ALLOW_SORT
-    course_metadata_sheet.protection.autoFilter = ALLOW_FILTER
-    course_metadata_sheet.protection.selectLockedCells = ALLOW_SELECT_LOCKED
-    course_metadata_sheet.protection.selectUnlockedCells = ALLOW_SELECT_UNLOCKED
-    workbook.save(output_path)
-    return output_path
+    _protect_openpyxl_sheet(course_metadata_sheet)
+
+    with TemporaryDirectory(prefix="focus_co_analysis_") as temp_root_raw:
+        temp_root = Path(temp_root_raw)
+        generated_final_reports: list[Path] = []
+        for index, source_path in enumerate(source_paths, start=1):
+            if token is not None:
+                token.raise_if_cancelled()
+            final_report_path = temp_root / f"co_analysis_source_{index}.xlsx"
+            try:
+                import openpyxl
+            except Exception as exc:
+                raise validation_error_from_key(
+                    "validation.dependency.openpyxl_missing",
+                    code="OPENPYXL_MISSING",
+                ) from exc
+            source_wb = openpyxl.load_workbook(source_path, data_only=False, read_only=True)
+            try:
+                template_id = read_valid_template_id_from_system_hash_sheet(source_wb)
+            finally:
+                source_wb.close()
+            strategy = get_template_strategy(template_id)
+            strategy.generate_final_report(source_path, final_report_path, cancel_token=token)
+            if normalize(template_id) != normalize(resolved_template_id):
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="COA_TEMPLATE_MIXED",
+                )
+            generated_final_reports.append(final_report_path)
+
+        if not generated_final_reports:
+            workbook.save(output_path)
+            return output_path
+
+        first_report = load_workbook(generated_final_reports[0], data_only=False)
+        try:
+            total_outcomes = _read_total_outcomes_from_course_metadata(first_report)
+        finally:
+            first_report.close()
+
+        coordinator_output = temp_root / "co_analysis_co_sheets.xlsx"
+        strategy = get_template_strategy(resolved_template_id)
+        strategy.generate_co_attainment(
+            generated_final_reports,
+            coordinator_output,
+            token=token or CancellationToken(),
+            thresholds=thresholds,
+            co_attainment_percent=co_attainment_percent,
+            co_attainment_level=co_attainment_level,
+        )
+
+        coordinator_wb = load_workbook(coordinator_output, data_only=False)
+        try:
+            for co_index in range(1, total_outcomes + 1):
+                if token is not None:
+                    token.raise_if_cancelled()
+                direct_name = co_direct_sheet_name(co_index)
+                indirect_source_name = co_indirect_sheet_name(co_index)
+                indirect_target_name = co_indirect_sheet_name(co_index)
+                co_name = f"CO{co_index}"
+                merged_direct = workbook.create_sheet(title=direct_name)
+                _merge_report_sheets(
+                    report_paths=generated_final_reports,
+                    source_sheet_name=direct_name,
+                    target_sheet=merged_direct,
+                )
+                _protect_sheet(merged_direct)
+                merged_indirect = workbook.create_sheet(title=indirect_target_name)
+                _merge_report_sheets(
+                    report_paths=generated_final_reports,
+                    source_sheet_name=indirect_source_name,
+                    target_sheet=merged_indirect,
+                )
+                _protect_sheet(merged_indirect)
+                if co_name in coordinator_wb.sheetnames:
+                    co_sheet = workbook.create_sheet(title=co_name)
+                    _copy_sheet(coordinator_wb[co_name], co_sheet)
+                    _protect_sheet(co_sheet)
+        finally:
+            coordinator_wb.close()
+
+        workbook.save(output_path)
+        return output_path
 
 
-def _extract_students_from_report_sheets(workbook: object) -> set[str]:
+def _extract_students_from_report_sheets(workbook: object, *, template_id: str = ID_COURSE_SETUP) -> set[str]:
     unique_students: set[str] = set()
+    students_headers = _students_headers(template_id)
     try:
         sheets = getattr(workbook, "worksheets", [])
     except Exception:
@@ -472,7 +613,7 @@ def _extract_students_from_report_sheets(workbook: object) -> set[str]:
         for row in range(1, scan_rows + 1):
             for col in range(1, scan_cols + 1):
                 key = normalize(sheet.cell(row=row, column=col).value)
-                if key in {normalize(CO_REPORT_HEADER_REG_NO), normalize(STUDENTS_HEADERS[0])}:
+                if key in {normalize(CO_REPORT_HEADER_REG_NO), normalize(students_headers[0])}:
                     reg_col = col
                     header_row = row
                     break
@@ -487,3 +628,99 @@ def _extract_students_from_report_sheets(workbook: object) -> set[str]:
             if reg_text:
                 unique_students.add(normalize(reg_text))
     return unique_students
+
+
+def _read_total_outcomes_from_course_metadata(workbook: object) -> int:
+    try:
+        metadata_sheet = workbook[COURSE_METADATA_SHEET]  # type: ignore[index]
+    except Exception:
+        return 0
+    row = 2
+    while True:
+        key = metadata_sheet.cell(row=row, column=1).value
+        value = metadata_sheet.cell(row=row, column=2).value
+        if normalize(key) == "" and normalize(value) == "":
+            break
+        if normalize(key) == normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY):
+            parsed = coerce_excel_number(value)
+            if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+                return max(0, int(parsed))
+        row += 1
+    return 0
+
+
+def _protect_sheet(sheet: object) -> None:
+    _protect_openpyxl_sheet(sheet)
+
+
+def _copy_sheet(source_sheet: object, target_sheet: object) -> None:
+    _copy_openpyxl_sheet(source_sheet, target_sheet)
+
+
+def _find_header_row_by_serial(sheet: object) -> int:
+    return _find_header_row_by_value(sheet, header_value=CO_REPORT_HEADER_SERIAL, header_col=1, max_scan_rows=300)
+
+
+def _merge_report_sheets(
+    *,
+    report_paths: list[Path],
+    source_sheet_name: str,
+    target_sheet: object,
+) -> None:
+    from openpyxl import load_workbook
+
+    if not report_paths:
+        return
+
+    seed_wb = load_workbook(report_paths[0], data_only=False)
+    try:
+        if source_sheet_name not in seed_wb.sheetnames:
+            return
+        source_sheet = seed_wb[source_sheet_name]
+        header_row = _find_header_row_by_serial(source_sheet)
+        if header_row <= 0:
+            return
+        for row in range(1, header_row + 1):
+            for col in range(1, int(source_sheet.max_column) + 1):
+                source_cell = source_sheet.cell(row=row, column=col)
+                target_cell = target_sheet.cell(row=row, column=col, value=source_cell.value)
+                _copy_openpyxl_cell_style(source_cell, target_cell)
+        target_sheet.freeze_panes = source_sheet.freeze_panes
+        target_sheet.print_title_rows = source_sheet.print_title_rows
+        target_sheet.print_title_cols = source_sheet.print_title_cols
+        target_sheet.page_setup.orientation = source_sheet.page_setup.orientation
+        target_sheet.page_setup.paperSize = source_sheet.page_setup.paperSize
+        target_sheet.page_setup.fitToWidth = source_sheet.page_setup.fitToWidth
+        target_sheet.page_setup.fitToHeight = source_sheet.page_setup.fitToHeight
+        for key, dimension in source_sheet.column_dimensions.items():
+            target_sheet.column_dimensions[key].width = dimension.width
+    finally:
+        seed_wb.close()
+
+    next_row = header_row + 1
+    next_serial = 1
+    for report_path in report_paths:
+        wb = load_workbook(report_path, data_only=False)
+        try:
+            if source_sheet_name not in wb.sheetnames:
+                continue
+            sheet = wb[source_sheet_name]
+            local_header_row = _find_header_row_by_serial(sheet)
+            if local_header_row <= 0:
+                continue
+            row = local_header_row + 1
+            while row <= int(sheet.max_row):
+                reg_cell = sheet.cell(row=row, column=2).value
+                name_cell = sheet.cell(row=row, column=3).value
+                if normalize(reg_cell) == "" and normalize(name_cell) == "":
+                    break
+                target_sheet.cell(row=next_row, column=1, value=next_serial)
+                for col in range(2, int(sheet.max_column) + 1):
+                    source_cell = sheet.cell(row=row, column=col)
+                    target_cell = target_sheet.cell(row=next_row, column=col, value=source_cell.value)
+                    _copy_openpyxl_cell_style(source_cell, target_cell)
+                next_serial += 1
+                next_row += 1
+                row += 1
+        finally:
+            wb.close()

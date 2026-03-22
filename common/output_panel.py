@@ -18,9 +18,9 @@ class OutputItem:
 class OutputPanelData:
     items: tuple[OutputItem, ...]
     empty_message_key: str = "outputs.none_generated"
-    open_file_key: str = "instructor.links.open_file"
-    open_folder_key: str = "instructor.links.open_folder"
-    open_failed_key: str = "instructor.links.open_failed"
+    open_file_key: str = "outputs.open_file"
+    open_folder_key: str = "outputs.open_folder"
+    open_failed_key: str = "outputs.open_failed"
 
 
 def render_output_panel_html(

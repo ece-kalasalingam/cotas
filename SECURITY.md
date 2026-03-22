@@ -27,7 +27,8 @@ Initial triage target: 7 business days.
   `FOCUS_WORKBOOK_SIGNATURE_VERSION` controls active signature format version.
   Legacy unsigned-signature compatibility paths are not accepted in the current release.
 - CI quality gate:
-  lint, type check, UI string policy check, and tests.
+  lint, type check, UI string policy check, tests, and coverage gates.
+  Executable checklist source: `docs/QUALITY_GATE.md`.
 - CI dependency audit:
   `pip-audit` runs on each pull request and push.
 - CI SAST gate:
@@ -53,3 +54,4 @@ Initial triage target: 7 business days.
 - Protect the host profile where app secrets are stored.
 - Rotate workbook password by controlled app data reset and template regeneration when required.
 - POSIX fallback note: if no keyring backend is available, the fallback secret file is compatibility storage and not equivalent to hardware/OS secret vault protection.
+- Release/promotion security checks must pass `AGENTS.md` release policy and the command checklist in `docs/QUALITY_GATE.md`.

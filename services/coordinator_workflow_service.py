@@ -9,11 +9,12 @@ from common.constants import (
     COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
     COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES,
 )
+from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken, JobContext
-from domain.coordinator_engine import (
+from domain.template_versions.course_setup_v1_coordinator_engine import (
     _analyze_dropped_files,
-    _generate_co_attainment_workbook,
 )
+from domain.template_strategy_router import extract_final_report_signature_from_path, generate_workbook
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
@@ -78,24 +79,33 @@ class CoordinatorWorkflowService(WorkflowServiceBase):
         co_attainment_percent: float | None = None,
         co_attainment_level: int | None = None,
     ):
+        if not source_paths:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="COA_SOURCE_WORKBOOK_REQUIRED",
+            )
+        signature = extract_final_report_signature_from_path(source_paths[0])
+        if signature is None:
+            raise validation_error_from_key(
+                "validation.workbook.open_failed",
+                code="WORKBOOK_OPEN_FAILED",
+                workbook=str(source_paths[0]),
+            )
         return self._execute_with_telemetry(
             context=context,
             operation=COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: (
-                _generate_co_attainment_workbook(
-                    source_paths,
-                    output_path,
-                    token=effective_cancel_token,
-                )
-                if thresholds is None and co_attainment_percent is None and co_attainment_level is None
-                else _generate_co_attainment_workbook(
-                    source_paths,
-                    output_path,
-                    token=effective_cancel_token,
-                    thresholds=thresholds,
-                    co_attainment_percent=co_attainment_percent,
-                    co_attainment_level=co_attainment_level,
-                )
+            work=lambda effective_cancel_token: generate_workbook(
+                template_id=signature.template_id,
+                output_path=output_path,
+                workbook_name=output_path.name,
+                workbook_kind="co_attainment",
+                cancel_token=effective_cancel_token,
+                context={
+                    "source_paths": [str(path) for path in source_paths],
+                    "thresholds": tuple(thresholds) if thresholds is not None else None,
+                    "co_attainment_percent": co_attainment_percent,
+                    "co_attainment_level": co_attainment_level,
+                },
             ),
         )

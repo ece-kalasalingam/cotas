@@ -3,23 +3,14 @@
 from __future__ import annotations
 
 import logging
-import re
-from typing import Any, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from common.constants import (
-    ASSESSMENT_CONFIG_HEADERS,
-    ASSESSMENT_FORMAT_OPTIONS,
-    ASSESSMENT_MODE_OPTIONS,
-    ASSESSMENT_PARTICIPATION_OPTIONS,
-    ASSESSMENT_CONFIG_SHEET,
-    ASSESSMENT_TYPE_OPTIONS,
-    CO_DESCRIPTION_HEADERS,
-    CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
-    CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
-    CO_DESCRIPTION_SHEET,
-    COURSE_METADATA_HEADERS,
-    COURSE_METADATA_SHEET,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+    FILE_EXTENSION_XLSX,
+    FILENAME_JOIN_SEPARATOR,
     LAYOUT_MANIFEST_KEY_SHEET_ORDER,
     LAYOUT_MANIFEST_KEY_SHEETS,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
@@ -34,42 +25,87 @@ from common.constants import (
     LAYOUT_SHEET_SPEC_KEY_NAME,
     LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT,
     LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH,
+    ID_COURSE_SETUP,
     LIKERT_MAX,
     LIKERT_MIN,
     MIN_MARK_VALUE,
-    QUESTION_DOMAIN_LEVEL_OPTIONS,
-    QUESTION_MAP_HEADERS,
-    QUESTION_MAP_SHEET,
-    STUDENTS_HEADERS,
-    STUDENTS_SHEET,
+    MARKS_TEMPLATE_NAME_SUFFIX,
     WEIGHT_TOTAL_EXPECTED,
     WEIGHT_TOTAL_ROUND_DIGITS,
 )
-from common.exceptions import ValidationError
+from common.error_catalog import validation_error_from_key
+from common.jobs import CancellationToken
+from common.registry import (
+    COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS,
+    COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
+    COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
+    COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS,
+    COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
+    COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
+    COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS,
+    COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
+    COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
+    COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
+    COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
+    COURSE_SETUP_SHEET_KEY_STUDENTS,
+    get_sheet_headers_by_key,
+    get_sheet_name_by_key,
+    get_sheet_schema_by_key,
+)
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from common.texts import t
-from common.utils import coerce_excel_number, normalize
+from common.utils import coerce_excel_number, normalize, sanitize_filename_token
 from common.workbook_signing import sign_payload
+from domain.assessment_semantics import parse_assessment_components
+from domain.co_token_parser import parse_co_tokens
 
 _logger = logging.getLogger(__name__)
 _MAX_DECIMAL_PLACES = 2
-_CO_TOKEN_SPLIT_SEPARATOR = ","
-_CO_TOKEN_PATTERN = r"(?:co)?\s*(\d+)"
 _FORMULA_SUM_TEMPLATE = "=SUM({start}:{end})"
 _LOG_STEP3_HIGH_ABSENCE = "Step3 anomaly: high absence ratio sheet=%s col=%s absent=%s total=%s"
 _LOG_STEP3_NEAR_CONSTANT = (
     "Step3 anomaly: near-constant marks sheet=%s col=%s dominant_count=%s numeric_total=%s"
 )
 _last_marks_anomaly_warnings: list[str] = []
-_ASSESSMENT_TYPE_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_TYPE_OPTIONS}
-_ASSESSMENT_FORMAT_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_FORMAT_OPTIONS}
-_ASSESSMENT_MODE_OPTION_TOKENS = {normalize(value) for value in ASSESSMENT_MODE_OPTIONS}
+COURSE_METADATA_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+ASSESSMENT_CONFIG_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+QUESTION_MAP_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_QUESTION_MAP)
+CO_DESCRIPTION_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+STUDENTS_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_STUDENTS)
+COURSE_METADATA_HEADERS = get_sheet_headers_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+ASSESSMENT_CONFIG_HEADERS = get_sheet_headers_by_key(
+    ID_COURSE_SETUP,
+    COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
+)
+QUESTION_MAP_HEADERS = get_sheet_headers_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_QUESTION_MAP)
+CO_DESCRIPTION_HEADERS = get_sheet_headers_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+STUDENTS_HEADERS = get_sheet_headers_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_STUDENTS)
+_ASSESSMENT_TYPE_OPTION_TOKENS = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS}
+_ASSESSMENT_FORMAT_OPTION_TOKENS = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS}
+_ASSESSMENT_MODE_OPTION_TOKENS = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_MODE_OPTIONS}
 _ASSESSMENT_PARTICIPATION_OPTION_TOKENS = {
-    normalize(value) for value in ASSESSMENT_PARTICIPATION_OPTIONS
+    normalize(value) for value in COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS
 }
 _QUESTION_DOMAIN_LEVEL_OPTION_TOKENS = {
-    normalize(value) for value in QUESTION_DOMAIN_LEVEL_OPTIONS
+    normalize(value) for value in COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS
 }
+_MARK_COMPONENT_SHEET_KINDS = {
+    LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
+    LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
+    LAYOUT_SHEET_KIND_INDIRECT,
+}
+_SUPPORTED_OPERATIONS = frozenset(
+    {
+        "generate_workbook",
+        "validate_course_details_rules",
+        "extract_marks_template_context",
+        "write_marks_template_workbook",
+        "validate_filled_marks_manifest_schema",
+        "consume_last_marks_anomaly_warnings",
+        "generate_final_report",
+        "generate_co_attainment",
+        "validate_final_report_workbook",
+    }
+)
 
 
 def _reset_marks_anomaly_warnings() -> None:
@@ -80,6 +116,305 @@ def consume_last_marks_anomaly_warnings() -> list[str]:
     warnings = list(_last_marks_anomaly_warnings)
     _last_marks_anomaly_warnings.clear()
     return warnings
+
+
+@dataclass(slots=True, frozen=True)
+class CourseSetupV1Strategy:
+    template_id: str = "COURSE_SETUP_V1"
+
+    def supports_operation(self, operation: str) -> bool:
+        return str(operation).strip() in _SUPPORTED_OPERATIONS
+
+    def default_workbook_name(
+        self,
+        *,
+        workbook_kind: str,
+        context: Mapping[str, Any] | None,
+        fallback: str,
+    ) -> str:
+        kind = normalize(workbook_kind)
+        payload = dict(context or {})
+        if kind != "marks_template":
+            return fallback
+        source_path = str(payload.get("course_details_path") or "").strip()
+        if not source_path:
+            return fallback
+        return self._build_marks_template_default_name_from_workbook(source_path, fallback=fallback)
+
+    def generate_workbook(
+        self,
+        *,
+        template_id: str,
+        workbook_kind: str,
+        output_path: str | Path,
+        workbook_name: str | None,
+        cancel_token: CancellationToken | None = None,
+        context: Mapping[str, Any] | None = None,
+    ) -> object:
+        requested_template = normalize(template_id)
+        if requested_template != normalize(self.template_id):
+            raise validation_error_from_key(
+                "validation.template.unknown",
+                code="UNKNOWN_TEMPLATE",
+                template_id=template_id,
+            )
+        resolved_workbook_name = (workbook_name or Path(output_path).name).strip()
+        if not resolved_workbook_name:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="WORKBOOK_NAME_REQUIRED",
+            )
+        kind = normalize(workbook_kind)
+        payload = dict(context or {})
+        if kind == "course_details_template":
+            from domain.template_versions.course_setup_v1_template_workbook import (
+                generate_course_details_template,
+            )
+
+            return generate_course_details_template(
+                output_path=output_path,
+                template_id=self.template_id,
+                cancel_token=cancel_token,
+            )
+        if kind == "marks_template":
+            source = str(payload.get("course_details_path") or "").strip()
+            if not source:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="WORKBOOK_SOURCE_REQUIRED",
+                    workbook_kind=workbook_kind,
+                )
+            from domain.template_versions.course_setup_v1_template_workbook import (
+                generate_marks_template_from_course_details,
+            )
+
+            return generate_marks_template_from_course_details(
+                source,
+                output_path,
+                cancel_token=cancel_token,
+            )
+        if kind == "final_report":
+            source = str(payload.get("filled_marks_path") or "").strip()
+            if not source:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="WORKBOOK_SOURCE_REQUIRED",
+                    workbook_kind=workbook_kind,
+                )
+            return self.generate_final_report(
+                source,
+                output_path,
+                cancel_token=cancel_token,
+            )
+        if kind == "co_attainment":
+            source_paths_raw = payload.get("source_paths")
+            source_paths = [Path(path) for path in source_paths_raw] if isinstance(source_paths_raw, list) else []
+            if not source_paths:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="COA_SOURCE_WORKBOOK_REQUIRED",
+                )
+            return self.generate_co_attainment(
+                source_paths,
+                Path(output_path),
+                token=cancel_token or CancellationToken(),
+                thresholds=payload.get("thresholds")
+                if isinstance(payload.get("thresholds"), tuple)
+                else None,
+                co_attainment_percent=float(payload["co_attainment_percent"])
+                if payload.get("co_attainment_percent") is not None
+                else None,
+                co_attainment_level=int(payload["co_attainment_level"])
+                if payload.get("co_attainment_level") is not None
+                else None,
+            )
+        if kind == "co_analysis":
+            source_paths_raw = payload.get("source_paths")
+            source_paths = [Path(path) for path in source_paths_raw] if isinstance(source_paths_raw, list) else []
+            if not source_paths:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="COA_SOURCE_WORKBOOK_REQUIRED",
+                )
+            from domain.co_analysis_engine import generate_co_analysis_workbook
+
+            return generate_co_analysis_workbook(
+                source_paths,
+                Path(output_path),
+                token=cancel_token,
+                thresholds=payload.get("thresholds")
+                if isinstance(payload.get("thresholds"), tuple)
+                else None,
+                co_attainment_percent=float(payload["co_attainment_percent"])
+                if payload.get("co_attainment_percent") is not None
+                else None,
+                co_attainment_level=int(payload["co_attainment_level"])
+                if payload.get("co_attainment_level") is not None
+                else None,
+            )
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind=workbook_kind,
+            template_id=self.template_id,
+        )
+
+    def _build_marks_template_default_name_from_workbook(self, workbook_path: str, *, fallback: str) -> str:
+        try:
+            import openpyxl
+        except ModuleNotFoundError:
+            return fallback
+
+        workbook = None
+        try:
+            workbook = openpyxl.load_workbook(workbook_path, data_only=True)
+            metadata_sheet_name = get_sheet_name_by_key(self.template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+            if metadata_sheet_name not in workbook.sheetnames:
+                return fallback
+            metadata_sheet = workbook[metadata_sheet_name]
+            fields: dict[str, str] = {}
+            for row in metadata_sheet.iter_rows(min_row=2, values_only=True):
+                key = normalize(row[0] if len(row) > 0 else None)
+                if not key:
+                    continue
+                value = row[1] if len(row) > 1 else None
+                coerced = coerce_excel_number(value)
+                fields[key] = str(coerced).strip() if coerced is not None else ""
+
+            name_token_keys = self._name_token_keys_for_template()
+            if not name_token_keys:
+                return fallback
+            parts = [sanitize_filename_token(fields.get(key, "")) for key in name_token_keys]
+            if any(not part for part in parts):
+                return fallback
+            parts.append(MARKS_TEMPLATE_NAME_SUFFIX)
+            return f"{FILENAME_JOIN_SEPARATOR.join(parts)}{FILE_EXTENSION_XLSX}"
+        except Exception:
+            return fallback
+        finally:
+            if workbook is not None:
+                workbook.close()
+
+    def _name_token_keys_for_template(self) -> tuple[str, ...]:
+        schema = get_sheet_schema_by_key(self.template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        if schema is None:
+            return tuple()
+        raw = schema.sheet_rules.get("workbook_name_tokens")
+        if not isinstance(raw, (tuple, list)):
+            return tuple()
+        keys = [normalize(item) for item in raw if isinstance(item, str) and normalize(item)]
+        return tuple(keys)
+
+    def validate_course_details_rules(self, workbook: object, *, context: object) -> None:
+        validate_course_details_rules(workbook)
+
+    def extract_marks_template_context(self, workbook: object, *, context: object) -> dict[str, Any]:
+        from domain.template_versions.course_setup_v1_template_workbook import (
+            _extract_marks_template_context,
+        )
+
+        return _extract_marks_template_context(workbook)
+
+    def write_marks_template_workbook(
+        self,
+        workbook: object,
+        context_data: dict[str, Any],
+        *,
+        context: object,
+        cancel_token: CancellationToken | None = None,
+    ) -> dict[str, Any]:
+        from domain.template_versions.course_setup_v1_template_workbook import (
+            _write_marks_template_workbook,
+        )
+
+        return _write_marks_template_workbook(
+            workbook,
+            context_data,
+            template_id=self.template_id,
+            cancel_token=cancel_token,
+        )
+
+    def validate_filled_marks_manifest_schema(self, workbook: object, manifest: object) -> None:
+        validate_filled_marks_manifest_schema(workbook, manifest)
+
+    def consume_last_marks_anomaly_warnings(self) -> list[str]:
+        return consume_last_marks_anomaly_warnings()
+
+    def generate_final_report(
+        self,
+        filled_marks_path: str | Path,
+        output_path: str | Path,
+        *,
+        cancel_token: CancellationToken | None = None,
+    ) -> Path:
+        from domain.template_versions.course_setup_v1_final_report import generate_final_co_report
+
+        return generate_final_co_report(
+            filled_marks_path,
+            output_path,
+            cancel_token=cancel_token,
+        )
+
+    def generate_co_attainment(
+        self,
+        source_paths: list[Path],
+        output_path: Path,
+        *,
+        token: CancellationToken,
+        thresholds: tuple[float, float, float] | None = None,
+        co_attainment_percent: float | None = None,
+        co_attainment_level: int | None = None,
+    ) -> object:
+        from domain.template_versions.course_setup_v1_coordinator_engine import (
+            _generate_co_attainment_workbook_course_setup_v1,
+        )
+
+        return _generate_co_attainment_workbook_course_setup_v1(
+            source_paths,
+            output_path,
+            token=token,
+            thresholds=thresholds,
+            co_attainment_percent=co_attainment_percent,
+            co_attainment_level=co_attainment_level,
+        )
+
+    def validate_final_report_workbook(
+        self,
+        workbook: Any,
+        *,
+        template_id: str,
+        verify_signature: Any,
+    ) -> Any:
+        from domain.template_strategy_router import (
+            FinalReportWorkbookSignature,
+            read_course_metadata_signature,
+            read_layout_manifest_co_sheet_counts,
+        )
+
+        sheet_counts = read_layout_manifest_co_sheet_counts(
+            workbook,
+            verify_signature=verify_signature,
+        )
+        if sheet_counts is None:
+            return None
+        metadata = read_course_metadata_signature(
+            workbook,
+            course_code_key="Course_Code",
+            total_outcomes_key="Total_Outcomes",
+            section_key="Section",
+        )
+        if metadata is None:
+            return None
+        direct_sheet_count, indirect_sheet_count = sheet_counts
+        course_code, total_outcomes, section = metadata
+        return FinalReportWorkbookSignature(
+            template_id=template_id,
+            course_code=course_code,
+            total_outcomes=total_outcomes,
+            section=section,
+            direct_sheet_count=direct_sheet_count,
+            indirect_sheet_count=indirect_sheet_count,
+        )
 
 
 def validate_course_details_rules(workbook: Any) -> None:
@@ -99,20 +434,20 @@ def validate_course_details_rules(workbook: Any) -> None:
 def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     _reset_marks_anomaly_warnings()
     if not isinstance(manifest, dict):
-        raise ValidationError(t("instructor.validation.step2.manifest_root_invalid"))
+        raise validation_error_from_key("instructor.validation.step2.manifest_root_invalid")
 
     sheet_order = manifest.get(LAYOUT_MANIFEST_KEY_SHEET_ORDER)
     sheet_specs = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS)
     if not isinstance(sheet_order, list) or not isinstance(sheet_specs, list):
-        raise ValidationError(t("instructor.validation.step2.manifest_structure_invalid"))
+        raise validation_error_from_key("instructor.validation.step2.manifest_structure_invalid")
 
     if list(workbook.sheetnames) != sheet_order:
-        raise ValidationError(
-            t(
+        raise validation_error_from_key(
+            
                 "instructor.validation.step2.sheet_order_mismatch",
                 expected=sheet_order,
                 found=list(workbook.sheetnames),
-            )
+            
         )
 
     has_marks_component = False
@@ -120,35 +455,35 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
     baseline_student_sheet: str | None = None
     for spec in sheet_specs:
         if not isinstance(spec, dict):
-            raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
+            raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
         sheet_name = spec.get(LAYOUT_SHEET_SPEC_KEY_NAME)
         header_row = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADER_ROW)
         headers = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADERS)
         anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_ANCHORS, [])
         formula_anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS, [])
         if not isinstance(sheet_name, str) or sheet_name not in workbook.sheetnames:
-            raise ValidationError(
-                t("instructor.validation.step2.sheet_missing", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.sheet_missing", sheet_name=sheet_name
             )
         if not isinstance(header_row, int) or header_row <= 0:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.step2.header_row_invalid",
                     sheet_name=sheet_name,
                     header_row=header_row,
-                )
+                
             )
         if not isinstance(headers, list) or not headers:
-            raise ValidationError(
-                t("instructor.validation.step2.headers_missing", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.headers_missing", sheet_name=sheet_name
             )
         if not isinstance(anchors, list):
-            raise ValidationError(
-                t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
             )
         if not isinstance(formula_anchors, list):
-            raise ValidationError(
-                t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
             )
 
         worksheet = workbook[sheet_name]
@@ -158,62 +493,64 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             for col_index in range(len(expected_headers))
         ]
         if actual_headers != expected_headers:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.step2.header_row_mismatch",
                     sheet_name=sheet_name,
                     row=header_row,
                     expected=headers,
-                )
+                
             )
 
         for anchor in anchors:
             if not isinstance(anchor, list) or len(anchor) != 2:
-                raise ValidationError(
-                    t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
+                raise validation_error_from_key(
+                    "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
                 )
             cell_ref, expected_value = anchor
             if not isinstance(cell_ref, str) or not cell_ref:
-                raise ValidationError(
-                    t("instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name)
+                raise validation_error_from_key(
+                    "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
                 )
             actual_value = worksheet[cell_ref].value
             if not _filled_marks_values_match(expected_value, actual_value):
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.anchor_value_mismatch",
                         sheet_name=sheet_name,
                         cell=cell_ref,
                         expected=expected_value,
                         found=actual_value,
-                    )
+                    
                 )
         for formula_anchor in formula_anchors:
             if not isinstance(formula_anchor, list) or len(formula_anchor) != 2:
-                raise ValidationError(
-                    t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
+                raise validation_error_from_key(
+                    "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
                 )
             cell_ref, expected_formula = formula_anchor
             if not isinstance(cell_ref, str) or not isinstance(expected_formula, str):
-                raise ValidationError(
-                    t("instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name)
+                raise validation_error_from_key(
+                    "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
                 )
             actual_formula = worksheet[cell_ref].value
             if _normalized_formula(actual_formula) != _normalized_formula(expected_formula):
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.formula_mismatch",
                         sheet_name=sheet_name,
                         cell=cell_ref,
-                    )
+                    
                 )
 
-        if sheet_name not in (COURSE_METADATA_SHEET, ASSESSMENT_CONFIG_SHEET):
+        sheet_kind = spec.get(LAYOUT_SHEET_SPEC_KEY_KIND)
+        is_mark_component = sheet_kind in _MARK_COMPONENT_SHEET_KINDS
+        if is_mark_component:
             has_marks_component = True
             _validate_component_structure_snapshot(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
+                sheet_kind=sheet_kind,
                 header_row=header_row,
                 structure=spec.get(LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE),
                 header_count=len(expected_headers),
@@ -221,7 +558,7 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
             actual_student_hash = _validate_component_student_identity(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
+                sheet_kind=sheet_kind,
                 header_row=header_row,
                 expected_student_count=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT),
                 expected_student_hash=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH),
@@ -230,23 +567,23 @@ def validate_filled_marks_manifest_schema(workbook: Any, manifest: Any) -> None:
                 baseline_student_hash = actual_student_hash
                 baseline_student_sheet = sheet_name
             elif actual_student_hash != baseline_student_hash:
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.student_identity_cross_sheet_mismatch",
                         sheet_name=sheet_name,
                         reference_sheet=baseline_student_sheet,
-                    )
+                    
                 )
             _validate_non_empty_marks_entries(
                 worksheet=worksheet,
                 sheet_name=sheet_name,
-                sheet_kind=spec.get(LAYOUT_SHEET_SPEC_KEY_KIND),
+                sheet_kind=sheet_kind,
                 header_count=len(expected_headers),
                 header_row=header_row,
             )
 
     if not has_marks_component:
-        raise ValidationError(t("instructor.validation.step2.no_component_sheets"))
+        raise validation_error_from_key("instructor.validation.step2.no_component_sheets")
 
 
 def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
@@ -264,12 +601,12 @@ def _header_index_map(worksheet: Any, headers: Sequence[str]) -> dict[str, int]:
         header_value = worksheet.cell(row=1, column=col_index).value
         index[normalize(expected_header)] = col_index - 1
         if normalize(header_value) != normalize(expected_header):
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.unexpected_header",
                     sheet_name=worksheet.title,
                     col=col_index,
-                )
+                
             )
     return index
 
@@ -293,77 +630,62 @@ def _validate_course_metadata(worksheet: Any) -> int:
         value_raw = row[header_map[value_header]]
         field_key = normalize(field_raw)
         if not field_key:
-            raise ValidationError(t("instructor.validation.course_metadata_field_empty", row=row_number))
+            raise validation_error_from_key("instructor.validation.course_metadata_field_empty", row=row_number)
         if field_key in actual_values:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.course_metadata_duplicate_field",
                     row=row_number,
                     field=field_raw,
-                )
+                
             )
         if field_key not in expected_field_types:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.course_metadata_unknown_field",
                     row=row_number,
                     field=field_raw,
-                )
+                
             )
         if normalize(value_raw) == "":
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.course_metadata_value_required",
                     row=row_number,
                     field=field_raw,
-                )
+                
             )
         actual_values[field_key] = coerce_excel_number(value_raw)
 
     missing_fields = [name for name in expected_field_types if name not in actual_values]
     if missing_fields:
-        raise ValidationError(
-            t(
+        raise validation_error_from_key(
+            
                 "instructor.validation.course_metadata_missing_fields",
                 fields=", ".join(missing_fields),
-            )
+            
         )
 
     for field_key, expected_type in expected_field_types.items():
         value = actual_values[field_key]
         if expected_type is int:
             if isinstance(value, bool) or not isinstance(value, int):
-                raise ValidationError(
-                    t("instructor.validation.course_metadata_field_must_be_int", field=field_key)
+                raise validation_error_from_key(
+                    "instructor.validation.course_metadata_field_must_be_int", field=field_key
                 )
         else:
             if not isinstance(value, str) or normalize(value) == "":
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.course_metadata_field_must_be_non_empty_str",
                         field=field_key,
-                    )
+                    
                 )
 
     total_outcomes = actual_values.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY))
     if isinstance(total_outcomes, bool) or not isinstance(total_outcomes, int) or total_outcomes <= 0:
-        raise ValidationError(t("instructor.validation.course_metadata_total_outcomes_invalid"))
+        raise validation_error_from_key("instructor.validation.course_metadata_total_outcomes_invalid")
     return total_outcomes
-
-
-def _parse_yes_no(value: Any, sheet_name: str, row_number: int, field_name: str) -> bool:
-    token = normalize(value)
-    yes_no_tokens = {"yes", "no"}
-    if token not in yes_no_tokens:
-        raise ValidationError(
-            t(
-                "instructor.validation.yes_no_required",
-                sheet_name=sheet_name,
-                row=row_number,
-                field=field_name,
-            )
-        )
-    return token == "yes"
 
 
 def _parse_allowed_option(
@@ -377,14 +699,14 @@ def _parse_allowed_option(
 ) -> str:
     token = normalize(value)
     if token not in allowed_tokens:
-        raise ValidationError(
-            t(
+        raise validation_error_from_key(
+            
                 "instructor.validation.allowed_values_required",
                 sheet_name=sheet_name,
                 row=row_number,
                 field=field_name,
                 allowed=", ".join(allowed_display),
-            )
+            
         )
     return token
 
@@ -392,20 +714,26 @@ def _parse_allowed_option(
 def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     assessment_headers = ASSESSMENT_CONFIG_HEADERS
     expected_headers = list(assessment_headers)
-    header_map = _header_index_map(worksheet, expected_headers)
-    component_header = normalize(assessment_headers[0])
-    weight_header = normalize(assessment_headers[1])
-    cia_header = normalize(assessment_headers[2])
-    co_wise_header = normalize(assessment_headers[3])
-    direct_header = normalize(assessment_headers[4])
-    assessment_type_header = normalize(assessment_headers[5])
-    assessment_format_header = normalize(assessment_headers[6])
-    mode_header = normalize(assessment_headers[7])
-    participation_header = normalize(assessment_headers[8])
+    _header_index_map(worksheet, expected_headers)
     rows = _iter_data_rows(worksheet, len(expected_headers))
-
-    if not rows:
-        raise ValidationError(t("instructor.validation.assessment_component_required_one"))
+    components = parse_assessment_components(
+        rows,
+        sheet_name=ASSESSMENT_CONFIG_SHEET,
+        headers=expected_headers,
+        row_start=2,
+        on_blank_component="error",
+        duplicate_policy="error",
+        require_non_empty=True,
+        validate_allowed_options=True,
+        assessment_type_allowed_tokens=_ASSESSMENT_TYPE_OPTION_TOKENS,
+        assessment_type_allowed_display=COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS,
+        assessment_format_allowed_tokens=_ASSESSMENT_FORMAT_OPTION_TOKENS,
+        assessment_format_allowed_display=COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS,
+        mode_allowed_tokens=_ASSESSMENT_MODE_OPTION_TOKENS,
+        mode_allowed_display=COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
+        participation_allowed_tokens=_ASSESSMENT_PARTICIPATION_OPTION_TOKENS,
+        participation_allowed_display=COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
+    )
 
     component_config: dict[str, dict[str, Any]] = {}
     direct_weight_total = 0.0
@@ -413,134 +741,37 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     direct_count = 0
     indirect_count = 0
 
-    for row_number, row in enumerate(rows, start=2):
-        component_raw = row[header_map[component_header]]
-        component_key = normalize(component_raw)
-        if not component_key:
-            raise ValidationError(
-                t("instructor.validation.assessment_component_required", row=row_number)
-            )
-        if component_key in component_config:
-            raise ValidationError(
-                t(
-                    "instructor.validation.assessment_component_duplicate",
-                    row=row_number,
-                    component=component_raw,
-                )
-            )
-
-        weight_value = coerce_excel_number(row[header_map[weight_header]])
-        if (
-            isinstance(weight_value, bool)
-            or not isinstance(weight_value, (int, float))
-        ):
-            raise ValidationError(
-                t("instructor.validation.assessment_weight_numeric", row=row_number)
-            )
-
-        is_direct = _parse_yes_no(
-            row[header_map[direct_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[4],
-        )
-        co_wise_breakup = _parse_yes_no(
-            row[header_map[co_wise_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[3],
-        )
-        _parse_yes_no(
-            row[header_map[cia_header]],
-            ASSESSMENT_CONFIG_SHEET,
-            row_number,
-            assessment_headers[2],
-        )
-        _parse_allowed_option(
-            row[header_map[assessment_type_header]],
-            sheet_name=ASSESSMENT_CONFIG_SHEET,
-            row_number=row_number,
-            field_name=assessment_headers[5],
-            allowed_tokens=_ASSESSMENT_TYPE_OPTION_TOKENS,
-            allowed_display=ASSESSMENT_TYPE_OPTIONS,
-        )
-        _parse_allowed_option(
-            row[header_map[assessment_format_header]],
-            sheet_name=ASSESSMENT_CONFIG_SHEET,
-            row_number=row_number,
-            field_name=assessment_headers[6],
-            allowed_tokens=_ASSESSMENT_FORMAT_OPTION_TOKENS,
-            allowed_display=ASSESSMENT_FORMAT_OPTIONS,
-        )
-        _parse_allowed_option(
-            row[header_map[mode_header]],
-            sheet_name=ASSESSMENT_CONFIG_SHEET,
-            row_number=row_number,
-            field_name=assessment_headers[7],
-            allowed_tokens=_ASSESSMENT_MODE_OPTION_TOKENS,
-            allowed_display=ASSESSMENT_MODE_OPTIONS,
-        )
-        _parse_allowed_option(
-            row[header_map[participation_header]],
-            sheet_name=ASSESSMENT_CONFIG_SHEET,
-            row_number=row_number,
-            field_name=assessment_headers[8],
-            allowed_tokens=_ASSESSMENT_PARTICIPATION_OPTION_TOKENS,
-            allowed_display=ASSESSMENT_PARTICIPATION_OPTIONS,
-        )
-
-        if is_direct:
-            direct_weight_total += float(weight_value)
+    for component in components:
+        if component.is_direct:
+            direct_weight_total += component.weight
             direct_count += 1
         else:
-            indirect_weight_total += float(weight_value)
+            indirect_weight_total += component.weight
             indirect_count += 1
 
-        component_config[component_key] = {
-            "display_name": str(component_raw).strip(),
-            "co_wise_breakup": co_wise_breakup,
+        component_config[component.component_key] = {
+            "display_name": component.component_name,
+            "co_wise_breakup": component.co_wise_breakup,
         }
 
     if direct_count == 0:
-        raise ValidationError(t("instructor.validation.assessment_direct_missing"))
+        raise validation_error_from_key("instructor.validation.assessment_direct_missing")
     if indirect_count == 0:
-        raise ValidationError(t("instructor.validation.assessment_indirect_missing"))
+        raise validation_error_from_key("instructor.validation.assessment_indirect_missing")
     if round(direct_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
-        raise ValidationError(
-            t("instructor.validation.assessment_direct_total_invalid", found=direct_weight_total)
+        raise validation_error_from_key(
+            "instructor.validation.assessment_direct_total_invalid", found=direct_weight_total
         )
     if round(indirect_weight_total, WEIGHT_TOTAL_ROUND_DIGITS) != WEIGHT_TOTAL_EXPECTED:
-        raise ValidationError(
-            t("instructor.validation.assessment_indirect_total_invalid", found=indirect_weight_total)
+        raise validation_error_from_key(
+            "instructor.validation.assessment_indirect_total_invalid", found=indirect_weight_total
         )
 
     return component_config
 
 
 def _co_tokens(value: Any) -> list[int]:
-    if value is None:
-        return []
-    if isinstance(value, bool):
-        return []
-    if isinstance(value, int):
-        return [value]
-    if isinstance(value, float):
-        return [int(value)] if value.is_integer() else []
-
-    token = str(value).strip()
-    if not token:
-        return []
-
-    numbers: list[int] = []
-    for item in token.split(_CO_TOKEN_SPLIT_SEPARATOR):
-        part = item.strip()
-        if not part:
-            return []
-        match = re.fullmatch(_CO_TOKEN_PATTERN, part, flags=re.IGNORECASE)
-        if not match:
-            return []
-        numbers.append(int(match.group(1)))
-    return numbers
+    return parse_co_tokens(value, dedupe=False)
 
 
 def _validate_question_map(
@@ -558,50 +789,50 @@ def _validate_question_map(
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
-        raise ValidationError(t("instructor.validation.question_map_row_required_one"))
+        raise validation_error_from_key("instructor.validation.question_map_row_required_one")
 
     seen_co_wise_questions: set[tuple[str, str]] = set()
     for row_number, row in enumerate(rows, start=2):
         component_raw = row[header_map[component_header]]
         component_key = normalize(component_raw)
         if not component_key:
-            raise ValidationError(t("instructor.validation.question_component_required", row=row_number))
+            raise validation_error_from_key("instructor.validation.question_component_required", row=row_number)
         if component_key not in component_config:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.question_component_unknown",
                     row=row_number,
                     component=component_raw,
-                )
+                
             )
 
         question_raw = row[header_map[question_header]]
         question_key = normalize(question_raw)
         if not question_key:
-            raise ValidationError(
-                t("instructor.validation.question_label_required", row=row_number)
+            raise validation_error_from_key(
+                "instructor.validation.question_label_required", row=row_number
             )
 
         max_marks = coerce_excel_number(row[header_map[max_marks_header]])
         if isinstance(max_marks, bool) or not isinstance(max_marks, (int, float)):
-            raise ValidationError(t("instructor.validation.question_max_marks_numeric", row=row_number))
+            raise validation_error_from_key("instructor.validation.question_max_marks_numeric", row=row_number)
         if float(max_marks) <= 0:
-            raise ValidationError(
-                t("instructor.validation.question_max_marks_positive", row=row_number)
+            raise validation_error_from_key(
+                "instructor.validation.question_max_marks_positive", row=row_number
             )
 
         co_values = _co_tokens(row[header_map[co_header]])
         if not co_values:
-            raise ValidationError(t("instructor.validation.question_co_required", row=row_number))
+            raise validation_error_from_key("instructor.validation.question_co_required", row=row_number)
         if len(set(co_values)) != len(co_values):
-            raise ValidationError(t("instructor.validation.question_co_no_repeat", row=row_number))
+            raise validation_error_from_key("instructor.validation.question_co_no_repeat", row=row_number)
         if any(co_number <= 0 or co_number > total_outcomes for co_number in co_values):
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.question_co_out_of_range",
                     row=row_number,
                     total_outcomes=total_outcomes,
-                )
+                
             )
         _parse_allowed_option(
             row[header_map[domain_level_header]],
@@ -609,28 +840,28 @@ def _validate_question_map(
             row_number=row_number,
             field_name=expected_headers[4],
             allowed_tokens=_QUESTION_DOMAIN_LEVEL_OPTION_TOKENS,
-            allowed_display=QUESTION_DOMAIN_LEVEL_OPTIONS,
+            allowed_display=COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS,
         )
 
         is_co_wise = bool(component_config[component_key]["co_wise_breakup"])
         if is_co_wise:
             if len(co_values) != 1:
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.question_co_wise_requires_one",
                         row=row_number,
                         component=component_raw,
-                    )
+                    
                 )
             question_id = (component_key, question_key)
             if question_id in seen_co_wise_questions:
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.question_duplicate_for_component",
                         row=row_number,
                         question=question_raw,
                         component=component_raw,
-                    )
+                    
                 )
             seen_co_wise_questions.add(question_id)
 
@@ -645,26 +876,26 @@ def _validate_co_description(worksheet: Any) -> None:
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
-        raise ValidationError(t("instructor.validation.co_description_row_required_one"))
+        raise validation_error_from_key("instructor.validation.co_description_row_required_one")
 
     seen_co_numbers: set[int] = set()
     for row_number, row in enumerate(rows, start=2):
         co_number_raw = row[header_map[co_number_header]]
         co_number = coerce_excel_number(co_number_raw)
         if isinstance(co_number, bool) or not isinstance(co_number, int) or co_number <= 0:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.co_description_number_positive_int_required",
                     row=row_number,
-                )
+                
             )
         if co_number in seen_co_numbers:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.co_description_number_duplicate",
                     row=row_number,
                     co_number=co_number,
-                )
+                
             )
         seen_co_numbers.add(co_number)
 
@@ -675,18 +906,21 @@ def _validate_co_description(worksheet: Any) -> None:
             row_number=row_number,
             field_name=expected_headers[2],
             allowed_tokens=_QUESTION_DOMAIN_LEVEL_OPTION_TOKENS,
-            allowed_display=QUESTION_DOMAIN_LEVEL_OPTIONS,
+            allowed_display=COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS,
         )
         summary_text = str(row[header_map[summary_header]]).strip() if row[header_map[summary_header]] is not None else ""
         summary_length = len(summary_text)
-        if summary_length < CO_DESCRIPTION_SUMMARY_MIN_LENGTH or summary_length > CO_DESCRIPTION_SUMMARY_MAX_LENGTH:
-            raise ValidationError(
-                t(
+        if (
+            summary_length < COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MIN_LENGTH
+            or summary_length > COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MAX_LENGTH
+        ):
+            raise validation_error_from_key(
+                
                     "instructor.validation.co_description_summary_length_invalid",
                     row=row_number,
-                    minimum=CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
-                    maximum=CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
-                )
+                    minimum=COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MIN_LENGTH,
+                    maximum=COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MAX_LENGTH,
+                
             )
 
 
@@ -698,7 +932,7 @@ def _validate_students(worksheet: Any) -> None:
     rows = _iter_data_rows(worksheet, len(expected_headers))
 
     if not rows:
-        raise ValidationError(t("instructor.validation.students_row_required_one"))
+        raise validation_error_from_key("instructor.validation.students_row_required_one")
 
     seen_reg_numbers: set[str] = set()
     for row_number, row in enumerate(rows, start=2):
@@ -709,14 +943,14 @@ def _validate_students(worksheet: Any) -> None:
         student_name = str(student_name_raw).strip() if student_name_raw is not None else ""
 
         if not reg_no or not student_name:
-            raise ValidationError(
-                t("instructor.validation.students_reg_and_name_required", row=row_number)
+            raise validation_error_from_key(
+                "instructor.validation.students_reg_and_name_required", row=row_number
             )
 
         reg_key = normalize(reg_no)
         if reg_key in seen_reg_numbers:
-            raise ValidationError(
-                t("instructor.validation.students_duplicate_reg_no", row=row_number, reg_no=reg_no)
+            raise validation_error_from_key(
+                "instructor.validation.students_duplicate_reg_no", row=row_number, reg_no=reg_no
             )
         seen_reg_numbers.add(reg_key)
 
@@ -750,12 +984,12 @@ def _validate_component_student_identity(
     expected_student_hash: Any,
 ) -> str:
     if not isinstance(expected_student_count, int) or expected_student_count < 0:
-        raise ValidationError(
-            t("instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name)
+        raise validation_error_from_key(
+            "instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name
         )
     if not isinstance(expected_student_hash, str) or not expected_student_hash.strip():
-        raise ValidationError(
-            t("instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name)
+        raise validation_error_from_key(
+            "instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name
         )
 
     students = _extract_component_students(
@@ -765,20 +999,20 @@ def _validate_component_student_identity(
         header_row=header_row,
     )
     if len(students) != expected_student_count:
-        raise ValidationError(
-            t(
+        raise validation_error_from_key(
+            
                 "instructor.validation.step2.student_identity_mismatch",
                 sheet_name=sheet_name,
-            )
+            
         )
 
     actual_hash = _student_identity_hash(students)
     if actual_hash != expected_student_hash:
-        raise ValidationError(
-            t(
+        raise validation_error_from_key(
+            
                 "instructor.validation.step2.student_identity_mismatch",
                 sheet_name=sheet_name,
-            )
+            
         )
     return actual_hash
 
@@ -802,20 +1036,20 @@ def _extract_component_students(
         if not reg_no and not student_name:
             break
         if not reg_no or not student_name:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.step2.student_identity_mismatch",
                     sheet_name=sheet_name,
-                )
+                
             )
         reg_key = normalize(reg_no)
         if reg_key in seen_reg_numbers:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.step2.student_reg_duplicate",
                     sheet_name=sheet_name,
                     reg_no=reg_no,
-                )
+                
             )
         seen_reg_numbers.add(reg_key)
         students.append((reg_no, student_name))
@@ -859,14 +1093,11 @@ def _validate_non_empty_marks_entries(
             cell_value = cell.value
             token = normalize(cell_value)
             if token == "":
-                raise ValidationError(
-                    t(
-                        "instructor.validation.step2.mark_entry_empty",
-                        sheet_name=sheet_name,
-                        cell=cell.coordinate,
-                    ),
+                raise validation_error_from_key(
+                    "instructor.validation.step2.mark_entry_empty",
                     code="COA_MARK_ENTRY_EMPTY",
-                    context={"sheet_name": sheet_name, "cell": cell.coordinate},
+                    sheet_name=sheet_name,
+                    cell=cell.coordinate,
                 )
             if token == "a":
                 has_absent = True
@@ -875,76 +1106,43 @@ def _validate_non_empty_marks_entries(
             has_numeric = True
             numeric_value = coerce_excel_number(cell_value)
             if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
-                raise ValidationError(
-                    t(
-                        "instructor.validation.step2.mark_value_invalid",
-                        sheet_name=sheet_name,
-                        cell=cell.coordinate,
-                        value=cell_value,
-                        minimum=minimum,
-                        maximum=maximum_by_col[col],
-                    ),
+                raise validation_error_from_key(
+                    "instructor.validation.step2.mark_value_invalid",
                     code="COA_MARK_VALUE_INVALID",
-                    context={
-                        "sheet_name": sheet_name,
-                        "cell": cell.coordinate,
-                        "value": cell_value,
-                        "minimum": minimum,
-                        "maximum": maximum_by_col[col],
-                    },
+                    sheet_name=sheet_name,
+                    cell=cell.coordinate,
+                    value=cell_value,
+                    minimum=minimum,
+                    maximum=maximum_by_col[col],
                 )
             if not _has_allowed_decimal_precision(float(numeric_value)):
-                raise ValidationError(
-                    t(
-                        "instructor.validation.step2.mark_precision_invalid",
-                        sheet_name=sheet_name,
-                        cell=cell.coordinate,
-                        value=cell_value,
-                        decimals=_MAX_DECIMAL_PLACES,
-                    ),
+                raise validation_error_from_key(
+                    "instructor.validation.step2.mark_precision_invalid",
                     code="COA_MARK_PRECISION_INVALID",
-                    context={
-                        "sheet_name": sheet_name,
-                        "cell": cell.coordinate,
-                        "value": cell_value,
-                        "decimals": _MAX_DECIMAL_PLACES,
-                    },
+                    sheet_name=sheet_name,
+                    cell=cell.coordinate,
+                    value=cell_value,
+                    decimals=_MAX_DECIMAL_PLACES,
                 )
             if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT and not _is_integer_value(float(numeric_value)):
-                raise ValidationError(
-                    t(
-                        "instructor.validation.step2.indirect_mark_must_be_integer",
-                        sheet_name=sheet_name,
-                        cell=cell.coordinate,
-                        value=cell_value,
-                    ),
+                raise validation_error_from_key(
+                    "instructor.validation.step2.indirect_mark_must_be_integer",
                     code="COA_INDIRECT_MARK_INTEGER_REQUIRED",
-                    context={
-                        "sheet_name": sheet_name,
-                        "cell": cell.coordinate,
-                        "value": cell_value,
-                    },
+                    sheet_name=sheet_name,
+                    cell=cell.coordinate,
+                    value=cell_value,
                 )
             maximum = maximum_by_col[col]
             numeric_float = float(numeric_value)
             if numeric_float < minimum or numeric_float > maximum:
-                raise ValidationError(
-                    t(
-                        "instructor.validation.step2.mark_value_invalid",
-                        sheet_name=sheet_name,
-                        cell=cell.coordinate,
-                        value=cell_value,
-                        minimum=minimum,
-                        maximum=maximum,
-                    ),
+                raise validation_error_from_key(
+                    "instructor.validation.step2.mark_value_invalid",
                     code="COA_MARK_VALUE_INVALID",
-                    context={
-                        "sheet_name": sheet_name,
-                        "cell": cell.coordinate,
-                        "value": cell_value,
-                        "minimum": minimum,
-                        "maximum": maximum,
-                    },
+                    sheet_name=sheet_name,
+                    cell=cell.coordinate,
+                    value=cell_value,
+                    minimum=minimum,
+                    maximum=maximum,
                 )
             numeric_count_by_col[col] += 1
             frequency_by_value = frequency_by_value_by_col[col]
@@ -991,7 +1189,7 @@ def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
         return range(4, header_count)
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return range(4, header_count + 1)
-    raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
+    raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
 
 
 def _mark_min_for_sheet(sheet_kind: Any) -> float:
@@ -1008,9 +1206,9 @@ def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) 
     elif sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         max_value = coerce_excel_number(worksheet.cell(row=max_row, column=col).value)
     else:
-        raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
+        raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
     if isinstance(max_value, bool) or not isinstance(max_value, (int, float)):
-        raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
+        raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
     return float(max_value)
 
 
@@ -1039,19 +1237,16 @@ def _validate_absence_policy_for_row(
     has_numeric: bool,
 ) -> None:
     if has_absent and has_numeric:
-        raise ValidationError(
-            t(
-                "instructor.validation.step2.absence_policy_violation",
-                sheet_name=sheet_name,
-                row=row,
-                range=f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
-            ),
+        mark_range = (
+            f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:"
+            f"{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}"
+        )
+        raise validation_error_from_key(
+            "instructor.validation.step2.absence_policy_violation",
             code="COA_ABSENCE_POLICY_VIOLATION",
-            context={
-                "sheet_name": sheet_name,
-                "row": row,
-                "range": f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
-            },
+            sheet_name=sheet_name,
+            row=row,
+            range=mark_range,
         )
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         return
@@ -1082,12 +1277,12 @@ def _validate_row_total_consistency(
                 end=f"{_excel_col_name(last_mark_col)}{row}",
             )
             if _normalized_formula(actual) != _normalized_formula(expected):
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.total_formula_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=row, column=total_col).coordinate,
-                    )
+                    
                 )
         return
 
@@ -1097,12 +1292,12 @@ def _validate_row_total_consistency(
             for col in range(5, header_count + 1):
                 formula = worksheet.cell(row=row, column=col).value
                 if not isinstance(formula, str) or not formula.startswith("="):
-                    raise ValidationError(
-                        t(
+                    raise validation_error_from_key(
+                        
                             "instructor.validation.step2.co_formula_mismatch",
                             sheet_name=sheet_name,
                             cell=worksheet.cell(row=row, column=col).coordinate,
-                        )
+                        
                     )
         return
 
@@ -1117,52 +1312,52 @@ def _validate_component_structure_snapshot(
     header_count: int,
 ) -> None:
     if not isinstance(structure, dict):
-        raise ValidationError(
-            t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
+        raise validation_error_from_key(
+            "instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name
         )
     max_row = header_row + 2
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
-            raise ValidationError(
-                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name
             )
         for idx, expected in enumerate(maxima, start=4):
             actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
             if not _filled_marks_values_match(expected, actual):
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.structure_snapshot_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=max_row, column=idx).coordinate,
-                    )
+                    
                 )
         return
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         maxima = structure.get("mark_maxima")
         if not isinstance(maxima, list):
-            raise ValidationError(
-                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name
             )
         for idx, expected in enumerate(maxima, start=4):
             actual = coerce_excel_number(worksheet.cell(row=max_row, column=idx).value)
             if not _filled_marks_values_match(expected, actual):
-                raise ValidationError(
-                    t(
+                raise validation_error_from_key(
+                    
                         "instructor.validation.step2.structure_snapshot_mismatch",
                         sheet_name=sheet_name,
                         cell=worksheet.cell(row=max_row, column=idx).coordinate,
-                    )
+                    
                 )
         return
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         likert_range = structure.get("likert_range")
         if likert_range != [LIKERT_MIN, LIKERT_MAX]:
-            raise ValidationError(
-                t("instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name)
+            raise validation_error_from_key(
+                "instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name
             )
         return
-    raise ValidationError(t("instructor.validation.step2.manifest_sheet_spec_invalid"))
+    raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
 
 
 def _has_allowed_decimal_precision(value: float) -> bool:

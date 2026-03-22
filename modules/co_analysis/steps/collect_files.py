@@ -10,34 +10,9 @@ from common.constants import (
     CO_ANALYSIS_WORKFLOW_STEP_ID_COLLECT_FILES,
     WORKFLOW_PAYLOAD_KEY_PATH,
 )
+from common.exceptions import AppSystemError
 from common.jobs import CancellationToken, JobContext
 from modules.co_analysis.steps.shared_execution import handle_step_failure
-
-
-def _validation_message_key_from_code(code: str) -> str | None:
-    table = {
-        "COA_SYSTEM_SHEET_MISSING": "instructor.validation.system_sheet_missing",
-        "COA_SYSTEM_HASH_HEADER_TEMPLATE_ID_MISSING": "instructor.validation.system_hash_missing_template_id_header",
-        "COA_SYSTEM_HASH_HEADER_TEMPLATE_HASH_MISSING": "instructor.validation.system_hash_missing_template_hash_header",
-        "COA_SYSTEM_HASH_TEMPLATE_ID_MISSING": "instructor.validation.system_hash_template_id_missing",
-        "COA_SYSTEM_HASH_MISMATCH": "instructor.validation.system_hash_mismatch",
-        "COA_LAYOUT_SHEET_MISSING": "instructor.validation.step2.layout_sheet_missing",
-        "COA_LAYOUT_HEADER_MISMATCH": "instructor.validation.step2.layout_header_mismatch",
-        "COA_LAYOUT_MANIFEST_MISSING": "instructor.validation.step2.layout_manifest_missing",
-        "COA_LAYOUT_HASH_MISMATCH": "instructor.validation.step2.layout_hash_mismatch",
-        "COA_LAYOUT_MANIFEST_JSON_INVALID": "instructor.validation.step2.layout_manifest_json_invalid",
-        "COA_TEMPLATE_VALIDATOR_MISSING": "instructor.validation.step2.template_validator_missing",
-        "COA_MARK_ENTRY_EMPTY": "instructor.validation.step2.mark_entry_empty",
-        "COA_MARK_VALUE_INVALID": "instructor.validation.step2.mark_value_invalid",
-        "COA_MARK_PRECISION_INVALID": "instructor.validation.step2.mark_precision_invalid",
-        "COA_INDIRECT_MARK_INTEGER_REQUIRED": "instructor.validation.step2.indirect_mark_must_be_integer",
-        "COA_ABSENCE_POLICY_VIOLATION": "instructor.validation.step2.absence_policy_violation",
-        "UNKNOWN_TEMPLATE": "instructor.validation.unknown_template",
-        "OPENPYXL_MISSING": "instructor.validation.openpyxl_missing",
-        "WORKBOOK_NOT_FOUND": "instructor.validation.workbook_not_found",
-        "WORKBOOK_OPEN_FAILED": "instructor.validation.workbook_open_failed",
-    }
-    return table.get(str(code or "").strip().upper())
 
 
 def _compact_context_text(context: object) -> str:
@@ -183,7 +158,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
 
     def _on_success(result: object) -> None:
         if not isinstance(result, dict):
-            raise RuntimeError("CO Analysis collect_files returned unexpected result.")
+            raise AppSystemError("CO Analysis collect_files returned unexpected result.")
         added_paths = [Path(str(value)) for value in cast(list[object], result.get("added", []))]
         duplicates = int(result.get("duplicates", 0))
         invalid = int(result.get("invalid", 0))

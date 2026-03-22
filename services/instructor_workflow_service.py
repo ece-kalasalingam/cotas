@@ -3,24 +3,21 @@
 from __future__ import annotations
 
 import logging
-from inspect import Signature, signature
 from pathlib import Path
 
 from common.constants import (
+    ID_COURSE_SETUP,
     WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
     WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
     WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
     WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
     WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
 )
+from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
-from domain.instructor_engine import (
-    generate_course_details_template,
-    generate_final_co_report,
-    generate_marks_template_from_course_details,
-    validate_course_details_workbook,
-)
+from domain.instructor_engine import validate_course_details_workbook
+from domain.template_strategy_router import generate_workbook, read_valid_template_id_from_system_hash_sheet
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
@@ -64,10 +61,15 @@ class InstructorWorkflowService(WorkflowServiceBase):
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
-                generate_course_details_template,
-                output_path,
-                cancel_token=effective_cancel_token,
+            work=lambda effective_cancel_token: self._result_to_path(
+                generate_workbook(
+                    template_id=ID_COURSE_SETUP,
+                    output_path=output_path,
+                    workbook_name=Path(output_path).name,
+                    workbook_kind="course_details_template",
+                    cancel_token=effective_cancel_token,
+                ),
+                fallback=Path(output_path),
             ),
         )
 
@@ -93,15 +95,21 @@ class InstructorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
+        template_id = self._resolve_template_id_from_workbook(course_details_path)
         return self._execute_with_telemetry(
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
-                generate_marks_template_from_course_details,
-                course_details_path,
-                output_path,
-                cancel_token=effective_cancel_token,
+            work=lambda effective_cancel_token: self._result_to_path(
+                generate_workbook(
+                    template_id=template_id,
+                    output_path=output_path,
+                    workbook_name=Path(output_path).name,
+                    workbook_kind="marks_template",
+                    cancel_token=effective_cancel_token,
+                    context={"course_details_path": str(course_details_path)},
+                ),
+                fallback=Path(output_path),
             ),
         )
 
@@ -113,15 +121,21 @@ class InstructorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
+        template_id = self._resolve_template_id_from_workbook(filled_marks_path)
         return self._execute_with_telemetry(
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._call_with_optional_cancel_token(
-                generate_final_co_report,
-                filled_marks_path,
-                output_path,
-                cancel_token=effective_cancel_token,
+            work=lambda effective_cancel_token: self._result_to_path(
+                generate_workbook(
+                    template_id=template_id,
+                    output_path=output_path,
+                    workbook_name=Path(output_path).name,
+                    workbook_kind="final_report",
+                    cancel_token=effective_cancel_token,
+                    context={"filled_marks_path": str(filled_marks_path)},
+                ),
+                fallback=Path(output_path),
             ),
         )
 
@@ -150,11 +164,35 @@ class InstructorWorkflowService(WorkflowServiceBase):
         return True
 
     @staticmethod
-    def _call_with_optional_cancel_token(fn, *args: object, cancel_token: CancellationToken | None):
+    def _resolve_template_id_from_workbook(workbook_path: str | Path) -> str:
         try:
-            fn_signature: Signature = signature(fn)
-        except (TypeError, ValueError):
-            fn_signature = Signature()
-        if "cancel_token" in fn_signature.parameters:
-            return fn(*args, cancel_token=cancel_token)
-        return fn(*args)
+            import openpyxl
+        except ModuleNotFoundError as exc:
+            raise validation_error_from_key(
+                "validation.dependency.openpyxl_missing",
+                code="OPENPYXL_MISSING",
+            ) from exc
+        source = Path(workbook_path)
+        try:
+            workbook = openpyxl.load_workbook(source, data_only=False, read_only=True)
+        except Exception as exc:
+            raise validation_error_from_key(
+                "validation.workbook.open_failed",
+                code="WORKBOOK_OPEN_FAILED",
+                workbook=str(source),
+            ) from exc
+        try:
+            return read_valid_template_id_from_system_hash_sheet(workbook)
+        finally:
+            workbook.close()
+
+    @staticmethod
+    def _result_to_path(result: object, *, fallback: Path) -> Path:
+        if isinstance(result, Path):
+            return result
+        output = getattr(result, "output_path", None)
+        if isinstance(output, Path):
+            return output
+        if isinstance(output, str) and output.strip():
+            return Path(output)
+        return fallback

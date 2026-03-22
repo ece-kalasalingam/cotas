@@ -14,10 +14,10 @@ def test_validation_error_supports_code_and_context() -> None:
     assert err.context == {"field": "course_code"}
 
 
-def test_job_context_snapshots_language_and_step() -> None:
-    ctx = JobContext.create(step_id="step2", payload={"path": "sample.xlsx"})
+def test_job_context_snapshots_language_and_operation() -> None:
+    ctx = JobContext.create(step_id="instructor.generate_report", payload={"path": "sample.xlsx"})
     assert ctx.job_id
-    assert ctx.step_id == "step2"
+    assert ctx.step_id == "instructor.generate_report"
     assert ctx.payload["path"] == "sample.xlsx"
     assert isinstance(ctx.language, str)
 

@@ -1,4 +1,4 @@
-"""State model for instructor workflow UI."""
+"""Shared workflow state models."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 
 @dataclass(slots=True)
-class InstructorWorkflowState:
-    current_step: int = 1
+class BusyWorkflowState:
     busy: bool = False
     active_job_id: str | None = None
 

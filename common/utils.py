@@ -4,6 +4,7 @@ import atexit
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -12,9 +13,10 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Literal
 
-from common.error_catalog import resolve_validation_error_message
+from common.error_catalog import resolve_validation_issue
 from common.exceptions import AppSystemError, ValidationError
 from common.texts import t
+from common.constants import WORKBOOK_TEMP_SUFFIX
 
 SETTINGS_FILE_NAME = "settings.json"
 DEFAULT_LOG_FILE_NAME = "focus.log"
@@ -467,6 +469,48 @@ def normalize(value: Any) -> str:
     return "" if value is None else str(value).strip().lower()
 
 
+def sanitize_filename_token(value: object) -> str:
+    token = str(value).strip()
+    token = re.sub(r'[<>:"/\\|?*]+', "_", token)
+    token = re.sub(r"\s+", "", token)
+    token = token.strip(" ._")
+    return token
+
+
+def canonical_path_key(path: str | Path) -> str:
+    """Return a stable, case-insensitive key for filesystem identity checks."""
+    return str(Path(path).resolve()).casefold()
+
+
+def atomic_copy_file(source_path: str | Path, output_path: str | Path, *, logger: object | None = None) -> Path:
+    source = Path(source_path)
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            delete=False,
+            dir=str(output.parent),
+            prefix=f"{output.name}.",
+            suffix=WORKBOOK_TEMP_SUFFIX,
+        ) as temp_file:
+            temp_name = temp_file.name
+        shutil.copyfile(str(source), temp_name)
+        os.replace(temp_name, output)
+    except Exception:
+        if temp_name:
+            try:
+                Path(temp_name).unlink(missing_ok=True)
+            except OSError:
+                if logger is not None:
+                    warning = getattr(logger, "warning", None)
+                    if callable(warning):
+                        warning("Failed to cleanup temp report file: %s", temp_name)
+        raise
+    return output
+
+
 def coerce_excel_number(value: Any) -> Any:
     """Convert numeric-like values (including numeric strings) into numbers.
 
@@ -547,15 +591,11 @@ def log_process_message(
         return True
 
     if isinstance(error, ValidationError):
+        code = str(getattr(error, "code", "VALIDATION_ERROR"))
+        context = getattr(error, "context", {}) or {}
         detail = str(error).strip()
-        if hasattr(error, "code"):
-            code = getattr(error, "code", "")
-            context = getattr(error, "context", {}) or {}
-            resolved = resolve_validation_error_message(str(code), context)
-            if resolved and resolved != str(code):
-                detail = resolved
-        if not detail:
-            detail = t("common.validation_failed_invalid_data")
+        resolved = resolve_validation_issue(code, context, fallback_message=detail)
+        detail = resolved.message or detail or t("common.validation_failed_invalid_data")
         user_message = user_validation_message or detail
         logger.warning(
             "%s failed due to data error.",
@@ -564,11 +604,13 @@ def log_process_message(
                 "user_message": user_message,
                 "job_id": job_id,
                 "step_id": step_id,
-                "error_code": str(getattr(error, "code", "VALIDATION_ERROR")),
+                "error_code": resolved.code,
+                "error_category": resolved.category,
+                "error_severity": resolved.severity,
             },
         )
         if notify is not None:
-            notify(user_message, "error")
+            notify(user_message, resolved.severity)
         return False
 
     user_message = user_error_message or t("common.error_while_process", process=process_name)

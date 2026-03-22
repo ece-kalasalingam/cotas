@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from common.exceptions import ConfigurationError
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,7 @@ class ModuleUIEngine:
 
     def __init__(self, host: QWidget, *, config: ModuleUIEngineConfig) -> None:
         if not (config.show_top or config.show_footer):
-            raise ValueError("At least one pane must be visible.")
+            raise ConfigurationError("At least one pane must be visible.")
         self._host = host
         self._config = config
 
@@ -78,7 +79,7 @@ class ModuleUIEngine:
     def _validate_any_pane_visible(self) -> None:
         if (not self.top_widget.isHidden()) or (not self.footer_widget.isHidden()):
             return
-        raise ValueError("At least one pane must be visible.")
+        raise ConfigurationError("At least one pane must be visible.")
 
     def _apply_footer_sizing(self, widget: QWidget) -> None:
         widget.setFixedHeight(self._config.footer_height)

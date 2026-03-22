@@ -7,14 +7,9 @@ import re
 from typing import Any, Sequence
 
 from common.constants import (
-    ALLOW_FILTER,
-    ALLOW_SELECT_LOCKED,
-    ALLOW_SELECT_UNLOCKED,
-    ALLOW_SORT,
     CO_LABEL,
     COMPONENT_NAME_LABEL,
     COURSE_METADATA_FACULTY_NAME_KEY,
-    HEADER_PATTERNFILL_COLOR,
     INSTRUCTOR_MAX_LABEL,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
     LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
@@ -39,19 +34,25 @@ from common.constants import (
     MARKS_ENTRY_VALIDATION_ERROR_TITLE,
     MAX_EXCEL_SHEETNAME_LENGTH,
     MIN_MARK_VALUE,
-    SYSTEM_HASH_SHEET,
-    SYSTEM_HASH_TEMPLATE_HASH_HEADER,
-    SYSTEM_HASH_TEMPLATE_ID_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_SHEET,
 )
-from common.excel_sheet_layout import compute_sampled_column_widths
-from common.exceptions import ValidationError
+from common.registry import (
+    SYSTEM_HASH_HEADER_TEMPLATE_HASH as SYSTEM_HASH_TEMPLATE_HASH_HEADER,
+    SYSTEM_HASH_HEADER_TEMPLATE_ID as SYSTEM_HASH_TEMPLATE_ID_HEADER,
+    SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
+)
+from common.excel_sheet_layout import (
+    build_xlsxwriter_body_format,
+    build_xlsxwriter_header_format,
+    compute_sampled_column_widths,
+    excel_col_name as _excel_col_name_one_based,
+    protect_xlsxwriter_sheet,
+)
+from common.error_catalog import validation_error_from_key
 from common.sheet_schema import ValidationRule
-from common.texts import t
 from common.utils import coerce_excel_number, normalize
-from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
 from common.workbook_signing import sign_payload
 
 _AUTO_FIT_SAMPLE_ROWS = 6
@@ -754,12 +755,7 @@ def _set_common_student_columns(
             ws.set_column(col, col, width)
 
 def _excel_col_name(col_index: int) -> str:
-    index = col_index + 1
-    label = ""
-    while index > 0:
-        index, rem = divmod(index - 1, 26)
-        label = chr(65 + rem) + label
-    return label
+    return _excel_col_name_one_based(col_index + 1)
 
 
 def _split_equal_with_residual(total: float, parts: int) -> list[float]:
@@ -794,25 +790,11 @@ def _safe_sheet_name(name: str, used_sheet_names: set[str]) -> str:
 
 
 def _build_header_format(workbook: Any, header_style: dict[str, Any]) -> Any:
-    bg_color = str(header_style.get("bg_color", HEADER_PATTERNFILL_COLOR))
-    return workbook.add_format(
-        {
-            "bold": bool(header_style.get("bold", True)),
-            "bg_color": bg_color,
-            "border": int(header_style.get("border", 1)),
-            "align": str(header_style.get("align", "center")),
-            "valign": str(header_style.get("valign", "vcenter")),
-        }
-    )
+    return build_xlsxwriter_header_format(workbook, header_style)
 
 
 def _build_body_format(workbook: Any, body_style: dict[str, Any]) -> Any:
-    return workbook.add_format(
-        {
-            "locked": bool(body_style.get("locked", False)),
-            "border": int(body_style.get("border", 1)),
-        }
-    )
+    return build_xlsxwriter_body_format(workbook, body_style)
 
 
 def generate_worksheet(
@@ -825,25 +807,25 @@ def generate_worksheet(
 ) -> Any:
     """Create a worksheet with strict validation and efficient row writes."""
     if not sheet_name or not isinstance(sheet_name, str):
-        raise ValidationError(t("instructor.validation.invalid_sheet_name"))
+        raise validation_error_from_key("instructor.validation.invalid_sheet_name")
 
     if not headers:
-        raise ValidationError(t("instructor.validation.headers_empty", sheet_name=sheet_name))
+        raise validation_error_from_key("instructor.validation.headers_empty", sheet_name=sheet_name)
 
     if len(set(headers)) != len(headers):
-        raise ValidationError(t("instructor.validation.headers_unique", sheet_name=sheet_name))
+        raise validation_error_from_key("instructor.validation.headers_unique", sheet_name=sheet_name)
 
     column_count = len(headers)
     for row_index, row in enumerate(data, start=1):
         if len(row) != column_count:
-            raise ValidationError(
-                t(
+            raise validation_error_from_key(
+                
                     "instructor.validation.row_length_mismatch",
                     row=row_index,
                     sheet_name=sheet_name,
                     expected=column_count,
                     found=len(row),
-                )
+                
             )
 
     worksheet = workbook.add_worksheet(sheet_name)
@@ -883,18 +865,9 @@ def _apply_validation(worksheet: Any, rule: ValidationRule) -> None:
 
 
 def _protect_sheet(worksheet: Any) -> None:
-    ensure_workbook_secret_policy()
     # Keep locked-cell selection disabled and unlocked-cell selection enabled so
     # keyboard navigation (Tab) jumps between mark-entry cells.
-    worksheet.protect(
-        get_workbook_password(),
-        {
-            "sort": ALLOW_SORT,
-            "autofilter": ALLOW_FILTER,
-            "select_locked_cells": ALLOW_SELECT_LOCKED,
-            "select_unlocked_cells": ALLOW_SELECT_UNLOCKED,
-        },
-    )
+    protect_xlsxwriter_sheet(worksheet)
 
 
 def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:

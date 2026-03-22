@@ -28,9 +28,12 @@ class _WorkflowService(Protocol):
         source_paths: list[Path],
         output_path: Path,
         *,
+        thresholds: tuple[float, float, float] | None = None,
+        co_attainment_percent: float | None = None,
+        co_attainment_level: int | None = None,
         context: JobContext,
         cancel_token: CancellationToken | None = None,
-    ) -> Path:
+    ) -> object:
         ...
 
 
@@ -40,6 +43,12 @@ class _Module(Protocol):
     _downloaded_outputs: list[Path]
     _logger: object
     _workflow_service: _WorkflowService
+
+    def _read_attainment_thresholds(self) -> tuple[float, float, float]:
+        ...
+
+    def _read_co_attainment_target(self) -> tuple[float, int]:
+        ...
 
     def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
         ...
@@ -79,7 +88,7 @@ class _Ns(TypedDict):
     APP_NAME: str
     t: Callable[..., str]
     resolve_dialog_start_path: Callable[..., str]
-    _path_key: Callable[[Path], str]
+    canonical_path_key: Callable[[Path], str]
     _extract_course_metadata_and_students: Callable[[Path], tuple[set[str], dict[str, str]]]
     _sanitize_filename_token: Callable[[object], str]
     log_process_message: Callable[..., None]
@@ -131,18 +140,26 @@ def save_workbook_async(module: object, *, ns: Mapping[str, object]) -> None:
         output_path = Path(replacement_path)
 
     token = CancellationToken()
+    thresholds = typed_module._read_attainment_thresholds()
+    co_attainment_percent, co_attainment_level = typed_module._read_co_attainment_target()
     job_context = typed_module._workflow_service.create_job_context(
         step_id=CO_ANALYSIS_WORKFLOW_STEP_ID_GENERATE_WORKBOOK,
         payload={
             WORKFLOW_PAYLOAD_KEY_SOURCE: [str(path) for path in typed_module._files],
             WORKFLOW_PAYLOAD_KEY_OUTPUT: str(output_path),
+            "thresholds": list(thresholds),
+            "co_attainment_percent": co_attainment_percent,
+            "co_attainment_level": co_attainment_level,
         },
     )
     typed_module._publish_status_key("coordinator.status.processing_started")
 
     def _on_success(result: object) -> None:
-        result_path = Path(str(result))
-        if all(typed_ns["_path_key"](path) != typed_ns["_path_key"](result_path) for path in typed_module._downloaded_outputs):
+        result_path = Path(str(getattr(result, "output_path", result)))
+        if all(
+            typed_ns["canonical_path_key"](path) != typed_ns["canonical_path_key"](result_path)
+            for path in typed_module._downloaded_outputs
+        ):
             typed_module._downloaded_outputs.append(result_path)
         typed_module._remember_dialog_dir_safe(str(result_path))
         typed_module._publish_status_key("coordinator.status.calculate_completed")
@@ -151,7 +168,9 @@ def save_workbook_async(module: object, *, ns: Mapping[str, object]) -> None:
             logger=typed_module._logger,
             success_message=(
                 "saving co analysis workbooks completed successfully. "
-                f"output_dir={output_dir}, generated=1"
+                f"output_dir={output_dir}, generated=1, "
+                f"thresholds=({thresholds[0]:g},{thresholds[1]:g},{thresholds[2]:g}), "
+                f"co_at_target=({co_attainment_percent:g},L{co_attainment_level})"
             ),
             user_success_message=typed_ns["build_i18n_log_message"](
                 "coordinator.status.calculate_completed",
@@ -183,6 +202,9 @@ def save_workbook_async(module: object, *, ns: Mapping[str, object]) -> None:
         work=lambda: typed_module._workflow_service.generate_workbook(
             list(typed_module._files),
             Path(output_path),
+            thresholds=thresholds,
+            co_attainment_percent=co_attainment_percent,
+            co_attainment_level=co_attainment_level,
             context=job_context,
             cancel_token=token,
         ),

@@ -37,7 +37,7 @@ STARTUP_TOAST_QUIT_DELAY_MS = 2300
 QT_ADAPTIVE_STRUCTURE_SENSITIVITY = "1"
 
 SYSTEM_VERSION = "1.0.0"
-ID_COURSE_SETUP = "COURSE_SETUP_V1"
+ID_COURSE_SETUP = "COURSE_SETUP_V2"
 UI_LANGUAGE = "en"  # Default UI language policy is explicit English.
 
 # Splash defaults
@@ -93,9 +93,6 @@ ALLOW_FILTER: bool = True
 ALLOW_SELECT_LOCKED: bool = False
 ALLOW_SELECT_UNLOCKED: bool = True
 
-HEADER_PATTERNFILL_COLOR = "F2F2F2"
-
-
 # ==========================================================
 # MARK ENTRY RULES
 # ==========================================================
@@ -137,11 +134,6 @@ WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE = "generate_course_details_t
 WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK = "validate_course_details_workbook"
 WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE = "generate_marks_template"
 WORKFLOW_OPERATION_GENERATE_FINAL_REPORT = "generate_final_report"
-WORKFLOW_STEP_ID_STEP1_GENERATE_COURSE_TEMPLATE = "step1_generate_course_template"
-WORKFLOW_STEP_ID_STEP2_VALIDATE_COURSE_DETAILS = "step2_validate_course_details"
-WORKFLOW_STEP_ID_STEP2_GENERATE_MARKS_TEMPLATE = "step2_generate_marks_template"
-WORKFLOW_STEP_ID_STEP2_UPLOAD_FILLED_MARKS = "step2_upload_filled_marks"
-WORKFLOW_STEP_ID_STEP2_GENERATE_FINAL_REPORT = "step2_generate_final_report"
 COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES = "collecting coordinator files"
 COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT = "calculating coordinator co attainment"
 COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES = "coordinator_collect_files"
@@ -178,6 +170,7 @@ LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE = "mark_structure"
 LAYOUT_SHEET_KIND_DIRECT_CO_WISE = "direct_co_wise"
 LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE = "direct_non_co_wise"
 LAYOUT_SHEET_KIND_INDIRECT = "indirect"
+WORKBOOK_INTEGRITY_SCHEMA_VERSION = 1
 
 
 # ==========================================================
@@ -196,67 +189,10 @@ LIKERT_MAX: int = 5
 # SYSTEM SHEET NAMES
 # ==========================================================
 
-SYSTEM_HASH_SHEET = "__SYSTEM_HASH__"
 SYSTEM_LAYOUT_SHEET = "__SYSTEM_LAYOUT__"
-COURSE_METADATA_SHEET = "Course_Metadata"
-ASSESSMENT_CONFIG_SHEET = "Assessment_Config"
-QUESTION_MAP_SHEET = "Question_Map"
-CO_DESCRIPTION_SHEET = "CO_Description"
-STUDENTS_SHEET = "Students"
 
-COURSE_METADATA_HEADERS = ("Field", "Value")
-ASSESSMENT_CONFIG_HEADERS = ("Component", "Weight (%)", "CIA", "CO_Wise_Marks_Breakup", "Direct", "Assessment_Type", "Assessment_Format", "Mode", "Participation"  )
-QUESTION_MAP_HEADERS = ("Component", "Q_No/Rubric_Parameter", "Max_Marks", "CO", "Bloom_Level")
-CO_DESCRIPTION_HEADERS = ("CO#", "Description", "Domain_Level", "Summary_of_Topics/Expts./Project")
-STUDENTS_HEADERS = ("Reg_No", "Student_Name")
-
-ASSESSMENT_VALIDATION_YES_NO_OPTIONS = ("YES", "NO")
-ASSESSMENT_VALIDATION_INPUT_TITLE = "Direct"
-ASSESSMENT_VALIDATION_INPUT_MESSAGE = "Select YES or NO"
-ASSESSMENT_TYPE_OPTIONS = ("FORMATIVE", "SUMMATIVE")
-ASSESSMENT_FORMAT_OPTIONS = (
-    "THEORY_EXAM",
-    "LAB_WORK",
-    "PROJECT",
-    "VIVA",
-    "PRACTICAL_EXAM",
-    "SURVEY",
-)
-ASSESSMENT_MODE_OPTIONS = (
-    "WRITTEN",
-    "HANDS_ON",
-    "ORAL",
-    "PRESENTATION",
-    "WRITTEN+ORAL",
-    "HANDS_ON+WRITTEN",
-    "HANDS_ON+ORAL",
-    "HANDS_ON+WRITTEN+ORAL",
-    "PRESENTATION+ORAL",
-    "WRITTEN+PRESENTATION",
-)
-ASSESSMENT_PARTICIPATION_OPTIONS = (
-    "INDIVIDUAL",
-    "GROUP",
-    "INDIVIDUAL+GROUP",
-)
-QUESTION_DOMAIN_LEVEL_OPTIONS = (
-    "REMEMBER",
-    "UNDERSTAND",
-    "APPLY",
-    "ANALYZE",
-    "EVALUATE",
-    "CREATE",
-    "SKILL_DEVELOPMENT",
-    "MULTIPLE_LEVELS",
-)
-CO_DESCRIPTION_SUMMARY_MIN_LENGTH = 100
-CO_DESCRIPTION_SUMMARY_MAX_LENGTH = 200
 ASSESSMENT_VALIDATION_LAST_ROW = 300
 
-SYSTEM_HASH_TEMPLATE_ID_HEADER = "Template_ID"
-SYSTEM_HASH_TEMPLATE_HASH_HEADER = "Template_Hash"
-SYSTEM_HASH_TEMPLATE_ID_KEY = "template_id"
-SYSTEM_HASH_TEMPLATE_HASH_KEY = "template_hash"
 SYSTEM_LAYOUT_MANIFEST_HEADER = "Layout_Manifest"
 SYSTEM_LAYOUT_MANIFEST_HASH_HEADER = "Layout_Hash"
 SYSTEM_LAYOUT_MANIFEST_KEY = "layout_manifest"

@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl
@@ -41,19 +40,18 @@ from common.constants import (
     WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
 from common.module_plugins import ModulePluginSpec
+from common.module_messages import append_user_log as _append_user_log_impl
+from common.module_messages import build_status_message
+from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import rerender_user_log as _rerender_user_log_impl
+from common.module_messages import resolve_status_message
+from common.module_messages import show_toast_key as _show_toast_key
 from common.output_panel import (
     OutputPanelData,
     open_output_link,
     render_output_panel_html,
 )
 from common.texts import get_available_languages, get_language, t
-from common.toast import show_toast
-from common.ui_logging import (
-    build_i18n_log_message,
-    format_log_line_at,
-    parse_i18n_log_message,
-    resolve_i18n_log_message,
-)
 from common.utils import (
     get_ui_language_preference,
     resource_path,
@@ -62,6 +60,10 @@ from common.utils import (
 from modules.module_catalog import build_module_catalog
 
 _logger = logging.getLogger(__name__)
+
+
+def _messages_namespace() -> dict[str, object]:
+    return dict(_default_messages_namespace(translate=t))
 
 
 class MainWindow(QMainWindow):
@@ -149,8 +151,8 @@ class MainWindow(QMainWindow):
         shared_log_layout.setContentsMargins(0, 0, 0, 0)
         shared_outputs_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.shared_info_tabs.addTab(shared_log_tab, t("instructor.log.title"))
-        self.shared_info_tabs.addTab(shared_outputs_tab, t("instructor.links.title"))
+        self.shared_info_tabs.addTab(shared_log_tab, t("activity.log.title"))
+        self.shared_info_tabs.addTab(shared_outputs_tab, t("outputs.title"))
         shared_layout.addWidget(self.shared_info_tabs)
 
         shared_row = QHBoxLayout()
@@ -160,7 +162,8 @@ class MainWindow(QMainWindow):
         central_layout.setStretch(1, 0)
 
         self.current_module: Any | None = None
-        self._shared_activity_entries: list[dict[str, object]] = []
+        self._user_log_entries: list[dict[str, object]] = []
+        self.user_log_view = self.shared_activity_log
 
         # ----------------------------
         # Activity Bar
@@ -191,18 +194,11 @@ class MainWindow(QMainWindow):
             self.nav_group.addAction(action)
             self.activitybar.addAction(action)
 
-        # Backward-compatible action aliases used by tests/internals.
-        self.action_co_section = self._module_actions_by_key["instructor"]
-        self.action_co_course = self._module_actions_by_key["coordinator"]
-        self.action_po = self._module_actions_by_key["po_analysis"]
-        self.action_help = self._module_actions_by_key["help"]
-        self.action_about = self._module_actions_by_key["about"]
-
         for action in self.activitybar.actions():
             btn = self.activitybar.widgetForAction(action)
             if btn:
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.action_co_section.setChecked(True)
+        self._module_actions_by_key["instructor"].setChecked(True)
 
         self.language_menu = QMenu(self)
         self.language_action_group = QActionGroup(self.language_menu)
@@ -223,9 +219,9 @@ class MainWindow(QMainWindow):
         self._refresh_language_switcher()
         self._refresh_shared_activity_texts()
         self._append_shared_activity_log(
-            build_i18n_log_message(
-                "instructor.log.ready",
-                fallback=t("instructor.log.ready"),
+            build_status_message(
+                "activity.log.ready",
+                translate=t,
             )
         )
         self._refresh_shared_outputs_html()
@@ -247,11 +243,13 @@ class MainWindow(QMainWindow):
                 new_module = module_class()
             except Exception as exc:
                 _logger.exception("Failed to load module '%s'.", module_key)
-                show_toast(
+                _show_toast_key(
                     self,
-                    t("module.load_failed_body", module=module_key, error=exc),
-                    title=t("module.load_failed_title"),
+                    text_key="module.load_failed_body",
+                    title_key="module.load_failed_title",
+                    translate=t,
                     level="error",
+                    text_kwargs={"module": module_key, "error": exc},
                 )
                 self.flash_status(t("module.load_failed_status", module=module_key))
                 return
@@ -283,11 +281,13 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             _logger.exception("Failed to import module plugin '%s'.", key)
             module_label = t(spec.title_key)
-            show_toast(
+            _show_toast_key(
                 self,
-                t("module.load_failed_body", module=module_label, error=exc),
-                title=t("module.load_failed_title"),
+                text_key="module.load_failed_body",
+                title_key="module.load_failed_title",
+                translate=t,
                 level="error",
+                text_kwargs={"module": module_label, "error": exc},
             )
             self.flash_status(t("module.load_failed_status", module=module_label))
             return
@@ -360,74 +360,19 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(t("status.ready"))
 
     def _refresh_shared_activity_texts(self) -> None:
-        self.shared_info_tabs.setTabText(0, t("instructor.log.title"))
-        self.shared_info_tabs.setTabText(1, t("instructor.links.title"))
+        self.shared_info_tabs.setTabText(0, t("activity.log.title"))
+        self.shared_info_tabs.setTabText(1, t("outputs.title"))
 
     def _on_module_status_changed(self, message: str) -> None:
-        self.flash_status(resolve_i18n_log_message(message))
+        self.flash_status(resolve_status_message(message))
         self._append_shared_activity_log(message)
         self._refresh_shared_outputs_html()
 
     def _append_shared_activity_log(self, message: str) -> None:
-        parsed = parse_i18n_log_message(message)
-        localized = resolve_i18n_log_message(message)
-        timestamp = datetime.now()
-        if parsed is None:
-            self._shared_activity_entries.append(
-                {
-                    "timestamp": timestamp,
-                    "message": localized,
-                    "raw_message": message,
-                }
-            )
-        else:
-            key, kwargs, fallback = parsed
-            self._shared_activity_entries.append(
-                {
-                    "timestamp": timestamp,
-                    "message": localized,
-                    "raw_message": message,
-                    "text_key": key,
-                    "kwargs": kwargs,
-                    "fallback": fallback,
-                }
-            )
-        line = format_log_line_at(localized, timestamp=timestamp)
-        if line is None:
-            return
-        self.shared_activity_log.appendPlainText(line)
+        _append_user_log_impl(self, message, ns=_messages_namespace())
 
     def _rerender_shared_activity_log(self) -> None:
-        self.shared_activity_log.clear()
-        for entry in self._shared_activity_entries:
-            timestamp = entry.get("timestamp")
-            text_key = entry.get("text_key")
-            fallback = entry.get("fallback")
-            kwargs = entry.get("kwargs")
-            message = entry.get("message")
-            raw_message = entry.get("raw_message")
-            if isinstance(text_key, str):
-                safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
-                try:
-                    payload = build_i18n_log_message(
-                        text_key,
-                        kwargs=safe_kwargs,
-                        fallback=fallback if isinstance(fallback, str) else None,
-                    )
-                    resolved = resolve_i18n_log_message(payload)
-                except Exception:
-                    resolved = fallback if isinstance(fallback, str) else str(message or "")
-            else:
-                if isinstance(raw_message, str):
-                    resolved = resolve_i18n_log_message(raw_message)
-                else:
-                    resolved = str(message or "")
-
-            ts = timestamp if isinstance(timestamp, datetime) else None
-            line = format_log_line_at(resolved, timestamp=ts)
-            if line is None:
-                continue
-            self.shared_activity_log.appendPlainText(line)
+        _rerender_user_log_impl(self, ns=_messages_namespace())
 
     def _refresh_shared_outputs_html(self) -> None:
         widget = self.stack.currentWidget()
@@ -463,10 +408,11 @@ class MainWindow(QMainWindow):
         )
         if opened:
             return
-        show_toast(
+        _show_toast_key(
             self,
-            t(payload.open_failed_key),
-            title=t("instructor.msg.error_title"),
+            text_key=payload.open_failed_key,
+            title_key="instructor.msg.error_title",
+            translate=t,
             level="error",
         )
 

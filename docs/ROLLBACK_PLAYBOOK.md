@@ -19,7 +19,7 @@
 
 ## Validation Checklist
 1. App launches successfully.
-2. Instructor module: Step 1/Step 2 flows work.
+2. Instructor module: single-flow course-template and marks-template workflow works.
 3. Coordinator module: intake and attainment output work.
 4. Help module: PDF load/save/open works.
 5. About module: metadata panel renders.

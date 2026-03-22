@@ -43,7 +43,7 @@ class _Module(Protocol):
 
 
 class FileActionsNamespace(TypedDict):
-    _path_key: Callable[[Path], str]
+    canonical_path_key: Callable[[Path], str]
     user_role: object
     log_process_message: Callable[..., None]
     build_i18n_log_message: Callable[..., str]
@@ -55,15 +55,17 @@ def remove_file_by_path(module: object, file_path: str, *, ns: Mapping[str, obje
     typed_ns = cast(FileActionsNamespace, ns)
     if typed_module.state.busy:
         return
-    target_key = typed_ns["_path_key"](Path(file_path))
+    target_key = typed_ns["canonical_path_key"](Path(file_path))
     before_count = len(typed_module._files)
-    typed_module._files = [path for path in typed_module._files if typed_ns["_path_key"](path) != target_key]
+    typed_module._files = [
+        path for path in typed_module._files if typed_ns["canonical_path_key"](path) != target_key
+    ]
     if len(typed_module._files) == before_count:
         return
     for row in range(typed_module.drop_list.count()):
         item = typed_module.drop_list.item(row)
         path_value = str(item.data(typed_ns["user_role"]) or "")
-        if typed_ns["_path_key"](Path(path_value)) == target_key:
+        if typed_ns["canonical_path_key"](Path(path_value)) == target_key:
             typed_module.drop_list.takeItem(row)
             break
     typed_module._refresh_ui()
@@ -102,4 +104,3 @@ def clear_all(module: object, *, ns: Mapping[str, object]) -> None:
             fallback=typed_ns["t"]("coordinator.status.cleared", count=total),
         ),
     )
-

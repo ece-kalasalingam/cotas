@@ -7,11 +7,17 @@ from common.exceptions import ConfigurationError
 from common.sheet_schema import SheetSchema, WorkbookBlueprint
 
 
-def _bp(type_id: str = "type-a", *, sheet_name: str = "Sheet1", headers: list[str] | None = None) -> WorkbookBlueprint:
+def _bp(
+    type_id: str = "type-a",
+    *,
+    sheet_key: str = "sheet_1",
+    sheet_name: str = "Sheet1",
+    headers: list[str] | None = None,
+) -> WorkbookBlueprint:
     return WorkbookBlueprint(
         type_id=type_id,
         style_registry={},
-        sheets=[SheetSchema(name=sheet_name, header_matrix=[headers or ["H1", "H2"]])],
+        sheets=[SheetSchema(name=sheet_name, header_matrix=[headers or ["H1", "H2"]], key=sheet_key)],
     )
 
 
@@ -62,8 +68,8 @@ def test_validate_blueprint_registry_contracts_rejects_duplicate_sheet_names(mon
         type_id="type-a",
         style_registry={},
         sheets=[
-            SheetSchema(name="Students", header_matrix=[["A"]]),
-            SheetSchema(name="students", header_matrix=[["B"]]),
+            SheetSchema(name="Students", header_matrix=[["A"]], key="students_1"),
+            SheetSchema(name="students", header_matrix=[["B"]], key="students_2"),
         ],
     )
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": bp})
@@ -75,10 +81,10 @@ def test_validate_blueprint_registry_contracts_rejects_missing_headers(monkeypat
     bp = WorkbookBlueprint(
         type_id="type-a",
         style_registry={},
-        sheets=[SheetSchema(name="S", header_matrix=[])],
+        sheets=[SheetSchema(name="S", header_matrix=[], key="sheet_s")],
     )
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": bp})
-    with pytest.raises(ConfigurationError, match="must define headers"):
+    with pytest.raises(ConfigurationError, match="must define fixed headers"):
         contracts.validate_blueprint_registry_contracts()
 
 

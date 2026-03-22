@@ -11,7 +11,7 @@ It helps faculty and coordinators generate, validate, and process structured Exc
 Developed at Kalasalingam Academy of Research and Education (KARE).
 
 ## Modules
-- `Instructor`: two-step course workflow (template generation/validation, then final report generation).
+- `Instructor`: single-flow course workflow (course template generation, course-details validation, marks-template generation).
 - `Coordinator`: bulk final-report intake and attainment consolidation.
 - `PO Analysis`: placeholder module wired via plugin catalog.
 - `Help`: packaged PDF guidance, export/open actions.
@@ -25,11 +25,11 @@ Developed at Kalasalingam Academy of Research and Education (KARE).
 - `modules/module_catalog.py`: canonical module plugin registry used by `MainWindow`.
 
 ## Instructor Workflow (Current)
-- `Step 1`: Generate and validate course details, then generate marks templates.
-- `Step 2`: Upload/validate filled marks and generate final CO reports.
-- Steps are intentionally independent across sessions: do not assume Step 1 artifacts are reusable cache for later Step 2 runs.
+- Download course template workbook.
+- Upload and validate one or more course-details workbooks.
+- Generate marks-template workbook(s) from validated inputs.
+- Runs are intentionally independent across sessions: do not assume previous artifacts are reusable cache.
 - Workbook formatting/protection and system-sheet structure are mandatory in current release outputs.
-- The instructor UI intentionally uses a two-step model only.
 
 ## Tech Stack
 - Python
@@ -46,6 +46,12 @@ conda run -n obe python main.py
 ```
 
 ## Quality Checks
+
+Primary source of truth for release checks:
+- `docs/QUALITY_GATE.md` (executable command checklist)
+- `AGENTS.md` (policy and guardrails)
+
+Common commands:
 ```powershell
 conda run -n obe python scripts/quality_gate.py --mode fast
 conda run -n obe python scripts/quality_gate.py --mode strict
@@ -65,4 +71,4 @@ conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache
 - Runtime signing/protection paths enforce workbook secret policy.
 - Legacy signature compatibility paths were removed; current version expects active versioned signatures.
 - Module loading is plugin-catalog driven (no hardcoded module imports in `MainWindow`).
-- Coordinator step orchestration uses explicit namespace contracts (no `globals()` coupling).
+- Coordinator orchestration uses explicit namespace contracts (no `globals()` coupling).

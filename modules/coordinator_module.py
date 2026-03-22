@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -37,6 +36,7 @@ from common.constants import (
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
+from common.contracts import require_keys
 from common.drag_drop_file_widget import (
     DragDropFileList,
     DragDropZoneFrame,
@@ -44,7 +44,10 @@ from common.drag_drop_file_widget import (
 )
 from common.exceptions import JobCancelledError
 from common.jobs import CancellationToken
+from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import build_status_message as _build_status_message
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
+from common.module_messages import show_toast_plain as _show_toast_plain
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
@@ -56,14 +59,6 @@ from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
 from common.texts import t
-from common.toast import show_toast
-from common.ui_logging import (
-    UILogHandler,
-    build_i18n_log_message,
-    format_log_line_at,
-    parse_i18n_log_message,
-    resolve_i18n_log_message,
-)
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
@@ -71,10 +66,11 @@ from common.ui_stylings import (
     GLOBAL_QPUSHBUTTON_MIN_WIDTH,
 )
 from common.utils import (
-    emit_user_status,
+    canonical_path_key as _path_key,
     log_process_message,
     resolve_dialog_start_path,
 )
+from domain import BusyWorkflowState
 from domain.coordinator_engine import (
     _analyze_dropped_files,
     _build_co_attainment_default_name,
@@ -85,10 +81,6 @@ from domain.coordinator_engine import (
 from domain.coordinator_engine import (
     _has_valid_final_co_report as _processing_has_valid_final_co_report,
 )
-from domain.coordinator_engine import (
-    _path_key,
-)
-from modules.coordinator.contracts import require_keys
 from modules.coordinator.file_actions import clear_all, remove_file_by_path
 from modules.coordinator.messages import show_threshold_validation_toast
 from modules.coordinator.steps.calculate_attainment import calculate_attainment_async
@@ -106,30 +98,16 @@ _QT_COMPAT_EXPORTS = (QListWidget,)
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 
 
-@dataclass(slots=True)
-class CoordinatorWorkflowState:
-    busy: bool = False
-    active_job_id: str | None = None
-
-    def set_busy(self, value: bool, *, job_id: str | None = None) -> None:
-        self.busy = value
-        self.active_job_id = job_id if value else None
-
-
 def _has_valid_final_co_report(path: Path) -> bool:
     return _processing_has_valid_final_co_report(path)
 
 
 def _messages_namespace() -> dict[str, object]:
-    return {
-        "emit_user_status": emit_user_status,
-        "t": t,
-        "build_i18n_log_message": build_i18n_log_message,
-        "parse_i18n_log_message": parse_i18n_log_message,
-        "resolve_i18n_log_message": resolve_i18n_log_message,
-        "format_log_line_at": format_log_line_at,
-        "UILogHandler": UILogHandler,
-    }
+    return dict(_default_messages_namespace(translate=t))
+
+
+def _build_i18n_message(text_key: str, *, kwargs: dict[str, object] | None = None, fallback: str | None = None) -> str:
+    return _build_status_message(text_key, translate=t, kwargs=kwargs, fallback=fallback)
 
 
 def _file_actions_namespace() -> dict[str, object]:
@@ -137,7 +115,7 @@ def _file_actions_namespace() -> dict[str, object]:
         "_path_key": _path_key,
         "user_role": Qt.ItemDataRole.UserRole,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
+        "build_i18n_log_message": _build_i18n_message,
         "t": t,
     }
 
@@ -146,9 +124,9 @@ def _collect_files_namespace() -> dict[str, object]:
     return {
         "t": t,
         "_path_key": _path_key,
-        "show_toast": show_toast,
+        "show_toast": _show_toast_plain,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
+        "build_i18n_log_message": _build_i18n_message,
         "_analyze_dropped_files": _analyze_dropped_files,
         "QListWidgetItem": QListWidgetItem,
         "JobCancelledError": JobCancelledError,
@@ -166,8 +144,8 @@ def _calculate_attainment_namespace() -> dict[str, object]:
         "_CoAttainmentWorkbookResult": _CoAttainmentWorkbookResult,
         "_path_key": _path_key,
         "log_process_message": log_process_message,
-        "build_i18n_log_message": build_i18n_log_message,
-        "show_toast": show_toast,
+        "build_i18n_log_message": _build_i18n_message,
+        "show_toast": _show_toast_plain,
         "_generate_co_attainment_workbook": _generate_co_attainment_workbook,
         "JobCancelledError": JobCancelledError,
     }
@@ -242,8 +220,8 @@ class _CoordinatorFileItemWidget(_SharedRemovableFileItemWidget):
         super().__init__(
             file_path,
             remove_fallback_text=t("coordinator.file.remove_fallback"),
-            open_file_tooltip=t("instructor.links.open_file"),
-            open_folder_tooltip=t("instructor.links.open_folder"),
+            open_file_tooltip=t("outputs.open_file"),
+            open_folder_tooltip=t("outputs.open_folder"),
             remove_tooltip=t("coordinator.file.remove_tooltip"),
             parent=parent,
         )
@@ -251,7 +229,6 @@ class _CoordinatorFileItemWidget(_SharedRemovableFileItemWidget):
 
 class CoordinatorModule(QWidget):
     status_changed = Signal(str)
-    OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
     _CO_ATTAINMENT_TARGET_VALIDATION_KEY = "coordinator.co_attainment.invalid_percent"
 
@@ -266,12 +243,12 @@ class CoordinatorModule(QWidget):
         self._files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
         self._logger = _logger
-        self.state = CoordinatorWorkflowState()
+        self.state = BusyWorkflowState()
         self._workflow_service = workflow_service or CoordinatorWorkflowService()
         self._cancel_token: CancellationToken | None = None
         self._active_jobs: list[object] = []
         self._pending_drop_batches: list[list[str]] = []
-        self._ui_log_handler: UILogHandler | None = None
+        self._ui_log_handler: object | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
         self._workflow_controller = CoordinatorWorkflowController(self)
@@ -468,8 +445,8 @@ class CoordinatorModule(QWidget):
         self.drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
             remove_fallback_text=t("coordinator.file.remove_fallback"),
-            open_file_tooltip=t("instructor.links.open_file"),
-            open_folder_tooltip=t("instructor.links.open_folder"),
+            open_file_tooltip=t("outputs.open_file"),
+            open_folder_tooltip=t("outputs.open_folder"),
             remove_tooltip=t("coordinator.file.remove_tooltip"),
         )
         self.drop_widget.set_summary_text_builder(
@@ -592,7 +569,7 @@ class CoordinatorModule(QWidget):
             self,
             message_key=message_key,
             title_key="coordinator.title",
-            toast_fn=show_toast,
+            toast_fn=_show_toast_plain,
             translate=t,
         )
 
@@ -712,7 +689,7 @@ class CoordinatorModule(QWidget):
         self._ui_engine.set_footer_visible(False)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
-        return OutputPanelData(items=self._output_items(), open_failed_key=self.OUTPUT_LINK_OPEN_FAILED_KEY)
+        return OutputPanelData(items=self._output_items())
 
     def _remove_file_by_path(self, file_path: str) -> None:
         remove_file_by_path(self, file_path, ns=_file_actions_namespace())

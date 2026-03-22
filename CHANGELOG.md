@@ -10,9 +10,14 @@ All notable changes to this project are documented in this file.
 - Added plugin module contract (`common/module_plugins.py`) and module catalog (`modules/module_catalog.py`) for plug-and-play module scaling.
 - Added dedicated `modules/po_analysis_module.py` placeholder module wired through plugin catalog.
 - Added coordinator namespace contract guard (`modules/coordinator/contracts.py`) to validate step integration keys at startup.
+- Added template strategy router (`domain/template_strategy_router.py`) as the central template operation dispatch path.
+- Added centralized CO direct/indirect sheet writer (`domain/co_report_sheet_generator.py`) as single generation source.
+- Added updated architecture/complexity documentation at `docs/COMPLEXITY_ANALYSIS.md`.
 
 ### Changed
-- Refactored Instructor flow to a two-step model and updated step usage across UI actions, workflow code, and language strings.
+- Refactored Instructor module from two-step flow to a single workflow (course template download + course-details validation + marks-template generation).
+- Reworked Instructor i18n keys/messages to remove step-number naming in active runtime paths.
+- Centralized template-aware operation routing so module/domain callsites dispatch through router + template strategy.
 - Standardized native-OS-first UI behavior by reducing custom styling overrides and inline spacing customizations across modules.
 - Kept Help module context menu rendering native while supporting style application order behavior safely.
 - Refactored `MainWindow` to registry-driven module loading with lazy class import (no hardcoded module imports in window bootstrap path).
@@ -20,6 +25,7 @@ All notable changes to this project are documented in this file.
 - Migrated coordinator business processing to `domain/coordinator_engine.py` and aligned module/service orchestration to the domain-layer architecture.
 - Hardened instructor final-report generation to require service/domain execution (removed service-unavailable copy-bypass behavior).
 - Improved coordinator and instructor diagnostics: per-file invalid reasons, full per-file batch failure details, and direct/indirect join-drop visibility.
+- Consolidated UI/release/support guardrails into `AGENTS.md` and updated `README.md` and docs to match current architecture.
 
 ### Fixed
 - Resolved high-volume static typing issues across Coordinator, Instructor, common utilities, and test modules.
@@ -34,6 +40,9 @@ All notable changes to this project are documented in this file.
 - Removed dead style/constants paths left behind after native-style cleanup.
 - Removed obsolete top-level `installerscript.ps1` duplicate script.
 - Removed tracked `coverage.json` artifact file.
+- Removed deprecated Instructor step artifacts (`modules/instructor/steps/step1_*`, `step2_*`, `validators/*`, `workflow_controller.py`) after single-flow migration.
+- Removed compatibility-only helper paths no longer used in runtime (`main_window` action aliases, legacy error-catalog resolver).
+- Removed obsolete process documents superseded by `AGENTS.md` (`docs/RELEASE_PROMOTION.md`, `docs/SUPPORT_RUNBOOK.md`, `docs/UI_LAYOUT_GUARDRAILS.md`, `docs/REPOSITORY_ACTION_PLAN.md`).
 
 ### Quality
 - `pyright`: `0 errors, 0 warnings`

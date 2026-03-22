@@ -13,17 +13,30 @@ from PySide6.QtWidgets import QFileDialog, QMenu, QStyleFactory, QVBoxLayout, QW
 from common.constants import (
     APP_NAME,
 )
+from common.module_messages import build_status_message as _build_status_message
+from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import publish_status_key as _publish_status_key_impl
+from common.module_messages import show_toast_key as _show_toast_key
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.texts import t
-from common.toast import show_toast
-from common.ui_logging import build_i18n_log_message
 from common.utils import (
-    emit_user_status,
     log_process_message,
     remember_dialog_dir_safe,
     resolve_dialog_start_path,
     resource_path,
 )
+
+
+class _LogSink:
+    def appendPlainText(self, _text: str) -> None:  # noqa: N802 - Qt-style name
+        return
+
+    def clear(self) -> None:
+        return
+
+
+def _messages_namespace() -> dict[str, object]:
+    return dict(_default_messages_namespace(translate=t))
 
 
 class HelpModule(QWidget):
@@ -35,6 +48,9 @@ class HelpModule(QWidget):
         self.pdf_path = Path(resource_path("assets/CO_Calculation_Document.pdf"))
         self._pdf_error_shown = False
         self._logger = logging.getLogger(__name__)
+        self._ui_log_handler: object | None = None
+        self._user_log_entries: list[dict[str, object]] = []
+        self.user_log_view = _LogSink()
 
         self._ui_engine = ModuleUIEngine(
             self,
@@ -65,12 +81,7 @@ class HelpModule(QWidget):
         self._load_pdf()
 
     def _emit_status_key(self, key: str, **kwargs: object) -> None:
-        localized = t(key, **kwargs)
-        emit_user_status(
-            self.status_changed,
-            build_i18n_log_message(key, kwargs=kwargs, fallback=localized),
-            logger=self._logger,
-        )
+        _publish_status_key_impl(self, key, ns=_messages_namespace(), **kwargs)
 
     # -----------------------------------------------------
     # PDF Load
@@ -79,20 +90,15 @@ class HelpModule(QWidget):
     def _load_pdf(self) -> None:
         if not self.pdf_path.exists():
             self._logger.warning("Help PDF is missing at path: %s", self.pdf_path)
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.doc_missing_body", path=self.pdf_path),
-                title=t("help.doc_missing_title"),
+                text_key="help.doc_missing_body",
+                title_key="help.doc_missing_title",
+                translate=t,
                 level="warning",
+                text_kwargs={"path": self.pdf_path},
             )
-            emit_user_status(
-                self.status_changed,
-                build_i18n_log_message(
-                    "help.status.doc_missing",
-                    fallback=t("help.status.doc_missing"),
-                ),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.doc_missing")
             return
 
         self.pdf_doc.load(str(self.pdf_path))
@@ -100,9 +106,9 @@ class HelpModule(QWidget):
             "loading help PDF",
             logger=self._logger,
             success_message="loading help PDF completed successfully.",
-            user_success_message=build_i18n_log_message(
+            user_success_message=_build_status_message(
                 "help.status.doc_loaded",
-                fallback=t("help.status.doc_loaded"),
+                translate=t,
             ),
         )
         self._emit_status_key("help.status.doc_loaded")
@@ -115,20 +121,14 @@ class HelpModule(QWidget):
         if status == QPdfDocument.Status.Error and not self._pdf_error_shown:
             self._pdf_error_shown = True
             self._logger.warning("Help PDF failed to load. status=%s", status)
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.doc_error_body"),
-                title=t("help.doc_error_title"),
+                text_key="help.doc_error_body",
+                title_key="help.doc_error_title",
+                translate=t,
                 level="warning",
             )
-            emit_user_status(
-                self.status_changed,
-                build_i18n_log_message(
-                    "help.status.doc_error",
-                    fallback=t("help.status.doc_error"),
-                ),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.doc_error")
 
     # -----------------------------------------------------
     # Context Menu
@@ -159,20 +159,14 @@ class HelpModule(QWidget):
         process_name = "saving help PDF"
         if not self.pdf_path.exists():
             self._logger.warning("Help PDF save requested but source file is missing.")
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.status.file_missing"),
-                title=t("help.missing_file_title"),
+                text_key="help.status.file_missing",
+                title_key="help.missing_file_title",
+                translate=t,
                 level="warning",
             )
-            emit_user_status(
-                self.status_changed,
-                build_i18n_log_message(
-                    "help.status.file_missing",
-                    fallback=t("help.status.file_missing"),
-                ),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.file_missing")
             return
 
         save_path, _ = QFileDialog.getSaveFileName(
@@ -195,15 +189,16 @@ class HelpModule(QWidget):
                     process_name,
                     logger=self._logger,
                     error=exc,
-                    user_error_message=build_i18n_log_message(
+                    user_error_message=_build_status_message(
                         "help.status.save_failed",
-                        fallback=t("help.status.save_failed"),
+                        translate=t,
                     ),
                 )
-                show_toast(
+                _show_toast_key(
                     self,
-                    t("help.status.save_failed"),
-                    title=t("help.save_failed_title"),
+                    text_key="help.status.save_failed",
+                    title_key="help.save_failed_title",
+                    translate=t,
                     level="error",
                 )
                 self._emit_status_key("help.status.save_failed")
@@ -213,15 +208,16 @@ class HelpModule(QWidget):
                 process_name,
                 logger=self._logger,
                 success_message=f"{process_name} completed successfully.",
-                user_success_message=build_i18n_log_message(
+                user_success_message=_build_status_message(
                     "help.status.save_success",
-                    fallback=t("help.status.save_success"),
+                    translate=t,
                 ),
             )
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.status.save_success"),
-                title=t("help.save_success_title"),
+                text_key="help.status.save_success",
+                title_key="help.save_success_title",
+                translate=t,
                 level="success",
             )
             self._emit_status_key("help.status.save_success")
@@ -234,20 +230,14 @@ class HelpModule(QWidget):
         process_name = "opening help PDF in default viewer"
         if not self.pdf_path.exists():
             self._logger.warning("Help PDF open requested but source file is missing.")
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.status.file_missing"),
-                title=t("help.missing_file_title"),
+                text_key="help.status.file_missing",
+                title_key="help.missing_file_title",
+                translate=t,
                 level="warning",
             )
-            emit_user_status(
-                self.status_changed,
-                build_i18n_log_message(
-                    "help.status.file_missing",
-                    fallback=t("help.status.file_missing"),
-                ),
-                logger=self._logger,
-            )
+            self._emit_status_key("help.status.file_missing")
             return
 
         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.pdf_path)))
@@ -256,15 +246,16 @@ class HelpModule(QWidget):
                 process_name,
                 logger=self._logger,
                 error=RuntimeError("Desktop service returned openUrl=False"),
-                user_error_message=build_i18n_log_message(
+                user_error_message=_build_status_message(
                     "help.status.open_failed",
-                    fallback=t("help.status.open_failed"),
+                    translate=t,
                 ),
             )
-            show_toast(
+            _show_toast_key(
                 self,
-                t("help.open_failed_body"),
-                title=t("help.open_failed_title"),
+                text_key="help.open_failed_body",
+                title_key="help.open_failed_title",
+                translate=t,
                 level="warning",
             )
             self._emit_status_key("help.status.open_failed")
@@ -274,15 +265,16 @@ class HelpModule(QWidget):
             process_name,
             logger=self._logger,
             success_message=f"{process_name} completed successfully.",
-            user_success_message=build_i18n_log_message(
+            user_success_message=_build_status_message(
                 "help.status.open_success",
-                fallback=t("help.status.open_success"),
+                translate=t,
             ),
         )
-        show_toast(
+        _show_toast_key(
             self,
-            t("help.open_success_body"),
-            title=t("help.open_success_title"),
+            text_key="help.open_success_body",
+            title_key="help.open_success_title",
+            translate=t,
             level="success",
         )
         self._emit_status_key("help.status.open_success")

@@ -61,13 +61,13 @@ def test_resolve_i18n_kwargs_handles_nested_translation(monkeypatch) -> None:
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: f"<{key}:{kwargs.get('n', '')}>")
     kwargs = {
         "title": {
-            "__t_key__": "instructor.step2.title",
+            "__t_key__": "activity.log.ready",
             "kwargs": {"n": 5},
             "fallback": "fallback-title",
         }
     }
     resolved = ui_logging._resolve_i18n_kwargs(kwargs)
-    assert resolved["title"] == "<instructor.step2.title:5>"
+    assert resolved["title"] == "<activity.log.ready:5>"
 
 
 def test_ui_log_handler_prefers_user_message_and_falls_back_to_level_prefix() -> None:
