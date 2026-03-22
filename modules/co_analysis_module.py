@@ -23,17 +23,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from common.async_operation_runner import AsyncOperationRunner
 from common.constants import (
     APP_NAME,
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
-    COURSE_METADATA_HEADERS,
-    COURSE_METADATA_SECTION_KEY,
-    COURSE_METADATA_SEMESTER_KEY,
-    COURSE_METADATA_SHEET,
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
@@ -43,13 +39,13 @@ from common.constants import (
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
 from common.drag_drop_file_widget import ManagedDropFileWidget
+from common.exceptions import JobCancelledError
+from common.jobs import CancellationToken
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.output_panel import OutputPanelData
-from common.removable_file_item_widget import (
-    ElidedFileNameLabel as _SharedElidedFileNameLabel,
-)
+from common.output_panel import OutputItem, OutputPanelData
+from common.qt_jobs import run_in_background
 from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
@@ -63,31 +59,38 @@ from common.ui_logging import (
     resolve_i18n_log_message,
 )
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
-from common.utils import emit_user_status, log_process_message, normalize, resolve_dialog_start_path
-from domain.coordinator_engine import _path_key
-from modules.coordinator.workflow_controller import CoordinatorWorkflowController
-from modules.instructor.validators.step2_filled_marks_validator import (
-    validate_uploaded_filled_marks_workbook,
+from common.utils import (
+    emit_user_status,
+    log_process_message,
+    normalize,
+    resolve_dialog_start_path,
 )
+from domain.co_analysis_engine import (
+    extract_course_metadata_and_students,
+)
+from domain.coordinator_engine import _path_key
+from modules.co_analysis.contracts import require_keys
+from modules.co_analysis.file_actions import clear_all, remove_file_by_path
+from modules.co_analysis.messages import show_threshold_validation_toast
+from modules.co_analysis.steps.collect_files import collect_files_async
+from modules.co_analysis.steps.generate_workbook import save_workbook_async
+from modules.co_analysis.validators.uploaded_workbook_validator import (
+    validate_uploaded_source_workbook,
+)
+from modules.co_analysis.workflow_controller import COAnalysisWorkflowController
+from modules.instructor.steps.shared_workbook_ops import sanitize_filename_token
+from services import CoAnalysisWorkflowService
 
 _logger = logging.getLogger(__name__)
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
-_SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xls"}
-_COURSE_METADATA_DUPLICATE_FIELDS = (
-    COURSE_METADATA_COURSE_CODE_KEY,
-    COURSE_METADATA_SEMESTER_KEY,
-    COURSE_METADATA_SECTION_KEY,
-    COURSE_METADATA_ACADEMIC_YEAR_KEY,
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
-)
-
-
 @dataclass(slots=True)
 class COAnalysisWorkflowState:
     busy: bool = False
+    active_job_id: str | None = None
 
-    def set_busy(self, value: bool) -> None:
+    def set_busy(self, value: bool, *, job_id: str | None = None) -> None:
         self.busy = value
+        self.active_job_id = job_id if value else None
 
 
 def _messages_namespace() -> dict[str, object]:
@@ -102,16 +105,52 @@ def _messages_namespace() -> dict[str, object]:
     }
 
 
+def _collect_files_namespace() -> dict[str, object]:
+    return {
+        "_validate_uploaded_source_workbook": validate_uploaded_source_workbook,
+        "t": t,
+        "show_toast": show_toast,
+        "log_process_message": log_process_message,
+        "build_i18n_log_message": build_i18n_log_message,
+        "JobCancelledError": JobCancelledError,
+    }
+
+
+def _generate_workbook_namespace() -> dict[str, object]:
+    return {
+        "QFileDialog": QFileDialog,
+        "APP_NAME": APP_NAME,
+        "t": t,
+        "resolve_dialog_start_path": resolve_dialog_start_path,
+        "_path_key": _path_key,
+        "_extract_course_metadata_and_students": extract_course_metadata_and_students,
+        "_sanitize_filename_token": sanitize_filename_token,
+        "log_process_message": log_process_message,
+        "build_i18n_log_message": build_i18n_log_message,
+        "show_toast": show_toast,
+        "normalize": normalize,
+        "COURSE_METADATA_COURSE_CODE_KEY": COURSE_METADATA_COURSE_CODE_KEY,
+        "COURSE_METADATA_ACADEMIC_YEAR_KEY": COURSE_METADATA_ACADEMIC_YEAR_KEY,
+        "JobCancelledError": JobCancelledError,
+    }
+
+
+def _file_actions_namespace() -> dict[str, object]:
+    return {
+        "_path_key": _path_key,
+        "user_role": Qt.ItemDataRole.UserRole,
+        "log_process_message": log_process_message,
+        "build_i18n_log_message": build_i18n_log_message,
+        "t": t,
+    }
+
+
 class _LogSink:
     def appendPlainText(self, _text: str) -> None:  # noqa: N802 - Qt-style name
         return
 
     def clear(self) -> None:
         return
-
-
-class _ElidedFileNameLabel(_SharedElidedFileNameLabel):
-    pass
 
 
 class _COAnalysisFileItemWidget(_SharedRemovableFileItemWidget):
@@ -126,67 +165,84 @@ class _COAnalysisFileItemWidget(_SharedRemovableFileItemWidget):
         )
 
 
-def _extract_course_metadata_signature(path: Path) -> tuple[str, ...] | None:
-    try:
-        import openpyxl
-    except Exception:
-        return None
-    try:
-        workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except Exception:
-        return None
-    try:
-        if COURSE_METADATA_SHEET not in workbook.sheetnames:
-            return None
-        sheet = workbook[COURSE_METADATA_SHEET]
-        field_header = normalize(sheet.cell(row=1, column=1).value)
-        value_header = normalize(sheet.cell(row=1, column=2).value)
-        expected_field = normalize(COURSE_METADATA_HEADERS[0])
-        expected_value = normalize(COURSE_METADATA_HEADERS[1])
-        if field_header != expected_field or value_header != expected_value:
-            return None
-        metadata: dict[str, str] = {}
-        row = 2
-        while True:
-            field_raw = sheet.cell(row=row, column=1).value
-            value_raw = sheet.cell(row=row, column=2).value
-            if normalize(field_raw) == "" and normalize(value_raw) == "":
-                break
-            field_key = normalize(field_raw)
-            if field_key:
-                value_text = str(value_raw).strip() if value_raw is not None else ""
-                metadata[field_key] = value_text
-            row += 1
-        signature = tuple(
-            metadata.get(normalize(field_name), "").strip()
-            for field_name in _COURSE_METADATA_DUPLICATE_FIELDS
-        )
-        if any(part for part in signature):
-            return signature
-        return None
-    finally:
-        workbook.close()
+def _validate_co_analysis_namespaces() -> None:
+    require_keys(
+        _collect_files_namespace(),
+        keys=(
+            "_validate_uploaded_source_workbook",
+            "t",
+            "show_toast",
+            "log_process_message",
+            "build_i18n_log_message",
+            "JobCancelledError",
+        ),
+        context="co_analysis.collect_files",
+    )
+    require_keys(
+        _generate_workbook_namespace(),
+        keys=(
+            "QFileDialog",
+            "APP_NAME",
+            "t",
+            "resolve_dialog_start_path",
+            "_path_key",
+            "_extract_course_metadata_and_students",
+            "_sanitize_filename_token",
+            "log_process_message",
+            "build_i18n_log_message",
+            "show_toast",
+            "normalize",
+            "COURSE_METADATA_COURSE_CODE_KEY",
+            "COURSE_METADATA_ACADEMIC_YEAR_KEY",
+            "JobCancelledError",
+        ),
+        context="co_analysis.generate_workbook",
+    )
+    require_keys(
+        _file_actions_namespace(),
+        keys=(
+            "_path_key",
+            "user_role",
+            "log_process_message",
+            "build_i18n_log_message",
+            "t",
+        ),
+        context="co_analysis.file_actions",
+    )
 
 
 class COAnalysisModule(QWidget):
     status_changed = Signal(str)
+    OUTPUT_LINK_OPEN_FAILED_KEY = "instructor.links.open_failed"
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
     _CO_ATTAINMENT_TARGET_VALIDATION_KEY = "coordinator.co_attainment.invalid_percent"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        workflow_service: CoAnalysisWorkflowService | None = None,
+        async_runner: AsyncOperationRunner | None = None,
+    ) -> None:
         super().__init__()
+        _validate_co_analysis_namespaces()
         self._files: list[Path] = []
+        self._downloaded_outputs: list[Path] = []
         self._logger = _logger
         self.state = COAnalysisWorkflowState()
+        self._workflow_service = workflow_service or CoAnalysisWorkflowService()
+        self._cancel_token: CancellationToken | None = None
+        self._active_jobs: list[object] = []
+        self._pending_drop_batches: list[list[str]] = []
         self._ui_log_handler: UILogHandler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._threshold_violation_active = False
-        self._workflow_controller = CoordinatorWorkflowController(self)
+        self._workflow_controller = COAnalysisWorkflowController(self)
+        self._async_runner = async_runner or AsyncOperationRunner(self, run_async=run_in_background)
         self._runtime = ModuleRuntime(
             module=self,
             app_name=APP_NAME,
             logger=self._logger,
-            async_runner=_NoopAsyncRunner(),
+            async_runner=self._async_runner,
             messages_namespace_factory=_messages_namespace,
         )
         self._build_ui()
@@ -394,10 +450,8 @@ class COAnalysisModule(QWidget):
         self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.drop_widget.drop_list.setObjectName("coordinatorDropList")
         self.drop_widget.files_dropped.connect(self._on_files_dropped)
-        self.drop_widget.files_rejected.connect(self._on_drop_files_rejected)
-        self.drop_widget.browse_requested.connect(self._on_drop_browse_requested)
+        self.drop_widget.drop_list.items_reordered.connect(self._on_drop_list_reordered)
         self.drop_widget.browse_requested.connect(self._browse_files)
-        self.drop_widget.files_changed.connect(self._on_drop_files_changed)
         self.drop_widget.clear_button.clicked.connect(self._clear_all)
         self.drop_widget.submit_requested.connect(self._on_submit_requested)
         self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
@@ -444,24 +498,59 @@ class COAnalysisModule(QWidget):
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
         self._runtime.publish_status_key(text_key, **kwargs)
 
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
+        self.state.set_busy(busy, job_id=job_id)
+        self._refresh_ui()
+
+    def _start_async_operation(
+        self,
+        *,
+        token: CancellationToken,
+        job_id: str | None,
+        work,
+        on_success,
+        on_failure,
+        on_finally=None,
+    ) -> None:
+        self._runtime.set_async_runner(self._async_runner)
+        self._runtime.start_async_operation(
+            token=token,
+            job_id=job_id,
+            work=work,
+            on_success=on_success,
+            on_failure=on_failure,
+            on_finally=on_finally,
+        )
+
+    def _drain_next_batch(self) -> None:
+        if self.state.busy or not self._pending_drop_batches:
+            return
+        next_batch = self._pending_drop_batches.pop(0)
+        self._collect_valid_files(next_batch)
+
     def _refresh_ui(self) -> None:
         has_files = bool(self._files)
-        can_submit = has_files and self._has_valid_attainment_thresholds() and self._has_valid_co_attainment_target()
-        self.drop_widget.setEnabled(True)
+        can_submit = (
+            has_files
+            and self._has_valid_attainment_thresholds()
+            and self._has_valid_co_attainment_target()
+            and (not self.state.busy)
+        )
+        self.drop_widget.setEnabled(not self.state.busy)
         self.drop_widget.set_submit_allowed(can_submit)
-        self.threshold_l1_input.setEnabled(True)
-        self.threshold_l2_input.setEnabled(True)
-        self.threshold_l3_input.setEnabled(True)
-        self.co_attainment_percent_input.setEnabled(True)
-        self.co_attainment_level_input.setEnabled(True)
-        self.drop_list.setEnabled(True)
-        self.clear_button.setEnabled(has_files)
+        self.threshold_l1_input.setEnabled(not self.state.busy)
+        self.threshold_l2_input.setEnabled(not self.state.busy)
+        self.threshold_l3_input.setEnabled(not self.state.busy)
+        self.co_attainment_percent_input.setEnabled(not self.state.busy)
+        self.co_attainment_level_input.setEnabled(not self.state.busy)
+        self.drop_list.setEnabled(not self.state.busy)
+        self.clear_button.setEnabled(has_files and (not self.state.busy))
         self.calculate_button.setEnabled(can_submit)
         for row in range(self.drop_list.count()):
             item = self.drop_list.item(row)
             widget = self.drop_list.itemWidget(item)
             if isinstance(widget, _COAnalysisFileItemWidget):
-                widget.remove_btn.setEnabled(True)
+                widget.remove_btn.setEnabled(not self.state.busy)
         self._refresh_summary()
 
     def _read_attainment_thresholds(self) -> tuple[float, float, float]:
@@ -480,11 +569,12 @@ class COAnalysisModule(QWidget):
         self._workflow_controller.notify_threshold_violation(force=force)
 
     def _show_threshold_validation_toast(self, *, message_key: str) -> None:
-        show_toast(
+        show_threshold_validation_toast(
             self,
-            t(message_key),
-            title=t("coordinator.title"),
-            level="error",
+            message_key=message_key,
+            title_key="coordinator.title",
+            toast_fn=show_toast,
+            translate=t,
         )
 
     def _on_threshold_value_changed(self, _value: float) -> None:
@@ -496,25 +586,31 @@ class COAnalysisModule(QWidget):
         self._refresh_ui()
 
     def _on_submit_requested(self) -> None:
-        # UI-only action requested by product; no processing logic is attached.
-        return
+        self._save_final_workbook()
 
-    def _on_drop_browse_requested(self) -> None:
-        self._publish_status_key("instructor.status.step2_drop_browse_requested")
+    def _save_final_workbook(self) -> None:
+        save_workbook_async(self, ns=_generate_workbook_namespace())
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
-        self._publish_status_key("instructor.status.step2_drop_files_dropped", count=len(dropped_files))
         if dropped_files:
             self._remember_dialog_dir_safe(dropped_files[0])
         self._collect_valid_files(dropped_files)
 
-    def _on_drop_files_rejected(self, files: list[str]) -> None:
-        self._publish_status_key("instructor.status.step2_drop_files_rejected", count=len(files))
-
-    def _on_drop_files_changed(self, files: list[str]) -> None:
-        self._publish_status_key("instructor.status.step2_drop_files_changed", count=len(files))
+    def _on_drop_list_reordered(self, ordered_paths: list[str]) -> None:
+        key_to_path = {_path_key(path): path for path in self._files}
+        reordered: list[Path] = []
+        for raw_path in ordered_paths:
+            key = _path_key(Path(raw_path))
+            matched = key_to_path.get(key)
+            if matched is not None:
+                reordered.append(matched)
+        if len(reordered) == len(self._files):
+            self._files = reordered
+            self._refresh_summary()
 
     def _browse_files(self) -> None:
+        if self.state.busy:
+            return
         selected_files, _ = QFileDialog.getOpenFileNames(
             self,
             t("instructor.dialog.step2.upload.title"),
@@ -545,93 +641,14 @@ class COAnalysisModule(QWidget):
         # CO Analysis maintains file state externally, so force the visual state from module state.
         self.drop_widget.summary_label.setEnabled(count > 0)
 
-    def _collect_valid_files(self, candidate_paths: list[str]) -> None:
-        if not candidate_paths:
-            return
-        self._publish_status_key("coordinator.status.processing_started")
-        existing_keys = {_path_key(path) for path in self._files}
-        seen_metadata_signatures = {
-            signature
-            for signature in (_extract_course_metadata_signature(path) for path in self._files)
-            if signature is not None
-        }
-        added_paths: list[Path] = []
-        duplicates = 0
-        invalid = 0
-        validated_candidates: list[tuple[Path, str, tuple[str, ...] | None]] = []
-        for raw_path in candidate_paths:
-            path = Path(raw_path)
-            suffix = path.suffix.lower()
-            if suffix not in _SUPPORTED_EXTENSIONS or not path.exists():
-                invalid += 1
-                continue
-            key = _path_key(path)
-            try:
-                validate_uploaded_filled_marks_workbook(path)
-            except Exception as exc:
-                invalid += 1
-                self._logger.info("Rejected invalid marks template workbook '%s': %s", path, exc)
-                continue
-            metadata_signature = _extract_course_metadata_signature(path)
-            validated_candidates.append((path, key, metadata_signature))
-
-        path_counts: dict[str, int] = {}
-        metadata_counts: dict[tuple[str, ...], int] = {}
-        for _path, key, metadata_signature in validated_candidates:
-            path_counts[key] = path_counts.get(key, 0) + 1
-            if metadata_signature is not None:
-                metadata_counts[metadata_signature] = metadata_counts.get(metadata_signature, 0) + 1
-
-        for path, key, metadata_signature in validated_candidates:
-            is_duplicate = False
-            if key in existing_keys:
-                is_duplicate = True
-            elif metadata_signature is not None and metadata_signature in seen_metadata_signatures:
-                is_duplicate = True
-            elif path_counts.get(key, 0) > 1:
-                is_duplicate = True
-            elif metadata_signature is not None and metadata_counts.get(metadata_signature, 0) > 1:
-                is_duplicate = True
-
-            if is_duplicate:
-                duplicates += 1
-                continue
-            added_paths.append(path)
-
-        self._add_uploaded_paths(added_paths)
-        if added_paths:
-            self._publish_status_key(
-                "coordinator.status.added",
-                added=len(added_paths),
-                total=len(self._files),
-            )
-        if duplicates or invalid:
-            show_toast(
-                self,
-                t(
-                    "instructor.toast.step2_upload_reject_summary",
-                    invalid=invalid,
-                    duplicates=duplicates,
-                ),
-                title=t("instructor.step2.title"),
-                level="warning",
-            )
-        ignored = duplicates + invalid
-        if ignored:
-            self._publish_status_key("coordinator.status.ignored", count=ignored)
-        log_process_message(
-            "collecting co analysis files",
-            logger=self._logger,
-            success_message=(
-                "collecting co analysis files completed successfully. "
-                f"added={len(added_paths)}, duplicates={duplicates}, invalid={invalid}"
-            ),
-            user_success_message=build_i18n_log_message(
-                "coordinator.status.processing_completed",
-                fallback=t("coordinator.status.processing_completed"),
-            ),
+    def _output_items(self) -> tuple[OutputItem, ...]:
+        return tuple(
+            OutputItem(label_key="coordinator.links.downloaded_output", path=str(path))
+            for path in self._downloaded_outputs
         )
-        self._refresh_ui()
+
+    def _collect_valid_files(self, candidate_paths: list[str]) -> None:
+        collect_files_async(self, candidate_paths, ns=_collect_files_namespace())
 
     def _new_file_item_widget(
         self,
@@ -657,61 +674,24 @@ class COAnalysisModule(QWidget):
             self.drop_list.setItemWidget(item, row_widget)
 
     def _remove_file_by_path(self, file_path: str) -> None:
-        target_key = _path_key(Path(file_path))
-        before_count = len(self._files)
-        self._files = [path for path in self._files if _path_key(path) != target_key]
-        if len(self._files) == before_count:
-            return
-        for row in range(self.drop_list.count()):
-            item = self.drop_list.item(row)
-            path_value = str(item.data(Qt.ItemDataRole.UserRole) or "")
-            if _path_key(Path(path_value)) == target_key:
-                self.drop_list.takeItem(row)
-                break
-        self._refresh_ui()
-        self._publish_status_key("coordinator.status.removed", count=1)
-        log_process_message(
-            "removing selected co analysis files",
-            logger=self._logger,
-            success_message="removing selected co analysis files completed successfully. removed=1",
-            user_success_message=build_i18n_log_message(
-                "coordinator.status.removed",
-                kwargs={"count": 1},
-                fallback=t("coordinator.status.removed", count=1),
-            ),
-        )
+        remove_file_by_path(self, file_path, ns=_file_actions_namespace())
 
     def _clear_all(self) -> None:
-        if not self._files:
-            return
-        total = len(self._files)
-        self._files.clear()
-        self.drop_list.clear()
-        self._refresh_ui()
-        self._publish_status_key("coordinator.status.cleared", count=total)
-        log_process_message(
-            "clearing co analysis files",
-            logger=self._logger,
-            success_message=f"clearing co analysis files completed successfully. removed={total}",
-            user_success_message=build_i18n_log_message(
-                "coordinator.status.cleared",
-                kwargs={"count": total},
-                fallback=t("coordinator.status.cleared", count=total),
-            ),
-        )
+        clear_all(self, ns=_file_actions_namespace())
 
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
         self._ui_engine.set_footer_visible(False)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
-        return OutputPanelData(items=tuple())
+        return OutputPanelData(items=self._output_items(), open_failed_key=self.OUTPUT_LINK_OPEN_FAILED_KEY)
 
     def closeEvent(self, event) -> None:
+        if self._cancel_token is not None:
+            self._cancel_token.cancel()
+            self._cancel_token = None
+        self._active_jobs.clear()
         if self._ui_log_handler is not None:
             self._logger.removeHandler(self._ui_log_handler)
             self._ui_log_handler = None
         super().closeEvent(event)
-class _NoopAsyncRunner:
-    def start(self, **_kwargs: object) -> None:
-        return
 

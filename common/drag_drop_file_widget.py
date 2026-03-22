@@ -38,6 +38,7 @@ from common.ui_stylings import (
 
 class DragDropFileList(QListWidget):
     files_dropped = Signal(list)
+    items_reordered = Signal(list)
     drag_state_changed = Signal(bool)
     browse_requested = Signal()
     DEFAULT_PLACEHOLDER_TEXT = "Drag and Drop, or press Ctrl + O, or single-click to add files"
@@ -56,7 +57,13 @@ class DragDropFileList(QListWidget):
         self._placeholder_bottom_margins = placeholder_bottom_margins
         self._drop_mode: Literal["single", "multiple"] = drop_mode
         self.setAcceptDrops(True)
-        self.setDragEnabled(False)
+        self.setDragEnabled(drop_mode == "multiple")
+        if drop_mode == "multiple":
+            self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+            self.setDefaultDropAction(Qt.DropAction.MoveAction)
+            self.setDragDropOverwriteMode(False)
+        else:
+            self.setDragDropMode(QListWidget.DragDropMode.NoDragDrop)
         self.setDropIndicatorShown(False)
         self.setSpacing(item_spacing)
         self.setAlternatingRowColors(False)
@@ -95,6 +102,11 @@ class DragDropFileList(QListWidget):
         painter.end()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        event_source = getattr(event, "source", None)
+        source = event_source() if callable(event_source) else None
+        if self._drop_mode == "multiple" and source is self:
+            event.acceptProposedAction()
+            return
         if event.mimeData().hasUrls():
             self.drag_state_changed.emit(True)
             event.acceptProposedAction()
@@ -102,6 +114,11 @@ class DragDropFileList(QListWidget):
         event.ignore()
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        event_source = getattr(event, "source", None)
+        source = event_source() if callable(event_source) else None
+        if self._drop_mode == "multiple" and source is self:
+            event.acceptProposedAction()
+            return
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             return
@@ -112,6 +129,13 @@ class DragDropFileList(QListWidget):
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event: QDropEvent) -> None:
+        event_source = getattr(event, "source", None)
+        source = event_source() if callable(event_source) else None
+        if self._drop_mode == "multiple" and source is self:
+            super().dropEvent(event)
+            event.acceptProposedAction()
+            self.items_reordered.emit(self._ordered_item_paths())
+            return
         urls = event.mimeData().urls()
         dropped = [url.toLocalFile() for url in urls if url.isLocalFile()]
         if self._drop_mode == "single" and dropped:
@@ -122,6 +146,17 @@ class DragDropFileList(QListWidget):
             event.acceptProposedAction()
             return
         event.ignore()
+
+    def _ordered_item_paths(self) -> list[str]:
+        ordered: list[str] = []
+        for row in range(self.count()):
+            item = self.item(row)
+            if item is None:
+                continue
+            value = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(value, str) and value:
+                ordered.append(value)
+        return ordered
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
@@ -201,6 +236,7 @@ class ManagedDropFileWidget(QWidget):
         )
         self.drop_list.drag_state_changed.connect(self.drop_zone.set_drag_active)
         self.drop_list.files_dropped.connect(self._on_files_dropped)
+        self.drop_list.items_reordered.connect(self._on_items_reordered)
         self.drop_list.browse_requested.connect(self.browse_requested.emit)
         self.drop_list.setCursor(Qt.CursorShape.PointingHandCursor)
         zone_layout.addWidget(self.drop_list)
@@ -381,6 +417,16 @@ class ManagedDropFileWidget(QWidget):
 
     def _on_files_dropped(self, paths: list[str]) -> None:
         self.add_files(paths, emit_drop=True)
+
+    def _on_items_reordered(self, ordered_paths: list[str]) -> None:
+        if self._drop_mode != "multiple":
+            return
+        if self._files:
+            existing = set(self._files)
+            reordered = [path for path in ordered_paths if path in existing]
+            if len(reordered) == len(self._files):
+                self._files = reordered
+        self.files_changed.emit(list(ordered_paths))
 
     @staticmethod
     def _normalize_extensions(values: Iterable[str] | None) -> set[str] | None:

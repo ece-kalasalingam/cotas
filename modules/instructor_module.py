@@ -694,11 +694,14 @@ class InstructorModule(QWidget):
             current_keys = {str(Path(path).resolve(strict=False)).lower() for path in current_valid}
             incoming_keys = {str(Path(path).resolve(strict=False)).lower() for path in files}
             if incoming_keys.issubset(current_keys):
-                incoming_set = incoming_keys
-                self.step1_course_details_paths = [
-                    path
+                key_to_existing = {
+                    str(Path(path).resolve(strict=False)).lower(): path
                     for path in self.step1_course_details_paths
-                    if str(Path(path).resolve(strict=False)).lower() in incoming_set
+                }
+                self.step1_course_details_paths = [
+                    key_to_existing[key]
+                    for key in [str(Path(path).resolve(strict=False)).lower() for path in files]
+                    if key in key_to_existing
                 ]
                 self.step2_course_details_path = (
                     self.step1_course_details_paths[0] if self.step1_course_details_paths else None
@@ -779,11 +782,14 @@ class InstructorModule(QWidget):
             current_keys = {str(Path(path).resolve(strict=False)).lower() for path in current_valid}
             incoming_keys = {str(Path(path).resolve(strict=False)).lower() for path in files}
             if incoming_keys.issubset(current_keys):
-                incoming_set = incoming_keys
-                self.filled_marks_paths = [
-                    path
+                key_to_existing = {
+                    str(Path(path).resolve(strict=False)).lower(): path
                     for path in self.filled_marks_paths
-                    if str(Path(path).resolve(strict=False)).lower() in incoming_set
+                }
+                self.filled_marks_paths = [
+                    key_to_existing[key]
+                    for key in [str(Path(path).resolve(strict=False)).lower() for path in files]
+                    if key in key_to_existing
                 ]
                 self.filled_marks_path = self.filled_marks_paths[0] if self.filled_marks_paths else None
                 self.filled_marks_done = bool(self.filled_marks_paths)

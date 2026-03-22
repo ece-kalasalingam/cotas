@@ -478,6 +478,7 @@ class CoordinatorModule(QWidget):
         self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.drop_widget.drop_list.setObjectName("coordinatorDropList")
         self.drop_widget.files_dropped.connect(self._on_files_dropped)
+        self.drop_widget.drop_list.items_reordered.connect(self._on_drop_list_reordered)
         self.drop_widget.browse_requested.connect(self._browse_files)
         self.drop_widget.clear_button.clicked.connect(self._clear_all)
         self.drop_widget.submit_requested.connect(self._on_calculate_clicked)
@@ -652,6 +653,18 @@ class CoordinatorModule(QWidget):
         if first_path:
             self._remember_dialog_dir_safe(first_path)
         self._process_files_async(dropped_files)
+
+    def _on_drop_list_reordered(self, ordered_paths: list[str]) -> None:
+        key_to_path = {_path_key(path): path for path in self._files}
+        reordered: list[Path] = []
+        for raw_path in ordered_paths:
+            key = _path_key(Path(raw_path))
+            matched = key_to_path.get(key)
+            if matched is not None:
+                reordered.append(matched)
+        if len(reordered) == len(self._files):
+            self._files = reordered
+            self._refresh_summary()
 
     def _browse_files(self) -> None:
         if self.state.busy:
