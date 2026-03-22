@@ -75,6 +75,7 @@ from modules.co_analysis.messages import show_threshold_validation_toast
 from modules.co_analysis.steps.collect_files import collect_files_async
 from modules.co_analysis.steps.generate_workbook import save_workbook_async
 from modules.co_analysis.validators.uploaded_workbook_validator import (
+    consume_last_source_anomaly_warnings,
     validate_uploaded_source_workbook,
 )
 from modules.co_analysis.workflow_controller import COAnalysisWorkflowController
@@ -108,6 +109,7 @@ def _messages_namespace() -> dict[str, object]:
 def _collect_files_namespace() -> dict[str, object]:
     return {
         "_validate_uploaded_source_workbook": validate_uploaded_source_workbook,
+        "_consume_last_source_anomaly_warnings": consume_last_source_anomaly_warnings,
         "t": t,
         "show_toast": show_toast,
         "log_process_message": log_process_message,
@@ -170,6 +172,7 @@ def _validate_co_analysis_namespaces() -> None:
         _collect_files_namespace(),
         keys=(
             "_validate_uploaded_source_workbook",
+            "_consume_last_source_anomaly_warnings",
             "t",
             "show_toast",
             "log_process_message",

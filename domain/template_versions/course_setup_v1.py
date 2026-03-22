@@ -721,7 +721,9 @@ def _validate_non_empty_marks_entries(
                         "instructor.validation.step2.mark_entry_empty",
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
-                    )
+                    ),
+                    code="COA_MARK_ENTRY_EMPTY",
+                    context={"sheet_name": sheet_name, "cell": cell.coordinate},
                 )
             if token == "a":
                 has_absent = True
@@ -738,7 +740,15 @@ def _validate_non_empty_marks_entries(
                         value=cell_value,
                         minimum=minimum,
                         maximum=maximum_by_col[col],
-                    )
+                    ),
+                    code="COA_MARK_VALUE_INVALID",
+                    context={
+                        "sheet_name": sheet_name,
+                        "cell": cell.coordinate,
+                        "value": cell_value,
+                        "minimum": minimum,
+                        "maximum": maximum_by_col[col],
+                    },
                 )
             if not _has_allowed_decimal_precision(float(numeric_value)):
                 raise ValidationError(
@@ -748,7 +758,14 @@ def _validate_non_empty_marks_entries(
                         cell=cell.coordinate,
                         value=cell_value,
                         decimals=_MAX_DECIMAL_PLACES,
-                    )
+                    ),
+                    code="COA_MARK_PRECISION_INVALID",
+                    context={
+                        "sheet_name": sheet_name,
+                        "cell": cell.coordinate,
+                        "value": cell_value,
+                        "decimals": _MAX_DECIMAL_PLACES,
+                    },
                 )
             if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT and not _is_integer_value(float(numeric_value)):
                 raise ValidationError(
@@ -757,7 +774,13 @@ def _validate_non_empty_marks_entries(
                         sheet_name=sheet_name,
                         cell=cell.coordinate,
                         value=cell_value,
-                    )
+                    ),
+                    code="COA_INDIRECT_MARK_INTEGER_REQUIRED",
+                    context={
+                        "sheet_name": sheet_name,
+                        "cell": cell.coordinate,
+                        "value": cell_value,
+                    },
                 )
             maximum = maximum_by_col[col]
             numeric_float = float(numeric_value)
@@ -770,7 +793,15 @@ def _validate_non_empty_marks_entries(
                         value=cell_value,
                         minimum=minimum,
                         maximum=maximum,
-                    )
+                    ),
+                    code="COA_MARK_VALUE_INVALID",
+                    context={
+                        "sheet_name": sheet_name,
+                        "cell": cell.coordinate,
+                        "value": cell_value,
+                        "minimum": minimum,
+                        "maximum": maximum,
+                    },
                 )
             numeric_count_by_col[col] += 1
             frequency_by_value = frequency_by_value_by_col[col]
@@ -871,7 +902,13 @@ def _validate_absence_policy_for_row(
                 sheet_name=sheet_name,
                 row=row,
                 range=f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
-            )
+            ),
+            code="COA_ABSENCE_POLICY_VIOLATION",
+            context={
+                "sheet_name": sheet_name,
+                "row": row,
+                "range": f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:{worksheet.cell(row=row, column=mark_cols.stop - 1).coordinate}",
+            },
         )
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         return

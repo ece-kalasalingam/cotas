@@ -2,14 +2,184 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any, Callable
 
-from modules.instructor.validators.step2_filled_marks_validator import (
-    validate_uploaded_filled_marks_workbook,
+from common.constants import (
+    ID_COURSE_SETUP,
+    SYSTEM_HASH_SHEET,
+    SYSTEM_HASH_TEMPLATE_HASH_KEY,
+    SYSTEM_HASH_TEMPLATE_ID_KEY,
+    SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+    SYSTEM_LAYOUT_MANIFEST_KEY,
+    SYSTEM_LAYOUT_SHEET,
 )
+from common.exceptions import ValidationError
+from common.texts import t
+from common.utils import normalize
+from common.workbook_signing import verify_payload_signature
+from domain.template_versions import course_setup_v1
+
+
+def source_manifest_validators() -> dict[str, Callable[[object, object], None]]:
+    return {
+        ID_COURSE_SETUP: course_setup_v1.validate_filled_marks_manifest_schema,
+    }
+
+
+def validate_source_manifest_schema_by_template(
+    workbook: object,
+    manifest: object,
+    *,
+    template_id: str,
+) -> None:
+    validator = source_manifest_validators().get(template_id)
+    if validator is None:
+        raise ValidationError(
+            t("instructor.validation.step2.template_validator_missing", template_id=template_id),
+            code="COA_TEMPLATE_VALIDATOR_MISSING",
+            context={"template_id": template_id},
+        )
+    validator(workbook, manifest)
 
 
 def validate_uploaded_source_workbook(workbook_path: str | Path) -> None:
-    # CO Analysis uses the same signed template-version rules as Instructor Step 2.
-    # Those rules are implemented via domain.template_versions.*
-    validate_uploaded_filled_marks_workbook(workbook_path)
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise ValidationError(
+            t("instructor.validation.openpyxl_missing"),
+            code="OPENPYXL_MISSING",
+        ) from exc
+
+    workbook_file = Path(workbook_path)
+    if not workbook_file.exists():
+        raise ValidationError(
+            t("instructor.validation.workbook_not_found", workbook=workbook_file),
+            code="WORKBOOK_NOT_FOUND",
+            context={"workbook": str(workbook_file)},
+        )
+
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False, read_only=True)
+    except Exception as exc:
+        raise ValidationError(
+            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
+            code="WORKBOOK_OPEN_FAILED",
+            context={"workbook": str(workbook_file)},
+        ) from exc
+    try:
+        template_id, manifest_text = _read_system_manifest_payload(workbook)
+    finally:
+        workbook.close()
+
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
+    except Exception as exc:
+        raise ValidationError(
+            t("instructor.validation.workbook_open_failed", workbook=workbook_file),
+            code="WORKBOOK_OPEN_FAILED",
+            context={"workbook": str(workbook_file)},
+        ) from exc
+    try:
+        try:
+            manifest = json.loads(manifest_text)
+        except Exception as exc:
+            raise ValidationError(
+                t("instructor.validation.step2.layout_manifest_json_invalid"),
+                code="COA_LAYOUT_MANIFEST_JSON_INVALID",
+            ) from exc
+        validate_source_manifest_schema_by_template(workbook, manifest, template_id=template_id)
+    finally:
+        workbook.close()
+
+
+def consume_last_source_anomaly_warnings() -> list[str]:
+    return course_setup_v1.consume_last_marks_anomaly_warnings()
+
+
+def _read_system_manifest_payload(workbook: Any) -> tuple[str, str]:
+    if SYSTEM_HASH_SHEET not in workbook.sheetnames:
+        raise ValidationError(
+            t("instructor.validation.system_sheet_missing", sheet=SYSTEM_HASH_SHEET),
+            code="COA_SYSTEM_SHEET_MISSING",
+            context={"sheet": SYSTEM_HASH_SHEET},
+        )
+
+    hash_sheet = workbook[SYSTEM_HASH_SHEET]
+    if normalize(hash_sheet["A1"].value) != normalize(SYSTEM_HASH_TEMPLATE_ID_KEY):
+        raise ValidationError(
+            t("instructor.validation.system_hash_missing_template_id_header"),
+            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_ID_MISSING",
+        )
+    if normalize(hash_sheet["B1"].value) != normalize(SYSTEM_HASH_TEMPLATE_HASH_KEY):
+        raise ValidationError(
+            t("instructor.validation.system_hash_missing_template_hash_header"),
+            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_HASH_MISSING",
+        )
+
+    template_id = str(hash_sheet["A2"].value).strip() if hash_sheet["A2"].value is not None else ""
+    template_hash = str(hash_sheet["B2"].value).strip() if hash_sheet["B2"].value is not None else ""
+    if not template_id:
+        raise ValidationError(
+            t("instructor.validation.system_hash_template_id_missing"),
+            code="COA_SYSTEM_HASH_TEMPLATE_ID_MISSING",
+        )
+    if not verify_payload_signature(template_id, template_hash):
+        raise ValidationError(
+            t("instructor.validation.system_hash_mismatch"),
+            code="COA_SYSTEM_HASH_MISMATCH",
+        )
+    if normalize(template_id) != normalize(ID_COURSE_SETUP):
+        raise ValidationError(
+            t(
+                "instructor.validation.unknown_template",
+                template_id=template_id,
+                available=ID_COURSE_SETUP,
+            ),
+            code="UNKNOWN_TEMPLATE",
+            context={"template_id": template_id, "available": ID_COURSE_SETUP},
+        )
+
+    if SYSTEM_LAYOUT_SHEET not in workbook.sheetnames:
+        raise ValidationError(
+            t("instructor.validation.step2.layout_sheet_missing", sheet=SYSTEM_LAYOUT_SHEET),
+            code="COA_LAYOUT_SHEET_MISSING",
+            context={"sheet": SYSTEM_LAYOUT_SHEET},
+        )
+    layout_sheet = workbook[SYSTEM_LAYOUT_SHEET]
+    if normalize(layout_sheet["A1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_KEY):
+        raise ValidationError(
+            t(
+                "instructor.validation.step2.layout_header_mismatch",
+                column="A1",
+                expected=SYSTEM_LAYOUT_MANIFEST_KEY,
+            ),
+            code="COA_LAYOUT_HEADER_MISMATCH",
+            context={"column": "A1", "expected": SYSTEM_LAYOUT_MANIFEST_KEY},
+        )
+    if normalize(layout_sheet["B1"].value) != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_KEY):
+        raise ValidationError(
+            t(
+                "instructor.validation.step2.layout_header_mismatch",
+                column="B1",
+                expected=SYSTEM_LAYOUT_MANIFEST_HASH_KEY,
+            ),
+            code="COA_LAYOUT_HEADER_MISMATCH",
+            context={"column": "B1", "expected": SYSTEM_LAYOUT_MANIFEST_HASH_KEY},
+        )
+
+    manifest_text = str(layout_sheet["A2"].value).strip() if layout_sheet["A2"].value is not None else ""
+    manifest_hash = str(layout_sheet["B2"].value).strip() if layout_sheet["B2"].value is not None else ""
+    if not manifest_text or not manifest_hash:
+        raise ValidationError(
+            t("instructor.validation.step2.layout_manifest_missing"),
+            code="COA_LAYOUT_MANIFEST_MISSING",
+        )
+    if not verify_payload_signature(manifest_text, manifest_hash):
+        raise ValidationError(
+            t("instructor.validation.step2.layout_hash_mismatch"),
+            code="COA_LAYOUT_HASH_MISMATCH",
+        )
+    return template_id, manifest_text

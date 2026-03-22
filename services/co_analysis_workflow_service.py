@@ -47,6 +47,7 @@ class CoAnalysisWorkflowService(WorkflowServiceBase):
         *,
         existing_paths: list[str],
         validate_uploaded_source_workbook,
+        consume_last_source_anomaly_warnings,
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> dict[str, object]:
@@ -58,6 +59,7 @@ class CoAnalysisWorkflowService(WorkflowServiceBase):
                 candidate_paths,
                 existing_paths=existing_paths,
                 validate_uploaded_source_workbook=validate_uploaded_source_workbook,
+                consume_last_source_anomaly_warnings=consume_last_source_anomaly_warnings,
                 token=effective_cancel_token,
             ),
         )
@@ -80,4 +82,3 @@ class CoAnalysisWorkflowService(WorkflowServiceBase):
                 token=effective_cancel_token,
             ),
         )
-

@@ -262,6 +262,44 @@ TEXTS = {
     'coordinator.regno_dedup.log_detail': 'రెగ్ నంబర్: {reg_no} | వర్క్\u200cషీట్: {worksheet} | వర్క్\u200cబుక్: {workbook}',
     'coordinator.regno_dedup.log_detail_unavailable': 'డూప్లికేట్ ఎంట్రీ వివరాలు అందుబాటులో లేవు.',
     'coordinator.join_drop.body': 'కొన్ని వరుసలు Direct లేదా Indirect షీట్లలో మాత్రమే ఉన్నందున అవి పరిగణించబడలేదు. తొలగించిన వరుసలు: {count}. వివరాల కోసం కార్యాచరణ లాగ్ చూడండి.',
+    'co_analysis.status.duplicate_reg_numbers': 'డూప్లికేట్ రిజిస్టర్ నంబర్ల కారణంగా {count} ఫైల్(లు) తిరస్కరించబడ్డాయి.',
+    'co_analysis.status.co_count_mismatch': 'మొత్తం ఫలితాల సంఖ్య సరిపోలకపోవడంతో {count} ఫైల్(లు) తిరస్కరించబడ్డాయి.',
+    'co_analysis.status.validation_warnings': '{count} ధృవీకరణ హెచ్చరిక(లు) నివేదించబడ్డాయి.',
+    'co_analysis.status.rejected_code_with_context': '{file} తిరస్కరించబడింది: {code} ({context})',
+    'co_analysis.validation.co_count_mismatch_body': 'ఎంచుకున్న బ్యాచ్‌తో మొత్తం ఫలితాల సంఖ్య భిన్నంగా ఉండటంతో {count} ఫైల్(లు) తిరస్కరించబడ్డాయి.',
+    'co_analysis.validation.anomaly_warnings_body': 'అప్‌లోడ్ చేసిన ఫైల్‌లలో {count} ధృవీకరణ అసాధారణ హెచ్చరిక(లు) నివేదించబడ్డాయి.',
+    'co_analysis.validation.rejection_breakdown_title': 'CO Analysis ఫైల్ తిరస్కరణలు',
+    'co_analysis.validation.rejection_breakdown_body': (
+        'కారణాల వారీగా తిరస్కరించిన ఫైల్‌లు:\\n'
+        'మద్దతు లేని/లేని ఫైళ్లు: {unsupported_or_missing}\\n'
+        'చెల్లని వర్క్‌బుక్: {invalid_workbook}\\n'
+        'సిస్టమ్ హాష్/గుర్తింపు వైఫల్యాలు: {invalid_hash}\\n'
+        'మార్కులు నింపలేదు: {marks_unfilled}\\n'
+        'లేఅవుట్/మానిఫెస్ట్ వైఫల్యాలు: {layout_manifest}\\n'
+        'టెంప్లేట్ సరిపోలిక లేదు: {template_mismatch}\\n'
+        'చెల్లని మార్క్ విలువ/ఫార్మాట్: {mark_value}\\n'
+        'ఇతర ధృవీకరణ వైఫల్యాలు: {invalid_other}\\n'
+        'నకిలీలు: {duplicates}\\n'
+        'నకిలీ రిజిస్టర్ నంబర్లు: {duplicate_reg}\\n'
+        'మొత్తం ఫలితాల సంఖ్య సరిపోలలేదు: {co_count_mismatch}'
+    ),
+    'co_analysis.status.ignored_summary': (
+        '{count} ఫైల్(లు) పట్టించుకోలేదు. '
+        '{part1}{sep1_2}{part2}{sep2_3}{part3}{sep3_4}{part4}{sep4_5}{part5}{sep5_6}{part6}'
+        '{sep6_7}{part7}{sep7_8}{part8}{sep8_9}{part9}{sep9_10}{part10}{sep10_11}{part11}{sep11_12}{part12}'
+    ),
+    'co_analysis.status.ignored_total': '{count} ఫైల్(లు) పట్టించుకోలేదు.',
+    'co_analysis.status.ignored_reason.unsupported_or_missing': 'మద్దతు లేని/లేని ఫైళ్లు={count}',
+    'co_analysis.status.ignored_reason.invalid_workbook': 'చెల్లని వర్క్‌బుక్={count}',
+    'co_analysis.status.ignored_reason.invalid_hash': 'హాష్={count}',
+    'co_analysis.status.ignored_reason.marks_unfilled': 'మార్కులు నింపలేదు={count}',
+    'co_analysis.status.ignored_reason.layout_manifest': 'లేఅవుట్/మానిఫెస్ట్={count}',
+    'co_analysis.status.ignored_reason.template_mismatch': 'టెంప్లేట్ సరిపోలిక లేదు={count}',
+    'co_analysis.status.ignored_reason.mark_value': 'చెల్లని మార్క్ విలువ={count}',
+    'co_analysis.status.ignored_reason.invalid_other': 'ఇతర ధృవీకరణ={count}',
+    'co_analysis.status.ignored_reason.duplicates': 'నకిలీలు={count}',
+    'co_analysis.status.ignored_reason.duplicate_reg': 'నకిలీ రిజిస్టర్ నంబర్లు={count}',
+    'co_analysis.status.ignored_reason.co_count_mismatch': 'మొత్తం ఫలితాల సంఖ్య సరిపోలలేదు={count}',
 }
 
 

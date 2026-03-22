@@ -277,6 +277,44 @@ TEXTS = {
     "coordinator.regno_dedup.log_detail": "பதிவு எண்: {reg_no} | பணித்தாள்: {worksheet} | பணிப்புத்தகம்: {workbook}",
     "coordinator.regno_dedup.log_detail_unavailable": "நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.",
     "coordinator.join_drop.body": "சில வரிகள் Direct அல்லது Indirect தாள்களில் மட்டும் இருந்ததால் புறக்கணிக்கப்பட்டன. நீக்கப்பட்ட வரிகள்: {count}. விவரங்களுக்கு செயல் பதிவைப் பார்க்கவும்.",
+    "co_analysis.status.duplicate_reg_numbers": "நகல் பதிவு எண்கள் காரணமாக {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.",
+    "co_analysis.status.co_count_mismatch": "மொத்த விளைவு எண்ணிக்கை பொருந்தாததால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.",
+    "co_analysis.status.validation_warnings": "{count} சரிபார்ப்பு எச்சரிக்கை(கள்) அறிவிக்கப்பட்டன.",
+    "co_analysis.status.rejected_code_with_context": "{file} நிராகரிக்கப்பட்டது: {code} ({context})",
+    "co_analysis.validation.co_count_mismatch_body": "தேர்ந்தெடுத்த தொகுப்புடன் மொத்த விளைவு எண்ணிக்கை வேறுபட்டதால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.",
+    "co_analysis.validation.anomaly_warnings_body": "பதிவேற்றிய கோப்புகளில் {count} சரிபார்ப்பு அசாதாரண எச்சரிக்கை(கள்) அறிக்கையிடப்பட்டன.",
+    "co_analysis.validation.rejection_breakdown_title": "CO Analysis கோப்பு நிராகரிப்புகள்",
+    "co_analysis.validation.rejection_breakdown_body": (
+        "காரணப்படி நிராகரிக்கப்பட்ட கோப்புகள்:\\n"
+        "ஆதரிக்காதது/இல்லை: {unsupported_or_missing}\\n"
+        "தவறான பணிப்புத்தகம்: {invalid_workbook}\\n"
+        "சிஸ்டம் ஹாஷ்/அடையாள தோல்வி: {invalid_hash}\\n"
+        "நிரப்பப்படாத மதிப்பெண்கள்: {marks_unfilled}\\n"
+        "லேஅவுட்/மனிபெஸ்ட் தோல்வி: {layout_manifest}\\n"
+        "வார்ப்புரு பொருந்தாமை: {template_mismatch}\\n"
+        "தவறான மார்க் மதிப்பு/வடிவம்: {mark_value}\\n"
+        "பிற சரிபார்ப்பு தோல்விகள்: {invalid_other}\\n"
+        "நகல்கள்: {duplicates}\\n"
+        "நகல் பதிவு எண்கள்: {duplicate_reg}\\n"
+        "மொத்த விளைவு எண்ணிக்கை பொருந்தாமை: {co_count_mismatch}"
+    ),
+    "co_analysis.status.ignored_summary": (
+        "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன. "
+        "{part1}{sep1_2}{part2}{sep2_3}{part3}{sep3_4}{part4}{sep4_5}{part5}{sep5_6}{part6}"
+        "{sep6_7}{part7}{sep7_8}{part8}{sep8_9}{part9}{sep9_10}{part10}{sep10_11}{part11}{sep11_12}{part12}"
+    ),
+    "co_analysis.status.ignored_total": "{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன.",
+    "co_analysis.status.ignored_reason.unsupported_or_missing": "ஆதரிக்காதது/இல்லை={count}",
+    "co_analysis.status.ignored_reason.invalid_workbook": "தவறான பணிப்புத்தகம்={count}",
+    "co_analysis.status.ignored_reason.invalid_hash": "ஹாஷ்={count}",
+    "co_analysis.status.ignored_reason.marks_unfilled": "நிரப்பப்படாத மதிப்பெண்கள்={count}",
+    "co_analysis.status.ignored_reason.layout_manifest": "லேஅவுட்/மனிபெஸ்ட்={count}",
+    "co_analysis.status.ignored_reason.template_mismatch": "வார்ப்புரு பொருந்தாமை={count}",
+    "co_analysis.status.ignored_reason.mark_value": "தவறான மார்க் மதிப்பு={count}",
+    "co_analysis.status.ignored_reason.invalid_other": "பிற சரிபார்ப்பு={count}",
+    "co_analysis.status.ignored_reason.duplicates": "நகல்கள்={count}",
+    "co_analysis.status.ignored_reason.duplicate_reg": "நகல் பதிவு எண்கள்={count}",
+    "co_analysis.status.ignored_reason.co_count_mismatch": "மொத்த விளைவு எண்ணிக்கை பொருந்தாமை={count}",
 }
 
 

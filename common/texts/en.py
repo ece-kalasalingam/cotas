@@ -302,6 +302,48 @@ TEXTS = {
         "Some rows were ignored because they existed only in Direct or only in Indirect sheets. "
         "Dropped rows: {count}. See activity log for details."
     ),
+    "co_analysis.status.duplicate_reg_numbers": "{count} file(s) rejected due to duplicate register numbers.",
+    "co_analysis.status.co_count_mismatch": "{count} file(s) rejected due to Total Outcomes mismatch.",
+    "co_analysis.status.validation_warnings": "{count} validation warning(s) reported.",
+    "co_analysis.status.rejected_code_with_context": "Rejected {file}: {code} ({context})",
+    "co_analysis.validation.co_count_mismatch_body": (
+        "{count} file(s) were rejected because Total Outcomes differs from the selected batch."
+    ),
+    "co_analysis.validation.anomaly_warnings_body": (
+        "{count} validation anomaly warning(s) were reported in uploaded files."
+    ),
+    "co_analysis.validation.rejection_breakdown_title": "CO Analysis File Rejections",
+    "co_analysis.validation.rejection_breakdown_body": (
+        "Rejected files by reason:\n"
+        "Unsupported/Missing: {unsupported_or_missing}\n"
+        "Invalid Workbook: {invalid_workbook}\n"
+        "System Hash/Identity Failures: {invalid_hash}\n"
+        "Marks Unfilled: {marks_unfilled}\n"
+        "Layout/Manifest Failures: {layout_manifest}\n"
+        "Template Mismatch: {template_mismatch}\n"
+        "Invalid Mark Value/Format: {mark_value}\n"
+        "Other Validation Failures: {invalid_other}\n"
+        "Duplicates: {duplicates}\n"
+        "Duplicate Register Numbers: {duplicate_reg}\n"
+        "Total Outcomes Mismatch: {co_count_mismatch}"
+    ),
+    "co_analysis.status.ignored_summary": (
+        "{count} file(s) ignored. "
+        "{part1}{sep1_2}{part2}{sep2_3}{part3}{sep3_4}{part4}{sep4_5}{part5}{sep5_6}{part6}"
+        "{sep6_7}{part7}{sep7_8}{part8}{sep8_9}{part9}{sep9_10}{part10}{sep10_11}{part11}{sep11_12}{part12}"
+    ),
+    "co_analysis.status.ignored_total": "{count} file(s) ignored.",
+    "co_analysis.status.ignored_reason.unsupported_or_missing": "Unsupported/Missing={count}",
+    "co_analysis.status.ignored_reason.invalid_workbook": "Invalid Workbook={count}",
+    "co_analysis.status.ignored_reason.invalid_hash": "Hash={count}",
+    "co_analysis.status.ignored_reason.marks_unfilled": "Unfilled={count}",
+    "co_analysis.status.ignored_reason.layout_manifest": "Layout/Manifest={count}",
+    "co_analysis.status.ignored_reason.template_mismatch": "Template Mismatch={count}",
+    "co_analysis.status.ignored_reason.mark_value": "Mark Value={count}",
+    "co_analysis.status.ignored_reason.invalid_other": "Other Validation={count}",
+    "co_analysis.status.ignored_reason.duplicates": "Duplicates={count}",
+    "co_analysis.status.ignored_reason.duplicate_reg": "Duplicate Reg No={count}",
+    "co_analysis.status.ignored_reason.co_count_mismatch": "Total Outcomes Mismatch={count}",
 }
 
 

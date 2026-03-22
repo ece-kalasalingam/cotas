@@ -23,6 +23,7 @@ from common.constants import (
     SYSTEM_HASH_SHEET,
     SYSTEM_LAYOUT_SHEET,
 )
+from common.exceptions import ValidationError
 from common.jobs import CancellationToken
 from common.utils import coerce_excel_number, normalize
 from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
@@ -44,6 +45,12 @@ _ORDERED_METADATA_FIELDS: tuple[tuple[str, str], ...] = (
     (COURSE_METADATA_ACADEMIC_YEAR_KEY, "Academic Year"),
     (COURSE_METADATA_SEMESTER_KEY, "Semester"),
 )
+_VALIDATION_REASON_SYSTEM_HASH = "system_hash"
+_VALIDATION_REASON_MARKS_UNFILLED = "marks_unfilled"
+_VALIDATION_REASON_LAYOUT_OR_MANIFEST = "layout_or_manifest"
+_VALIDATION_REASON_TEMPLATE_MISMATCH = "template_mismatch"
+_VALIDATION_REASON_MARK_VALUE = "mark_value"
+_VALIDATION_REASON_OTHER = "other_validation"
 
 
 def analyze_uploaded_workbooks(
@@ -51,43 +58,125 @@ def analyze_uploaded_workbooks(
     *,
     existing_paths: list[str],
     validate_uploaded_source_workbook: Callable[[str | Path], None],
+    consume_last_source_anomaly_warnings: Callable[[], list[str]],
     token: CancellationToken | None = None,
 ) -> dict[str, object]:
     existing_keys = {_path_key(Path(path)) for path in existing_paths}
-    seen_metadata_signatures = {
-        signature
-        for signature in (extract_course_metadata_signature(Path(path)) for path in existing_paths)
-        if signature is not None
-    }
+    seen_metadata_signatures: set[tuple[str, ...]] = set()
+    seen_register_numbers: set[str] = set()
+    for existing_path in existing_paths:
+        students, metadata_map = extract_course_metadata_and_students(Path(existing_path))
+        seen_register_numbers.update(students)
+        signature = _course_metadata_signature_from_map(metadata_map)
+        if signature is not None:
+            seen_metadata_signatures.add(signature)
+
     added_paths: list[str] = []
     duplicates = 0
     invalid = 0
-    validated_candidates: list[tuple[Path, str, tuple[str, ...] | None]] = []
+    unsupported_or_missing_files = 0
+    invalid_source_workbook_files = 0
+    duplicate_reg_number_files = 0
+    co_count_mismatch_files = 0
+    invalid_system_hash_files = 0
+    invalid_marks_unfilled_files = 0
+    invalid_layout_manifest_files = 0
+    invalid_template_mismatch_files = 0
+    invalid_mark_value_files = 0
+    invalid_other_validation_files = 0
+    anomaly_warnings: list[str] = []
+    validation_failures: list[dict[str, str]] = []
+    baseline_total_outcomes: int | None = None
+    validated_candidates: list[tuple[Path, str, tuple[str, ...] | None, set[str], int | None]] = []
     for raw_path in candidate_paths:
         if token is not None:
             token.raise_if_cancelled()
         path = Path(raw_path)
         suffix = path.suffix.lower()
         if suffix not in _SUPPORTED_EXTENSIONS or not path.exists():
+            unsupported_or_missing_files += 1
             invalid += 1
             continue
         key = _path_key(path)
         try:
             validate_uploaded_source_workbook(path)
-        except Exception:
+            warnings = consume_last_source_anomaly_warnings()
+            if warnings:
+                anomaly_warnings.extend([f"{path.name} -> {msg}" for msg in warnings])
+        except ValidationError as exc:
+            invalid_source_workbook_files += 1
             invalid += 1
+            reason = _classify_validation_reason(exc)
+            if reason == _VALIDATION_REASON_SYSTEM_HASH:
+                invalid_system_hash_files += 1
+            elif reason == _VALIDATION_REASON_MARKS_UNFILLED:
+                invalid_marks_unfilled_files += 1
+            elif reason == _VALIDATION_REASON_LAYOUT_OR_MANIFEST:
+                invalid_layout_manifest_files += 1
+            elif reason == _VALIDATION_REASON_TEMPLATE_MISMATCH:
+                invalid_template_mismatch_files += 1
+            elif reason == _VALIDATION_REASON_MARK_VALUE:
+                invalid_mark_value_files += 1
+            else:
+                invalid_other_validation_files += 1
+            validation_failures.append(
+                {
+                    "file": path.name,
+                    "reason": str(exc),
+                    "code": str(exc.code),
+                    "category": reason,
+                    "context": dict(exc.context or {}),
+                }
+            )
             continue
-        metadata_signature = extract_course_metadata_signature(path)
-        validated_candidates.append((path, key, metadata_signature))
+        except Exception as exc:
+            invalid_source_workbook_files += 1
+            invalid += 1
+            invalid_other_validation_files += 1
+            validation_failures.append(
+                {
+                    "file": path.name,
+                    "reason": str(exc),
+                    "code": type(exc).__name__,
+                    "category": _VALIDATION_REASON_OTHER,
+                    "context": {},
+                }
+            )
+            continue
+        students, metadata_map = extract_course_metadata_and_students(path)
+        metadata_signature = _course_metadata_signature_from_map(metadata_map)
+        total_outcomes = _total_outcomes_from_metadata_map(metadata_map)
+        validated_candidates.append((path, key, metadata_signature, students, total_outcomes))
 
     path_counts: dict[str, int] = {}
     metadata_counts: dict[tuple[str, ...], int] = {}
-    for _path, key, metadata_signature in validated_candidates:
+    register_owners: dict[str, list[int]] = {}
+    for idx, (_path, key, metadata_signature, students, total_outcomes) in enumerate(validated_candidates):
         path_counts[key] = path_counts.get(key, 0) + 1
         if metadata_signature is not None:
             metadata_counts[metadata_signature] = metadata_counts.get(metadata_signature, 0) + 1
+        for reg_no in students:
+            register_owners.setdefault(reg_no, []).append(idx)
+        if baseline_total_outcomes is None and total_outcomes is not None:
+            baseline_total_outcomes = total_outcomes
 
-    for path, key, metadata_signature in validated_candidates:
+    invalid_due_to_reg_duplicates: set[int] = set()
+    for idx, (_path, _key, _metadata_signature, students, _total_outcomes) in enumerate(validated_candidates):
+        if any(reg_no in seen_register_numbers for reg_no in students):
+            invalid_due_to_reg_duplicates.add(idx)
+    for reg_no, owner_indices in register_owners.items():
+        if len(owner_indices) > 1:
+            invalid_due_to_reg_duplicates.update(owner_indices)
+
+    for idx, (path, key, metadata_signature, students, total_outcomes) in enumerate(validated_candidates):
+        if idx in invalid_due_to_reg_duplicates:
+            duplicate_reg_number_files += 1
+            invalid += 1
+            continue
+        if baseline_total_outcomes is not None and total_outcomes is not None and total_outcomes != baseline_total_outcomes:
+            co_count_mismatch_files += 1
+            invalid += 1
+            continue
         is_duplicate = False
         if key in existing_keys:
             is_duplicate = True
@@ -101,12 +190,76 @@ def analyze_uploaded_workbooks(
             duplicates += 1
             continue
         added_paths.append(str(path))
+        seen_register_numbers.update(students)
     return {
         "added": added_paths,
         "duplicates": duplicates,
         "invalid": invalid,
         "ignored": duplicates + invalid,
+        "unsupported_or_missing_files": unsupported_or_missing_files,
+        "invalid_source_workbook_files": invalid_source_workbook_files,
+        "anomaly_warnings": anomaly_warnings,
+        "duplicate_reg_number_files": duplicate_reg_number_files,
+        "co_count_mismatch_files": co_count_mismatch_files,
+        "invalid_system_hash_files": invalid_system_hash_files,
+        "invalid_marks_unfilled_files": invalid_marks_unfilled_files,
+        "invalid_layout_manifest_files": invalid_layout_manifest_files,
+        "invalid_template_mismatch_files": invalid_template_mismatch_files,
+        "invalid_mark_value_files": invalid_mark_value_files,
+        "invalid_other_validation_files": invalid_other_validation_files,
+        "validation_failures": validation_failures,
     }
+
+
+def _classify_validation_reason(exc: ValidationError) -> str:
+    code = normalize(getattr(exc, "code", ""))
+    if code in {
+        "coa_system_hash_mismatch",
+        "coa_system_hash_header_template_id_missing",
+        "coa_system_hash_header_template_hash_missing",
+        "coa_system_hash_template_id_missing",
+        "coa_system_sheet_missing",
+    }:
+        return _VALIDATION_REASON_SYSTEM_HASH
+    if code in {"coa_mark_entry_empty"}:
+        return _VALIDATION_REASON_MARKS_UNFILLED
+    if code in {
+        "coa_layout_sheet_missing",
+        "coa_layout_header_mismatch",
+        "coa_layout_manifest_missing",
+        "coa_layout_hash_mismatch",
+        "coa_layout_manifest_json_invalid",
+    }:
+        return _VALIDATION_REASON_LAYOUT_OR_MANIFEST
+    if code in {"unknown_template", "coa_template_validator_missing"}:
+        return _VALIDATION_REASON_TEMPLATE_MISMATCH
+    if code in {
+        "coa_mark_value_invalid",
+        "coa_mark_precision_invalid",
+        "coa_indirect_mark_integer_required",
+        "coa_absence_policy_violation",
+    }:
+        return _VALIDATION_REASON_MARK_VALUE
+    return _VALIDATION_REASON_OTHER
+
+
+def _course_metadata_signature_from_map(metadata_map: dict[str, str]) -> tuple[str, ...] | None:
+    signature = tuple(
+        metadata_map.get(normalize(field_name), "").strip()
+        for field_name in _COURSE_METADATA_DUPLICATE_FIELDS
+    )
+    return signature if any(signature) else None
+
+
+def _total_outcomes_from_metadata_map(metadata_map: dict[str, str]) -> int | None:
+    raw = metadata_map.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def extract_course_metadata_signature(path: Path) -> tuple[str, ...] | None:

@@ -409,7 +409,12 @@ class MainWindow(QMainWindow):
             if isinstance(text_key, str):
                 safe_kwargs = kwargs if isinstance(kwargs, dict) else {}
                 try:
-                    resolved = t(text_key, **safe_kwargs)
+                    payload = build_i18n_log_message(
+                        text_key,
+                        kwargs=safe_kwargs,
+                        fallback=fallback if isinstance(fallback, str) else None,
+                    )
+                    resolved = resolve_i18n_log_message(payload)
                 except Exception:
                     resolved = fallback if isinstance(fallback, str) else str(message or "")
             else:

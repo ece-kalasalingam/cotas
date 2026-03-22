@@ -262,6 +262,44 @@ TEXTS = {
     'coordinator.regno_dedup.log_detail': 'रजिस्टर नंबर: {reg_no} | वर्कशीट: {worksheet} | वर्कबुक: {workbook}',
     'coordinator.regno_dedup.log_detail_unavailable': 'डुप्लीकेट प्रविष्टि का विवरण उपलब्ध नहीं है।',
     'coordinator.join_drop.body': 'कुछ पंक्तियों को नज़रअंदाज़ किया गया क्योंकि वे केवल Direct या केवल Indirect शीट में थीं। हटाई गई पंक्तियाँ: {count}। विवरण के लिए एक्टिविटी लॉग देखें।',
+    'co_analysis.status.duplicate_reg_numbers': 'डुप्लीकेट रजिस्टर नंबर के कारण {count} फ़ाइल(ें) अस्वीकार की गईं।',
+    'co_analysis.status.co_count_mismatch': 'कुल परिणाम संख्या असंगति के कारण {count} फ़ाइल(ें) अस्वीकार की गईं।',
+    'co_analysis.status.validation_warnings': '{count} वैलिडेशन चेतावनी(याँ) रिपोर्ट हुईं।',
+    'co_analysis.status.rejected_code_with_context': 'अस्वीकृत {file}: {code} ({context})',
+    'co_analysis.validation.co_count_mismatch_body': 'चयनित बैच से कुल परिणाम संख्या अलग होने के कारण {count} फ़ाइल(ें) अस्वीकार की गईं।',
+    'co_analysis.validation.anomaly_warnings_body': 'अपलोड की गई फ़ाइलों में {count} वैलिडेशन विसंगति चेतावनी(याँ) रिपोर्ट हुईं।',
+    'co_analysis.validation.rejection_breakdown_title': 'CO Analysis फ़ाइल अस्वीकृति',
+    'co_analysis.validation.rejection_breakdown_body': (
+        'कारण अनुसार अस्वीकृत फ़ाइलें:\\n'
+        'असमर्थित/गायब: {unsupported_or_missing}\\n'
+        'अमान्य वर्कबुक: {invalid_workbook}\\n'
+        'सिस्टम हैश/पहचान विफल: {invalid_hash}\\n'
+        'अधूरे मार्क्स: {marks_unfilled}\\n'
+        'लेआउट/मैनिफेस्ट विफल: {layout_manifest}\\n'
+        'टेम्प्लेट असंगति: {template_mismatch}\\n'
+        'अमान्य मार्क वैल्यू/फॉर्मेट: {mark_value}\\n'
+        'अन्य वैलिडेशन विफल: {invalid_other}\\n'
+        'डुप्लीकेट: {duplicates}\\n'
+        'डुप्लीकेट रजिस्टर नंबर: {duplicate_reg}\\n'
+        'कुल परिणाम संख्या असंगति: {co_count_mismatch}'
+    ),
+    'co_analysis.status.ignored_summary': (
+        '{count} फ़ाइल(ें) अनदेखी की गईं। '
+        '{part1}{sep1_2}{part2}{sep2_3}{part3}{sep3_4}{part4}{sep4_5}{part5}{sep5_6}{part6}'
+        '{sep6_7}{part7}{sep7_8}{part8}{sep8_9}{part9}{sep9_10}{part10}{sep10_11}{part11}{sep11_12}{part12}'
+    ),
+    'co_analysis.status.ignored_total': '{count} फ़ाइल(ें) अनदेखी की गईं।',
+    'co_analysis.status.ignored_reason.unsupported_or_missing': 'असमर्थित/गायब={count}',
+    'co_analysis.status.ignored_reason.invalid_workbook': 'अमान्य वर्कबुक={count}',
+    'co_analysis.status.ignored_reason.invalid_hash': 'हैश={count}',
+    'co_analysis.status.ignored_reason.marks_unfilled': 'अधूरे मार्क्स={count}',
+    'co_analysis.status.ignored_reason.layout_manifest': 'लेआउट/मैनिफेस्ट={count}',
+    'co_analysis.status.ignored_reason.template_mismatch': 'टेम्प्लेट असंगति={count}',
+    'co_analysis.status.ignored_reason.mark_value': 'अमान्य मार्क वैल्यू={count}',
+    'co_analysis.status.ignored_reason.invalid_other': 'अन्य वैलिडेशन={count}',
+    'co_analysis.status.ignored_reason.duplicates': 'डुप्लीकेट={count}',
+    'co_analysis.status.ignored_reason.duplicate_reg': 'डुप्लीकेट रजिस्टर नंबर={count}',
+    'co_analysis.status.ignored_reason.co_count_mismatch': 'कुल परिणाम संख्या असंगति={count}',
 }
 
 
