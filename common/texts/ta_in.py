@@ -16,6 +16,7 @@ TEXTS = {
     "module.instructor": "பயிற்றுநர்",
     "module.coordinator_short": "ஒருங்கிணைப்பாளர்",
     "module.po_analysis": "PO பகுப்பாய்வு",
+    "module.co_analysis": "CO பகுப்பாய்வு",
     "module.load_failed_title": "தொகுதி ஏற்றப் பிழை",
     "module.load_failed_body": "'{module}' தொகுதியை ஏற்ற முடியவில்லை.\n\nவிவரம்: {error}",
     "module.load_failed_status": "தொகுதியை ஏற்ற முடியவில்லை: {module}.",
@@ -233,15 +234,14 @@ TEXTS = {
     "coordinator.calculate": "CO அடைவை கணக்கிடு",
     "coordinator.thresholds.title": "CO அடைவு வரம்புகள்",
     "coordinator.thresholds.description": (
-        "- L1 வரம்பு என்பது பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய விதிமுறையில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.\n"
-        "- L2 வரம்பு என்பது முதல் வகுப்பு.\n"
-        "- L3 வரம்பு என்பது சிறப்புத் தரம்."
+        "- L1 வரம்பு - பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய விதிமுறையில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.\n"
+        "- L2 வரம்பு - முதல் வகுப்பு.\n"
+        "- L3 வரம்பு - சிறப்புத் தரம்."
     ),
     "coordinator.thresholds.l1.label": "L1 வரம்பு:",
     "coordinator.thresholds.l2.label": "L2 வரம்பு:",
     "coordinator.thresholds.l3.label": "L3 வரம்பு:",
     "coordinator.thresholds.invalid_rule": "வரம்பு விதி மீறப்பட்டது: 0 < L1 < L2 < L3 < 100 என்பதைப் பின்பற்றவும்.",
-    "coordinator.co_attainment.title": "CO அடைவு வரம்பு",
     "coordinator.co_attainment.description": "குறிப்பிட்ட நிலை மற்றும் அதற்கு மேலுள்ள மாணவர்கள் % அடிப்படையில் அடைந்ததாக கருதப்படும்.",
     "coordinator.co_attainment.percent.label": "CO AT%:",
     "coordinator.co_attainment.level.label": "CO AT நிலை:",

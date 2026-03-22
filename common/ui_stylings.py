@@ -48,9 +48,12 @@ QListWidget#stepList::item:selected:!active {
 }
 QLabel#coordinatorTitle,
 QLabel#coordinatorThresholdTitle,
-QLabel#coordinatorThresholdInputLabel,
 QLabel#instructorRailTitle {
     font-weight: 700;
+}
+QLabel#coordinatorThresholdL1Label {
+    font-weight: 700;
+    color: palette(text);
 }
 QScrollArea#coordinatorLeftScroll,
 QScrollArea#coordinatorRightScroll,

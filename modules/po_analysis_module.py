@@ -41,4 +41,3 @@ class POAnalysisModule(QWidget):
 
     def get_shared_outputs_data(self) -> OutputPanelData:
         return OutputPanelData(items=tuple())
-

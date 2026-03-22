@@ -20,6 +20,7 @@ TEXTS = {
     "module.instructor": "Instructor",
     "module.coordinator_short": "Coordinator",
     "module.po_analysis": "PO Analysis",
+    "module.co_analysis": "CO Analysis",
     "module.load_failed_title": "Module Load Error",
     "module.load_failed_body": "Could not load module '{module}'.\n\nDetails: {error}",
     "module.load_failed_status": "Failed to load module: {module}.",
@@ -247,15 +248,14 @@ TEXTS = {
     "coordinator.calculate": "Calculate CO Attainment",
     "coordinator.thresholds.title": "CO Attainment Thresholds",
     "coordinator.thresholds.description": (
-        "- L1 Threshold means pass mark of the course or course average for the 3 batches offered in the previous regulation.\n"
-        "- L2 Threshold means First Class.\n"
-        "- L3 Threshold means Distinction Class."
+        "- L1 Threshold - pass mark of the course or course average for the 3 batches offered in the previous regulation.\n"
+        "- L2 Threshold - First Class.\n"
+        "- L3 Threshold - Distinction Class."
     ),
     "coordinator.thresholds.l1.label": "L1 Threshold:",
     "coordinator.thresholds.l2.label": "L2 Threshold:",
     "coordinator.thresholds.l3.label": "L3 Threshold:",
     "coordinator.thresholds.invalid_rule": "Invalid thresholds: 0 < L1 < L2 < L3 < 100 is required.",
-    "coordinator.co_attainment.title": "CO Attainment Threshold",
     "coordinator.co_attainment.description": "Attained if the following % of students are at level fixed and above.",
     "coordinator.co_attainment.percent.label": "CO AT%:",
     "coordinator.co_attainment.level.label": "CO AT Level:",

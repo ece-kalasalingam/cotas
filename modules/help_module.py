@@ -51,6 +51,7 @@ class HelpModule(QWidget):
 
         self.pdf_view = QPdfView()
         self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
+        self.pdf_view.setPageMode(QPdfView.PageMode.MultiPage)
 
         self.pdf_doc = QPdfDocument(self)
         self.pdf_view.setDocument(self.pdf_doc)

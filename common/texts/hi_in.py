@@ -14,6 +14,7 @@ TEXTS = {
     'module.instructor': 'प्रशिक्षक',
     'module.coordinator_short': 'समन्वयक',
     'module.po_analysis': 'PO विश्लेषण',
+    'module.co_analysis': 'CO विश्लेषण',
     'module.load_failed_title': 'मॉड्यूल लोड त्रुटि',
     'module.load_failed_body': "मॉड्यूल '{module}' लोड नहीं किया जा सका।\n\nविवरण: {error}",
     'module.load_failed_status': 'मॉड्यूल लोड करने में विफल: {module}.',
@@ -221,15 +222,14 @@ TEXTS = {
     'coordinator.calculate': 'CO प्राप्ति की गणना करें',
     'coordinator.thresholds.title': 'CO प्राप्ति सीमाएँ',
     'coordinator.thresholds.description': (
-        '- L1 सीमा का अर्थ है पाठ्यक्रम का पास अंक या पिछली विनियमन में चलाए गए 3 बैचों का पाठ्यक्रम औसत।\n'
-        '- L2 सीमा का अर्थ है प्रथम श्रेणी।\n'
-        '- L3 सीमा का अर्थ है विशिष्ट श्रेणी।'
+        '- L1 सीमा - पाठ्यक्रम का पास अंक या पिछली विनियमन में चलाए गए 3 बैचों का पाठ्यक्रम औसत।\n'
+        '- L2 सीमा - प्रथम श्रेणी।\n'
+        '- L3 सीमा - विशिष्ट श्रेणी।'
     ),
     'coordinator.thresholds.l1.label': 'L1 सीमा:',
     'coordinator.thresholds.l2.label': 'L2 सीमा:',
     'coordinator.thresholds.l3.label': 'L3 सीमा:',
     'coordinator.thresholds.invalid_rule': 'थ्रेशोल्ड नियम उल्लंघन: 0 < L1 < L2 < L3 < 100 रखें।',
-    'coordinator.co_attainment.title': 'CO प्राप्ति सीमा',
     'coordinator.co_attainment.description': 'यदि निम्न % विद्यार्थी तय स्तर और उससे ऊपर हैं, तो प्राप्त माना जाएगा।',
     'coordinator.co_attainment.percent.label': 'CO AT%:',
     'coordinator.co_attainment.level.label': 'CO AT स्तर:',

@@ -993,6 +993,14 @@ def _create_summary_sheet(
     widths = _compute_sampled_column_widths(sampled_rows, 2)
     sheet.set_column(1, 1, widths.get(1, 8))
     sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
+    result_col = table_start_col + (len(headers) - 1)
+    result_sample_rows: list[list[Any]] = [
+        [headers[-1]],
+        ["Attained"],
+        ["Yet to Attain"],
+    ]
+    result_widths = _compute_sampled_column_widths(result_sample_rows, 0)
+    sheet.set_column(result_col, result_col, result_widths.get(0, 12), formats["column_wrap"])
 
     sheet.set_landscape()
     sheet.set_paper(9)  # A4

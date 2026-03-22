@@ -14,6 +14,7 @@ TEXTS = {
     'module.instructor': 'బోధకుడు',
     'module.coordinator_short': 'సమన్వయకర్త',
     'module.po_analysis': 'PO విశ్లేషణ',
+    'module.co_analysis': 'CO విశ్లేషణ',
     'module.load_failed_title': 'మాడ్యూల్ లోడ్ ఎర్రర్',
     'module.load_failed_body': "మాడ్యూల్ '{module}'ని లోడ్ చేయడం సాధ్యపడలేదు.\n\nవివరాలు: {error}",
     'module.load_failed_status': 'మాడ్యూల్\u200cను లోడ్ చేయడంలో విఫలమైంది: {module}.',
@@ -221,15 +222,14 @@ TEXTS = {
     'coordinator.calculate': 'CO సాధనను లెక్కించండి',
     'coordinator.thresholds.title': 'CO సాధన పరిమితులు',
     'coordinator.thresholds.description': (
-        '- L1 పరిమితి అంటే కోర్సు పాస్ మార్క్ లేదా గత నియమావళిలో ఆఫర్ చేసిన 3 బ్యాచ్‌ల కోర్సు సగటు.\n'
-        '- L2 పరిమితి అంటే ఫస్ట్ క్లాస్.\n'
-        '- L3 పరిమితి అంటే డిస్టింక్షన్ క్లాస్.'
+        '- L1 పరిమితి - కోర్సు పాస్ మార్క్ లేదా గత నియమావళిలో ఆఫర్ చేసిన 3 బ్యాచ్‌ల కోర్సు సగటు.\n'
+        '- L2 పరిమితి - ఫస్ట్ క్లాస్.\n'
+        '- L3 పరిమితి - డిస్టింక్షన్ క్లాస్.'
     ),
     'coordinator.thresholds.l1.label': 'L1 పరిమితి:',
     'coordinator.thresholds.l2.label': 'L2 పరిమితి:',
     'coordinator.thresholds.l3.label': 'L3 పరిమితి:',
     'coordinator.thresholds.invalid_rule': 'పరిమితి నియమం ఉల్లంఘించబడింది: 0 < L1 < L2 < L3 < 100 ఉండాలి.',
-    'coordinator.co_attainment.title': 'CO సాధన పరిమితి',
     'coordinator.co_attainment.description': 'స్థిరీకరించిన స్థాయి మరియు అంతకన్నా పై స్థాయిలో ఉన్న విద్యార్థుల % ఆధారంగా సాధన నిర్ణయించబడుతుంది.',
     'coordinator.co_attainment.percent.label': 'CO AT%:',
     'coordinator.co_attainment.level.label': 'CO AT స్థాయి:',
