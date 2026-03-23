@@ -171,6 +171,16 @@
 - In About description (`about.description`) for non-English locales, keep key product terms
   such as app name and "Course Outcome (CO)" in transliterated form.
 
+## Qt Translation Guardrail
+
+- UI translation must use Qt's native translator flow via `QTranslator` with locale-based `.qm` loading.
+- Runtime translation access must go through `common/i18n/__init__.py` (`t`, `set_language`, `get_language`, `get_available_languages`).
+- Do not reintroduce `common/texts` catalogs or non-Qt in-memory translation registries.
+- Translation source of truth must be Qt TS catalogs under `common/i18n/` (for example `obe_en_US.ts`, `obe_hi_IN.ts`, `obe_ta_IN.ts`, `obe_te_IN.ts`).
+- Compiled catalogs must be generated as `.qm` files in `common/i18n/` and loaded at runtime by `QTranslator`.
+- Use `scripts/build_qt_translations.py` to compile `.ts` to `.qm`; do not add alternate translation-build scripts.
+- Keep translation scope limited to UI/UX strings only; do not translate workbook data, generated Excel cell values, sheet names, filenames, or filesystem paths unless explicitly required by a separate spec.
+
 ## Module UI Engine Guardrail
 
 - `common/module_ui_engine.py` must remain generic and blackbox-only.
