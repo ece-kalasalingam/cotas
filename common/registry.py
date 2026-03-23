@@ -58,6 +58,14 @@ COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS = (
 )
 COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MIN_LENGTH = 100
 COURSE_SETUP_CO_DESCRIPTION_SUMMARY_MAX_LENGTH = 200
+COURSE_METADATA_TOTAL_OUTCOMES_KEY = "total_outcomes"
+COURSE_METADATA_COURSE_CODE_KEY = "course_code"
+COURSE_METADATA_SEMESTER_KEY = "semester"
+COURSE_METADATA_SECTION_KEY = "section"
+COURSE_METADATA_ACADEMIC_YEAR_KEY = "academic_year"
+COURSE_METADATA_TOTAL_STUDENTS_KEY = "total_students"
+WEIGHT_TOTAL_EXPECTED = 100.0
+WEIGHT_TOTAL_ROUND_DIGITS = 6
 
 SETUP_STYLE_REGISTRY_V1 = {
     "header": {
@@ -162,12 +170,27 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
             name="Course_Metadata",
             headers=("Field", "Value"),
             sheet_rules={
+                "column_keys": (
+                    "field",
+                    "value",
+                ),
                 "workbook_name_tokens": (
                     "course_code",
                     "semester",
                     "section",
                     "academic_year",
                 ),
+                "required_field_keys": (
+                    COURSE_METADATA_COURSE_CODE_KEY,
+                    COURSE_METADATA_SEMESTER_KEY,
+                    COURSE_METADATA_SECTION_KEY,
+                    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+                    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+                ),
+                "optional_field_keys": (
+                    COURSE_METADATA_TOTAL_STUDENTS_KEY,
+                ),
+                "total_outcomes_key": COURSE_METADATA_TOTAL_OUTCOMES_KEY,
             },
         ),
         COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG: _sheet(
@@ -241,6 +264,24 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
                     },
                 ),
             ],
+            sheet_rules={
+                "column_keys": (
+                    "component",
+                    "weight_percent",
+                    "cia",
+                    "co_wise_marks_breakup",
+                    "direct",
+                    "assessment_type",
+                    "assessment_format",
+                    "mode",
+                    "participation",
+                ),
+                "percentage_column_keys": ("weight_percent",),
+                "weight_total_expected": WEIGHT_TOTAL_EXPECTED,
+                "weight_total_round_digits": WEIGHT_TOTAL_ROUND_DIGITS,
+                "indirect_tools_min": 1,
+                "indirect_tools_max": 3,
+            },
         ),
         COURSE_SETUP_SHEET_KEY_QUESTION_MAP: _sheet(
             key=COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
@@ -259,6 +300,15 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
                     },
                 )
             ],
+            sheet_rules={
+                "column_keys": (
+                    "component",
+                    "question_label",
+                    "max_marks",
+                    "co",
+                    "bloom_level",
+                ),
+            },
         ),
         COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION: _sheet(
             key=COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
@@ -310,6 +360,12 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
             key=COURSE_SETUP_SHEET_KEY_STUDENTS,
             name="Students",
             headers=("Reg_No", "Student_Name"),
+            sheet_rules={
+                "column_keys": (
+                    "reg_no",
+                    "student_name",
+                ),
+            },
         ),
     }
 

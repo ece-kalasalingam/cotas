@@ -88,6 +88,22 @@
 - Template-specific orchestration must live in `domain/template_versions/<template_id>.py` strategy classes.
 - Strategy classes may call shared/common helpers or template-specific helpers, but modules must not import template-version modules directly.
 
+## Module To Workbook Flow Guardrail
+
+- Workbook generation and workbook validation must follow this layered flow:
+  - Module UI/engine layer (input collection only; no template branching)
+  - `domain/template_strategy_router.py` shared entrypoint
+  - Resolved template strategy class in `domain/template_versions/<template_id>.py`
+  - Template-version implementation file(s) under that template version (shared helpers allowed)
+- For generation, modules must call router `generate_workbook(...)` only.
+- For validation, modules must call router `validate_workbook(...)` or `validate_workbooks(...)` only.
+- Template id for uploaded/source workbooks must be read from `SYSTEM_HASH` and routed dynamically.
+- Template id must not be hardcoded in module-layer logic for uploaded/source workbook operations.
+- For multi-file workbook generation (for example marks template):
+  - Module must use directory-selection mode when generating multiple outputs.
+  - File naming must use router `default_workbook_name(...)`; do not create module-local naming rules.
+- If a workflow kind (for example `marks_template`) is newly added, extend router/strategy/impl layers; do not bypass router from modules.
+
 ## Single Source Of Truth Guardrail (Validation Issues)
 
 - Validation issue semantics (code -> category/severity/i18n/default) must be centralized in `common/error_catalog.py`.

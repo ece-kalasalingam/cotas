@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from common.constants import (
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     FILE_EXTENSION_XLSX,
     FILENAME_JOIN_SEPARATOR,
     LAYOUT_MANIFEST_KEY_SHEET_ORDER,
@@ -30,12 +29,11 @@ from common.constants import (
     LIKERT_MIN,
     MIN_MARK_VALUE,
     MARKS_TEMPLATE_NAME_SUFFIX,
-    WEIGHT_TOTAL_EXPECTED,
-    WEIGHT_TOTAL_ROUND_DIGITS,
 )
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
 from common.registry import (
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS,
     COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
     COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
@@ -48,6 +46,8 @@ from common.registry import (
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
+    WEIGHT_TOTAL_EXPECTED,
+    WEIGHT_TOTAL_ROUND_DIGITS,
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
     get_sheet_schema_by_key,

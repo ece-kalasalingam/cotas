@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -40,6 +41,7 @@ from domain.template_strategy_router import (
     default_workbook_name,
     generate_workbook,
     resolve_template_id_from_workbook_path,
+    validate_workbooks,
 )
 
 _logger = logging.getLogger(__name__)
@@ -72,6 +74,11 @@ class InstructorModule(QWidget):
         self.course_details_paths: list[str] = []
         self.marks_template_path: str | None = None
         self.marks_template_paths: list[str] = []
+        self._uploaded_course_details_paths: list[str] = []
+        self._validated_course_details_paths: list[str] = []
+        self._validated_template_ids_by_path_key: dict[str, str] = {}
+        self._ready_for_marks_generation = False
+        self._syncing_drop_widget_files = False
 
         self.state = BusyWorkflowState()
         self._logger = _logger
@@ -183,11 +190,13 @@ class InstructorModule(QWidget):
         self.course_details_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.drop.summary", count=count)
         )
-        self.course_details_drop_widget.set_submit_allowed(bool(self.course_details_paths))
+        self.course_details_drop_widget.set_submit_allowed(self._ready_for_marks_generation)
 
         enabled = not self.state.busy
         self.course_details_drop_widget.setEnabled(enabled)
-        self.generate_marks_template_action.setEnabled(enabled and bool(self.course_details_paths))
+        self.generate_marks_template_action.setEnabled(
+            enabled and self._ready_for_marks_generation and bool(self.course_details_paths)
+        )
 
     def retranslate_ui(self) -> None:
         self.course_details_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
@@ -266,31 +275,47 @@ class InstructorModule(QWidget):
         self.course_details_drop_widget.clear_files()
 
     def _on_course_details_files_changed(self, files: list[str]) -> None:
-        self._publish_status_key("instructor.status.course_details_drop_files_changed", count=len(files))
         if self.state.busy:
             return
+        if self._syncing_drop_widget_files:
+            return
         if files:
-            current_keys = {canonical_path_key(path) for path in self.course_details_paths}
+            current_keys = {canonical_path_key(path) for path in self._validated_course_details_paths}
             incoming_keys = {canonical_path_key(path) for path in files}
             if incoming_keys.issubset(current_keys):
                 key_to_existing = {
                     canonical_path_key(path): path
-                    for path in self.course_details_paths
+                    for path in self._validated_course_details_paths
                 }
                 self.course_details_paths = [
                     key_to_existing[key]
                     for key in [canonical_path_key(path) for path in files]
                     if key in key_to_existing
                 ]
+                self._uploaded_course_details_paths = list(self.course_details_paths)
+                self._validated_course_details_paths = list(self.course_details_paths)
                 self.course_details_path = self.course_details_paths[0] if self.course_details_paths else None
+                retained_keys = {canonical_path_key(path) for path in self.course_details_paths}
+                self._validated_template_ids_by_path_key = {
+                    key: value
+                    for key, value in self._validated_template_ids_by_path_key.items()
+                    if key in retained_keys
+                }
+                self._ready_for_marks_generation = bool(self.course_details_paths)
                 self._refresh_ui()
                 return
 
+        had_state = bool(self._uploaded_course_details_paths or self._validated_course_details_paths)
+        self._uploaded_course_details_paths = [path for path in files if path]
+        self._validated_course_details_paths = []
+        self._validated_template_ids_by_path_key.clear()
         self.course_details_paths = []
         self.course_details_path = None
         self.marks_template_paths = []
         self.marks_template_path = None
-        self._publish_status_key("instructor.status.course_details_replaced")
+        self._ready_for_marks_generation = False
+        if had_state:
+            self._publish_status_key("instructor.status.course_details_replaced")
         self._refresh_ui()
 
     def _download_course_template_async(self) -> None:
@@ -367,6 +392,18 @@ class InstructorModule(QWidget):
         selected_paths = [path for path in open_paths if path]
         if not selected_paths:
             return
+        had_previous_validated = bool(self._validated_course_details_paths)
+        staged_uploaded_paths = self._merge_uploaded_paths(selected_paths)
+        self._uploaded_course_details_paths = list(staged_uploaded_paths)
+        self._validated_course_details_paths = []
+        self._validated_template_ids_by_path_key.clear()
+        self.course_details_paths = []
+        self.course_details_path = None
+        self.marks_template_paths = []
+        self.marks_template_path = None
+        self._ready_for_marks_generation = False
+        self._set_course_details_widget_files(staged_uploaded_paths)
+        self._refresh_ui()
 
         self._remember_dialog_dir_safe(selected_paths[0])
         process_key = "instructor.log.process.validate_course_details_workbook"
@@ -375,62 +412,50 @@ class InstructorModule(QWidget):
         token = CancellationToken()
 
         def _work() -> dict[str, object]:
-            valid_paths: list[str] = []
-            invalid_paths: list[str] = []
-            seen: set[str] = set()
-            duplicates = 0
-            for path in selected_paths:
-                token.raise_if_cancelled()
-                key = canonical_path_key(path)
-                if key in seen:
-                    duplicates += 1
-                    continue
-                seen.add(key)
-                # TEMP: restore when instructor template engine wiring is reintroduced.
-                # try:
-                #     validate_course_details_workbook(path)
-                # except Exception:
-                #     invalid_paths.append(path)
-                #     continue
-                # valid_paths.append(path)
-                invalid_paths.append(path)
-            return {
-                "valid_paths": valid_paths,
-                "invalid_paths": invalid_paths,
-                "duplicates": duplicates,
-                "total": len(selected_paths),
-            }
+            result = validate_workbooks(
+                template_id=ID_COURSE_SETUP,
+                workbook_paths=staged_uploaded_paths,
+                workbook_kind="course_details",
+                cancel_token=token,
+            )
+            total = len(staged_uploaded_paths)
+            result["total"] = total
+            return result
 
         def _on_success(result: object) -> None:
             data = result if isinstance(result, dict) else {}
             valid_paths = [p for p in data.get("valid_paths", []) if isinstance(p, str) and p]
             invalid_paths = [p for p in data.get("invalid_paths", []) if isinstance(p, str) and p]
-            duplicates = int(data.get("duplicates", 0))
+            mismatched_paths = [p for p in data.get("mismatched_paths", []) if isinstance(p, str) and p]
+            duplicate_paths = [p for p in data.get("duplicate_paths", []) if isinstance(p, str) and p]
+            duplicate_sections = [p for p in data.get("duplicate_sections", []) if isinstance(p, str) and p]
+            rejection_items = [
+                item for item in data.get("rejections", []) if isinstance(item, dict)
+            ]
+            template_ids = data.get("template_ids", {})
             total = int(data.get("total", 0))
-
-            merged_paths: list[str] = []
-            seen_targets: set[str] = set()
-            for path in [*self.course_details_paths, *valid_paths]:
-                key = canonical_path_key(path)
-                if key in seen_targets:
-                    continue
-                seen_targets.add(key)
-                merged_paths.append(path)
-
-            replacing_existing = bool(self.course_details_paths)
-            self.course_details_paths = merged_paths
-            self.course_details_path = merged_paths[0] if merged_paths else None
+            replacing_existing = had_previous_validated
+            self._validated_course_details_paths = list(valid_paths)
+            self._uploaded_course_details_paths = list(valid_paths)
+            self.course_details_paths = list(valid_paths)
+            self.course_details_path = valid_paths[0] if valid_paths else None
             self.marks_template_paths = []
             self.marks_template_path = None
-            self.course_details_drop_widget.set_files(self.course_details_paths)
+            self._validated_template_ids_by_path_key = {}
+            if isinstance(template_ids, dict):
+                for key, value in template_ids.items():
+                    if isinstance(key, str) and isinstance(value, str) and key and value:
+                        self._validated_template_ids_by_path_key[key] = value
+            self._set_course_details_widget_files(self.course_details_paths)
+            self._ready_for_marks_generation = bool(self.course_details_paths)
 
             if replacing_existing:
                 self._publish_status_key("instructor.status.course_details_replaced")
-            elif merged_paths:
+            elif self.course_details_paths:
                 self._publish_status_key("instructor.status.course_details_validated")
             self._publish_status_key(
                 "instructor.status.course_details_validation_progress",
-                valid=len(valid_paths),
+                valid=len(self.course_details_paths),
                 total=total,
             )
             log_process_message(
@@ -440,14 +465,17 @@ class InstructorModule(QWidget):
                 user_success_message=user_success_message,
             )
 
-            if invalid_paths or duplicates:
+            duplicate_count = len(duplicate_paths) + len(duplicate_sections)
+            self._publish_course_details_rejection_details(rejection_items)
+            if invalid_paths or mismatched_paths or duplicate_count:
                 self._runtime.notify_message_key(
                     "instructor.toast.course_details_validation_summary",
                     channels=("toast",),
                     kwargs={
+                        "valid": len(self.course_details_paths),
                         "invalid": len(invalid_paths),
-                        "mismatched": 0,
-                        "duplicates": duplicates,
+                        "mismatched": len(mismatched_paths),
+                        "duplicates": duplicate_count,
                     },
                     toast_title_key="instructor.msg.validation_title",
                     toast_level="warning",
@@ -511,13 +539,36 @@ class InstructorModule(QWidget):
             processed = 0
             for source_path, output_path in output_plan:
                 token.raise_if_cancelled()
-                # TEMP: restore when instructor template engine wiring is reintroduced.
-                # try:
-                #     generate_marks_template_from_course_details(source_path, output_path)
-                #     generated.append(output_path)
-                # except Exception as exc:
-                #     failed.append({"source": source_path, "reason": str(exc).strip() or exc.__class__.__name__})
-                failed.append({"source": source_path, "reason": "Temporarily disabled"})
+                try:
+                    source_key = canonical_path_key(source_path)
+                    template_id = self._validated_template_ids_by_path_key.get(source_key)
+                    if not template_id:
+                        template_id = resolve_template_id_from_workbook_path(source_path)
+                    result = generate_workbook(
+                        template_id=template_id,
+                        output_path=output_path,
+                        workbook_name=Path(output_path).name,
+                        workbook_kind="marks_template",
+                        cancel_token=token,
+                        context={"course_details_path": source_path},
+                    )
+                    if isinstance(result, Path):
+                        generated.append(str(result))
+                    else:
+                        output = getattr(result, "output_path", None)
+                        if isinstance(output, Path):
+                            generated.append(str(output))
+                        elif isinstance(output, str) and output.strip():
+                            generated.append(output)
+                        else:
+                            generated.append(output_path)
+                except Exception as exc:
+                    failed.append(
+                        {
+                            "source": source_path,
+                            "reason": str(exc).strip() or exc.__class__.__name__,
+                        }
+                    )
                 processed += 1
                 if processed % 10 == 0 or processed == total:
                     self._publish_status_key(
@@ -555,8 +606,10 @@ class InstructorModule(QWidget):
                 channels=("toast",),
                 kwargs={
                     "generated": len(generated),
+                    "processed": total,
                     "total": total,
                     "failed": len(failed),
+                    "skipped": 0,
                 },
                 toast_title_key="instructor.msg.success_title",
                 toast_level="success" if generated else "warning",
@@ -569,6 +622,37 @@ class InstructorModule(QWidget):
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         self._runtime.remember_dialog_dir_safe(selected_path)
+
+    def _merge_uploaded_paths(self, selected_paths: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for path in [*self._uploaded_course_details_paths, *selected_paths]:
+            key = canonical_path_key(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(path)
+        return merged
+
+    def _set_course_details_widget_files(self, paths: list[str]) -> None:
+        self._syncing_drop_widget_files = True
+        try:
+            self.course_details_drop_widget.set_files(paths)
+        finally:
+            self._syncing_drop_widget_files = False
+
+    def _publish_course_details_rejection_details(self, rejection_items: list[dict[str, object]]) -> None:
+        for item in rejection_items:
+            issue_payload = item.get("issue")
+            if not isinstance(issue_payload, dict):
+                continue
+            workbook = item.get("path")
+            file_path = str(workbook).strip() if isinstance(workbook, str) else None
+            self._runtime.notify_validation_issue(
+                cast(dict[str, object], issue_payload),
+                file_path=file_path,
+                channels=("status", "activity_log"),
+            )
 
     def _marks_template_default_name(self, source_path: str) -> str:
         fallback = t("instructor.dialog.marks_template.default_name")

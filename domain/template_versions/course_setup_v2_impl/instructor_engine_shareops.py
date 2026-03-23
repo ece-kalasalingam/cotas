@@ -16,7 +16,12 @@ from common.registry import (
     SYSTEM_HASH_SHEET_NAME,
 )
 from common.sheet_schema import ValidationRule
+from common.utils import (
+    copy_system_hash_sheet as _copy_system_hash_sheet_common,
+    ensure_uniform_template_id_and_copy_system_hash as _ensure_uniform_template_id_and_copy_system_hash_common,
+)
 from common.workbook_signing import sign_payload
+from domain.template_strategy_router import read_valid_template_id_from_system_hash_sheet
 
 
 def build_header_format(workbook: Any, header_style: dict[str, Any]) -> Any:
@@ -95,8 +100,30 @@ def add_system_hash_sheet(workbook: Any, template_id: str) -> None:
     worksheet.hide()
 
 
+def copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
+    _copy_system_hash_sheet_common(source_workbook, target_workbook)
+
+
+def ensure_uniform_template_id_and_copy_system_hash(
+    source_workbooks: list[Any],
+    target_workbook: Any,
+    *,
+    routed_template_id: str | None = None,
+    cancel_token: Any | None = None,
+) -> str:
+    return _ensure_uniform_template_id_and_copy_system_hash_common(
+        source_workbooks,
+        target_workbook,
+        read_template_id=read_valid_template_id_from_system_hash_sheet,
+        routed_template_id=routed_template_id,
+        cancel_token=cancel_token,
+    )
+
+
 __all__ = [
     "add_system_hash_sheet",
+    "copy_system_hash_sheet",
+    "ensure_uniform_template_id_and_copy_system_hash",
     "apply_validation",
     "build_body_format",
     "build_header_format",

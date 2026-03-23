@@ -163,6 +163,109 @@ _VALIDATION_ISSUE_CATALOG: Mapping[str, ValidationIssueSpec] = {
         translation_key="validation.mark.absence_policy_violation",
         category="marks",
     ),
+    "FORMULA_NOT_ALLOWED": ValidationIssueSpec(
+        code="FORMULA_NOT_ALLOWED",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Formulas are not allowed in uploaded course template cells.",
+    ),
+    "CELL_EMPTY_NOT_ALLOWED": ValidationIssueSpec(
+        code="CELL_EMPTY_NOT_ALLOWED",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="All required cells must be non-empty in uploaded course template rows.",
+    ),
+    "SHEET_DATA_REQUIRED": ValidationIssueSpec(
+        code="SHEET_DATA_REQUIRED",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="At least one data row is required in each course template sheet.",
+    ),
+    "PERCENTAGE_NUMERIC_REQUIRED": ValidationIssueSpec(
+        code="PERCENTAGE_NUMERIC_REQUIRED",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Percentage fields must be numeric.",
+    ),
+    "PERCENTAGE_RANGE_INVALID": ValidationIssueSpec(
+        code="PERCENTAGE_RANGE_INVALID",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Percentage fields must be between 0 and 100.",
+    ),
+    "INTEGER_VALUE_REQUIRED": ValidationIssueSpec(
+        code="INTEGER_VALUE_REQUIRED",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="An integer value is required.",
+    ),
+    "INTEGER_VALUE_OUT_OF_RANGE": ValidationIssueSpec(
+        code="INTEGER_VALUE_OUT_OF_RANGE",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Integer value is outside the allowed range.",
+    ),
+    "TEXT_LENGTH_OUT_OF_RANGE": ValidationIssueSpec(
+        code="TEXT_LENGTH_OUT_OF_RANGE",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Text length is outside the allowed range.",
+    ),
+    "SCHEMA_MISSING": ValidationIssueSpec(
+        code="SCHEMA_MISSING",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="configuration",
+        default_message="Template schema configuration is missing.",
+    ),
+    "SCHEMA_COLUMN_KEY_MISSING": ValidationIssueSpec(
+        code="SCHEMA_COLUMN_KEY_MISSING",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="configuration",
+        default_message="Template schema column mapping is incomplete.",
+    ),
+    "INDIRECT_TOOL_COUNT_INVALID": ValidationIssueSpec(
+        code="INDIRECT_TOOL_COUNT_INVALID",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="Indirect tool count is outside the allowed range.",
+    ),
+    "QUESTION_MAP_COMPONENT_MISSING": ValidationIssueSpec(
+        code="QUESTION_MAP_COMPONENT_MISSING",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        default_message="A direct assessment component is missing in Question Map.",
+    ),
+    "COURSE_DETAILS_DUPLICATE_PATH": ValidationIssueSpec(
+        code="COURSE_DETAILS_DUPLICATE_PATH",
+        translation_key="validation.course_details.duplicate_path",
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate file path skipped.",
+    ),
+    "COURSE_DETAILS_SECTION_DUPLICATE": ValidationIssueSpec(
+        code="COURSE_DETAILS_SECTION_DUPLICATE",
+        translation_key="validation.course_details.duplicate_section",
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate section skipped for same course cohort.",
+    ),
+    "COURSE_DETAILS_COHORT_MISMATCH": ValidationIssueSpec(
+        code="COURSE_DETAILS_COHORT_MISMATCH",
+        translation_key="validation.course_details.cohort_mismatch",
+        category="validation",
+        severity="warning",
+        default_message=(
+            "File skipped because course cohort metadata does not match "
+            "(course code, semester, academic year, total outcomes must match)."
+        ),
+    ),
+    "COURSE_DETAILS_UNEXPECTED_REJECTION": ValidationIssueSpec(
+        code="COURSE_DETAILS_UNEXPECTED_REJECTION",
+        translation_key="validation.course_details.unexpected_rejection",
+        category="validation",
+        severity="warning",
+        default_message="File skipped due to an unexpected validation failure.",
+    ),
 }
 
 

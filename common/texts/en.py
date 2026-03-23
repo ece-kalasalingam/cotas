@@ -125,7 +125,18 @@ TEXTS = {
     "instructor.log.process.generate_course_details_template": "generating course details template",
     "instructor.log.process.validate_course_details_workbook": "validating uploaded course details workbook",
     "instructor.log.process.generate_marks_template": "generating marks template",
+    "instructor.validation.file_issue_line": "{file}: [{code}] {reason}",
     "instructor.validation.course_details_missing": "Upload at least one validated course details workbook before generating marks template.",
+    "validation.course_details.duplicate_path": "Duplicate file path skipped: {workbook}.",
+    "validation.course_details.duplicate_section": (
+        "Duplicate section skipped for this cohort (section '{section}') in file: {workbook}."
+    ),
+    "validation.course_details.cohort_mismatch": (
+        "Cohort mismatch in {workbook}. These fields must match the first valid file: {fields}."
+    ),
+    "validation.course_details.unexpected_rejection": (
+        "File was skipped due to an unexpected validation failure: {workbook}."
+    ),
     "instructor.validation.xlsxwriter_missing": "xlsxwriter is not installed. Install it to generate course templates.",
     "validation.dependency.xlsxwriter_missing": "xlsxwriter is not installed. Install it to generate course templates.",
     "instructor.validation.sheet_single_header_row": "Sheet '{sheet_name}' must define exactly one header row.",

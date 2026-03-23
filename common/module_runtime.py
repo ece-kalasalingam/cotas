@@ -11,6 +11,7 @@ from common.module_messages import (
     NotificationChannel,
     ToastLevel,
     append_user_log,
+    notify_validation_issue,
     notify_message,
     notify_message_key,
     publish_status,
@@ -106,6 +107,21 @@ class ModuleRuntime:
             toast_title_kwargs=toast_title_kwargs,
             toast_level=toast_level,
             toast_duration_ms=toast_duration_ms,
+        )
+
+    def notify_validation_issue(
+        self,
+        issue: Mapping[str, object],
+        *,
+        file_path: str | None = None,
+        channels: tuple[NotificationChannel, ...] = ("activity_log",),
+    ) -> None:
+        notify_validation_issue(
+            self._module,
+            ns=self._messages_namespace_factory(),
+            issue=issue,
+            file_path=file_path,
+            channels=channels,
         )
 
     def show_toast_key(

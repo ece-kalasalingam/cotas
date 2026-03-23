@@ -21,7 +21,6 @@ from common.constants import (
     CO_REPORT_NOT_APPLICABLE_TOKEN,
     CO_REPORT_PERCENT_SYMBOL,
     COURSE_METADATA_FACULTY_NAME_KEY,
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     DIRECT_RATIO,
     INDIRECT_RATIO,
     LIKERT_MAX,
@@ -29,6 +28,7 @@ from common.constants import (
 )
 from common.registry import (
     CO_REPORT_SHEET_KEY_CO_INDIRECT,
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     get_sheet_headers_by_key,
     resolve_dynamic_sheet_headers,

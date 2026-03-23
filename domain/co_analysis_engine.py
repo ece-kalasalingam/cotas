@@ -9,11 +9,6 @@ from typing import Callable
 from common.constants import (
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
-    COURSE_METADATA_ACADEMIC_YEAR_KEY,
-    COURSE_METADATA_COURSE_CODE_KEY,
-    COURSE_METADATA_SECTION_KEY,
-    COURSE_METADATA_SEMESTER_KEY,
-    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     SYSTEM_LAYOUT_SHEET,
     ID_COURSE_SETUP,
 )
@@ -30,6 +25,11 @@ from common.exceptions import AppSystemError, ValidationError
 from common.jobs import CancellationToken
 from common.utils import canonical_path_key, coerce_excel_number, normalize
 from common.registry import (
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_SECTION_KEY,
+    COURSE_METADATA_SEMESTER_KEY,
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
     SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,

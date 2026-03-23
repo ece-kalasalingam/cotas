@@ -7,6 +7,7 @@ import json
 import pkgutil
 import re
 from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -76,6 +77,28 @@ class _TemplateStrategy(Protocol):
         cancel_token: CancellationToken | None,
         context: Mapping[str, Any] | None,
     ) -> object:
+        ...
+
+    def validate_workbook(
+        self,
+        *,
+        template_id: str,
+        workbook_kind: str,
+        workbook_path: str | Path,
+        cancel_token: CancellationToken | None,
+        context: Mapping[str, Any] | None,
+    ) -> str:
+        ...
+
+    def validate_workbooks(
+        self,
+        *,
+        template_id: str,
+        workbook_kind: str,
+        workbook_paths: Sequence[str | Path],
+        cancel_token: CancellationToken | None,
+        context: Mapping[str, Any] | None,
+    ) -> dict[str, object]:
         ...
 
     def validate_course_details_rules(self, workbook: object, *, context: object) -> None:
@@ -234,6 +257,44 @@ def generate_workbook(
         workbook_kind=workbook_kind,
         output_path=output_path,
         workbook_name=workbook_name,
+        cancel_token=cancel_token,
+        context=context,
+    )
+
+
+def validate_workbook(
+    *,
+    workbook_path: str | Path,
+    workbook_kind: str = "course_details",
+    cancel_token: CancellationToken | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> str:
+    template_id = resolve_template_id_from_workbook_path(workbook_path)
+    strategy = get_template_strategy(template_id)
+    _require_operation(strategy, "validate_workbook")
+    return strategy.validate_workbook(
+        template_id=template_id,
+        workbook_kind=workbook_kind,
+        workbook_path=workbook_path,
+        cancel_token=cancel_token,
+        context=context,
+    )
+
+
+def validate_workbooks(
+    *,
+    template_id: str,
+    workbook_paths: Sequence[str | Path],
+    workbook_kind: str = "course_details",
+    cancel_token: CancellationToken | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> dict[str, object]:
+    strategy = get_template_strategy(template_id)
+    _require_operation(strategy, "validate_workbooks")
+    return strategy.validate_workbooks(
+        template_id=template_id,
+        workbook_kind=workbook_kind,
+        workbook_paths=workbook_paths,
         cancel_token=cancel_token,
         context=context,
     )
@@ -656,6 +717,8 @@ __all__ = [
     "generate_co_attainment_by_template",
     "generate_final_report_by_template",
     "generate_workbook",
+    "validate_workbook",
+    "validate_workbooks",
     "get_template_strategy",
     "read_course_metadata_signature",
     "read_layout_manifest_co_sheet_counts",

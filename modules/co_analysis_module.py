@@ -27,8 +27,6 @@ from common.constants import (
     APP_NAME,
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
-    COURSE_METADATA_ACADEMIC_YEAR_KEY,
-    COURSE_METADATA_COURSE_CODE_KEY,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
@@ -36,6 +34,10 @@ from common.constants import (
     MODULE_LEFT_PANE_CONTENT_MARGINS,
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
+)
+from common.registry import (
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
 )
 from common.contracts import require_keys
 from common.drag_drop_file_widget import ManagedDropFileWidget

@@ -13,10 +13,15 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Literal
 
-from common.error_catalog import resolve_validation_issue
+from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, ValidationError
 from common.texts import t
 from common.constants import WORKBOOK_TEMP_SUFFIX
+from common.registry import (
+    SYSTEM_HASH_HEADER_TEMPLATE_HASH,
+    SYSTEM_HASH_HEADER_TEMPLATE_ID,
+    SYSTEM_HASH_SHEET_NAME,
+)
 
 SETTINGS_FILE_NAME = "settings.json"
 DEFAULT_LOG_FILE_NAME = "focus.log"
@@ -668,6 +673,91 @@ def emit_user_status(
     except Exception:
         if logger is not None:
             logger.exception("Failed to emit user status message.")
+
+
+def copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
+    """Copy validated SYSTEM_HASH sheet from openpyxl source workbook to xlsxwriter target workbook."""
+    if SYSTEM_HASH_SHEET_NAME not in getattr(source_workbook, "sheetnames", []):
+        raise validation_error_from_key(
+            "validation.system.sheet_missing",
+            code="COA_SYSTEM_SHEET_MISSING",
+            sheet=SYSTEM_HASH_SHEET_NAME,
+        )
+    source = source_workbook[SYSTEM_HASH_SHEET_NAME]
+    header_id = str(source.cell(row=1, column=1).value or "").strip()
+    header_hash = str(source.cell(row=1, column=2).value or "").strip()
+    if header_id != SYSTEM_HASH_HEADER_TEMPLATE_ID:
+        raise validation_error_from_key(
+            "validation.system_hash.header_template_id_missing",
+            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_ID_MISSING",
+        )
+    if header_hash != SYSTEM_HASH_HEADER_TEMPLATE_HASH:
+        raise validation_error_from_key(
+            "validation.system_hash.header_template_hash_missing",
+            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_HASH_MISSING",
+        )
+    template_id = str(source.cell(row=2, column=1).value or "").strip()
+    template_hash = str(source.cell(row=2, column=2).value or "").strip()
+    if not template_id:
+        raise validation_error_from_key(
+            "validation.system_hash.template_id_missing",
+            code="COA_SYSTEM_HASH_TEMPLATE_ID_MISSING",
+        )
+    target = target_workbook.add_worksheet(SYSTEM_HASH_SHEET_NAME)
+    target.write_row(0, 0, [SYSTEM_HASH_HEADER_TEMPLATE_ID, SYSTEM_HASH_HEADER_TEMPLATE_HASH])
+    target.write_row(1, 0, [template_id, template_hash])
+    target.hide()
+
+
+def ensure_uniform_template_id_and_copy_system_hash(
+    source_workbooks: list[Any],
+    target_workbook: Any,
+    *,
+    read_template_id: Callable[[Any], str],
+    routed_template_id: str | None = None,
+    cancel_token: Any | None = None,
+) -> str:
+    if not source_workbooks:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COA_SOURCE_WORKBOOK_REQUIRED",
+        )
+
+    template_id: str | None = None
+    first_workbook: Any | None = None
+    for workbook in source_workbooks:
+        if cancel_token is not None:
+            raise_if_cancelled = getattr(cancel_token, "raise_if_cancelled", None)
+            if callable(raise_if_cancelled):
+                raise_if_cancelled()
+        current_template_id = read_template_id(workbook)
+        if routed_template_id is not None and normalize(current_template_id) != normalize(routed_template_id):
+            raise validation_error_from_key(
+                "validation.template.unknown",
+                code="UNKNOWN_TEMPLATE",
+                template_id=current_template_id,
+                available=routed_template_id,
+            )
+        if template_id is None:
+            template_id = current_template_id
+            first_workbook = workbook
+            continue
+        if normalize(current_template_id) != normalize(template_id):
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="COA_TEMPLATE_MIXED",
+                expected=template_id,
+                found=current_template_id,
+            )
+
+    if first_workbook is None or template_id is None:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COA_SOURCE_WORKBOOK_REQUIRED",
+        )
+
+    copy_system_hash_sheet(first_workbook, target_workbook)
+    return template_id
 
 
 

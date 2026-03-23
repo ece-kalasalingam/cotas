@@ -205,6 +205,82 @@ def notify_message_key(
     )
 
 
+def notify_validation_issue(
+    module: object,
+    *,
+    ns: Mapping[str, object],
+    issue: Mapping[str, object],
+    file_path: str | None = None,
+    channels: Iterable[NotificationChannel] | None = ("activity_log",),
+) -> None:
+    typed_ns = cast(MessagesNamespace, ns)
+    translation_key = str(issue.get("translation_key", "") or "").strip()
+    code = str(issue.get("code", "") or "").strip()
+    fallback_reason = str(issue.get("message", "") or "").strip()
+    raw_context = issue.get("context")
+    context: dict[str, object] = {}
+    if isinstance(raw_context, Mapping):
+        for key, value in raw_context.items():
+            if isinstance(key, str):
+                context[key] = value
+
+    if translation_key:
+        if file_path:
+            reason_kwargs = dict(context)
+            reason_text = typed_ns["t"](translation_key, **reason_kwargs)
+            payload_kwargs: dict[str, object] = {
+                "file": file_path,
+                "code": code or "VALIDATION_ERROR",
+                "reason": {"__t_key__": translation_key, "__kwargs__": reason_kwargs},
+            }
+            fallback = typed_ns["t"](
+                "instructor.validation.file_issue_line",
+                file=file_path,
+                code=code or "VALIDATION_ERROR",
+                reason=reason_text,
+            )
+            notify_message(
+                module,
+                typed_ns["build_i18n_log_message"](
+                    "instructor.validation.file_issue_line",
+                    kwargs=payload_kwargs,
+                    fallback=fallback,
+                ),
+                ns=typed_ns,
+                channels=_normalize_channels(channels, default=("activity_log",)),
+            )
+            return
+        notify_message_key(
+            module,
+            translation_key,
+            ns=typed_ns,
+            channels=channels,
+            kwargs=context,
+            fallback=fallback_reason or None,
+        )
+        return
+
+    if file_path and fallback_reason:
+        notify_message(
+            module,
+            typed_ns["build_i18n_log_message"](
+                "instructor.validation.file_issue_line",
+                kwargs={
+                    "file": file_path,
+                    "code": code or "VALIDATION_ERROR",
+                    "reason": fallback_reason,
+                },
+                fallback=f"{file_path}: [{code or 'VALIDATION_ERROR'}] {fallback_reason}",
+            ),
+            ns=typed_ns,
+            channels=_normalize_channels(channels, default=("activity_log",)),
+        )
+        return
+
+    if fallback_reason:
+        notify_message(module, fallback_reason, ns=typed_ns, channels=channels)
+
+
 def publish_status(module: object, message: str, *, ns: Mapping[str, object]) -> None:
     notify_message(module, message, ns=ns, channels=("status", "activity_log"))
 

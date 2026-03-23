@@ -52,7 +52,7 @@ from common.excel_sheet_layout import (
 )
 from common.error_catalog import validation_error_from_key
 from common.sheet_schema import ValidationRule
-from common.utils import coerce_excel_number, normalize
+from common.utils import coerce_excel_number, copy_system_hash_sheet, normalize
 from common.workbook_signing import sign_payload
 
 _AUTO_FIT_SAMPLE_ROWS = 6
@@ -72,14 +72,7 @@ _VALIDATION_KEY_ERROR_MESSAGE = "error_message"
 _VALIDATION_KEY_IGNORE_BLANK = "ignore_blank"
 
 def _copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
-    if SYSTEM_HASH_SHEET not in source_workbook.sheetnames:
-        return
-
-    source = source_workbook[SYSTEM_HASH_SHEET]
-    target = target_workbook.add_worksheet(SYSTEM_HASH_SHEET)
-    target.write_row(0, 0, [source["A1"].value, source["B1"].value])
-    target.write_row(1, 0, [source["A2"].value, source["B2"].value])
-    target.hide()
+    copy_system_hash_sheet(source_workbook, target_workbook)
 
 
 def _write_two_column_copy_sheet(
