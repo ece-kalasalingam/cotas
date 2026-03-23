@@ -1,4 +1,4 @@
-# modules/help_module.py
+﻿# modules/help_module.py
 
 import logging
 import shutil
@@ -18,7 +18,7 @@ from common.module_messages import default_messages_namespace as _default_messag
 from common.module_messages import publish_status_key as _publish_status_key_impl
 from common.module_messages import show_toast_key as _show_toast_key
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.texts import t
+from common.i18n import t
 from common.utils import (
     log_process_message,
     remember_dialog_dir_safe,
@@ -278,3 +278,4 @@ class HelpModule(QWidget):
             level="success",
         )
         self._emit_status_key("help.status.open_success")
+

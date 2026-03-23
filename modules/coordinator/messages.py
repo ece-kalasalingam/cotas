@@ -1,4 +1,4 @@
-"""Coordinator module message and toast helpers."""
+﻿"""Coordinator module message and toast helpers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Callable, cast
 from PySide6.QtWidgets import QWidget
 
 from common.module_messages import show_toast_plain
-from common.texts import t
+from common.i18n import t
 
 
 def show_threshold_validation_toast(
@@ -24,3 +24,4 @@ def show_threshold_validation_toast(
         title=translate(title_key),
         level="error",
     )
+

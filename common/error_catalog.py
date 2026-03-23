@@ -1,4 +1,4 @@
-"""Central validation issue catalog used by engines, UI logging, and toast messages."""
+﻿"""Central validation issue catalog used by engines, UI logging, and toast messages."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from common.exceptions import ValidationError
-from common.texts import t
+from common.i18n import t
 
 ValidationSeverity = Literal["info", "success", "warning", "error"]
 
@@ -400,3 +400,4 @@ def resolve_validation_issue(
         message=translated,
         context=clean_context,
     )
+

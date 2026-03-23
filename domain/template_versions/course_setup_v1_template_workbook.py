@@ -1,4 +1,4 @@
-"""Generator for the Course Details workbook template."""
+﻿"""Generator for the Course Details workbook template."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from common.registry import (
 )
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import WorkbookBlueprint
-from common.texts import t
+from common.i18n import t
 from common.utils import coerce_excel_number, normalize
 from domain.assessment_semantics import parse_assessment_components
 from domain.template_strategy_router import (
@@ -813,6 +813,7 @@ def _co_tokens(value: Any) -> list[int]:
             return []
         numbers.append(int(match.group(1)))
     return numbers
+
 
 
 

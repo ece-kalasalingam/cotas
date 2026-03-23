@@ -1,4 +1,4 @@
-"""Instructor CO module UI (single workflow: course template + marks template)."""
+﻿"""Instructor CO module UI (single workflow: course template + marks template)."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
-from common.texts import t
+from common.i18n import t
 from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
 from domain.template_strategy_router import (
@@ -792,3 +792,4 @@ def _localized_log_messages(process_key: str) -> tuple[str, str]:
 
 
 __all__ = ["InstructorModule"]
+

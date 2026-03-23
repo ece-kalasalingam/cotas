@@ -1,4 +1,4 @@
-"""Final CO report generation from validated filled-marks workbooks."""
+﻿"""Final CO report generation from validated filled-marks workbooks."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ from common.excel_sheet_layout import (
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from common.texts import t
+from common.i18n import t
 from common.utils import coerce_excel_number, normalize
 from common.workbook_signing import sign_payload
 from domain.assessment_semantics import AssessmentComponent, parse_assessment_components
@@ -735,3 +735,4 @@ def _normalize_page_setup_fit(path: Path) -> None:
 
 def _ratio_total_header(ratio: float) -> str:
     return _co_sheet_ratio_total_header(ratio)
+

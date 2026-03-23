@@ -1,4 +1,4 @@
-"""Shared utility helpers used across the application."""
+﻿"""Shared utility helpers used across the application."""
 
 import atexit
 import json
@@ -15,7 +15,7 @@ from typing import Any, Callable, Literal
 
 from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, ValidationError
-from common.texts import t
+from common.i18n import t
 from common.constants import WORKBOOK_TEMP_SUFFIX
 from common.registry import (
     SYSTEM_HASH_HEADER_TEMPLATE_HASH,
@@ -758,6 +758,7 @@ def ensure_uniform_template_id_and_copy_system_hash(
 
     copy_system_hash_sheet(first_workbook, target_workbook)
     return template_id
+
 
 
 

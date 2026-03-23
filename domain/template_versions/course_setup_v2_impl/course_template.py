@@ -1,4 +1,4 @@
-"""COURSE_SETUP_V2 course-template generation."""
+﻿"""COURSE_SETUP_V2 course-template generation."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from common.texts import t
+from common.i18n import t
 _logger = logging.getLogger(__name__)
 _TEMPLATE_ID = "COURSE_SETUP_V2"
 from domain.template_versions.course_setup_v2_impl import instructor_engine_shareops as _shareops
@@ -133,3 +133,4 @@ def generate_course_details_template(
 
 
 __all__ = ["generate_course_details_template"]
+

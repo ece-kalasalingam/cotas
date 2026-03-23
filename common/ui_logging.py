@@ -1,4 +1,4 @@
-"""Shared UI logging helpers for module activity panels."""
+﻿"""Shared UI logging helpers for module activity panels."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from common.texts import t
+from common.i18n import t
 
 _I18N_LOG_PREFIX = "__I18N_LOG__:"
 
@@ -125,3 +125,4 @@ def _resolve_i18n_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
                 continue
         resolved[key] = value
     return resolved
+

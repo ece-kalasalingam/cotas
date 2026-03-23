@@ -1,4 +1,4 @@
-"""PO Analysis placeholder module."""
+﻿"""PO Analysis placeholder module."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from common.constants import INSTRUCTOR_INFO_TAB_FIXED_HEIGHT
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputPanelData
-from common.texts import t
+from common.i18n import t
 
 
 class POAnalysisModule(QWidget):
@@ -41,3 +41,4 @@ class POAnalysisModule(QWidget):
 
     def get_shared_outputs_data(self) -> OutputPanelData:
         return OutputPanelData(items=tuple())
+

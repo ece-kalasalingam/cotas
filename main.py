@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import os
 import re
 import sys
@@ -37,7 +37,7 @@ from common.crash_reporting import (
     has_remote_crash_endpoint,
 )
 from common.exceptions import ConfigurationError
-from common.texts import get_language, set_language, t
+from common.i18n import get_language, set_language, t
 from common.toast import ToastLevel, show_toast
 from common.ui_stylings import apply_global_ui_styles
 from common.utils import (
@@ -302,14 +302,14 @@ def main() -> int:
     validate_blueprint_registry_contracts()
     configure_app_logging(APP_NAME)
     startup_language = get_ui_language_preference(APP_NAME) or UI_LANGUAGE
-    if startup_language.lower() in UI_LANGUAGE_AUTO_ALIASES:
-        set_language(UI_LANGUAGE)
-    else:
-        set_language(startup_language)
+    selected_startup_language = (
+        UI_LANGUAGE if startup_language.lower() in UI_LANGUAGE_AUTO_ALIASES else startup_language
+    )
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
+    set_language(selected_startup_language)
     app.setStyle("Fusion")
     _setup_system_theme()
     apply_global_ui_styles(app)
@@ -383,3 +383,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

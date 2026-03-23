@@ -1,4 +1,4 @@
-"""Fail when user-facing UI strings are hardcoded in UI modules."""
+﻿"""Fail when user-facing UI strings are hardcoded in UI modules."""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def main() -> int:
         print("UI hardcoded-string check failed:")
         for failure in failures:
             print(f"  - {failure}")
-        print("Use common.texts.t(...) keys instead of inline literals.")
+        print("Use common.i18n.t(...) keys instead of inline literals.")
         return 1
 
     print("UI hardcoded-string check passed.")
@@ -92,3 +92,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

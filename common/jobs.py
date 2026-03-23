@@ -1,4 +1,4 @@
-"""Job context and cancellation primitives."""
+﻿"""Job context and cancellation primitives."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from common.exceptions import JobCancelledError
-from common.texts import get_language
+from common.i18n import get_language
 
 
 def generate_job_id() -> str:
@@ -49,3 +49,4 @@ class CancellationToken:
     def raise_if_cancelled(self, *, message: str = "Job was cancelled.") -> None:
         if self.cancelled:
             raise JobCancelledError(message)
+

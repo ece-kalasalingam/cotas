@@ -1,4 +1,4 @@
-"""About module using a single visible Module UI Engine pane."""
+﻿"""About module using a single visible Module UI Engine pane."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from common.constants import (
     SYSTEM_VERSION,
 )
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.texts import t
+from common.i18n import t
 from common.utils import resource_path
 
 
@@ -140,3 +140,4 @@ class AboutModule(QWidget):
                 link_label=link_text,
             )
         )
+

@@ -1,4 +1,4 @@
-"""CO Analysis module."""
+﻿"""CO Analysis module."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ from common.qt_jobs import run_in_background
 from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
-from common.texts import t
+from common.i18n import t
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
     canonical_path_key,
@@ -680,4 +680,5 @@ class COAnalysisModule(QWidget):
             self._logger.removeHandler(self._ui_log_handler)
             self._ui_log_handler = None
         super().closeEvent(event)
+
 

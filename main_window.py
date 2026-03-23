@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -51,7 +51,7 @@ from common.output_panel import (
     open_output_link,
     render_output_panel_html,
 )
-from common.texts import get_available_languages, get_language, t
+from common.i18n import get_available_languages, get_language, t
 from common.utils import (
     get_ui_language_preference,
     resource_path,
@@ -419,5 +419,6 @@ class MainWindow(QMainWindow):
     def set_language_switch_enabled(self, enabled: bool) -> None:
         self.language_status_button.setEnabled(enabled)
         self.language_menu.setEnabled(enabled)
+
 
 

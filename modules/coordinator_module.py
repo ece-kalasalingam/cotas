@@ -1,4 +1,4 @@
-"""Course coordinator module for collecting Final CO report Excel files."""
+﻿"""Course coordinator module for collecting Final CO report Excel files."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ from common.removable_file_item_widget import (
 from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
-from common.texts import t
+from common.i18n import t
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
@@ -706,6 +706,7 @@ class CoordinatorModule(QWidget):
             self._logger.removeHandler(self._ui_log_handler)
             self._ui_log_handler = None
         super().closeEvent(event)
+
 
 
 
