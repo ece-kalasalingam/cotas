@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-import importlib.util
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Mapping, cast
+from typing import Any, cast
 
 from common.error_catalog import validation_error_from_key
-from common.exceptions import ConfigurationError
+from common.exceptions import ConfigurationError, JobCancelledError
 from common.jobs import CancellationToken
-from common.utils import normalize
+from common.utils import canonical_path_key, normalize
 
 _SUPPORTED_OPERATIONS = frozenset(
     {
         "generate_workbook",
+        "generate_workbooks",
         "validate_workbook",
         "validate_workbooks",
-        "validate_course_details_rules",
-        "extract_marks_template_context",
-        "write_marks_template_workbook",
     }
 )
+_SUPPORTED_OPERATION_TOKENS = frozenset(normalize(value) for value in _SUPPORTED_OPERATIONS)
 
 
 @dataclass(slots=True, frozen=True)
@@ -30,7 +29,7 @@ class CourseSetupV2Strategy:
     template_id: str = "COURSE_SETUP_V2"
 
     def supports_operation(self, operation: str) -> bool:
-        return str(operation).strip() in _SUPPORTED_OPERATIONS
+        return normalize(operation) in _SUPPORTED_OPERATION_TOKENS
 
     def default_workbook_name(
         self,
@@ -39,12 +38,8 @@ class CourseSetupV2Strategy:
         context: Mapping[str, Any] | None,
         fallback: str,
     ) -> str:
-        if normalize(workbook_kind) == "marks_template":
-            return _v1_delegate().default_workbook_name(
-                workbook_kind=workbook_kind,
-                context=context,
-                fallback=fallback,
-            )
+        del workbook_kind
+        del context
         return fallback
 
     def generate_workbook(
@@ -57,24 +52,21 @@ class CourseSetupV2Strategy:
         cancel_token: CancellationToken | None = None,
         context: Mapping[str, Any] | None = None,
     ) -> object:
-        if normalize(template_id) != normalize(self.template_id):
-            raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=template_id,
-            )
+        from domain.template_strategy_router import assert_template_id_matches
 
+        assert_template_id_matches(
+            actual_template_id=template_id,
+            expected_template_id=self.template_id,
+        )
         resolved_workbook_name = (workbook_name or Path(output_path).name).strip()
         if not resolved_workbook_name:
             raise validation_error_from_key(
                 "common.validation_failed_invalid_data",
                 code="WORKBOOK_NAME_REQUIRED",
             )
-
         kind = normalize(workbook_kind)
         if kind == "course_details_template":
-            generator = _load_course_template_generator()
-            return generator(
+            return _course_template_generator()(
                 output_path=output_path,
                 cancel_token=cancel_token,
             )
@@ -86,8 +78,7 @@ class CourseSetupV2Strategy:
                     code="WORKBOOK_SOURCE_REQUIRED",
                     workbook_kind=workbook_kind,
                 )
-            generator = _load_marks_template_generator()
-            return generator(
+            return _marks_template_generator()(
                 course_details_path=source,
                 output_path=output_path,
                 cancel_token=cancel_token,
@@ -108,12 +99,12 @@ class CourseSetupV2Strategy:
         cancel_token: CancellationToken | None = None,
         context: Mapping[str, Any] | None = None,
     ) -> str:
-        if normalize(template_id) != normalize(self.template_id):
-            raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=template_id,
-            )
+        from domain.template_strategy_router import assert_template_id_matches
+
+        assert_template_id_matches(
+            actual_template_id=template_id,
+            expected_template_id=self.template_id,
+        )
         if normalize(workbook_kind) not in {"course_details", "course_details_template"}:
             raise validation_error_from_key(
                 "common.validation_failed_invalid_data",
@@ -121,8 +112,7 @@ class CourseSetupV2Strategy:
                 workbook_kind=workbook_kind,
                 template_id=self.template_id,
             )
-        validator = _load_course_template_validator()
-        return validator(
+        return _course_template_validator()(
             workbook_path=workbook_path,
             cancel_token=cancel_token,
         )
@@ -136,12 +126,12 @@ class CourseSetupV2Strategy:
         cancel_token: CancellationToken | None = None,
         context: Mapping[str, Any] | None = None,
     ) -> dict[str, object]:
-        if normalize(template_id) != normalize(self.template_id):
-            raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=template_id,
-            )
+        from domain.template_strategy_router import assert_template_id_matches
+
+        assert_template_id_matches(
+            actual_template_id=template_id,
+            expected_template_id=self.template_id,
+        )
         if normalize(workbook_kind) not in {"course_details", "course_details_template"}:
             raise validation_error_from_key(
                 "common.validation_failed_invalid_data",
@@ -149,51 +139,120 @@ class CourseSetupV2Strategy:
                 workbook_kind=workbook_kind,
                 template_id=self.template_id,
             )
-        batch_validator = _load_course_template_batch_validator()
-        return batch_validator(
+        return _course_template_batch_validator()(
             workbook_paths=workbook_paths,
             cancel_token=cancel_token,
         )
 
-    def validate_course_details_rules(self, workbook: object, *, context: object) -> None:
-        _v1_delegate().validate_course_details_rules(workbook, context=context)
-
-    def extract_marks_template_context(self, workbook: object, *, context: object) -> dict[str, Any]:
-        return _v1_delegate().extract_marks_template_context(workbook, context=context)
-
-    def write_marks_template_workbook(
+    def generate_workbooks(
         self,
-        workbook: object,
-        context_data: dict[str, Any],
         *,
-        context: object,
+        template_id: str,
+        workbook_kind: str,
+        workbook_paths: Sequence[str | Path],
+        output_dir: str | Path,
         cancel_token: CancellationToken | None = None,
-    ) -> dict[str, Any]:
-        return _v1_delegate().write_marks_template_workbook(
-            workbook,
-            context_data,
-            context=context,
+        context: Mapping[str, Any] | None = None,
+    ) -> dict[str, object]:
+        from domain.template_strategy_router import assert_template_id_matches
+
+        assert_template_id_matches(
+            actual_template_id=template_id,
+            expected_template_id=self.template_id,
+        )
+        kind = normalize(workbook_kind)
+        runner = _get_workbooks_batch_runner(kind)
+        if runner is None:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="WORKBOOK_KIND_UNSUPPORTED",
+                workbook_kind=workbook_kind,
+                template_id=self.template_id,
+            )
+        return runner(
+            workbook_paths=workbook_paths,
+            output_dir=Path(output_dir),
             cancel_token=cancel_token,
+            context=context,
         )
 
 
-def _v1_delegate():
-    from domain.template_versions.course_setup_v1 import CourseSetupV1Strategy
+def _run_marks_template_batch(
+    *,
+    workbook_paths: Sequence[str | Path],
+    output_dir: Path,
+    cancel_token: CancellationToken | None,
+    context: Mapping[str, Any] | None,
+) -> dict[str, object]:
+    del context
+    generator = _marks_template_generator()
+    seen_keys: set[str] = set()
+    seen_output_names: set[str] = set()
+    results: dict[str, object] = {}
+    generated = 0
+    failed = 0
+    skipped = 0
 
-    return CourseSetupV1Strategy()
+    for raw_path in workbook_paths:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+
+        source = Path(raw_path)
+        key = canonical_path_key(source)
+
+        if key in seen_keys:
+            results[key] = {"status": "skipped", "output": None, "reason": "duplicate_source"}
+            skipped += 1
+            continue
+        seen_keys.add(key)
+
+        output_name = source.stem + "_marks_template.xlsx"
+        if output_name in seen_output_names:
+            results[key] = {"status": "failed", "output": None, "reason": "output_name_collision"}
+            failed += 1
+            continue
+        seen_output_names.add(output_name)
+
+        output_path = output_dir / output_name
+        try:
+            generator(
+                course_details_path=str(source),
+                output_path=output_path,
+                cancel_token=cancel_token,
+            )
+            results[key] = {"status": "generated", "output": str(output_path), "reason": None}
+            generated += 1
+        except JobCancelledError:
+            raise
+        except Exception as exc:
+            results[key] = {"status": "failed", "output": None, "reason": str(exc)}
+            failed += 1
+
+    return {
+        "total": len(seen_keys) + skipped,
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "results": results,
+    }
 
 
-def _load_marks_template_generator() -> Callable[..., Path]:
-    impl_path = Path(__file__).parent / "course_setup_v2_impl" / "marks_template.py"
-    if not impl_path.exists():
-        raise ConfigurationError(f"Missing V2 marks template implementation: {impl_path}")
-    module_name = "domain.template_versions._course_setup_v2_marks_template"
-    spec = importlib.util.spec_from_file_location(module_name, impl_path)
-    if spec is None or spec.loader is None:
-        raise ConfigurationError(f"Unable to load V2 marks template implementation: {impl_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    fn = getattr(module, "generate_marks_template_from_course_details", None)
+def _get_workbooks_batch_runner(
+    kind: str,
+) -> Callable[..., dict[str, object]] | None:
+    if kind == "marks_template":
+        return _run_marks_template_batch
+    # future: if kind == "co_template": return _run_co_template_batch
+    return None
+
+
+@lru_cache(maxsize=1)
+def _marks_template_generator() -> Callable[..., Path]:
+    try:
+        from domain.template_versions.course_setup_v2_impl import marks_template as marks_template_impl
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 marks template implementation module.") from exc
+    fn = getattr(marks_template_impl, "generate_marks_template_from_course_details", None)
     if not callable(fn):
         raise ConfigurationError(
             "V2 marks template implementation missing generate_marks_template_from_course_details()."
@@ -201,52 +260,46 @@ def _load_marks_template_generator() -> Callable[..., Path]:
     return cast(Callable[..., Path], fn)
 
 
-def _load_course_template_generator() -> Callable[..., Path]:
-    impl_path = Path(__file__).parent / "course_setup_v2_impl" / "course_template.py"
-    if not impl_path.exists():
-        raise ConfigurationError(f"Missing V2 course template implementation: {impl_path}")
-    module_name = "domain.template_versions._course_setup_v2_course_template"
-    spec = importlib.util.spec_from_file_location(module_name, impl_path)
-    if spec is None or spec.loader is None:
-        raise ConfigurationError(f"Unable to load V2 course template implementation: {impl_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    fn = getattr(module, "generate_course_details_template", None)
+@lru_cache(maxsize=1)
+def _course_template_generator() -> Callable[..., Path]:
+    try:
+        from domain.template_versions.course_setup_v2_impl.course_template import (
+            generate_course_details_template,
+        )
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 course template implementation module.") from exc
+    fn = generate_course_details_template
     if not callable(fn):
         raise ConfigurationError("V2 course template implementation missing generate_course_details_template().")
-    return cast(Callable[..., Path], fn)
+    return fn
 
 
-def _load_course_template_validator() -> Callable[..., str]:
-    impl_path = Path(__file__).parent / "course_setup_v2_impl" / "course_template_validator.py"
-    if not impl_path.exists():
-        raise ConfigurationError(f"Missing V2 course template validator: {impl_path}")
-    module_name = "domain.template_versions._course_setup_v2_course_template_validator"
-    spec = importlib.util.spec_from_file_location(module_name, impl_path)
-    if spec is None or spec.loader is None:
-        raise ConfigurationError(f"Unable to load V2 course template validator: {impl_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    fn = getattr(module, "validate_course_details_workbook", None)
+@lru_cache(maxsize=1)
+def _course_template_validator() -> Callable[..., str]:
+    try:
+        from domain.template_versions.course_setup_v2_impl.course_template_validator import (
+            validate_course_details_workbook,
+        )
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 course template validator module.") from exc
+    fn = validate_course_details_workbook
     if not callable(fn):
         raise ConfigurationError("V2 course template validator missing validate_course_details_workbook().")
-    return cast(Callable[..., str], fn)
+    return fn
 
 
-def _load_course_template_batch_validator() -> Callable[..., dict[str, object]]:
-    impl_path = Path(__file__).parent / "course_setup_v2_impl" / "course_template_validator.py"
-    if not impl_path.exists():
-        raise ConfigurationError(f"Missing V2 course template validator: {impl_path}")
-    module_name = "domain.template_versions._course_setup_v2_course_template_validator"
-    spec = importlib.util.spec_from_file_location(module_name, impl_path)
-    if spec is None or spec.loader is None:
-        raise ConfigurationError(f"Unable to load V2 course template validator: {impl_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    fn = getattr(module, "validate_course_details_workbooks", None)
+@lru_cache(maxsize=1)
+def _course_template_batch_validator() -> Callable[..., dict[str, object]]:
+    try:
+        from domain.template_versions.course_setup_v2_impl.course_template_validator import (
+            validate_course_details_workbooks,
+        )
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 course template validator module.") from exc
+    fn = validate_course_details_workbooks
     if not callable(fn):
         raise ConfigurationError("V2 course template validator missing validate_course_details_workbooks().")
-    return cast(Callable[..., dict[str, object]], fn)
+    return fn
 
 
 __all__ = ["CourseSetupV2Strategy"]

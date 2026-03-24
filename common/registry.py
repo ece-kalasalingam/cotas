@@ -210,6 +210,28 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
             validations=[
                 _rule(
                     first_row=1,
+                    first_col=2,
+                    last_col=2,
+                    options={
+                        "validate": "list",
+                        "source": list(COURSE_SETUP_ASSESSMENT_VALIDATION_YES_NO_OPTIONS),
+                        "input_title": COURSE_SETUP_ASSESSMENT_VALIDATION_INPUT_TITLE,
+                        "input_message": COURSE_SETUP_ASSESSMENT_VALIDATION_INPUT_MESSAGE,
+                    },
+                ),
+                _rule(
+                    first_row=1,
+                    first_col=3,
+                    last_col=3,
+                    options={
+                        "validate": "list",
+                        "source": list(COURSE_SETUP_ASSESSMENT_VALIDATION_YES_NO_OPTIONS),
+                        "input_title": COURSE_SETUP_ASSESSMENT_VALIDATION_INPUT_TITLE,
+                        "input_message": COURSE_SETUP_ASSESSMENT_VALIDATION_INPUT_MESSAGE,
+                    },
+                ),
+                _rule(
+                    first_row=1,
                     first_col=4,
                     last_col=4,
                     options={
@@ -426,7 +448,6 @@ COURSE_SETUP_V2 = _build_course_setup_blueprint(
         COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
         COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
         COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
-        COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
         COURSE_SETUP_SHEET_KEY_STUDENTS,
     ),
 )

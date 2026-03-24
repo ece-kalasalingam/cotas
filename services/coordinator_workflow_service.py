@@ -14,7 +14,8 @@ from common.jobs import CancellationToken, JobContext
 from domain.template_versions.course_setup_v1_coordinator_engine import (
     _analyze_dropped_files,
 )
-from domain.template_strategy_router import extract_final_report_signature_from_path, generate_workbook
+from domain.template_strategy_router import generate_workbook
+from domain.template_versions.course_setup_v1_coordinator_engine import extract_final_report_signature_from_path
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 

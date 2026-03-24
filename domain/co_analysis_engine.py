@@ -38,6 +38,7 @@ from common.registry import (
 )
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
+    assert_template_id_matches,
     get_template_strategy,
     read_valid_template_id_from_system_hash_sheet,
 )
@@ -527,11 +528,18 @@ def build_co_analysis_workbook(
                 source_wb.close()
             strategy = get_template_strategy(template_id)
             strategy.generate_final_report(source_path, final_report_path, cancel_token=token)
-            if normalize(template_id) != normalize(resolved_template_id):
+            try:
+                assert_template_id_matches(
+                    actual_template_id=template_id,
+                    expected_template_id=resolved_template_id,
+                )
+            except ValidationError as exc:
                 raise validation_error_from_key(
                     "common.validation_failed_invalid_data",
                     code="COA_TEMPLATE_MIXED",
-                )
+                    expected=resolved_template_id,
+                    found=template_id,
+                ) from exc
             generated_final_reports.append(final_report_path)
 
         if not generated_final_reports:

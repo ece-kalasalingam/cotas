@@ -38,7 +38,6 @@ from common.i18n import t
 from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
 from domain.template_strategy_router import (
-    default_workbook_name,
     generate_workbook,
     resolve_template_id_from_workbook_path,
     validate_workbooks,
@@ -656,19 +655,16 @@ class InstructorModule(QWidget):
 
     def _marks_template_default_name(self, source_path: str) -> str:
         fallback = t("instructor.dialog.marks_template.default_name")
-        try:
-            template_id = resolve_template_id_from_workbook_path(source_path)
-        except Exception:
+        source_name = Path(source_path).stem.strip()
+        if not source_name:
             return fallback
-        try:
-            return default_workbook_name(
-                template_id=template_id,
-                workbook_kind="marks_template",
-                fallback=fallback,
-                context={"course_details_path": source_path},
-            )
-        except Exception:
-            return fallback
+        ext = Path(fallback).suffix or ".xlsx"
+        base_fallback = Path(fallback).stem.strip()
+        suffix = base_fallback or "Marks"
+        candidate = f"{source_name}_{suffix}{ext}"
+        if candidate.strip():
+            return candidate
+        return fallback
 
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()

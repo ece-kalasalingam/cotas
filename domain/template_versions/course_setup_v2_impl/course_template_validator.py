@@ -31,9 +31,13 @@ from common.registry import (
     get_sheet_schema_by_key,
 )
 from common.sheet_schema import SheetSchema, ValidationRule
+from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.utils import canonical_path_key, coerce_excel_number, normalize
 from domain.co_token_parser import parse_co_tokens
-from domain.template_strategy_router import read_valid_template_id_from_system_hash_sheet
+from domain.template_strategy_router import (
+    assert_template_id_matches,
+    read_valid_template_id_from_system_hash_sheet,
+)
 
 _TEMPLATE_ID = "COURSE_SETUP_V2"
 _COL_COMPONENT = "component"
@@ -83,6 +87,81 @@ def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) ->
         "message": resolved.message,
         "context": dict(resolved.context),
     }
+
+
+class _ValidationCollector:
+    def __init__(self) -> None:
+        self._issues: list[dict[str, object]] = []
+
+    def add(self, exc: ValidationError) -> None:
+        self._issues.append(
+            _issue_dict(
+                code=str(getattr(exc, "code", "VALIDATION_ERROR")),
+                context=dict(getattr(exc, "context", {}) or {}),
+                fallback_message=str(exc).strip() or "Validation failed.",
+            )
+        )
+
+    def capture(self, fn, *args, **kwargs) -> Any | None:
+        try:
+            return fn(*args, **kwargs)
+        except ValidationError as exc:
+            self.add(exc)
+            return None
+
+    def raise_if_any(self) -> None:
+        if not self._issues:
+            return
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COURSE_DETAILS_VALIDATION_FAILED",
+            issue_count=len(self._issues),
+            issues=list(self._issues),
+        )
+
+
+def validate_course_details_rules(workbook: Any) -> None:
+    blueprint = get_blueprint(_TEMPLATE_ID)
+    if blueprint is None:
+        raise validation_error_from_key(
+            "validation.template.unknown",
+            code="UNKNOWN_TEMPLATE",
+            template_id=_TEMPLATE_ID,
+        )
+
+    collector = _ValidationCollector()
+    template_id = collector.capture(read_valid_template_id_from_system_hash_sheet, workbook)
+    if isinstance(template_id, str):
+        try:
+            assert_template_id_matches(
+                actual_template_id=template_id,
+                expected_template_id=_TEMPLATE_ID,
+            )
+        except ValidationError as exc:
+            collector.add(exc)
+
+    collector.capture(_validate_sheet_order, workbook, blueprint.sheets)
+    collector.capture(_reject_any_formula_cells, workbook, blueprint.sheets)
+    collector.capture(_validate_sheet_headers, workbook, blueprint.sheets)
+
+    row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]] = {}
+    for sheet_schema in blueprint.sheets:
+        worksheet = workbook[sheet_schema.name] if sheet_schema.name in workbook.sheetnames else None
+        if worksheet is None:
+            continue
+        row_data = collector.capture(_validated_non_empty_data_rows, worksheet, sheet_schema)
+        if not isinstance(row_data, list):
+            continue
+        row_data_by_sheet[sheet_schema.name] = row_data
+        collector.capture(_validate_sheet_rules_from_schema, sheet_schema, row_data)
+        collector.capture(_validate_percentage_columns, sheet_schema, row_data)
+
+    identity = collector.capture(_validate_course_metadata_rules, row_data_by_sheet)
+    component_config = collector.capture(_validate_assessment_config_rules, row_data_by_sheet)
+    if isinstance(identity, _CourseIdentity) and isinstance(component_config, dict):
+        collector.capture(_validate_question_map_rules, row_data_by_sheet, component_config, identity.total_outcomes)
+    collector.capture(_validate_students_rules, row_data_by_sheet)
+    collector.raise_if_any()
 
 
 def validate_course_details_workbook(
@@ -282,40 +361,25 @@ def _validate_course_details_workbook_impl(
     try:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        template_id = read_valid_template_id_from_system_hash_sheet(workbook)
-        if normalize(template_id) != normalize(_TEMPLATE_ID):
+        validate_course_details_rules(workbook)
+        metadata_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        metadata_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        if metadata_schema is None:
             raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=template_id,
+                "common.validation_failed_invalid_data",
+                code="SCHEMA_MISSING",
+                sheet_name=metadata_sheet,
             )
-
-        blueprint = get_blueprint(_TEMPLATE_ID)
-        if blueprint is None:
+        if metadata_sheet not in workbook.sheetnames:
             raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=_TEMPLATE_ID,
+                "common.validation_failed_invalid_data",
+                code="SHEET_DATA_REQUIRED",
+                sheet_name=metadata_sheet,
             )
-
-        _validate_sheet_order(workbook, blueprint.sheets)
-        _reject_any_formula_cells(workbook, blueprint.sheets, cancel_token=cancel_token)
-        _validate_sheet_headers(workbook, blueprint.sheets, cancel_token=cancel_token)
-
-        row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]] = {}
-        for sheet_schema in blueprint.sheets:
-            if cancel_token is not None:
-                cancel_token.raise_if_cancelled()
-            row_data = _validated_non_empty_data_rows(workbook[sheet_schema.name], sheet_schema)
-            row_data_by_sheet[sheet_schema.name] = row_data
-            _validate_sheet_rules_from_schema(sheet_schema, row_data)
-            _validate_percentage_columns(sheet_schema, row_data)
-
-        identity = _validate_course_metadata_rules(row_data_by_sheet)
-        component_config = _validate_assessment_config_rules(row_data_by_sheet)
-        _validate_question_map_rules(row_data_by_sheet, component_config, identity.total_outcomes)
-        _validate_students_rules(row_data_by_sheet)
-        return identity
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        metadata_rows = _validated_non_empty_data_rows(workbook[metadata_sheet], metadata_schema)
+        return _validate_course_metadata_rules({metadata_sheet: metadata_rows})
     except JobCancelledError:
         raise
     finally:
@@ -503,7 +567,6 @@ def _validate_percentage_columns(
     rows: list[tuple[int, list[Any]]],
 ) -> None:
     headers = list(sheet_schema.header_matrix[0])
-    column_keys = _column_keys(sheet_schema)
     configured_percent_keys = sheet_schema.sheet_rules.get("percentage_column_keys")
     percent_columns: list[int] = []
     if isinstance(configured_percent_keys, (list, tuple)):
@@ -541,6 +604,21 @@ def _validate_percentage_columns(
                 )
 
 
+def _required_sheet_rows(
+    row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]],
+    *,
+    sheet_name: str,
+) -> list[tuple[int, list[Any]]]:
+    rows = row_data_by_sheet.get(sheet_name)
+    if isinstance(rows, list):
+        return rows
+    raise validation_error_from_key(
+        "common.validation_failed_invalid_data",
+        code="SHEET_DATA_REQUIRED",
+        sheet_name=sheet_name,
+    )
+
+
 def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]]) -> _CourseIdentity:
     metadata_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     metadata_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
@@ -550,8 +628,8 @@ def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int,
             code="SCHEMA_MISSING",
             sheet_name=metadata_sheet,
         )
-    rows = row_data_by_sheet[metadata_sheet]
-    fields: dict[str, str] = {}
+    rows = _required_sheet_rows(row_data_by_sheet, sheet_name=metadata_sheet)
+    fields: dict[str, Any] = {}
     row_by_key: dict[str, int] = {}
     required_keys_raw = metadata_schema.sheet_rules.get("required_field_keys")
     required_keys = {
@@ -570,42 +648,75 @@ def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int,
 
     field_index = _required_column_index(metadata_schema, "field")
     value_index = _required_column_index(metadata_schema, "value")
+    expected_field_types: dict[str, type] = {}
+    for field_name, sample_value in SAMPLE_SETUP_DATA.get(metadata_sheet, []):
+        field_key = normalize(field_name)
+        expected_field_types[field_key] = int if isinstance(sample_value, int) else str
+
     for row_number, values in rows:
         key_raw = values[field_index] if field_index < len(values) else ""
         value_raw = values[value_index] if value_index < len(values) else ""
         key = normalize(key_raw)
+        if not key:
+            raise validation_error_from_key("instructor.validation.course_metadata_field_empty", row=row_number)
         if key in row_by_key:
             raise validation_error_from_key(
                 "instructor.validation.course_metadata_duplicate_field",
                 row=row_number,
                 field=key_raw,
             )
+        if key not in expected_field_types:
+            raise validation_error_from_key(
+                "instructor.validation.course_metadata_unknown_field",
+                row=row_number,
+                field=key_raw,
+            )
         row_by_key[key] = row_number
-        fields[key] = str(coerce_excel_number(value_raw) if value_raw is not None else "").strip()
+        if normalize(value_raw) == "":
+            raise validation_error_from_key(
+                "instructor.validation.course_metadata_value_required",
+                row=row_number,
+                field=key_raw,
+            )
+        fields[key] = coerce_excel_number(value_raw)
 
-    missing = sorted(key for key in required_keys if key not in fields or not fields[key])
+    missing = sorted(key for key in required_keys if key not in fields or normalize(fields[key]) == "")
     if missing:
         raise validation_error_from_key(
             "instructor.validation.course_metadata_missing_fields",
             fields=", ".join(missing),
         )
+
+    for field_key, expected_type in expected_field_types.items():
+        if field_key not in fields:
+            continue
+        value = fields[field_key]
+        if expected_type is int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise validation_error_from_key(
+                    "instructor.validation.course_metadata_field_must_be_int",
+                    field=field_key,
+                )
+            continue
+        if not isinstance(value, str) or normalize(value) == "":
+            raise validation_error_from_key(
+                "instructor.validation.course_metadata_field_must_be_non_empty_str",
+                field=field_key,
+            )
+
     total_outcomes_key = normalize(str(metadata_schema.sheet_rules.get("total_outcomes_key", "")))
     if not total_outcomes_key:
         total_outcomes_key = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
-    total_outcomes_token = fields.get(total_outcomes_key, "").strip()
-    try:
-        total_outcomes = int(float(total_outcomes_token))
-    except (TypeError, ValueError) as exc:
-        raise validation_error_from_key("instructor.validation.course_metadata_total_outcomes_invalid") from exc
-    if total_outcomes <= 0:
+    total_outcomes_value = fields.get(total_outcomes_key)
+    if isinstance(total_outcomes_value, bool) or not isinstance(total_outcomes_value, int) or total_outcomes_value <= 0:
         raise validation_error_from_key("instructor.validation.course_metadata_total_outcomes_invalid")
     return _CourseIdentity(
         template_id=_TEMPLATE_ID,
-        course_code=fields.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), ""),
-        semester=fields.get(normalize(COURSE_METADATA_SEMESTER_KEY), ""),
-        academic_year=fields.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), ""),
-        total_outcomes=total_outcomes,
-        section=fields.get(normalize(COURSE_METADATA_SECTION_KEY), ""),
+        course_code=str(fields.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")).strip(),
+        semester=str(fields.get(normalize(COURSE_METADATA_SEMESTER_KEY), "")).strip(),
+        academic_year=str(fields.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")).strip(),
+        total_outcomes=total_outcomes_value,
+        section=str(fields.get(normalize(COURSE_METADATA_SECTION_KEY), "")).strip(),
     )
 
 
@@ -620,9 +731,10 @@ def _validate_assessment_config_rules(
             code="SCHEMA_MISSING",
             sheet_name=assessment_sheet,
         )
-    rows = row_data_by_sheet[assessment_sheet]
+    rows = _required_sheet_rows(row_data_by_sheet, sheet_name=assessment_sheet)
     component_index = _required_column_index(assessment_schema, _COL_COMPONENT)
     weight_index = _required_column_index(assessment_schema, _COL_WEIGHT_PERCENT)
+    cia_index = _required_column_index(assessment_schema, "cia")
     co_wise_index = _required_column_index(assessment_schema, "co_wise_marks_breakup")
     direct_index = _required_column_index(assessment_schema, "direct")
     assessment_type_index = _required_column_index(assessment_schema, "assessment_type")
@@ -658,6 +770,12 @@ def _validate_assessment_config_rules(
             raise validation_error_from_key("instructor.validation.assessment_weight_numeric", row=row_number)
         weight = float(weight_value)
 
+        _yes_no_value(
+            values[cia_index],
+            sheet_name=assessment_sheet,
+            row_number=row_number,
+            field_name=str(assessment_schema.header_matrix[0][cia_index]),
+        )
         co_wise_breakup = _yes_no_value(
             values[co_wise_index],
             sheet_name=assessment_sheet,
@@ -772,7 +890,7 @@ def _validate_question_map_rules(
     max_marks_idx = _required_column_index(question_schema, _COL_MAX_MARKS)
     co_idx = _required_column_index(question_schema, _COL_CO)
     bloom_idx = _required_column_index(question_schema, _COL_BLOOM_LEVEL)
-    rows = row_data_by_sheet[question_sheet]
+    rows = _required_sheet_rows(row_data_by_sheet, sheet_name=question_sheet)
     allowed_bloom_levels = {normalize(value) for value in COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS}
     question_count_by_component: dict[str, int] = {}
     seen_co_wise_questions: set[tuple[str, str]] = set()
@@ -863,7 +981,7 @@ def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[A
         )
     reg_no_index = _required_column_index(students_schema, _COL_REG_NO)
     student_name_index = _required_column_index(students_schema, _COL_STUDENT_NAME)
-    rows = row_data_by_sheet[students_sheet]
+    rows = _required_sheet_rows(row_data_by_sheet, sheet_name=students_sheet)
     seen_reg_numbers: set[str] = set()
     for row_number, values in rows:
         reg_no = str(values[reg_no_index]).strip() if reg_no_index < len(values) else ""
@@ -942,4 +1060,8 @@ def _ensure_allowed_option(
     )
 
 
-__all__ = ["validate_course_details_workbook", "validate_course_details_workbooks"]
+__all__ = [
+    "validate_course_details_rules",
+    "validate_course_details_workbook",
+    "validate_course_details_workbooks",
+]

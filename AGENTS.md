@@ -101,8 +101,18 @@
 - Template id must not be hardcoded in module-layer logic for uploaded/source workbook operations.
 - For multi-file workbook generation (for example marks template):
   - Module must use directory-selection mode when generating multiple outputs.
-  - File naming must use router `default_workbook_name(...)`; do not create module-local naming rules.
+  - File naming must be resolved in template strategy/template implementation workflow code (workbook-kind aware); router must not own naming logic.
+  - Module code must not define business naming rules; it may only pass user-selected output directory/path inputs.
 - If a workflow kind (for example `marks_template`) is newly added, extend router/strategy/impl layers; do not bypass router from modules.
+
+## Batch Iteration Guardrail
+
+- For multi-workbook operations, module code must pass workbook collections to router entrypoints and stay orchestration-thin.
+- Router remains template-id resolver and operation dispatcher only; router must not implement template-specific workbook iteration logic.
+- Template strategy (or a template-local work-process helper called by strategy) is the authoritative location for per-workbook iteration/orchestration.
+- Validation implementation files should prioritize single-workbook validation entrypoints (for example `validate_course_details_rules(workbook)`).
+- Batch validation/generation helpers may call single-workbook entrypoints in a loop, but business-rule ownership remains in single-workbook validators.
+- Aggregate-all-errors behavior for a workbook must be implemented in template validation code, not in module or router layers.
 
 ## Single Source Of Truth Guardrail (Validation Issues)
 

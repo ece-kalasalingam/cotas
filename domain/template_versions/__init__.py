@@ -1,6 +1,7 @@
-"""Template-version handlers and strategy implementations."""
+"""Template-version package marker.
 
-from domain.template_versions import course_setup_v1
-from domain.template_versions.course_setup_v1 import CourseSetupV1Strategy
+Keep package import side-effect free. Strategy modules are loaded on demand by
+the template strategy router.
+"""
 
-__all__ = ["course_setup_v1", "CourseSetupV1Strategy"]
+__all__: list[str] = []

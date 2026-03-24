@@ -12,22 +12,25 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from common.constants import (
     APP_NAME,
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
     CO_REPORT_ABSENT_TOKEN,
+    CO_REPORT_DIRECT_SHEET_SUFFIX,
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
     CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE,
+    CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
     CO_REPORT_NOT_APPLICABLE_TOKEN,
     DIRECT_RATIO,
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
+    LAYOUT_MANIFEST_KEY_SHEETS,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
@@ -68,12 +71,10 @@ from common.workbook_signing import sign_payload, verify_payload_signature
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
     FinalReportWorkbookSignature,
-    extract_final_report_signature_from_path,
     generate_workbook,
     get_template_strategy,
-    read_course_metadata_signature,
-    read_layout_manifest_co_sheet_counts,
     read_template_id_from_system_hash_sheet_if_valid,
+    read_valid_system_workbook_payload,
 )
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -276,6 +277,129 @@ def _filter_excel_paths(paths: Iterable[str]) -> list[Path]:
         seen.add(key)
         collected.append(path.resolve())
     return collected
+
+
+_VERIFY_SIGNATURE = Callable[[str, str], bool]
+
+
+def _count_co_sheets_from_manifest(manifest: dict[str, Any]) -> tuple[int, int] | None:
+    sheets = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS, [])
+    if not isinstance(sheets, list):
+        return None
+    direct = 0
+    indirect = 0
+    for entry in sheets:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        if name.endswith(CO_REPORT_DIRECT_SHEET_SUFFIX):
+            direct += 1
+        elif name.endswith(CO_REPORT_INDIRECT_SHEET_SUFFIX):
+            indirect += 1
+    if direct <= 0 and indirect <= 0:
+        return None
+    return direct, indirect
+
+
+def read_layout_manifest_co_sheet_counts(
+    workbook: Any,
+    *,
+    verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
+) -> tuple[int, int] | None:
+    try:
+        payload = read_valid_system_workbook_payload(workbook, verify_signature=verify_signature)
+    except Exception:
+        return None
+    return _count_co_sheets_from_manifest(payload.manifest)
+
+
+def read_course_metadata_signature(
+    workbook: Any,
+    *,
+    course_code_key: str,
+    total_outcomes_key: str,
+    section_key: str,
+) -> tuple[str, int, str] | None:
+    template_id = read_template_id_from_system_hash_sheet_if_valid(workbook)
+    if not template_id:
+        return None
+    metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+    if metadata_sheet_name not in getattr(workbook, "sheetnames", []):
+        return None
+    sheet = workbook[metadata_sheet_name]
+
+    metadata: dict[str, str] = {}
+    row = 2
+    while True:
+        key_raw = sheet.cell(row=row, column=1).value
+        value_raw = sheet.cell(row=row, column=2).value
+        if normalize(key_raw) == "" and normalize(value_raw) == "":
+            break
+        key = normalize(key_raw)
+        if key:
+            value = coerce_excel_number(value_raw)
+            metadata[key] = str(value).strip() if value is not None else ""
+        row += 1
+
+    course_code = metadata.get(normalize(course_code_key), "").strip()
+    section = metadata.get(normalize(section_key), "").strip()
+    total_token = metadata.get(normalize(total_outcomes_key), "").strip()
+    if not course_code or not section or not total_token:
+        return None
+    try:
+        total_outcomes = int(float(total_token))
+    except (TypeError, ValueError):
+        return None
+    if total_outcomes <= 0:
+        return None
+    return course_code, total_outcomes, section
+
+
+def extract_final_report_signature_from_path(
+    path: Path,
+    *,
+    verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
+) -> FinalReportWorkbookSignature | None:
+    try:
+        import openpyxl
+    except Exception:
+        return None
+    try:
+        workbook = openpyxl.load_workbook(path, data_only=False, read_only=True)
+    except Exception:
+        return None
+    try:
+        template_id = read_template_id_from_system_hash_sheet_if_valid(
+            workbook,
+            verify_signature=verify_signature,
+        )
+        if not template_id:
+            return None
+        sheet_counts = read_layout_manifest_co_sheet_counts(workbook, verify_signature=verify_signature)
+        if sheet_counts is None:
+            return None
+        metadata = read_course_metadata_signature(
+            workbook,
+            course_code_key="Course_Code",
+            total_outcomes_key="Total_Outcomes",
+            section_key="Section",
+        )
+        if metadata is None:
+            return None
+        course_code, total_outcomes, section = metadata
+        direct_sheet_count, indirect_sheet_count = sheet_counts
+        return FinalReportWorkbookSignature(
+            template_id=template_id,
+            course_code=course_code,
+            total_outcomes=total_outcomes,
+            section=section,
+            direct_sheet_count=direct_sheet_count,
+            indirect_sheet_count=indirect_sheet_count,
+        )
+    finally:
+        workbook.close()
 
 
 def _has_valid_final_co_report(path: Path) -> bool:

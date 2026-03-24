@@ -57,6 +57,7 @@ from common.utils import coerce_excel_number, normalize, sanitize_filename_token
 from common.workbook_signing import sign_payload
 from domain.assessment_semantics import parse_assessment_components
 from domain.co_token_parser import parse_co_tokens
+from domain.template_strategy_router import assert_template_id_matches
 
 _logger = logging.getLogger(__name__)
 _MAX_DECIMAL_PLACES = 2
@@ -151,13 +152,10 @@ class CourseSetupV1Strategy:
         cancel_token: CancellationToken | None = None,
         context: Mapping[str, Any] | None = None,
     ) -> object:
-        requested_template = normalize(template_id)
-        if requested_template != normalize(self.template_id):
-            raise validation_error_from_key(
-                "validation.template.unknown",
-                code="UNKNOWN_TEMPLATE",
-                template_id=template_id,
-            )
+        assert_template_id_matches(
+            actual_template_id=template_id,
+            expected_template_id=self.template_id,
+        )
         resolved_workbook_name = (workbook_name or Path(output_path).name).strip()
         if not resolved_workbook_name:
             raise validation_error_from_key(
@@ -385,8 +383,8 @@ class CourseSetupV1Strategy:
         template_id: str,
         verify_signature: Any,
     ) -> Any:
-        from domain.template_strategy_router import (
-            FinalReportWorkbookSignature,
+        from domain.template_strategy_router import FinalReportWorkbookSignature
+        from domain.template_versions.course_setup_v1_coordinator_engine import (
             read_course_metadata_signature,
             read_layout_manifest_co_sheet_counts,
         )

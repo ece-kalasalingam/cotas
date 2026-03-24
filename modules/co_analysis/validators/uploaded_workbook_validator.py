@@ -7,9 +7,8 @@ from typing import Any
 
 from common.error_catalog import validation_error_from_key
 from domain.template_strategy_router import (
-    consume_marks_anomaly_warnings_by_template,
+    get_template_strategy,
     read_valid_system_workbook_payload,
-    validate_filled_marks_manifest_schema_by_template,
 )
 
 _last_validated_template_id: str = ""
@@ -21,11 +20,16 @@ def validate_source_manifest_schema_by_template(
     *,
     template_id: str,
 ) -> None:
-    validate_filled_marks_manifest_schema_by_template(
-        workbook,
-        manifest,
-        template_id=template_id,
-    )
+    strategy = get_template_strategy(template_id)
+    fn = getattr(strategy, "validate_filled_marks_manifest_schema", None)
+    if not callable(fn):
+        raise validation_error_from_key(
+            "validation.template.validator_missing",
+            code="COA_TEMPLATE_VALIDATOR_MISSING",
+            template_id=template_id,
+            operation="validate_filled_marks_manifest_schema",
+        )
+    fn(workbook, manifest)
 
 
 def validate_uploaded_source_workbook(workbook_path: str | Path) -> None:
@@ -77,7 +81,16 @@ def validate_uploaded_source_workbook(workbook_path: str | Path) -> None:
 def consume_last_source_anomaly_warnings() -> list[str]:
     if not _last_validated_template_id:
         return []
-    return consume_marks_anomaly_warnings_by_template(template_id=_last_validated_template_id)
+    strategy = get_template_strategy(_last_validated_template_id)
+    fn = getattr(strategy, "consume_last_marks_anomaly_warnings", None)
+    if not callable(fn):
+        raise validation_error_from_key(
+            "validation.template.validator_missing",
+            code="COA_TEMPLATE_VALIDATOR_MISSING",
+            template_id=_last_validated_template_id,
+            operation="consume_last_marks_anomaly_warnings",
+        )
+    return list(fn())
 
 
 def _read_system_manifest_payload(workbook: Any) -> tuple[str, dict[str, Any]]:

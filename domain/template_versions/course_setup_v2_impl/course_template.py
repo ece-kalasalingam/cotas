@@ -1,34 +1,23 @@
-﻿"""COURSE_SETUP_V2 course-template generation."""
+"""COURSE_SETUP_V2 course-template generation."""
 
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 from common.constants import WORKBOOK_TEMP_SUFFIX
 from common.error_catalog import validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
+from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from common.i18n import t
-_logger = logging.getLogger(__name__)
-_TEMPLATE_ID = "COURSE_SETUP_V2"
 from domain.template_versions.course_setup_v2_impl import instructor_engine_shareops as _shareops
 
-_add_system_hash_sheet = _shareops.add_system_hash_sheet
-_apply_validation = _shareops.apply_validation
-_build_body_format = _shareops.build_body_format
-_build_header_format = _shareops.build_header_format
-_protect_sheet = _shareops.protect_sheet
-generate_worksheet = _shareops.generate_worksheet
-
-
-def _ve(translation_key: str, *, code: str, **context: Any) -> ValidationError:
-    return validation_error_from_key(translation_key, code=code, context=context)
+_logger = logging.getLogger(__name__)
+_TEMPLATE_ID = "COURSE_SETUP_V2"
 
 
 def generate_course_details_template(
@@ -40,14 +29,14 @@ def generate_course_details_template(
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
-        raise _ve(
+        raise validation_error_from_key(
             "instructor.validation.xlsxwriter_missing",
             code="XLSXWRITER_MISSING",
         ) from exc
 
     blueprint = _registry_get_blueprint(_TEMPLATE_ID)
     if blueprint is None:
-        raise _ve(
+        raise validation_error_from_key(
             "validation.template.unknown",
             code="UNKNOWN_TEMPLATE",
             template_id=_TEMPLATE_ID,
@@ -76,8 +65,8 @@ def generate_course_details_template(
     try:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        header_format = _build_header_format(workbook, blueprint.style_registry.get("header", {}))
-        body_format = _build_body_format(workbook, blueprint.style_registry.get("body", {}))
+        header_format = _shareops.build_header_format(workbook, blueprint.style_registry.get("header", {}))
+        body_format = _shareops.build_body_format(workbook, blueprint.style_registry.get("body", {}))
 
         for sheet_schema in blueprint.sheets:
             if cancel_token is not None:
@@ -85,9 +74,10 @@ def generate_course_details_template(
             if len(sheet_schema.header_matrix) != 1:
                 raise validation_error_from_key(
                     "instructor.validation.sheet_single_header_row",
+                    code="SHEET_HEADER_MATRIX_INVALID",
                     sheet_name=sheet_schema.name,
                 )
-            worksheet = generate_worksheet(
+            worksheet = _shareops.generate_worksheet(
                 workbook=workbook,
                 sheet_name=sheet_schema.name,
                 headers=sheet_schema.header_matrix[0],
@@ -98,20 +88,18 @@ def generate_course_details_template(
             for validation in sheet_schema.validations:
                 if cancel_token is not None:
                     cancel_token.raise_if_cancelled()
-                _apply_validation(worksheet, validation)
+                _shareops.apply_validation(worksheet, validation)
             if sheet_schema.is_protected:
-                _protect_sheet(worksheet)
+                _shareops.protect_sheet(worksheet)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        _add_system_hash_sheet(workbook, _TEMPLATE_ID)
+        _shareops.add_system_hash_sheet(workbook, _TEMPLATE_ID)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
         workbook.close()
         workbook_closed = True
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
         os.replace(temp_output, output)
     except ValidationError:
         _cleanup_incomplete_output()
@@ -133,4 +121,3 @@ def generate_course_details_template(
 
 
 __all__ = ["generate_course_details_template"]
-

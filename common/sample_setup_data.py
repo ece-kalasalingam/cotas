@@ -11,13 +11,21 @@ from common.registry import (
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
+    get_sheet_schema_by_key,
     get_sheet_name_by_key,
 )
+
+def _sheet_name_or_none(sheet_key: str) -> str | None:
+    sheet = get_sheet_schema_by_key(ID_COURSE_SETUP, sheet_key)
+    if sheet is None:
+        return None
+    return str(sheet.name).strip() or None
+
 
 COURSE_METADATA_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
 ASSESSMENT_CONFIG_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
 QUESTION_MAP_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_QUESTION_MAP)
-CO_DESCRIPTION_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+CO_DESCRIPTION_SHEET = _sheet_name_or_none(COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
 STUDENTS_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_STUDENTS)
 
 SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
@@ -69,7 +77,14 @@ SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
         ["ESP", 1, 100, "1,2,3,4,5, 6",  "MULTIPLE_LEVELS"],
         ["ESE", 1, 100, "1,2,3,4,5, 6", "MULTIPLE_LEVELS"],
     ],
-    CO_DESCRIPTION_SHEET: [
+    STUDENTS_SHEET: [
+        ["R101", "STUD1"],
+        ["R1032", "STUD2"],
+    ],
+}
+
+if CO_DESCRIPTION_SHEET:
+    SAMPLE_SETUP_DATA[CO_DESCRIPTION_SHEET] = [
         [
             1,
             "Recall and explain core concepts",
@@ -106,9 +121,4 @@ SAMPLE_SETUP_DATA: dict[str, list[list[Any]]] = {
             "CREATE",
             "Emphasizes project-oriented synthesis through design tasks, prototype planning, implementation details, and reflective iteration on outputs.",
         ],
-    ],
-    STUDENTS_SHEET: [
-        ["R101", "STUD1"],
-        ["R1032", "STUD2"],
-    ],
-}
+    ]

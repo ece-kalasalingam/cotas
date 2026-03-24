@@ -42,11 +42,8 @@ from common.utils import coerce_excel_number, normalize
 from domain.assessment_semantics import parse_assessment_components
 from domain.template_strategy_router import (
     available_template_ids,
-    extract_marks_template_context_by_template,
     get_template_strategy,
     read_valid_template_id_from_system_hash_sheet,
-    validate_course_details_rules_by_template,
-    write_marks_template_workbook_by_template,
 )
 
 _logger = logging.getLogger(__name__)
@@ -318,7 +315,8 @@ def _extract_marks_template_context(workbook: Any) -> dict[str, Any]:
 
 
 def _extract_marks_template_context_by_template(workbook: Any, template_id: str) -> dict[str, Any]:
-    return extract_marks_template_context_by_template(workbook, template_id=template_id)
+    del template_id
+    return _extract_marks_template_context(workbook)
 
 
 def _write_marks_template_workbook_by_template(
@@ -328,7 +326,7 @@ def _write_marks_template_workbook_by_template(
     template_id: str,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, Any]:
-    return write_marks_template_workbook_by_template(
+    return _write_marks_template_workbook(
         workbook,
         context,
         template_id=template_id,
@@ -786,7 +784,8 @@ def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
 
 
 def _validate_template_specific_rules(workbook: Any, template_id: str) -> None:
-    validate_course_details_rules_by_template(workbook, template_id=template_id)
+    strategy = get_template_strategy(template_id)
+    strategy.validate_course_details_rules(workbook, context=None)
 
 
 def _co_tokens(value: Any) -> list[int]:
