@@ -1,0 +1,12 @@
+"""Workbook integrity system-sheet constants (SSOT)."""
+
+SYSTEM_LAYOUT_SHEET = "__SYSTEM_LAYOUT__"
+SYSTEM_LAYOUT_MANIFEST_HEADER = "Layout_Manifest"
+SYSTEM_LAYOUT_MANIFEST_HASH_HEADER = "Layout_Hash"
+
+__all__ = [
+    "SYSTEM_LAYOUT_SHEET",
+    "SYSTEM_LAYOUT_MANIFEST_HEADER",
+    "SYSTEM_LAYOUT_MANIFEST_HASH_HEADER",
+]
+

@@ -1,4 +1,4 @@
-from common import workbook_signing as ws
+from common.workbook_integrity import workbook_signing as ws
 
 
 def test_verify_payload_signature_empty_and_version_mismatch(monkeypatch) -> None:
@@ -17,3 +17,4 @@ def test_verify_payload_signature_hmac_branch_no_secret_match(monkeypatch) -> No
     monkeypatch.setattr(ws, "WORKBOOK_SIGNATURE_VERSION", "v1")
 
     assert ws.verify_payload_signature("payload", "v1:not-a-valid-digest") is False
+

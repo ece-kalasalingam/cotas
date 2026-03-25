@@ -15,6 +15,7 @@ from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
+from common.workbook_integrity import add_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _shareops
 
 _logger = logging.getLogger(__name__)
@@ -99,7 +100,7 @@ def generate_course_details_template(
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        _shareops._add_system_hash_sheet(workbook, _TEMPLATE_ID)
+        add_system_hash_sheet(workbook, _TEMPLATE_ID)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()

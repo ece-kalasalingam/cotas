@@ -15,7 +15,7 @@ from common.constants import (
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
 from common.utils import normalize
-from common.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
+from common.workbook_integrity.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
 
 _STYLE_REGISTRY_HEADER = "header"
 _STYLE_REGISTRY_BODY = "body"
@@ -26,6 +26,12 @@ _COLUMN_MAX_WIDTH = 60
 _COLUMN_WIDTH_PADDING = 2
 _HEADER_ACTIVE_COLUMN = "A"
 _AUTOSIZE_SAMPLE_ROWS = 300
+XLSX_PAPER_SIZE_A4 = 9
+XLSX_PAGE_MIN_MARGIN_IN = 0.25
+XLSX_AUTOFIT_SAMPLE_ROWS = 30
+XLSX_AUTOFIT_PADDING = 2
+XLSX_AUTOFIT_MIN_WIDTH = _COLUMN_MIN_WIDTH
+XLSX_AUTOFIT_MAX_WIDTH = _COLUMN_MAX_WIDTH
 _STYLE_PROVIDER_TEMPLATE = tuple[dict[str, Any], dict[str, Any]]
 _STYLE_PROVIDER_FN = Callable[[], _STYLE_PROVIDER_TEMPLATE]
 _XLSXWRITER_PROTECT_OPTIONS = {
@@ -284,6 +290,66 @@ def build_template_xlsxwriter_formats(
     return formats
 
 
+def build_marks_template_xlsxwriter_formats(
+    workbook: Any,
+    *,
+    template_id: str | None = None,
+    cache_attr: str | None = None,
+    include_column_wrap: bool = False,
+    normalize_header_valign_to_center: bool = False,
+) -> dict[str, Any]:
+    if cache_attr:
+        cached = getattr(workbook, cache_attr, None)
+        if isinstance(cached, dict):
+            return cached
+
+    formats = dict(
+        build_template_xlsxwriter_formats(
+            workbook,
+            template_id=template_id,
+            include_column_wrap=include_column_wrap,
+            normalize_header_valign_to_center=normalize_header_valign_to_center,
+        )
+    )
+    header_style, body_style = style_registry_for_template(template_id)
+    border_value = 1 if int(body_style.get("border", 1)) > 0 else 0
+    header_border_value = 1 if int(header_style.get("border", 1)) > 0 else 0
+    header_bg = color_without_hash(str(header_style.get("bg_color", "")))
+
+    header_default_valign = "center" if normalize_header_valign_to_center else "vcenter"
+    header_valign = str(header_style.get("valign", header_default_valign))
+    if normalize_header_valign_to_center and header_valign == "vcenter":
+        header_valign = "center"
+
+    formats["num"] = workbook.add_format(
+        {
+            "border": border_value,
+            "num_format": "0.00",
+        }
+    )
+    formats["header_num"] = workbook.add_format(
+        {
+            "bold": bool(header_style.get("bold", True)),
+            "border": header_border_value,
+            "align": str(header_style.get("align", "center")),
+            "valign": header_valign,
+            "num_format": "0.00",
+            "fg_color": header_bg,
+            "pattern": 1,
+        }
+    )
+    formats["unlocked_body"] = workbook.add_format(
+        {
+            "border": border_value,
+            "locked": False,
+        }
+    )
+
+    if cache_attr:
+        setattr(workbook, cache_attr, formats)
+    return formats
+
+
 def apply_xlsxwriter_layout(
     ws: Any,
     *,
@@ -292,14 +358,103 @@ def apply_xlsxwriter_layout(
     landscape: bool,
     selection_col: int = 0,
 ) -> None:
+    apply_xlsxwriter_page_setup(
+        ws,
+        paper_size=paper_size,
+        landscape=landscape,
+        fit_width=1,
+        fit_height=0,
+    )
+    protect_xlsxwriter_sheet(ws)
+    ws.set_selection(header_row_index, selection_col, header_row_index, selection_col)
+
+
+def apply_xlsxwriter_page_setup(
+    ws: Any,
+    *,
+    paper_size: int,
+    landscape: bool,
+    fit_width: int = 1,
+    fit_height: int = 0,
+    margins: tuple[float, float, float, float] | None = None,
+) -> None:
     if landscape:
         ws.set_landscape()
     else:
         ws.set_portrait()
     ws.set_paper(paper_size)
-    ws.fit_to_pages(1, 0)
-    protect_xlsxwriter_sheet(ws)
-    ws.set_selection(header_row_index, selection_col, header_row_index, selection_col)
+    ws.fit_to_pages(fit_width, fit_height)
+    if margins is not None:
+        left, right, top, bottom = margins
+        ws.set_margins(left, right, top, bottom)
+
+
+def apply_xlsxwriter_column_widths(
+    ws: Any,
+    widths: dict[int, int],
+    *,
+    default_width: int = _COLUMN_MIN_WIDTH,
+    wrap_columns: Sequence[int] = (),
+    wrap_format: Any | None = None,
+) -> None:
+    max_col = max(widths.keys(), default=-1)
+    wrap_set = set(wrap_columns)
+    for col in range(0, max_col + 1):
+        width = widths.get(col, default_width)
+        if col in wrap_set and wrap_format is not None:
+            ws.set_column(col, col, width, wrap_format)
+        else:
+            ws.set_column(col, col, width)
+
+
+def apply_xlsxwriter_sheet_frame(
+    ws: Any,
+    *,
+    repeat_last_row: int,
+    freeze_row: int,
+    freeze_col: int,
+    select_row: int,
+    select_col: int,
+    paper_size: int,
+    landscape: bool,
+    margins: tuple[float, float, float, float] | None = None,
+    protect: bool = True,
+) -> None:
+    apply_xlsxwriter_viewport(
+        ws,
+        repeat_last_row=repeat_last_row,
+        freeze_row=freeze_row,
+        freeze_col=freeze_col,
+        select_row=select_row,
+        select_col=select_col,
+    )
+    apply_xlsxwriter_page_setup(
+        ws,
+        paper_size=paper_size,
+        landscape=landscape,
+        fit_width=1,
+        fit_height=0,
+        margins=margins,
+    )
+    if protect:
+        protect_xlsxwriter_sheet(ws)
+
+
+def apply_xlsxwriter_viewport(
+    ws: Any,
+    *,
+    repeat_last_row: int | None = None,
+    freeze_row: int | None = None,
+    freeze_col: int = 0,
+    select_row: int | None = None,
+    select_col: int = 0,
+) -> None:
+    if isinstance(repeat_last_row, int):
+        ws.repeat_rows(0, repeat_last_row)
+    if isinstance(freeze_row, int):
+        ws.freeze_panes(freeze_row, freeze_col)
+    if isinstance(select_row, int):
+        ws.set_selection(select_row, select_col, select_row, select_col)
 
 
 def set_two_column_metadata_widths(
@@ -394,3 +549,4 @@ def find_header_row_by_value(
         if normalize(sheet.cell(row=row, column=header_col).value) == wanted:
             return row
     return 0
+

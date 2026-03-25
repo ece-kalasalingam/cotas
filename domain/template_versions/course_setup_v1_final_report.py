@@ -1,4 +1,4 @@
-﻿"""Final CO report generation from validated filled-marks workbooks."""
+"""Final CO report generation from validated filled-marks workbooks."""
 
 from __future__ import annotations
 
@@ -26,11 +26,13 @@ from common.constants import (
     LAYOUT_SHEET_SPEC_KEY_HEADERS,
     LAYOUT_SHEET_SPEC_KEY_KIND,
     LAYOUT_SHEET_SPEC_KEY_NAME,
+    WORKBOOK_INTEGRITY_SCHEMA_VERSION,
+    WORKBOOK_TEMP_SUFFIX,
+)
+from common.workbook_integrity.constants import (
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_SHEET,
-    WORKBOOK_INTEGRITY_SCHEMA_VERSION,
-    WORKBOOK_TEMP_SUFFIX,
 )
 from common.registry import (
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
@@ -50,7 +52,7 @@ from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
 from common.i18n import t
 from common.utils import coerce_excel_number, normalize
-from common.workbook_signing import sign_payload
+from common.workbook_integrity.workbook_signing import sign_payload
 from domain.assessment_semantics import AssessmentComponent, parse_assessment_components
 from domain.co_token_parser import parse_co_tokens
 from domain.co_report_sheet_generator import (
@@ -735,4 +737,5 @@ def _normalize_page_setup_fit(path: Path) -> None:
 
 def _ratio_total_header(ratio: float) -> str:
     return _co_sheet_ratio_total_header(ratio)
+
 

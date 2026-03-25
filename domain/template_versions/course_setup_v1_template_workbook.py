@@ -19,12 +19,16 @@ from common.constants import (
     LAYOUT_SHEET_KIND_INDIRECT,
     LAYOUT_SHEET_SPEC_KEY_KIND,
     LAYOUT_SHEET_SPEC_KEY_NAME,
-    SYSTEM_LAYOUT_SHEET,
     WORKBOOK_INTEGRITY_SCHEMA_VERSION,
     WORKBOOK_TEMP_SUFFIX,
 )
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
+from common.workbook_integrity.constants import (
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
+    SYSTEM_LAYOUT_SHEET,
+)
 from common.registry import (
     SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
@@ -39,6 +43,15 @@ from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import WorkbookBlueprint
 from common.i18n import t
 from common.utils import coerce_excel_number, normalize
+from common.excel_sheet_layout import (
+    build_xlsxwriter_body_format,
+    build_xlsxwriter_header_format,
+)
+from common.workbook_integrity import (
+    add_system_hash_sheet,
+    add_system_layout_sheet,
+    copy_system_hash_sheet,
+)
 from domain.assessment_semantics import parse_assessment_components
 from domain.template_strategy_router import (
     available_template_ids,
@@ -614,18 +627,17 @@ def _precompute_marks_layout_manifest(
 
 from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 
-_add_system_hash_sheet = _sheetops._add_system_hash_sheet
-_add_system_layout_sheet = _sheetops._add_system_layout_sheet
+_add_system_hash_sheet = add_system_hash_sheet
+_add_system_layout_sheet = add_system_layout_sheet
 _apply_validation = _sheetops._apply_validation
-_build_body_format = _sheetops._build_body_format
+_build_body_format = build_xlsxwriter_body_format
 _build_direct_co_wise_sheet_spec = _sheetops._build_direct_co_wise_sheet_spec
 _build_direct_non_co_wise_sheet_spec = _sheetops._build_direct_non_co_wise_sheet_spec
-_build_header_format = _sheetops._build_header_format
+_build_header_format = build_xlsxwriter_header_format
 _build_indirect_sheet_spec = _sheetops._build_indirect_sheet_spec
 _build_multi_column_copy_sheet_spec = _sheetops._build_multi_column_copy_sheet_spec
 _build_two_column_copy_sheet_spec = _sheetops._build_two_column_copy_sheet_spec
-_compute_template_hash = _sheetops._compute_template_hash
-_copy_system_hash_sheet = _sheetops._copy_system_hash_sheet
+_copy_system_hash_sheet = copy_system_hash_sheet
 _filter_marks_template_metadata_rows = _sheetops._filter_marks_template_metadata_rows
 _protect_sheet = _sheetops._protect_sheet
 _safe_sheet_name = _sheetops._safe_sheet_name

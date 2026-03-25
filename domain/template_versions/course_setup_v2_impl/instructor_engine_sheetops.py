@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any, Sequence
 
@@ -25,48 +24,45 @@ from common.constants import (
     LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH,
     LIKERT_MAX,
     LIKERT_MIN,
-    MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
     MARKS_ENTRY_INDIRECT_VALIDATION_ERROR_RANGE_TEMPLATE,
-    MARKS_ENTRY_QUESTION_PREFIX,
     MARKS_ENTRY_ROW_HEADERS,
-    MARKS_ENTRY_TOTAL_LABEL,
     MARKS_ENTRY_VALIDATION_ERROR_RANGE_TEMPLATE,
     MARKS_ENTRY_VALIDATION_ERROR_TITLE,
     MAX_EXCEL_SHEETNAME_LENGTH,
     MIN_MARK_VALUE,
-    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
-    SYSTEM_LAYOUT_MANIFEST_HEADER,
-    SYSTEM_LAYOUT_SHEET,
 )
 from common.registry import (
-    SYSTEM_HASH_HEADER_TEMPLATE_HASH as SYSTEM_HASH_TEMPLATE_HASH_HEADER,
-    SYSTEM_HASH_HEADER_TEMPLATE_ID as SYSTEM_HASH_TEMPLATE_ID_HEADER,
-    SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
+    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE,
+    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
+    COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
+    resolve_dynamic_sheet_headers,
 )
 from common.excel_sheet_layout import (
-    build_xlsxwriter_body_format,
-    build_xlsxwriter_header_format,
+    apply_xlsxwriter_column_widths,
+    apply_xlsxwriter_sheet_frame,
+    apply_xlsxwriter_viewport,
     compute_sampled_column_widths,
     excel_col_name as _excel_col_name_one_based,
     protect_xlsxwriter_sheet,
+    XLSX_AUTOFIT_MAX_WIDTH,
+    XLSX_AUTOFIT_MIN_WIDTH,
+    XLSX_AUTOFIT_PADDING,
+    XLSX_AUTOFIT_SAMPLE_ROWS,
+    XLSX_PAGE_MIN_MARGIN_IN,
+    XLSX_PAPER_SIZE_A4,
 )
 from common.error_catalog import validation_error_from_key
 from common.sheet_schema import ValidationRule
 from common.utils import (
     coerce_excel_number,
-    copy_system_hash_sheet,
     normalize,
 )
-from common.workbook_signing import sign_payload
+from common.workbook_integrity.workbook_signing import sign_payload
 
-_AUTO_FIT_SAMPLE_ROWS = 6
-_AUTO_FIT_PADDING = 2
-_AUTO_FIT_MIN_WIDTH = 8
-_AUTO_FIT_MAX_WIDTH = 60
-_PAGE_MIN_MARGIN_IN = 0.25
 _COMPONENT_NAME_LABEL = COMPONENT_NAME_LABEL
 _CO_LABEL = CO_LABEL
 _MAX_LABEL = INSTRUCTOR_MAX_LABEL
+_TEMPLATE_ID = "COURSE_SETUP_V2"
 _FORMULA_SUM_TEMPLATE = "=SUM({start}:{end})"
 _VALIDATION_KIND_CUSTOM = "custom"
 _VALIDATION_KEY_KIND = "validate"
@@ -74,10 +70,6 @@ _VALIDATION_KEY_VALUE = "value"
 _VALIDATION_KEY_ERROR_TITLE = "error_title"
 _VALIDATION_KEY_ERROR_MESSAGE = "error_message"
 _VALIDATION_KEY_IGNORE_BLANK = "ignore_blank"
-
-def _copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
-    copy_system_hash_sheet(source_workbook, target_workbook)
-
 
 def _write_two_column_copy_sheet(
     workbook: Any,
@@ -89,14 +81,33 @@ def _write_two_column_copy_sheet(
 ) -> None:
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
-    ws.set_column(0, 0, 24)
-    ws.set_column(1, 1, 24)
+    sample_rows: list[list[Any]] = [list(header)]
+    sample_rows.extend([[row[0] if len(row) > 0 else "", row[1] if len(row) > 1 else ""] for row in rows])
+    widths = compute_sampled_column_widths(
+        sample_rows,
+        1,
+        min_width=XLSX_AUTOFIT_MIN_WIDTH,
+        max_width=XLSX_AUTOFIT_MAX_WIDTH,
+        padding=XLSX_AUTOFIT_PADDING,
+    )
+    apply_xlsxwriter_column_widths(
+        ws,
+        widths,
+        default_width=XLSX_AUTOFIT_MIN_WIDTH,
+    )
     for row_index, row in enumerate(rows, start=1):
         ws.write(row_index, 0, row[0] if len(row) > 0 else "", body_fmt)
         ws.write(row_index, 1, row[1] if len(row) > 1 else "", body_fmt)
-    ws.repeat_rows(0, 0)
-    ws.freeze_panes(1, 0)
-    ws.set_selection(1, 0, 1, 0)
+    apply_xlsxwriter_sheet_frame(
+        ws,
+        repeat_last_row=0,
+        freeze_row=1,
+        freeze_col=0,
+        select_row=1,
+        select_col=0,
+        paper_size=XLSX_PAPER_SIZE_A4,
+        landscape=False,
+    )
 
 
 def _build_two_column_copy_sheet_spec(
@@ -126,18 +137,81 @@ def _write_multi_column_copy_sheet(
     header_fmt: Any,
     body_fmt: Any,
     num_fmt: Any,
+    *,
+    metadata_rows: Sequence[Sequence[Any]] | None = None,
+    wrapped_body_fmt: Any | None = None,
+    wrapped_column_fmt: Any | None = None,
+    wrap_columns: Sequence[int] = (),
+    fit_all_columns_single_page: bool = False,
+    use_common_student_columns: bool = False,
 ) -> None:
     ws = workbook.add_worksheet(title)
-    ws.write_row(0, 0, list(header), header_fmt)
-    for col in range(len(header)):
-        ws.set_column(col, col, 22)
-    for row_index, row in enumerate(rows, start=1):
+    metadata = list(metadata_rows or [])
+    header_row_index = len(metadata) + 1 if metadata else 0
+
+    for row_index, row in enumerate(metadata):
+        ws.write(row_index, 1, row[0] if len(row) > 0 else "", body_fmt)
+        metadata_value_fmt = wrapped_body_fmt or body_fmt
+        ws.write(row_index, 2, row[1] if len(row) > 1 else "", metadata_value_fmt)
+
+    ws.write_row(header_row_index, 0, list(header), header_fmt)
+
+    first_data_row = header_row_index + 1
+    for row_index, row in enumerate(rows, start=first_data_row):
         for col_index, value in enumerate(row[: len(header)]):
-            cell_fmt = num_fmt if col_index == 1 and isinstance(value, (int, float)) else body_fmt
+            if col_index in wrap_columns:
+                cell_fmt = wrapped_body_fmt or body_fmt
+            elif col_index == 1 and isinstance(value, (int, float)):
+                cell_fmt = num_fmt
+            else:
+                cell_fmt = body_fmt
             ws.write(row_index, col_index, value, cell_fmt)
-    ws.repeat_rows(0, 0)
-    ws.freeze_panes(1, 0)
-    ws.set_selection(1, 0, 1, 0)
+
+    width_rows: list[list[Any]] = []
+    for row in metadata:
+        width_rows.append(["", row[0] if len(row) > 0 else "", row[1] if len(row) > 1 else ""])
+    width_rows.append(list(header))
+    sampled_data_rows = rows[: min(len(rows), XLSX_AUTOFIT_SAMPLE_ROWS)]
+    for row in sampled_data_rows:
+        width_rows.append([row[col] if col < len(row) else "" for col in range(len(header))])
+    widths = compute_sampled_column_widths(
+        width_rows,
+        max(0, len(header) - 1),
+        min_width=XLSX_AUTOFIT_MIN_WIDTH,
+        max_width=XLSX_AUTOFIT_MAX_WIDTH,
+        padding=XLSX_AUTOFIT_PADDING,
+    )
+    effective_wrap_columns = (2,) if use_common_student_columns else tuple(wrap_columns)
+    apply_xlsxwriter_column_widths(
+        ws,
+        widths,
+        default_width=XLSX_AUTOFIT_MIN_WIDTH,
+        wrap_columns=effective_wrap_columns,
+        wrap_format=wrapped_column_fmt or wrapped_body_fmt or body_fmt,
+    )
+
+    effective_landscape = True if use_common_student_columns else fit_all_columns_single_page
+    effective_margins = (
+        (
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+        )
+        if use_common_student_columns
+        else None
+    )
+    apply_xlsxwriter_sheet_frame(
+        ws,
+        repeat_last_row=header_row_index,
+        freeze_row=first_data_row,
+        freeze_col=0,
+        select_row=first_data_row,
+        select_col=0,
+        paper_size=XLSX_PAPER_SIZE_A4,
+        landscape=effective_landscape,
+        margins=effective_margins,
+    )
 
 
 def _build_multi_column_copy_sheet_spec(
@@ -145,9 +219,17 @@ def _build_multi_column_copy_sheet_spec(
     title: str,
     header: Sequence[str],
     rows: Sequence[Sequence[Any]],
+    metadata_rows: Sequence[Sequence[Any]] | None = None,
 ) -> dict[str, Any]:
     anchors = []
-    for row_index, row in enumerate(rows, start=2):
+    metadata = list(metadata_rows or [])
+    for row_index, row in enumerate(metadata, start=1):
+        anchors.append([f"B{row_index}", row[0] if len(row) > 0 else ""])
+        anchors.append([f"C{row_index}", row[1] if len(row) > 1 else ""])
+
+    header_row = len(metadata) + 2 if metadata else 1
+    first_data_row = header_row + 1
+    for row_index, row in enumerate(rows, start=first_data_row):
         for col_index, _header in enumerate(header):
             anchors.append(
                 [
@@ -157,7 +239,7 @@ def _build_multi_column_copy_sheet_spec(
             )
     return {
         LAYOUT_SHEET_SPEC_KEY_NAME: title,
-        LAYOUT_SHEET_SPEC_KEY_HEADER_ROW: 1,
+        LAYOUT_SHEET_SPEC_KEY_HEADER_ROW: header_row,
         LAYOUT_SHEET_SPEC_KEY_HEADERS: list(header),
         LAYOUT_SHEET_SPEC_KEY_ANCHORS: anchors,
         LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS: [],
@@ -178,6 +260,36 @@ def _filter_marks_template_metadata_rows(
     return filtered
 
 
+def _dynamic_direct_co_wise_headers(question_count: int) -> list[str]:
+    return list(
+        resolve_dynamic_sheet_headers(
+            _TEMPLATE_ID,
+            sheet_key=COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE,
+            context={"question_count": question_count},
+        )
+    )
+
+
+def _dynamic_direct_non_co_wise_headers(covered_cos: list[int]) -> list[str]:
+    return list(
+        resolve_dynamic_sheet_headers(
+            _TEMPLATE_ID,
+            sheet_key=COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
+            context={"covered_cos": covered_cos},
+        )
+    )
+
+
+def _dynamic_indirect_headers(total_outcomes: int) -> list[str]:
+    return list(
+        resolve_dynamic_sheet_headers(
+            _TEMPLATE_ID,
+            sheet_key=COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
+            context={"total_outcomes": total_outcomes},
+        )
+    )
+
+
 def _build_direct_co_wise_sheet_spec(
     *,
     sheet_name: str,
@@ -191,10 +303,9 @@ def _build_direct_co_wise_sheet_spec(
     header_row = header_start_row + 1
     question_count = len(questions)
     total_col = 3 + question_count
-    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
-    question_headers = [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
+    sheet_headers = _dynamic_direct_co_wise_headers(question_count)
     max_marks_values = [float(question["max_marks"]) for question in questions]
-    sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
+    total_header = sheet_headers[-1]
 
     anchors = _component_metadata_anchor_cells(metadata_rows)
     component_row = len(metadata_rows) + 1
@@ -204,7 +315,7 @@ def _build_direct_co_wise_sheet_spec(
             [f"C{component_row}", component_name],
             [f"C{header_row + 1}", _CO_LABEL],
             [f"C{header_row + 2}", _MAX_LABEL],
-            [f"{_excel_col_name(total_col)}{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+            [f"{_excel_col_name(total_col)}{header_row}", total_header],
         ]
     )
 
@@ -246,11 +357,11 @@ def _build_direct_non_co_wise_sheet_spec(
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
     covered_cos = sorted({co for q in questions for co in q["co_values"]})
-    co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
+    sheet_headers = _dynamic_direct_non_co_wise_headers(covered_cos)
+    total_header = sheet_headers[len(MARKS_ENTRY_ROW_HEADERS)]
     total_max = sum(float(question["max_marks"]) for question in questions)
     max_marks_per_co = _split_equal_with_residual(total_max, max(1, len(covered_cos)))
     mark_maxima = [total_max] + [float(value) for value in max_marks_per_co]
-    sheet_headers = list(MARKS_ENTRY_ROW_HEADERS) + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
 
     anchors = _component_metadata_anchor_cells(metadata_rows)
     component_row = len(metadata_rows) + 1
@@ -260,7 +371,7 @@ def _build_direct_non_co_wise_sheet_spec(
             [f"C{component_row}", component_name],
             [f"C{header_row + 1}", _CO_LABEL],
             [f"C{header_row + 2}", _MAX_LABEL],
-            [f"D{header_row}", MARKS_ENTRY_TOTAL_LABEL],
+            [f"D{header_row}", total_header],
         ]
     )
 
@@ -320,9 +431,7 @@ def _build_indirect_sheet_spec(
 ) -> dict[str, Any]:
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
-    headers = list(MARKS_ENTRY_ROW_HEADERS) + [
-        f"{CO_LABEL}{i}" for i in range(1, total_outcomes + 1)
-    ]
+    headers = _dynamic_indirect_headers(total_outcomes)
     anchors = _component_metadata_anchor_cells(metadata_rows)
     component_row = len(metadata_rows) + 1
     anchors.extend(
@@ -365,16 +474,18 @@ def _write_direct_co_wise_sheet(
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     question_count = len(questions)
     total_col = 3 + question_count
-    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
-    question_headers = [f"{MARKS_ENTRY_QUESTION_PREFIX}{idx + 1}" for idx in range(question_count)]
+    sheet_headers = _dynamic_direct_co_wise_headers(question_count)
+    row_header_count = len(MARKS_ENTRY_ROW_HEADERS)
+    row_headers = sheet_headers[:row_header_count]
+    question_headers = sheet_headers[row_header_count:-1]
+    total_header = sheet_headers[-1]
     co_labels = [f"{CO_LABEL}{question['co_values'][0]}" for question in questions]
     max_marks_values = [float(question["max_marks"]) for question in questions]
-    sheet_headers = row_headers + question_headers + [MARKS_ENTRY_TOTAL_LABEL]
 
     ws.write_row(header_start_row, 0, row_headers, header_fmt)
     if question_headers:
         ws.write_row(header_start_row, 3, question_headers, header_fmt)
-    ws.write(header_start_row, total_col, MARKS_ENTRY_TOTAL_LABEL, header_fmt)
+    ws.write(header_start_row, total_col, total_header, header_fmt)
 
     ws.write_row(header_start_row + 1, 0, ["", "", _CO_LABEL], header_fmt)
     if co_labels:
@@ -437,16 +548,28 @@ def _write_direct_co_wise_sheet(
         ["", "", _CO_LABEL] + co_labels + [""],
         ["", "", _MAX_LABEL] + max_marks_values + [component_total],
     ]
-    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    preview_students = students[: max(0, XLSX_AUTOFIT_SAMPLE_ROWS - len(sample_rows))]
     for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
         sample_rows.append(
             [row_offset - (first_data_row - 1), reg_no, student_name] + [""] * question_count + [""]
         )
     _set_common_student_columns(ws, total_col, sample_rows, wrapped_column_fmt)
-    ws.repeat_rows(0, header_start_row + 2)
-    ws.freeze_panes(header_start_row + 3, 3)
-    ws.set_selection(first_data_row, 3, first_data_row, 3)
-    _protect_sheet(ws)
+    apply_xlsxwriter_sheet_frame(
+        ws,
+        repeat_last_row=header_start_row + 2,
+        freeze_row=header_start_row + 3,
+        freeze_col=3,
+        select_row=first_data_row,
+        select_col=3,
+        paper_size=XLSX_PAPER_SIZE_A4,
+        landscape=True,
+        margins=(
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+        ),
+    )
 
 
 def _write_direct_non_co_wise_sheet(
@@ -470,12 +593,14 @@ def _write_direct_non_co_wise_sheet(
     co_count = max(1, len(covered_cos))
     total_max = sum(float(question["max_marks"]) for question in questions)
     max_marks_per_co = _split_equal_with_residual(total_max, co_count)
-    row_headers = list(MARKS_ENTRY_ROW_HEADERS)
-    co_mark_headers = [f"{MARKS_ENTRY_CO_MARKS_LABEL_PREFIX}{co}" for co in covered_cos]
+    sheet_headers = _dynamic_direct_non_co_wise_headers(covered_cos)
+    row_header_count = len(MARKS_ENTRY_ROW_HEADERS)
+    row_headers = sheet_headers[:row_header_count]
+    total_header = sheet_headers[row_header_count]
+    co_mark_headers = sheet_headers[row_header_count + 1 :]
     co_prefix_labels = [f"{CO_LABEL}{co}" for co in covered_cos]
-    sheet_headers = row_headers + [MARKS_ENTRY_TOTAL_LABEL] + co_mark_headers
 
-    ws.write_row(header_start_row, 0, row_headers + [MARKS_ENTRY_TOTAL_LABEL], header_fmt)
+    ws.write_row(header_start_row, 0, row_headers + [total_header], header_fmt)
     if co_mark_headers:
         ws.write_row(header_start_row, 4, co_mark_headers, header_fmt)
 
@@ -553,14 +678,26 @@ def _write_direct_non_co_wise_sheet(
         ["", "", _CO_LABEL, ""] + co_prefix_labels,
         ["", "", _MAX_LABEL, total_max] + max_marks_per_co,
     ]
-    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    preview_students = students[: max(0, XLSX_AUTOFIT_SAMPLE_ROWS - len(sample_rows))]
     for row_offset, (reg_no, student_name) in enumerate(preview_students, start=first_data_row):
         sample_rows.append([row_offset - (first_data_row - 1), reg_no, student_name, ""] + [""] * len(covered_cos))
     _set_common_student_columns(ws, 3 + len(covered_cos), sample_rows, wrapped_column_fmt)
-    ws.repeat_rows(0, header_start_row + 2)
-    ws.freeze_panes(header_start_row + 3, 3)
-    ws.set_selection(first_data_row, 3, first_data_row, 3)
-    _protect_sheet(ws)
+    apply_xlsxwriter_sheet_frame(
+        ws,
+        repeat_last_row=header_start_row + 2,
+        freeze_row=header_start_row + 3,
+        freeze_col=3,
+        select_row=first_data_row,
+        select_col=3,
+        paper_size=XLSX_PAPER_SIZE_A4,
+        landscape=True,
+        margins=(
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+        ),
+    )
 
 
 def _write_indirect_sheet(
@@ -578,9 +715,7 @@ def _write_indirect_sheet(
 ) -> None:
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
-    headers = list(MARKS_ENTRY_ROW_HEADERS) + [
-        f"{CO_LABEL}{i}" for i in range(1, total_outcomes + 1)
-    ]
+    headers = _dynamic_indirect_headers(total_outcomes)
     ws.write_row(header_start_row, 0, headers, header_fmt)
 
     first_data_row = header_start_row + 1
@@ -614,14 +749,26 @@ def _write_indirect_sheet(
         )
 
     sample_rows: list[list[Any]] = _component_metadata_sample_rows(metadata_rows, component_name) + [headers]
-    preview_students = students[: max(0, _AUTO_FIT_SAMPLE_ROWS - len(sample_rows))]
+    preview_students = students[: max(0, XLSX_AUTOFIT_SAMPLE_ROWS - len(sample_rows))]
     for row_index, (reg_no, student_name) in enumerate(preview_students, start=1):
         sample_rows.append([row_index, reg_no, student_name] + [""] * total_outcomes)
     _set_common_student_columns(ws, 2 + total_outcomes, sample_rows, wrapped_column_fmt)
-    ws.repeat_rows(0, header_start_row)
-    ws.freeze_panes(header_start_row + 1, 3)
-    ws.set_selection(first_data_row, 3, first_data_row, 3)
-    _protect_sheet(ws)
+    apply_xlsxwriter_sheet_frame(
+        ws,
+        repeat_last_row=header_start_row,
+        freeze_row=header_start_row + 1,
+        freeze_col=3,
+        select_row=first_data_row,
+        select_col=3,
+        paper_size=XLSX_PAPER_SIZE_A4,
+        landscape=True,
+        margins=(
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+            XLSX_PAGE_MIN_MARGIN_IN,
+        ),
+    )
 
 
 def _write_component_course_metadata(
@@ -731,25 +878,20 @@ def _set_common_student_columns(
     sample_rows: Sequence[Sequence[Any]],
     wrapped_c_column_format: Any,
 ) -> None:
-    ws.set_paper(9)  # A4
-    ws.set_landscape()
-    ws.set_margins(_PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN, _PAGE_MIN_MARGIN_IN)
-    ws.fit_to_pages(1, 0)
-
     widths = compute_sampled_column_widths(
         sample_rows,
         last_col,
-        min_width=_AUTO_FIT_MIN_WIDTH,
-        max_width=_AUTO_FIT_MAX_WIDTH,
-        padding=_AUTO_FIT_PADDING,
+        min_width=XLSX_AUTOFIT_MIN_WIDTH,
+        max_width=XLSX_AUTOFIT_MAX_WIDTH,
+        padding=XLSX_AUTOFIT_PADDING,
     )
-
-    for col in range(0, last_col + 1):
-        width = widths.get(col, _AUTO_FIT_MIN_WIDTH)
-        if col == 2:
-            ws.set_column(col, col, width, wrapped_c_column_format)
-        else:
-            ws.set_column(col, col, width)
+    apply_xlsxwriter_column_widths(
+        ws,
+        widths,
+        default_width=XLSX_AUTOFIT_MIN_WIDTH,
+        wrap_columns=(2,),
+        wrap_format=wrapped_c_column_format,
+    )
 
 def _excel_col_name(col_index: int) -> str:
     return _excel_col_name_one_based(col_index + 1)
@@ -784,14 +926,6 @@ def _safe_sheet_name(name: str, used_sheet_names: set[str]) -> str:
             used_sheet_names.add(key)
             return candidate
         counter += 1
-
-
-def _build_header_format(workbook: Any, header_style: dict[str, Any]) -> Any:
-    return build_xlsxwriter_header_format(workbook, header_style)
-
-
-def _build_body_format(workbook: Any, body_style: dict[str, Any]) -> Any:
-    return build_xlsxwriter_body_format(workbook, body_style)
 
 
 def generate_worksheet(
@@ -832,13 +966,20 @@ def generate_worksheet(
     for col_index, value in enumerate(headers):
         col_widths[col_index] = max(12, len(str(value)) + 2)
 
-    for col_index, width in col_widths.items():
-        worksheet.set_column(col_index, col_index, width)
+    apply_xlsxwriter_column_widths(
+        worksheet,
+        col_widths,
+        default_width=12,
+    )
 
     for row_offset, row_values in enumerate(data, start=1):
         write_row(row_offset, 0, row_values, body_format)
 
-    worksheet.freeze_panes(1, 0)
+    apply_xlsxwriter_viewport(
+        worksheet,
+        freeze_row=1,
+        freeze_col=0,
+    )
     return worksheet
 
 
@@ -866,43 +1007,6 @@ def _protect_sheet(worksheet: Any) -> None:
     # keyboard navigation (Tab) jumps between mark-entry cells.
     protect_xlsxwriter_sheet(worksheet)
 
-
-def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
-    worksheet = workbook.add_worksheet(SYSTEM_HASH_SHEET)
-    template_hash = _compute_template_hash(template_id)
-
-    worksheet.write_row(
-        0,
-        0,
-        [SYSTEM_HASH_TEMPLATE_ID_HEADER, SYSTEM_HASH_TEMPLATE_HASH_HEADER],
-    )
-    worksheet.write_row(1, 0, [template_id, template_hash])
-    worksheet.hide()
-
-
-def _add_system_layout_sheet(workbook: Any, layout_manifest: dict[str, Any]) -> None:
-    worksheet = workbook.add_worksheet(SYSTEM_LAYOUT_SHEET)
-    manifest_text = _serialize_layout_manifest(layout_manifest)
-    manifest_hash = _compute_layout_manifest_hash(manifest_text)
-    worksheet.write_row(
-        0,
-        0,
-        [SYSTEM_LAYOUT_MANIFEST_HEADER, SYSTEM_LAYOUT_MANIFEST_HASH_HEADER],
-    )
-    worksheet.write_row(1, 0, [manifest_text, manifest_hash])
-    worksheet.hide()
-
-
-def _compute_template_hash(template_id: str) -> str:
-    return sign_payload(template_id)
-
-
-def _serialize_layout_manifest(layout_manifest: dict[str, Any]) -> str:
-    return json.dumps(layout_manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-
-
-def _compute_layout_manifest_hash(manifest_text: str) -> str:
-    return sign_payload(manifest_text)
 
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hmac
 from hashlib import sha256
 
-from common.workbook_secret import (
+from common.workbook_integrity.workbook_secret import (
     WORKBOOK_SIGNATURE_VERSION,
     ensure_workbook_secret_policy,
     get_workbook_password,

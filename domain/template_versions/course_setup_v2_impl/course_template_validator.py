@@ -36,9 +36,9 @@ from common.utils import (
     canonical_path_key,
     coerce_excel_number,
     normalize,
-    read_valid_template_id_from_system_hash_sheet,
     sanitize_filename_token,
 )
+from common.workbook_integrity import read_valid_template_id_from_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
     parse_assessment_components,
 )

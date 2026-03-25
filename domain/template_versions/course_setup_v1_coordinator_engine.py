@@ -34,10 +34,12 @@ from common.constants import (
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
+    WORKBOOK_INTEGRITY_SCHEMA_VERSION,
+)
+from common.workbook_integrity.constants import (
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
     SYSTEM_LAYOUT_MANIFEST_HEADER,
     SYSTEM_LAYOUT_SHEET,
-    WORKBOOK_INTEGRITY_SCHEMA_VERSION,
 )
 from common.registry import (
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
@@ -67,7 +69,7 @@ from common.utils import (
     create_app_runtime_sqlite_file,
     normalize,
 )
-from common.workbook_signing import sign_payload, verify_payload_signature
+from common.workbook_integrity.workbook_signing import sign_payload, verify_payload_signature
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
     FinalReportWorkbookSignature,
@@ -1369,4 +1371,5 @@ def _generate_co_attainment_workbook_course_setup_v1(
         inner_join_drop_count=inner_join_drop_count,
         inner_join_drop_details=tuple(inner_join_drop_details),
     )
+
 

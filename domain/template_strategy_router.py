@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import pkgutil
 import re
 from dataclasses import dataclass
@@ -11,29 +10,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
-from common.constants import (
-    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
-    SYSTEM_LAYOUT_MANIFEST_HEADER,
-    SYSTEM_LAYOUT_SHEET,
-)
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
-from common.registry import (
-    SYSTEM_HASH_SHEET_NAME,
+from common.utils import normalize
+from common.workbook_integrity import (
+    SystemWorkbookPayload,
+    read_template_id_from_system_hash_sheet_if_valid as _read_template_id_from_system_hash_sheet_if_valid_integrity,
+    read_valid_system_workbook_payload as _read_valid_system_workbook_payload_integrity,
+    read_valid_template_id_from_system_hash_sheet as _read_valid_template_id_from_system_hash_sheet_integrity,
+    verify_payload_signature,
 )
-from common.utils import (
-    normalize,
-    read_template_id_from_system_hash_sheet_if_valid as _read_template_id_from_system_hash_sheet_if_valid_common,
-    read_valid_template_id_from_system_hash_sheet as _read_valid_template_id_from_system_hash_sheet_common,
-)
-from common.workbook_signing import verify_payload_signature
-
-
-@dataclass(frozen=True)
-class SystemWorkbookPayload:
-    template_id: str
-    template_hash: str
-    manifest: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -382,74 +368,16 @@ def read_template_id_from_system_hash_sheet_if_valid(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> str | None:
-    return _read_template_id_from_system_hash_sheet_if_valid_common(
+    return _read_template_id_from_system_hash_sheet_if_valid_integrity(
         workbook,
         verify_signature=verify_signature,
     )
 
 
 def read_valid_template_id_from_system_hash_sheet(workbook: Any) -> str:
-    template_id = _read_valid_template_id_from_system_hash_sheet_common(workbook)
+    template_id = _read_valid_template_id_from_system_hash_sheet_integrity(workbook)
     get_template_strategy(template_id)
     return template_id
-
-
-def _read_manifest_sheet_payload(
-    workbook: Any,
-    *,
-    verify_signature: _VERIFY_SIGNATURE,
-) -> dict[str, Any]:
-    if SYSTEM_LAYOUT_SHEET not in getattr(workbook, "sheetnames", []):
-        raise validation_error_from_key(
-            "validation.layout.sheet_missing",
-            code="COA_LAYOUT_SHEET_MISSING",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-    sheet = workbook[SYSTEM_LAYOUT_SHEET]
-    manifest_header = normalize(sheet.cell(row=1, column=1).value)
-    manifest_hash_header = normalize(sheet.cell(row=1, column=2).value)
-    if manifest_header != normalize(SYSTEM_LAYOUT_MANIFEST_HEADER):
-        raise validation_error_from_key(
-            "validation.layout.header_mismatch",
-            code="COA_LAYOUT_HEADER_MISMATCH",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-    if manifest_hash_header != normalize(SYSTEM_LAYOUT_MANIFEST_HASH_HEADER):
-        raise validation_error_from_key(
-            "validation.layout.header_mismatch",
-            code="COA_LAYOUT_HEADER_MISMATCH",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-
-    manifest_text = str(sheet.cell(row=2, column=1).value or "").strip()
-    manifest_hash = str(sheet.cell(row=2, column=2).value or "").strip()
-    if not manifest_text or not manifest_hash:
-        raise validation_error_from_key(
-            "validation.layout.manifest_missing",
-            code="COA_LAYOUT_MANIFEST_MISSING",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-    if not verify_signature(manifest_text, manifest_hash):
-        raise validation_error_from_key(
-            "validation.layout.hash_mismatch",
-            code="COA_LAYOUT_HASH_MISMATCH",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-    try:
-        manifest = json.loads(manifest_text)
-    except Exception as exc:
-        raise validation_error_from_key(
-            "validation.layout.manifest_json_invalid",
-            code="COA_LAYOUT_MANIFEST_JSON_INVALID",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        ) from exc
-    if not isinstance(manifest, dict):
-        raise validation_error_from_key(
-            "validation.layout.manifest_json_invalid",
-            code="COA_LAYOUT_MANIFEST_JSON_INVALID",
-            sheet_name=SYSTEM_LAYOUT_SHEET,
-        )
-    return manifest
 
 
 def read_valid_system_workbook_payload(
@@ -457,15 +385,12 @@ def read_valid_system_workbook_payload(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> SystemWorkbookPayload:
-    template_id = read_valid_template_id_from_system_hash_sheet(workbook)
-    sheet = workbook[SYSTEM_HASH_SHEET_NAME]
-    template_hash = str(sheet.cell(row=2, column=2).value or "").strip()
-    manifest = _read_manifest_sheet_payload(workbook, verify_signature=verify_signature)
-    return SystemWorkbookPayload(
-        template_id=template_id,
-        template_hash=template_hash,
-        manifest=manifest,
+    payload = _read_valid_system_workbook_payload_integrity(
+        workbook,
+        verify_signature=verify_signature,
     )
+    get_template_strategy(payload.template_id)
+    return payload
 
 
 
@@ -483,3 +408,4 @@ __all__ = [
     "read_valid_system_workbook_payload",
     "read_valid_template_id_from_system_hash_sheet",
 ]
+

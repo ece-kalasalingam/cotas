@@ -63,7 +63,9 @@ def test_instructor_report_engine_stays_within_size_budget() -> None:
 
 
 def test_sheetops_module_does_not_import_ui_or_service_layers() -> None:
-    sheetops_file = REPO_ROOT / "domain" / "instructor_template_engine_sheetops.py"
+    sheetops_file = (
+        REPO_ROOT / "domain" / "template_versions" / "course_setup_v2_impl" / "instructor_engine_sheetops.py"
+    )
     imports = _imports_for(sheetops_file)
     assert not any(name == "modules" or name.startswith("modules.") for name in imports)
     assert not any(name == "services" or name.startswith("services.") for name in imports)
@@ -73,3 +75,19 @@ def test_service_layer_does_not_define_atomic_copy_helper() -> None:
     service_file = REPO_ROOT / "services" / "instructor_workflow_service.py"
     content = service_file.read_text(encoding="utf-8")
     assert "def _atomic_copy_file(" not in content
+
+
+def test_utils_does_not_own_workbook_integrity_rules() -> None:
+    utils_file = REPO_ROOT / "common" / "utils.py"
+    content = utils_file.read_text(encoding="utf-8")
+    assert "def read_valid_template_id_from_system_hash_sheet(" not in content
+    assert "def read_template_id_from_system_hash_sheet_if_valid(" not in content
+    assert "def add_system_hash_sheet(" not in content
+    assert "def add_system_layout_sheet(" not in content
+    assert "def copy_system_hash_sheet(" not in content
+
+
+def test_template_strategy_router_uses_shared_workbook_integrity_package() -> None:
+    router_file = REPO_ROOT / "domain" / "template_strategy_router.py"
+    content = router_file.read_text(encoding="utf-8")
+    assert "from common.workbook_integrity import (" in content

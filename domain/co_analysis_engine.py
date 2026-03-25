@@ -9,7 +9,6 @@ from typing import Callable
 from common.constants import (
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
-    SYSTEM_LAYOUT_SHEET,
     ID_COURSE_SETUP,
 )
 from common.error_catalog import validation_error_from_key
@@ -36,6 +35,7 @@ from common.registry import (
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
 )
+from common.workbook_integrity.constants import SYSTEM_LAYOUT_SHEET
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
     assert_template_id_matches,

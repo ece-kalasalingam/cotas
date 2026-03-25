@@ -54,7 +54,7 @@ from common.registry import (
 )
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.utils import coerce_excel_number, normalize, sanitize_filename_token
-from common.workbook_signing import sign_payload
+from common.workbook_integrity.workbook_signing import sign_payload
 from domain.assessment_semantics import parse_assessment_components
 from domain.co_token_parser import parse_co_tokens
 from domain.template_strategy_router import assert_template_id_matches
@@ -1455,4 +1455,5 @@ def _log_marks_anomaly_warnings_from_stats(
                     same,
                     numeric_count,
                 )
+
 

@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import re
 import sys
@@ -48,7 +48,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
-from common.workbook_secret import ensure_workbook_secret_policy
+from common.workbook_integrity.workbook_secret import ensure_workbook_secret_policy
 from main_window import MainWindow
 
 _logger = logging.getLogger(__name__)
@@ -383,4 +383,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

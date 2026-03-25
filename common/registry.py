@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from common.constants import (
+    CO_LABEL,
+    MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
+    MARKS_ENTRY_QUESTION_PREFIX,
+    MARKS_ENTRY_ROW_HEADERS,
+    MARKS_ENTRY_TOTAL_LABEL,
+)
 from common.exceptions import ConfigurationError
 from common.sheet_schema import SheetSchema, ValidationRule, WorkbookBlueprint
 
@@ -10,6 +17,9 @@ COURSE_SETUP_SHEET_KEY_QUESTION_MAP = "question_map"
 COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION = "co_description"
 COURSE_SETUP_SHEET_KEY_STUDENTS = "students"
 CO_REPORT_SHEET_KEY_CO_INDIRECT = "co_indirect"
+COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE = "marks_direct_co_wise"
+COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE = "marks_direct_non_co_wise"
+COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT = "marks_indirect"
 
 SYSTEM_HASH_SHEET_NAME = "__SYSTEM_HASH__"
 SYSTEM_HASH_HEADER_TEMPLATE_ID = "Template_ID"
@@ -95,6 +105,9 @@ SETUP_STYLE_REGISTRY_V2 = {
 }
 
 _CO_INDIRECT_HEADER_RESOLVER = "course_setup.co_indirect_headers"
+_MARKS_DIRECT_CO_WISE_HEADER_RESOLVER = "course_setup.marks_direct_co_wise_headers"
+_MARKS_DIRECT_NON_CO_WISE_HEADER_RESOLVER = "course_setup.marks_direct_non_co_wise_headers"
+_MARKS_INDIRECT_HEADER_RESOLVER = "course_setup.marks_indirect_headers"
 
 
 def _rule(
@@ -423,7 +436,30 @@ def _build_course_setup_blueprint(
                     "scaled_label_template": "scaled 0-{max_value}",
                     "total_100_label": "Total (100%)",
                     "ratio_header_template": "Total ({ratio}%)",
-                }
+                },
+                COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE: {
+                    "sheet_name_pattern": "{component_name}",
+                    "header_kind": "dynamic",
+                    "header_resolver": _MARKS_DIRECT_CO_WISE_HEADER_RESOLVER,
+                    "header_base": MARKS_ENTRY_ROW_HEADERS,
+                    "question_prefix": MARKS_ENTRY_QUESTION_PREFIX,
+                    "total_label": MARKS_ENTRY_TOTAL_LABEL,
+                },
+                COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE: {
+                    "sheet_name_pattern": "{component_name}",
+                    "header_kind": "dynamic",
+                    "header_resolver": _MARKS_DIRECT_NON_CO_WISE_HEADER_RESOLVER,
+                    "header_base": MARKS_ENTRY_ROW_HEADERS,
+                    "total_label": MARKS_ENTRY_TOTAL_LABEL,
+                    "co_marks_prefix": MARKS_ENTRY_CO_MARKS_LABEL_PREFIX,
+                },
+                COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT: {
+                    "sheet_name_pattern": "{component_name}",
+                    "header_kind": "dynamic",
+                    "header_resolver": _MARKS_INDIRECT_HEADER_RESOLVER,
+                    "header_base": MARKS_ENTRY_ROW_HEADERS,
+                    "co_prefix": CO_LABEL,
+                },
             },
         },
     )
@@ -597,6 +633,86 @@ def _resolve_course_setup_co_indirect_headers(
     return tuple(headers)
 
 
+def _positive_int_context(value: object, *, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ConfigurationError(f"Invalid boolean value for '{field_name}'.")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, float):
+        parsed = int(value) if float(value).is_integer() else -1
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            parsed = -1
+        else:
+            try:
+                parsed = int(text)
+            except ValueError as exc:
+                raise ConfigurationError(f"Invalid integer value for '{field_name}': {value!r}.") from exc
+    else:
+        parsed = -1
+    if parsed <= 0:
+        raise ConfigurationError(f"'{field_name}' must be a positive integer, got {value!r}.")
+    return parsed
+
+
+def _resolve_course_setup_marks_direct_co_wise_headers(
+    *,
+    template_id: str,
+    context: dict[str, object],
+) -> tuple[str, ...]:
+    dynamic_template = get_dynamic_sheet_template(template_id, COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE)
+    base = dynamic_template.get("header_base", MARKS_ENTRY_ROW_HEADERS)
+    if not isinstance(base, tuple):
+        raise ConfigurationError(f"Template '{template_id}' marks direct co-wise header base must be a tuple.")
+    question_prefix = str(dynamic_template.get("question_prefix", MARKS_ENTRY_QUESTION_PREFIX))
+    total_label = str(dynamic_template.get("total_label", MARKS_ENTRY_TOTAL_LABEL))
+    question_count = _positive_int_context(context.get("question_count", 0), field_name="question_count")
+    headers = list(base) + [f"{question_prefix}{idx}" for idx in range(1, question_count + 1)] + [total_label]
+    return tuple(headers)
+
+
+def _resolve_course_setup_marks_direct_non_co_wise_headers(
+    *,
+    template_id: str,
+    context: dict[str, object],
+) -> tuple[str, ...]:
+    dynamic_template = get_dynamic_sheet_template(
+        template_id,
+        COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
+    )
+    base = dynamic_template.get("header_base", MARKS_ENTRY_ROW_HEADERS)
+    if not isinstance(base, tuple):
+        raise ConfigurationError(
+            f"Template '{template_id}' marks direct non-co-wise header base must be a tuple."
+        )
+    total_label = str(dynamic_template.get("total_label", MARKS_ENTRY_TOTAL_LABEL))
+    co_marks_prefix = str(dynamic_template.get("co_marks_prefix", MARKS_ENTRY_CO_MARKS_LABEL_PREFIX))
+    raw_covered_cos = context.get("covered_cos", [])
+    if not isinstance(raw_covered_cos, list):
+        raise ConfigurationError(f"Template '{template_id}' marks covered_cos must be a list.")
+    covered_cos: list[int] = []
+    for item in raw_covered_cos:
+        covered_cos.append(_positive_int_context(item, field_name="covered_cos"))
+    headers = list(base) + [total_label] + [f"{co_marks_prefix}{co}" for co in covered_cos]
+    return tuple(headers)
+
+
+def _resolve_course_setup_marks_indirect_headers(
+    *,
+    template_id: str,
+    context: dict[str, object],
+) -> tuple[str, ...]:
+    dynamic_template = get_dynamic_sheet_template(template_id, COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT)
+    base = dynamic_template.get("header_base", MARKS_ENTRY_ROW_HEADERS)
+    if not isinstance(base, tuple):
+        raise ConfigurationError(f"Template '{template_id}' marks indirect header base must be a tuple.")
+    co_prefix = str(dynamic_template.get("co_prefix", CO_LABEL))
+    total_outcomes = _positive_int_context(context.get("total_outcomes", 0), field_name="total_outcomes")
+    headers = list(base) + [f"{co_prefix}{i}" for i in range(1, total_outcomes + 1)]
+    return tuple(headers)
+
+
 def resolve_dynamic_sheet_headers(
     template_id: str,
     *,
@@ -608,6 +724,27 @@ def resolve_dynamic_sheet_headers(
     resolved_context = dict(context or {})
     if resolver_name == _CO_INDIRECT_HEADER_RESOLVER and sheet_key == CO_REPORT_SHEET_KEY_CO_INDIRECT:
         return _resolve_course_setup_co_indirect_headers(
+            template_id=template_id,
+            context=resolved_context,
+        )
+    if (
+        resolver_name == _MARKS_DIRECT_CO_WISE_HEADER_RESOLVER
+        and sheet_key == COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE
+    ):
+        return _resolve_course_setup_marks_direct_co_wise_headers(
+            template_id=template_id,
+            context=resolved_context,
+        )
+    if (
+        resolver_name == _MARKS_DIRECT_NON_CO_WISE_HEADER_RESOLVER
+        and sheet_key == COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE
+    ):
+        return _resolve_course_setup_marks_direct_non_co_wise_headers(
+            template_id=template_id,
+            context=resolved_context,
+        )
+    if resolver_name == _MARKS_INDIRECT_HEADER_RESOLVER and sheet_key == COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT:
+        return _resolve_course_setup_marks_indirect_headers(
             template_id=template_id,
             context=resolved_context,
         )

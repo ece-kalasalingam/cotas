@@ -16,13 +16,13 @@ from common.constants import (
     LAYOUT_SHEET_KIND_INDIRECT,
     LAYOUT_SHEET_SPEC_KEY_KIND,
     LAYOUT_SHEET_SPEC_KEY_NAME,
-    SYSTEM_LAYOUT_SHEET,
     WORKBOOK_INTEGRITY_SCHEMA_VERSION,
     WORKBOOK_TEMP_SUFFIX,
+    MARKS_ENTRY_ROW_HEADERS,
 )
 from common.error_catalog import validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
-from common.excel_sheet_layout import build_template_xlsxwriter_formats, style_registry_for_template
+from common.excel_sheet_layout import build_marks_template_xlsxwriter_formats
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import (
@@ -35,8 +35,15 @@ from common.registry import (
     get_blueprint,
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
+    get_sheet_schema_by_key,
 )
-from common.utils import coerce_excel_number, normalize, read_valid_template_id_from_system_hash_sheet
+from common.utils import coerce_excel_number, normalize
+from common.workbook_integrity import (
+    add_system_layout_sheet,
+    copy_system_hash_sheet,
+    read_valid_template_id_from_system_hash_sheet,
+)
+from common.workbook_integrity.constants import SYSTEM_LAYOUT_SHEET
 from domain.template_versions.course_setup_v2_impl.co_token_parser import parse_co_tokens
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
     parse_assessment_components,
@@ -140,8 +147,8 @@ def generate_marks_template_from_course_details(
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        _sheetops._copy_system_hash_sheet(source_workbook, target_workbook)
-        _sheetops._add_system_layout_sheet(target_workbook, layout_manifest)
+        copy_system_hash_sheet(source_workbook, target_workbook)
+        add_system_layout_sheet(target_workbook, layout_manifest)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
@@ -201,6 +208,8 @@ def _extract_marks_template_context_by_template(workbook: Any, template_id: str)
 
     total_outcomes = _extract_total_outcomes(metadata_rows)
     students = _extract_students(student_rows)
+    students_output_headers = (MARKS_ENTRY_ROW_HEADERS[0],) + tuple(students_headers)
+    students_output_rows = [[index, reg_no, student_name] for index, (reg_no, student_name) in enumerate(students, start=1)]
     components = _extract_components(
         assessment_rows,
         assessment_sheet=assessment_sheet,
@@ -216,10 +225,12 @@ def _extract_marks_template_context_by_template(workbook: Any, template_id: str)
         "assessment_headers": assessment_headers,
         "question_map_headers": question_map_headers,
         "students_headers": students_headers,
+        "students_output_headers": students_output_headers,
         "metadata_rows": metadata_rows,
         "assessment_rows": assessment_rows,
         "question_rows": question_rows,
         "student_rows": student_rows,
+        "students_output_rows": students_output_rows,
         "total_outcomes": total_outcomes,
         "students": students,
         "components": components,
@@ -335,32 +346,20 @@ def _write_marks_template_workbook(
             template_id=template_id,
         )
 
-    format_bundle = build_template_xlsxwriter_formats(
+    format_bundle = build_marks_template_xlsxwriter_formats(
         workbook,
         template_id=template_id,
         include_column_wrap=True,
         normalize_header_valign_to_center=True,
     )
-    header_style, body_style = style_registry_for_template(template_id)
-    body_border = int(body_style.get("border", 1))
-    header_border = int(header_style.get("border", 1))
 
     header_fmt = format_bundle["header"]
     body_fmt = format_bundle["body"]
     wrapped_body_fmt = format_bundle["body_wrap"]
     wrapped_column_fmt = format_bundle["column_wrap"]
-    num_fmt = workbook.add_format({"border": body_border, "num_format": "0.00"})
-    header_num_fmt = workbook.add_format(
-        {
-            "bold": bool(header_style.get("bold", True)),
-            "bg_color": str(header_style.get("bg_color", "")),
-            "border": header_border,
-            "align": str(header_style.get("align", "center")),
-            "valign": str(header_style.get("valign", "vcenter")),
-            "num_format": "0.00",
-        }
-    )
-    unlocked_body_fmt = workbook.add_format({"border": body_border, "locked": False})
+    num_fmt = format_bundle["num"]
+    header_num_fmt = format_bundle["header_num"]
+    unlocked_body_fmt = format_bundle["unlocked_body"]
 
     layout_sheets, component_plans = _precompute_marks_layout_manifest(
         context=context,
@@ -368,6 +367,7 @@ def _write_marks_template_workbook(
     )
 
     students = context["students"]
+    assessment_wrap_columns = _assessment_wrapped_columns_from_schema(template_id)
     _sheetops._write_two_column_copy_sheet(
         workbook=workbook,
         title=context["course_metadata_sheet"],
@@ -384,6 +384,10 @@ def _write_marks_template_workbook(
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        wrap_columns=assessment_wrap_columns,
+        fit_all_columns_single_page=True,
     )
     _sheetops._write_multi_column_copy_sheet(
         workbook=workbook,
@@ -393,15 +397,22 @@ def _write_marks_template_workbook(
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        fit_all_columns_single_page=True,
     )
     _sheetops._write_multi_column_copy_sheet(
         workbook=workbook,
         title=context["students_sheet"],
-        header=context["students_headers"],
-        rows=context["student_rows"],
+        header=context["students_output_headers"],
+        rows=context["students_output_rows"],
         header_fmt=header_fmt,
         body_fmt=body_fmt,
         num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        wrapped_column_fmt=wrapped_column_fmt,
+        use_common_student_columns=True,
     )
 
     for plan in component_plans:
@@ -462,6 +473,18 @@ def _write_marks_template_workbook(
     }
 
 
+def _assessment_wrapped_columns_from_schema(template_id: str) -> tuple[int, ...]:
+    schema = get_sheet_schema_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+    if schema is None:
+        return ()
+    column_keys_raw = schema.sheet_rules.get("column_keys")
+    if not isinstance(column_keys_raw, (tuple, list)):
+        return ()
+    column_keys = [normalize(value) for value in column_keys_raw]
+    wrapped_keys = {normalize("mode"), normalize("participation")}
+    return tuple(index for index, key in enumerate(column_keys) if key in wrapped_keys)
+
+
 def _precompute_marks_layout_manifest(
     *,
     context: dict[str, Any],
@@ -484,16 +507,19 @@ def _precompute_marks_layout_manifest(
             title=context["assessment_sheet"],
             header=context["assessment_headers"],
             rows=assessment_rows,
+            metadata_rows=metadata_rows,
         ),
         _sheetops._build_multi_column_copy_sheet_spec(
             title=context["question_map_sheet"],
             header=context["question_map_headers"],
             rows=context["question_rows"],
+            metadata_rows=metadata_rows,
         ),
         _sheetops._build_multi_column_copy_sheet_spec(
             title=context["students_sheet"],
-            header=context["students_headers"],
-            rows=context["student_rows"],
+            header=context["students_output_headers"],
+            rows=context["students_output_rows"],
+            metadata_rows=metadata_rows,
         ),
     ]
     component_plans: list[dict[str, Any]] = []

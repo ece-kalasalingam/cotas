@@ -9,7 +9,7 @@ from common.exceptions import ConfigurationError
 
 
 def _reloaded_workbook_secret():
-    import common.workbook_secret as workbook_secret_mod
+    import common.workbook_integrity.workbook_secret as workbook_secret_mod
 
     return importlib.reload(workbook_secret_mod)
 
@@ -178,3 +178,4 @@ def test_ensure_workbook_secret_policy_raises_when_empty(monkeypatch: pytest.Mon
     monkeypatch.setattr(workbook_secret_mod, "get_workbook_password", lambda: "")
     with pytest.raises(ConfigurationError):
         workbook_secret_mod.ensure_workbook_secret_policy()
+
