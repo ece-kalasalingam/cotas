@@ -19,11 +19,13 @@ from common.constants import (
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
 from common.registry import (
-    SYSTEM_HASH_HEADER_TEMPLATE_HASH,
-    SYSTEM_HASH_HEADER_TEMPLATE_ID,
     SYSTEM_HASH_SHEET_NAME,
 )
-from common.utils import normalize
+from common.utils import (
+    normalize,
+    read_template_id_from_system_hash_sheet_if_valid as _read_template_id_from_system_hash_sheet_if_valid_common,
+    read_valid_template_id_from_system_hash_sheet as _read_valid_template_id_from_system_hash_sheet_common,
+)
 from common.workbook_signing import verify_payload_signature
 
 
@@ -32,6 +34,15 @@ class SystemWorkbookPayload:
     template_id: str
     template_hash: str
     manifest: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class WorkbookGenerationResult:
+    status: str
+    workbook_path: str | None
+    output_path: str
+    output_url: str
+    reason: str | None = None
 
 
 class _TemplateStrategy(Protocol):
@@ -191,7 +202,7 @@ def generate_workbook(
     context: Mapping[str, Any] | None = None,
 ) -> object:
     strategy = get_template_strategy(template_id)
-    return strategy.generate_workbook(
+    raw = strategy.generate_workbook(
         template_id=template_id,
         workbook_kind=workbook_kind,
         output_path=output_path,
@@ -199,6 +210,7 @@ def generate_workbook(
         cancel_token=cancel_token,
         context=context,
     )
+    return _normalize_generate_workbook_result(raw=raw, fallback_output=Path(output_path))
 
 
 def validate_workbook(
@@ -247,7 +259,7 @@ def generate_workbooks(
     context: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
     strategy = get_template_strategy(template_id)
-    return strategy.generate_workbooks(
+    raw = strategy.generate_workbooks(
         template_id=template_id,
         workbook_kind=workbook_kind,
         workbook_paths=workbook_paths,
@@ -255,6 +267,91 @@ def generate_workbooks(
         cancel_token=cancel_token,
         context=context,
     )
+    return _normalize_generate_workbooks_result(raw)
+
+
+def _extract_output_path_from_result(raw: object) -> str | None:
+    if isinstance(raw, Path):
+        return str(raw)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    output = getattr(raw, "workbook_path", None)
+    if isinstance(output, Path):
+        return str(output)
+    if isinstance(output, str) and output.strip():
+        return output.strip()
+    output = getattr(raw, "output_path", None)
+    if isinstance(output, Path):
+        return str(output)
+    if isinstance(output, str) and output.strip():
+        return output.strip()
+    return None
+
+
+def _normalize_generate_workbook_result(
+    *,
+    raw: object,
+    fallback_output: Path,
+) -> WorkbookGenerationResult:
+    output_value = _extract_output_path_from_result(raw) or str(fallback_output)
+    status = str(getattr(raw, "status", "generated")).strip() or "generated"
+    reason_attr = getattr(raw, "reason", None)
+    reason = str(reason_attr).strip() if isinstance(reason_attr, str) and reason_attr.strip() else None
+    return WorkbookGenerationResult(
+        status=status,
+        workbook_path=output_value if status == "generated" else None,
+        output_path=output_value,
+        output_url=output_value,
+        reason=reason,
+    )
+
+
+def _normalize_generate_workbooks_result(raw: dict[str, object]) -> dict[str, object]:
+    if not isinstance(raw, dict):
+        return {
+            "total": 0,
+            "generated": 0,
+            "failed": 0,
+            "skipped": 0,
+            "generated_workbook_paths": [],
+            "output_urls": [],
+            "results": {},
+        }
+    raw_results = raw.get("results")
+    normalized_results: dict[str, object] = {}
+    generated_paths: list[str] = []
+    if isinstance(raw_results, dict):
+        for key, item in raw_results.items():
+            if not isinstance(item, dict):
+                continue
+            status = str(item.get("status") or "").strip() or "failed"
+            output_path = str(item.get("workbook_path") or item.get("output_path") or item.get("output") or "").strip()
+            reason_raw = item.get("reason")
+            reason = str(reason_raw).strip() if isinstance(reason_raw, str) and reason_raw.strip() else None
+            normalized_results[str(key)] = {
+                "status": status,
+                "source_path": item.get("source_path"),
+                "workbook_path": output_path if status == "generated" and output_path else None,
+                "output": output_path if output_path else None,
+                "output_path": output_path if output_path else None,
+                "output_url": output_path if output_path else None,
+                "reason": reason,
+            }
+            if status == "generated" and output_path:
+                generated_paths.append(output_path)
+    total = int(raw.get("total", len(normalized_results)) or 0)
+    generated = int(raw.get("generated", len(generated_paths)) or 0)
+    failed = int(raw.get("failed", 0) or 0)
+    skipped = int(raw.get("skipped", 0) or 0)
+    return {
+        "total": total,
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "generated_workbook_paths": generated_paths,
+        "output_urls": list(generated_paths),
+        "results": normalized_results,
+    }
 
 
 def resolve_template_id_from_workbook_path(workbook_path: str | Path) -> str:
@@ -285,57 +382,14 @@ def read_template_id_from_system_hash_sheet_if_valid(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> str | None:
-    if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
-        return None
-    sheet = workbook[SYSTEM_HASH_SHEET_NAME]
-    header_template_id = normalize(sheet.cell(row=1, column=1).value)
-    header_template_hash = normalize(sheet.cell(row=1, column=2).value)
-    if header_template_id != normalize(SYSTEM_HASH_HEADER_TEMPLATE_ID):
-        return None
-    if header_template_hash != normalize(SYSTEM_HASH_HEADER_TEMPLATE_HASH):
-        return None
-    template_id = str(sheet.cell(row=2, column=1).value or "").strip()
-    template_hash = str(sheet.cell(row=2, column=2).value or "").strip()
-    if not template_id or not template_hash:
-        return None
-    if not verify_signature(template_id, template_hash):
-        return None
-    return template_id
+    return _read_template_id_from_system_hash_sheet_if_valid_common(
+        workbook,
+        verify_signature=verify_signature,
+    )
 
 
 def read_valid_template_id_from_system_hash_sheet(workbook: Any) -> str:
-    if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
-        raise validation_error_from_key(
-            "validation.system.sheet_missing",
-            code="COA_SYSTEM_SHEET_MISSING",
-            sheet_name=SYSTEM_HASH_SHEET_NAME,
-        )
-    sheet = workbook[SYSTEM_HASH_SHEET_NAME]
-    header_template_id = normalize(sheet.cell(row=1, column=1).value)
-    header_template_hash = normalize(sheet.cell(row=1, column=2).value)
-    if header_template_id != normalize(SYSTEM_HASH_HEADER_TEMPLATE_ID):
-        raise validation_error_from_key(
-            "validation.system_hash.header_template_id_missing",
-            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_ID_MISSING",
-        )
-    if header_template_hash != normalize(SYSTEM_HASH_HEADER_TEMPLATE_HASH):
-        raise validation_error_from_key(
-            "validation.system_hash.header_template_hash_missing",
-            code="COA_SYSTEM_HASH_HEADER_TEMPLATE_HASH_MISSING",
-        )
-    template_id = str(sheet.cell(row=2, column=1).value or "").strip()
-    template_hash = str(sheet.cell(row=2, column=2).value or "").strip()
-    if not template_id:
-        raise validation_error_from_key(
-            "validation.system_hash.template_id_missing",
-            code="COA_SYSTEM_HASH_TEMPLATE_ID_MISSING",
-        )
-    if not verify_payload_signature(template_id, template_hash):
-        raise validation_error_from_key(
-            "validation.system_hash.mismatch",
-            code="COA_SYSTEM_HASH_MISMATCH",
-            template_id=template_id,
-        )
+    template_id = _read_valid_template_id_from_system_hash_sheet_common(workbook)
     get_template_strategy(template_id)
     return template_id
 

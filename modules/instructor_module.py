@@ -533,6 +533,7 @@ class InstructorModule(QWidget):
 
         def _work() -> dict[str, object]:
             generated: list[str] = []
+            generated_items: list[dict[str, str]] = []
             failed: list[dict[str, str]] = []
             total = len(output_plan)
             processed = 0
@@ -551,16 +552,22 @@ class InstructorModule(QWidget):
                         cancel_token=token,
                         context={"course_details_path": source_path},
                     )
+                    resolved_output = output_path
                     if isinstance(result, Path):
-                        generated.append(str(result))
+                        resolved_output = str(result)
                     else:
                         output = getattr(result, "output_path", None)
                         if isinstance(output, Path):
-                            generated.append(str(output))
+                            resolved_output = str(output)
                         elif isinstance(output, str) and output.strip():
-                            generated.append(output)
-                        else:
-                            generated.append(output_path)
+                            resolved_output = output
+                    generated.append(resolved_output)
+                    generated_items.append(
+                        {
+                            "source": source_path,
+                            "output_url": resolved_output,
+                        }
+                    )
                 except Exception as exc:
                     failed.append(
                         {
@@ -575,11 +582,18 @@ class InstructorModule(QWidget):
                         processed=processed,
                         total=total,
                     )
-            return {"generated": generated, "failed": failed, "total": total}
+            return {"generated": generated, "generated_items": generated_items, "failed": failed, "total": total}
 
         def _on_success(result: object) -> None:
             data = result if isinstance(result, dict) else {}
-            generated = [p for p in data.get("generated", []) if isinstance(p, str) and p]
+            generated_items = [
+                item
+                for item in data.get("generated_items", [])
+                if isinstance(item, dict)
+                and isinstance(item.get("output_url"), str)
+                and str(item.get("output_url")).strip()
+            ]
+            generated = [str(item["output_url"]) for item in generated_items]
             failed = [x for x in data.get("failed", []) if isinstance(x, dict)]
             total = int(data.get("total", 0))
 
@@ -655,16 +669,22 @@ class InstructorModule(QWidget):
 
     def _marks_template_default_name(self, source_path: str) -> str:
         fallback = t("instructor.dialog.marks_template.default_name")
+        ext = Path(fallback).suffix or ".xlsx"
+        try:
+            from domain.template_versions.course_setup_v2_impl.course_template_validator import (
+                build_marks_template_filename_base,
+            )
+
+            base = build_marks_template_filename_base(source_path)
+            if base.strip():
+                return f"{base}{ext}"
+        except Exception:
+            pass
         source_name = Path(source_path).stem.strip()
         if not source_name:
             return fallback
-        ext = Path(fallback).suffix or ".xlsx"
-        base_fallback = Path(fallback).stem.strip()
-        suffix = base_fallback or "Marks"
-        candidate = f"{source_name}_{suffix}{ext}"
-        if candidate.strip():
-            return candidate
-        return fallback
+        base_fallback = Path(fallback).stem.strip() or "Marks"
+        return f"{source_name}_{base_fallback}{ext}"
 
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()

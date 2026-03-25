@@ -32,11 +32,23 @@ from common.registry import (
 )
 from common.sheet_schema import SheetSchema, ValidationRule
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from common.utils import canonical_path_key, coerce_excel_number, normalize
-from domain.co_token_parser import parse_co_tokens
+from common.utils import (
+    canonical_path_key,
+    coerce_excel_number,
+    normalize,
+    read_valid_template_id_from_system_hash_sheet,
+    sanitize_filename_token,
+)
+from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
+    parse_assessment_components,
+)
+from domain.template_versions.course_setup_v2_impl.co_token_parser import parse_co_tokens
+from domain.template_versions.course_setup_v2_impl.schema_columns import (
+    column_index_by_key,
+    required_column_index,
+)
 from domain.template_strategy_router import (
     assert_template_id_matches,
-    read_valid_template_id_from_system_hash_sheet,
 )
 
 _TEMPLATE_ID = "COURSE_SETUP_V2"
@@ -386,6 +398,27 @@ def _validate_course_details_workbook_impl(
         workbook.close()
 
 
+def _filename_token(value: str) -> str:
+    token = sanitize_filename_token(value)
+    return token if token else "NA"
+
+
+def build_marks_template_filename_base(
+    workbook_path: str | Path,
+    *,
+    cancel_token: CancellationToken | None = None,
+) -> str:
+    identity = _validate_course_details_workbook_impl(
+        workbook_path=workbook_path,
+        cancel_token=cancel_token,
+    )
+    ay = _filename_token(identity.academic_year)
+    course_code = _filename_token(identity.course_code)
+    semester = _filename_token(identity.semester)
+    section = _filename_token(identity.section)
+    return f"{ay}_{course_code}_{semester}_{section}_Marks"
+
+
 def _validate_sheet_order(workbook: Any, sheet_schemas: Sequence[SheetSchema]) -> None:
     expected = [sheet.name for sheet in sheet_schemas] + ["__SYSTEM_HASH__"]
     actual = list(workbook.sheetnames)
@@ -573,7 +606,7 @@ def _validate_percentage_columns(
         for key in configured_percent_keys:
             if not isinstance(key, str):
                 continue
-            index = _column_index_by_key(sheet_schema, key)
+            index = column_index_by_key(sheet_schema, key)
             if index is not None:
                 percent_columns.append(index)
     if not percent_columns:
@@ -646,8 +679,8 @@ def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int,
             normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY),
         }
 
-    field_index = _required_column_index(metadata_schema, "field")
-    value_index = _required_column_index(metadata_schema, "value")
+    field_index = required_column_index(metadata_schema, "field")
+    value_index = required_column_index(metadata_schema, "value")
     expected_field_types: dict[str, type] = {}
     for field_name, sample_value in SAMPLE_SETUP_DATA.get(metadata_sheet, []):
         field_key = normalize(field_name)
@@ -732,105 +765,50 @@ def _validate_assessment_config_rules(
             sheet_name=assessment_sheet,
         )
     rows = _required_sheet_rows(row_data_by_sheet, sheet_name=assessment_sheet)
-    component_index = _required_column_index(assessment_schema, _COL_COMPONENT)
-    weight_index = _required_column_index(assessment_schema, _COL_WEIGHT_PERCENT)
-    cia_index = _required_column_index(assessment_schema, "cia")
-    co_wise_index = _required_column_index(assessment_schema, "co_wise_marks_breakup")
-    direct_index = _required_column_index(assessment_schema, "direct")
-    assessment_type_index = _required_column_index(assessment_schema, "assessment_type")
-    assessment_format_index = _required_column_index(assessment_schema, "assessment_format")
-    mode_index = _required_column_index(assessment_schema, "mode")
-    participation_index = _required_column_index(assessment_schema, "participation")
+    row_numbers = [row_number for row_number, _values in rows]
+    row_values = [values for _row_number, values in rows]
 
     direct_weight_total = 0.0
     indirect_weight_total = 0.0
     direct_count = 0
     indirect_count = 0
-    seen_component_keys: set[str] = set()
     component_config: dict[str, dict[str, Any]] = {}
     allowed_assessment_type = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS}
     allowed_assessment_format = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS}
     allowed_mode = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_MODE_OPTIONS}
     allowed_participation = {normalize(value) for value in COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS}
-    for row_number, values in rows:
-        component_raw = values[component_index]
-        component_key = normalize(component_raw)
-        if not component_key:
-            raise validation_error_from_key("instructor.validation.assessment_component_required", row=row_number)
-        if component_key in seen_component_keys:
-            raise validation_error_from_key(
-                "instructor.validation.assessment_component_duplicate",
-                row=row_number,
-                component=component_raw,
-            )
-        seen_component_keys.add(component_key)
 
-        weight_value = coerce_excel_number(values[weight_index])
-        if isinstance(weight_value, bool) or not isinstance(weight_value, (int, float)):
-            raise validation_error_from_key("instructor.validation.assessment_weight_numeric", row=row_number)
-        weight = float(weight_value)
+    parsed_components = parse_assessment_components(
+        row_values,
+        sheet_name=assessment_sheet,
+        row_numbers=row_numbers,
+        row_start=row_numbers[0] if row_numbers else 2,
+        on_blank_component="error",
+        duplicate_policy="error",
+        require_non_empty=True,
+        validate_allowed_options=True,
+        assessment_type_allowed_tokens=allowed_assessment_type,
+        assessment_type_allowed_display=COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS,
+        assessment_format_allowed_tokens=allowed_assessment_format,
+        assessment_format_allowed_display=COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS,
+        mode_allowed_tokens=allowed_mode,
+        mode_allowed_display=COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
+        participation_allowed_tokens=allowed_participation,
+        participation_allowed_display=COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
+    )
 
-        _yes_no_value(
-            values[cia_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][cia_index]),
-        )
-        co_wise_breakup = _yes_no_value(
-            values[co_wise_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][co_wise_index]),
-        )
-        is_direct = _yes_no_value(
-            values[direct_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][direct_index]),
-        )
-        _ensure_allowed_option(
-            values[assessment_type_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][assessment_type_index]),
-            allowed_tokens=allowed_assessment_type,
-            allowed_display=COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS,
-        )
-        _ensure_allowed_option(
-            values[assessment_format_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][assessment_format_index]),
-            allowed_tokens=allowed_assessment_format,
-            allowed_display=COURSE_SETUP_ASSESSMENT_FORMAT_OPTIONS,
-        )
-        _ensure_allowed_option(
-            values[mode_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][mode_index]),
-            allowed_tokens=allowed_mode,
-            allowed_display=COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
-        )
-        _ensure_allowed_option(
-            values[participation_index],
-            sheet_name=assessment_sheet,
-            row_number=row_number,
-            field_name=str(assessment_schema.header_matrix[0][participation_index]),
-            allowed_tokens=allowed_participation,
-            allowed_display=COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
-        )
-
-        if is_direct:
-            direct_weight_total += weight
+    for component in parsed_components:
+        component_key = component.component_key
+        if component.is_direct:
+            direct_weight_total += component.weight
             direct_count += 1
         else:
-            indirect_weight_total += weight
+            indirect_weight_total += component.weight
             indirect_count += 1
         component_config[component_key] = {
-            "display_name": str(component_raw).strip(),
-            "co_wise_breakup": co_wise_breakup,
-            "is_direct": is_direct,
+            "display_name": component.component_name,
+            "co_wise_breakup": component.co_wise_breakup,
+            "is_direct": component.is_direct,
         }
 
     if direct_count <= 0:
@@ -885,11 +863,11 @@ def _validate_question_map_rules(
             sheet_name=question_sheet,
         )
     question_headers = list(question_schema.header_matrix[0])
-    component_idx = _required_column_index(question_schema, _COL_COMPONENT)
-    question_idx = _required_column_index(question_schema, _COL_QUESTION_LABEL)
-    max_marks_idx = _required_column_index(question_schema, _COL_MAX_MARKS)
-    co_idx = _required_column_index(question_schema, _COL_CO)
-    bloom_idx = _required_column_index(question_schema, _COL_BLOOM_LEVEL)
+    component_idx = required_column_index(question_schema, _COL_COMPONENT)
+    question_idx = required_column_index(question_schema, _COL_QUESTION_LABEL)
+    max_marks_idx = required_column_index(question_schema, _COL_MAX_MARKS)
+    co_idx = required_column_index(question_schema, _COL_CO)
+    bloom_idx = required_column_index(question_schema, _COL_BLOOM_LEVEL)
     rows = _required_sheet_rows(row_data_by_sheet, sheet_name=question_sheet)
     allowed_bloom_levels = {normalize(value) for value in COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS}
     question_count_by_component: dict[str, int] = {}
@@ -979,8 +957,8 @@ def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[A
             code="SCHEMA_MISSING",
             sheet_name=students_sheet,
         )
-    reg_no_index = _required_column_index(students_schema, _COL_REG_NO)
-    student_name_index = _required_column_index(students_schema, _COL_STUDENT_NAME)
+    reg_no_index = required_column_index(students_schema, _COL_REG_NO)
+    student_name_index = required_column_index(students_schema, _COL_STUDENT_NAME)
     rows = _required_sheet_rows(row_data_by_sheet, sheet_name=students_sheet)
     seen_reg_numbers: set[str] = set()
     for row_number, values in rows:
@@ -1001,66 +979,8 @@ def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[A
         seen_reg_numbers.add(reg_key)
 
 
-def _column_keys(sheet_schema: SheetSchema) -> tuple[str, ...]:
-    raw = sheet_schema.sheet_rules.get("column_keys")
-    if not isinstance(raw, (list, tuple)):
-        return tuple()
-    return tuple(normalize(value) for value in raw if isinstance(value, str) and normalize(value))
-
-
-def _column_index_by_key(sheet_schema: SheetSchema, key: str) -> int | None:
-    wanted = normalize(key)
-    for index, value in enumerate(_column_keys(sheet_schema)):
-        if value == wanted:
-            return index
-    return None
-
-
-def _required_column_index(sheet_schema: SheetSchema, key: str) -> int:
-    index = _column_index_by_key(sheet_schema, key)
-    if index is not None:
-        return index
-    raise validation_error_from_key(
-        "common.validation_failed_invalid_data",
-        code="SCHEMA_COLUMN_KEY_MISSING",
-        sheet_name=sheet_schema.name,
-        column_key=key,
-    )
-
-
-def _yes_no_value(value: Any, *, sheet_name: str, row_number: int, field_name: str) -> bool:
-    token = normalize(value)
-    if token not in {"yes", "no"}:
-        raise validation_error_from_key(
-            "instructor.validation.yes_no_required",
-            sheet_name=sheet_name,
-            row=row_number,
-            field=field_name,
-        )
-    return token == "yes"
-
-
-def _ensure_allowed_option(
-    value: Any,
-    *,
-    sheet_name: str,
-    row_number: int,
-    field_name: str,
-    allowed_tokens: set[str],
-    allowed_display: Sequence[str],
-) -> None:
-    if normalize(value) in allowed_tokens:
-        return
-    raise validation_error_from_key(
-        "instructor.validation.allowed_values_required",
-        sheet_name=sheet_name,
-        row=row_number,
-        field=field_name,
-        allowed=", ".join(allowed_display),
-    )
-
-
 __all__ = [
+    "build_marks_template_filename_base",
     "validate_course_details_rules",
     "validate_course_details_workbook",
     "validate_course_details_workbooks",

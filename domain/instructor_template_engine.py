@@ -7,8 +7,11 @@ from pathlib import Path
 from common.constants import ID_COURSE_SETUP
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
-from domain.template_strategy_router import generate_workbook, read_valid_template_id_from_system_hash_sheet
-from domain.template_versions.course_setup_v1_template_workbook import validate_course_details_workbook
+from domain.template_strategy_router import (
+    generate_workbook,
+    read_valid_template_id_from_system_hash_sheet,
+    validate_workbook,
+)
 
 
 def generate_course_details_template(
@@ -78,6 +81,18 @@ def _resolve_template_id_from_workbook(workbook_path: str | Path) -> str:
         return read_valid_template_id_from_system_hash_sheet(workbook)
     finally:
         workbook.close()
+
+
+def validate_course_details_workbook(
+    workbook_path: str | Path,
+    *,
+    cancel_token: CancellationToken | None = None,
+) -> str:
+    return validate_workbook(
+        workbook_path=workbook_path,
+        workbook_kind="course_details",
+        cancel_token=cancel_token,
+    )
 
 
 __all__ = [

@@ -18,6 +18,34 @@
 - Do not trim workbook output structure/formatting/protection.
   Current formatting, hidden/system sheets, and protection behavior are part of required output compatibility for this release.
 
+## Compulsory Engineering Guardrail (DRY + SSOT + Reuse + Complexity)
+
+- This is mandatory for all modules and templates: follow DRY (Don't Repeat Yourself), keep a Single Source of Truth (SSOT), and prefer reusable shared logic over duplicated logic.
+- If business logic already exists in a shared/helper layer, reuse or extend that implementation; do not re-implement equivalent logic in another file/module.
+- New business rules must be added to the authoritative shared location first, then consumed by callers.
+- Avoid parallel implementations of the same validation/parsing/generation rules across files; keep one authoritative implementation and make other layers orchestration-thin.
+- Changes must target least practical time and space complexity for the workflow scale in this project; avoid unnecessary passes, repeated parsing, and redundant allocations.
+- If a tradeoff is required (readability vs micro-optimization), keep code readable while still avoiding avoidable asymptotic or repeated-work regressions.
+
+## Compulsory Template Evolution Guardrail
+
+- All business logic that can vary by template version must support template-specific behavioral evolution through explicit template-id branching or strategy dispatch.
+- For currently supported template ids, keep behavior in clearly separated template branches (even if two branches temporarily share the same implementation).
+- This branching/dispatch requirement is compulsory for shared/common code paths used by more than one template id; do not keep multi-template business logic in a single unbranched path.
+- If a business rule is strictly template-specific and is used by only one template id, separate branching is not required for that rule.
+- For new template versions, add a new branch/strategy path instead of editing existing template behavior in-place.
+- Keep module-layer code template-agnostic; template branching must live in shared router/strategy/semantics layers.
+
+## Compulsory V2 Migration Policy (Current Release Track)
+
+- `COURSE_SETUP_V2` is the active target architecture for this unreleased app; all ongoing refactors must migrate business logic to V2 paths.
+- Migration must be phased:
+  - first refactor/route logic to V2
+  - then verify runtime flows and validations on V2
+  - only after that, prune dead V1 code
+- During migration, do not add new business logic to V1 files unless explicitly required for a temporary bridge; prefer V2-first implementation.
+- Keep pruning of V1 code intentional and evidence-based (remove only when references are eliminated and equivalent V2 behavior exists).
+
 ## Single Source Of Truth Guardrail (Sheet Configuration)
 
 - Any sheet configuration that is not strictly template-version implementation detail must be centralized in

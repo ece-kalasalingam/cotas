@@ -296,8 +296,8 @@ def _read_assessment_components(sheet: Any, *, template_id: str) -> list[Assessm
         row += 1
     return parse_assessment_components(
         rows,
+        template_id=template_id,
         sheet_name=ASSESSMENT_CONFIG_SHEET,
-        headers=expected_headers,
         row_start=2,
         on_blank_component="break",
         duplicate_policy="keep_all",

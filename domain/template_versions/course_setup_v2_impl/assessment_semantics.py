@@ -1,12 +1,12 @@
-"""Shared semantic reader for Assessment_Config component rows."""
+"""COURSE_SETUP_V2 semantic reader for Assessment_Config component rows."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable, Literal, Sequence
 
-from common.exceptions import ConfigurationError
 from common.error_catalog import validation_error_from_key
+from common.exceptions import ConfigurationError
 from common.registry import (
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
     get_sheet_headers_by_key,
@@ -15,7 +15,11 @@ from common.registry import (
 )
 from common.sheet_schema import SheetSchema
 from common.utils import coerce_excel_number, normalize
+from domain.template_versions.course_setup_v2_impl.schema_columns import (
+    required_column_index,
+)
 
+_TEMPLATE_ID = "COURSE_SETUP_V2"
 
 _COL_COMPONENT = "component"
 _COL_WEIGHT_PERCENT = "weight_percent"
@@ -26,7 +30,6 @@ _COL_ASSESSMENT_TYPE = "assessment_type"
 _COL_ASSESSMENT_FORMAT = "assessment_format"
 _COL_MODE = "mode"
 _COL_PARTICIPATION = "participation"
-_SUPPORTED_TEMPLATE_IDS = frozenset({"course_setup_v1"})
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,24 +47,24 @@ class AssessmentComponent:
     participation: str
 
 
-def _column_keys(schema: SheetSchema) -> tuple[str, ...]:
-    raw = schema.sheet_rules.get("column_keys")
-    if not isinstance(raw, (list, tuple)):
-        return tuple()
-    return tuple(normalize(value) for value in raw if isinstance(value, str) and normalize(value))
+def _assessment_schema() -> SheetSchema:
+    schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+    if schema is None:
+        raise ConfigurationError(
+            f"Template {_TEMPLATE_ID!r} does not define sheet key "
+            f"{COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG!r}."
+        )
+    return schema
 
 
-def _required_column_index(schema: SheetSchema, key: str) -> int:
-    wanted = normalize(key)
-    for index, value in enumerate(_column_keys(schema)):
-        if value == wanted:
-            return index
-    raise validation_error_from_key(
-        "common.validation_failed_invalid_data",
-        code="SCHEMA_COLUMN_KEY_MISSING",
-        sheet_name=schema.name,
-        column_key=key,
-    )
+def _headers_from_registry() -> tuple[str, ...]:
+    _assessment_schema()
+    headers = get_sheet_headers_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+    if not headers:
+        raise ConfigurationError(
+            f"Assessment_Config headers are empty for template {_TEMPLATE_ID!r}."
+        )
+    return headers
 
 
 def _parse_yes_no(value: Any, *, sheet_name: str, row_number: int, field_name: str) -> bool:
@@ -97,39 +100,9 @@ def _parse_allowed_option(
     return token
 
 
-def _ensure_supported_template_id(template_id: str) -> str:
-    token = normalize(template_id)
-    if token not in _SUPPORTED_TEMPLATE_IDS:
-        raise ConfigurationError(
-            f"Unsupported template_id for assessment component parsing: {template_id!r}."
-        )
-    return token
-
-
-def _assessment_schema(template_id: str) -> SheetSchema:
-    schema = get_sheet_schema_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
-    if schema is None:
-        raise ConfigurationError(
-            f"Template {template_id!r} does not define sheet key "
-            f"{COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG!r}."
-        )
-    return schema
-
-
-def _headers_from_registry(template_id: str) -> tuple[str, ...]:
-    _assessment_schema(template_id)
-    headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
-    if not headers:
-        raise ConfigurationError(
-            f"Assessment_Config headers are empty for template {template_id!r}."
-        )
-    return headers
-
-
-def _parse_assessment_components_v1(
+def parse_assessment_components(
     rows: Iterable[Sequence[Any]],
     *,
-    template_id: str,
     sheet_name: str,
     row_start: int = 2,
     row_numbers: Sequence[int] | None = None,
@@ -146,24 +119,24 @@ def _parse_assessment_components_v1(
     participation_allowed_tokens: set[str] | None = None,
     participation_allowed_display: Sequence[str] | None = None,
 ) -> list[AssessmentComponent]:
-    expected_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+    expected_sheet_name = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if normalize(sheet_name) != normalize(expected_sheet_name):
         raise ConfigurationError(
-            f"Assessment parser expected sheet {expected_sheet_name!r} for template {template_id!r}, "
+            f"Assessment parser expected sheet {expected_sheet_name!r} for template {_TEMPLATE_ID!r}, "
             f"but got {sheet_name!r}."
         )
-    schema = _assessment_schema(template_id)
-    headers = list(_headers_from_registry(template_id))
+    schema = _assessment_schema()
+    headers = list(_headers_from_registry())
     idx = {
-        _COL_COMPONENT: _required_column_index(schema, _COL_COMPONENT),
-        _COL_WEIGHT_PERCENT: _required_column_index(schema, _COL_WEIGHT_PERCENT),
-        _COL_CIA: _required_column_index(schema, _COL_CIA),
-        _COL_CO_WISE_BREAKUP: _required_column_index(schema, _COL_CO_WISE_BREAKUP),
-        _COL_DIRECT: _required_column_index(schema, _COL_DIRECT),
-        _COL_ASSESSMENT_TYPE: _required_column_index(schema, _COL_ASSESSMENT_TYPE),
-        _COL_ASSESSMENT_FORMAT: _required_column_index(schema, _COL_ASSESSMENT_FORMAT),
-        _COL_MODE: _required_column_index(schema, _COL_MODE),
-        _COL_PARTICIPATION: _required_column_index(schema, _COL_PARTICIPATION),
+        _COL_COMPONENT: required_column_index(schema, _COL_COMPONENT),
+        _COL_WEIGHT_PERCENT: required_column_index(schema, _COL_WEIGHT_PERCENT),
+        _COL_CIA: required_column_index(schema, _COL_CIA),
+        _COL_CO_WISE_BREAKUP: required_column_index(schema, _COL_CO_WISE_BREAKUP),
+        _COL_DIRECT: required_column_index(schema, _COL_DIRECT),
+        _COL_ASSESSMENT_TYPE: required_column_index(schema, _COL_ASSESSMENT_TYPE),
+        _COL_ASSESSMENT_FORMAT: required_column_index(schema, _COL_ASSESSMENT_FORMAT),
+        _COL_MODE: required_column_index(schema, _COL_MODE),
+        _COL_PARTICIPATION: required_column_index(schema, _COL_PARTICIPATION),
     }
     components: list[AssessmentComponent] = []
     seen: set[str] = set()
@@ -297,48 +270,4 @@ def _parse_assessment_components_v1(
     return components
 
 
-def parse_assessment_components(
-    rows: Iterable[Sequence[Any]],
-    *,
-    template_id: str,
-    sheet_name: str,
-    row_start: int = 2,
-    row_numbers: Sequence[int] | None = None,
-    on_blank_component: Literal["error", "break", "skip"] = "error",
-    duplicate_policy: Literal["error", "keep_first", "keep_all"] = "error",
-    require_non_empty: bool = True,
-    validate_allowed_options: bool = False,
-    assessment_type_allowed_tokens: set[str] | None = None,
-    assessment_type_allowed_display: Sequence[str] | None = None,
-    assessment_format_allowed_tokens: set[str] | None = None,
-    assessment_format_allowed_display: Sequence[str] | None = None,
-    mode_allowed_tokens: set[str] | None = None,
-    mode_allowed_display: Sequence[str] | None = None,
-    participation_allowed_tokens: set[str] | None = None,
-    participation_allowed_display: Sequence[str] | None = None,
-) -> list[AssessmentComponent]:
-    token = _ensure_supported_template_id(template_id)
-
-    if token == "course_setup_v1":
-        return _parse_assessment_components_v1(
-            rows,
-            template_id=template_id,
-            sheet_name=sheet_name,
-            row_start=row_start,
-            row_numbers=row_numbers,
-            on_blank_component=on_blank_component,
-            duplicate_policy=duplicate_policy,
-            require_non_empty=require_non_empty,
-            validate_allowed_options=validate_allowed_options,
-            assessment_type_allowed_tokens=assessment_type_allowed_tokens,
-            assessment_type_allowed_display=assessment_type_allowed_display,
-            assessment_format_allowed_tokens=assessment_format_allowed_tokens,
-            assessment_format_allowed_display=assessment_format_allowed_display,
-            mode_allowed_tokens=mode_allowed_tokens,
-            mode_allowed_display=mode_allowed_display,
-            participation_allowed_tokens=participation_allowed_tokens,
-            participation_allowed_display=participation_allowed_display,
-        )
-    raise ConfigurationError(
-        f"No assessment semantics branch configured for template_id={template_id!r}."
-    )
+__all__ = ["AssessmentComponent", "parse_assessment_components"]

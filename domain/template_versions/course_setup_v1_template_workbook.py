@@ -361,8 +361,8 @@ def _extract_students(student_rows: Sequence[Sequence[Any]]) -> list[tuple[str, 
 def _extract_components(assessment_rows: Sequence[Sequence[Any]]) -> list[dict[str, Any]]:
     parsed = parse_assessment_components(
         assessment_rows,
+        template_id="COURSE_SETUP_V1",
         sheet_name=ASSESSMENT_CONFIG_SHEET,
-        headers=list(ASSESSMENT_CONFIG_HEADERS),
         row_start=2,
         on_blank_component="skip",
         duplicate_policy="keep_first",
@@ -612,7 +612,7 @@ def _precompute_marks_layout_manifest(
 
 
 
-from domain import instructor_template_engine_sheetops as _sheetops
+from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 
 _add_system_hash_sheet = _sheetops._add_system_hash_sheet
 _add_system_layout_sheet = _sheetops._add_system_layout_sheet

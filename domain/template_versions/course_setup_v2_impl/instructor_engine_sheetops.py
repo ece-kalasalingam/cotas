@@ -52,7 +52,11 @@ from common.excel_sheet_layout import (
 )
 from common.error_catalog import validation_error_from_key
 from common.sheet_schema import ValidationRule
-from common.utils import coerce_excel_number, copy_system_hash_sheet, normalize
+from common.utils import (
+    coerce_excel_number,
+    copy_system_hash_sheet,
+    normalize,
+)
 from common.workbook_signing import sign_payload
 
 _AUTO_FIT_SAMPLE_ROWS = 6
@@ -899,4 +903,6 @@ def _serialize_layout_manifest(layout_manifest: dict[str, Any]) -> str:
 
 def _compute_layout_manifest_hash(manifest_text: str) -> str:
     return sign_payload(manifest_text)
+
+
 

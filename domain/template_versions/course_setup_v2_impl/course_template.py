@@ -10,11 +10,12 @@ from uuid import uuid4
 from common.constants import WORKBOOK_TEMP_SUFFIX
 from common.error_catalog import validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
+from common.excel_sheet_layout import build_template_xlsxwriter_formats
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from domain.template_versions.course_setup_v2_impl import instructor_engine_shareops as _shareops
+from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _shareops
 
 _logger = logging.getLogger(__name__)
 _TEMPLATE_ID = "COURSE_SETUP_V2"
@@ -65,8 +66,12 @@ def generate_course_details_template(
     try:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        header_format = _shareops.build_header_format(workbook, blueprint.style_registry.get("header", {}))
-        body_format = _shareops.build_body_format(workbook, blueprint.style_registry.get("body", {}))
+        format_bundle = build_template_xlsxwriter_formats(
+            workbook,
+            template_id=_TEMPLATE_ID,
+        )
+        header_format = format_bundle["header"]
+        body_format = format_bundle["body"]
 
         for sheet_schema in blueprint.sheets:
             if cancel_token is not None:
@@ -88,13 +93,13 @@ def generate_course_details_template(
             for validation in sheet_schema.validations:
                 if cancel_token is not None:
                     cancel_token.raise_if_cancelled()
-                _shareops.apply_validation(worksheet, validation)
+                _shareops._apply_validation(worksheet, validation)
             if sheet_schema.is_protected:
-                _shareops.protect_sheet(worksheet)
+                _shareops._protect_sheet(worksheet)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
-        _shareops.add_system_hash_sheet(workbook, _TEMPLATE_ID)
+        _shareops._add_system_hash_sheet(workbook, _TEMPLATE_ID)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()

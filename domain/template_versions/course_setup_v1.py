@@ -716,8 +716,8 @@ def _validate_assessment_config(worksheet: Any) -> dict[str, dict[str, Any]]:
     rows = _iter_data_rows(worksheet, len(expected_headers))
     components = parse_assessment_components(
         rows,
+        template_id="COURSE_SETUP_V1",
         sheet_name=ASSESSMENT_CONFIG_SHEET,
-        headers=expected_headers,
         row_start=2,
         on_blank_component="error",
         duplicate_policy="error",

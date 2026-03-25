@@ -675,34 +675,82 @@ def emit_user_status(
             logger.exception("Failed to emit user status message.")
 
 
-def copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
-    """Copy validated SYSTEM_HASH sheet from openpyxl source workbook to xlsxwriter target workbook."""
-    if SYSTEM_HASH_SHEET_NAME not in getattr(source_workbook, "sheetnames", []):
+def read_template_id_from_system_hash_sheet_if_valid(
+    workbook: Any,
+    *,
+    verify_signature: Callable[[str, str], bool] | None = None,
+) -> str | None:
+    if verify_signature is None:
+        from common.workbook_signing import verify_payload_signature as _verify_payload_signature
+
+        verify_signature = _verify_payload_signature
+    if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
+        return None
+    sheet = workbook[SYSTEM_HASH_SHEET_NAME]
+    header_template_id = normalize(sheet.cell(row=1, column=1).value)
+    header_template_hash = normalize(sheet.cell(row=1, column=2).value)
+    if header_template_id != normalize(SYSTEM_HASH_HEADER_TEMPLATE_ID):
+        return None
+    if header_template_hash != normalize(SYSTEM_HASH_HEADER_TEMPLATE_HASH):
+        return None
+    template_id = str(sheet.cell(row=2, column=1).value or "").strip()
+    template_hash = str(sheet.cell(row=2, column=2).value or "").strip()
+    if not template_id or not template_hash:
+        return None
+    if not verify_signature(template_id, template_hash):
+        return None
+    return template_id
+
+
+def read_valid_template_id_from_system_hash_sheet(
+    workbook: Any,
+    *,
+    verify_signature: Callable[[str, str], bool] | None = None,
+) -> str:
+    if verify_signature is None:
+        from common.workbook_signing import verify_payload_signature as _verify_payload_signature
+
+        verify_signature = _verify_payload_signature
+    if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
         raise validation_error_from_key(
             "validation.system.sheet_missing",
             code="COA_SYSTEM_SHEET_MISSING",
-            sheet=SYSTEM_HASH_SHEET_NAME,
+            sheet_name=SYSTEM_HASH_SHEET_NAME,
         )
-    source = source_workbook[SYSTEM_HASH_SHEET_NAME]
-    header_id = str(source.cell(row=1, column=1).value or "").strip()
-    header_hash = str(source.cell(row=1, column=2).value or "").strip()
-    if header_id != SYSTEM_HASH_HEADER_TEMPLATE_ID:
+    sheet = workbook[SYSTEM_HASH_SHEET_NAME]
+    header_template_id = normalize(sheet.cell(row=1, column=1).value)
+    header_template_hash = normalize(sheet.cell(row=1, column=2).value)
+    if header_template_id != normalize(SYSTEM_HASH_HEADER_TEMPLATE_ID):
         raise validation_error_from_key(
             "validation.system_hash.header_template_id_missing",
             code="COA_SYSTEM_HASH_HEADER_TEMPLATE_ID_MISSING",
         )
-    if header_hash != SYSTEM_HASH_HEADER_TEMPLATE_HASH:
+    if header_template_hash != normalize(SYSTEM_HASH_HEADER_TEMPLATE_HASH):
         raise validation_error_from_key(
             "validation.system_hash.header_template_hash_missing",
             code="COA_SYSTEM_HASH_HEADER_TEMPLATE_HASH_MISSING",
         )
-    template_id = str(source.cell(row=2, column=1).value or "").strip()
-    template_hash = str(source.cell(row=2, column=2).value or "").strip()
+    template_id = str(sheet.cell(row=2, column=1).value or "").strip()
+    template_hash = str(sheet.cell(row=2, column=2).value or "").strip()
     if not template_id:
         raise validation_error_from_key(
             "validation.system_hash.template_id_missing",
             code="COA_SYSTEM_HASH_TEMPLATE_ID_MISSING",
         )
+    if not verify_signature(template_id, template_hash):
+        raise validation_error_from_key(
+            "validation.system_hash.mismatch",
+            code="COA_SYSTEM_HASH_MISMATCH",
+            template_id=template_id,
+        )
+    return template_id
+
+
+def copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
+    """Copy validated SYSTEM_HASH sheet from openpyxl source workbook to xlsxwriter target workbook."""
+    template_id = read_valid_template_id_from_system_hash_sheet(source_workbook)
+    source = source_workbook[SYSTEM_HASH_SHEET_NAME]
+    template_hash = str(source.cell(row=2, column=2).value or "").strip()
     target = target_workbook.add_worksheet(SYSTEM_HASH_SHEET_NAME)
     target.write_row(0, 0, [SYSTEM_HASH_HEADER_TEMPLATE_ID, SYSTEM_HASH_HEADER_TEMPLATE_HASH])
     target.write_row(1, 0, [template_id, template_hash])
