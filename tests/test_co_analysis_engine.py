@@ -8,8 +8,37 @@ import pytest
 openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
+from common.constants import ID_COURSE_SETUP
 from domain.co_analysis_engine import generate_co_analysis_workbook
-from domain.instructor_engine import generate_course_details_template, generate_marks_template_from_course_details
+from domain.template_strategy_router import generate_workbook, resolve_template_id_from_workbook_path
+
+
+def generate_course_details_template(output_path: Path) -> Path:
+    result = generate_workbook(
+        template_id=ID_COURSE_SETUP,
+        output_path=output_path,
+        workbook_name=output_path.name,
+        workbook_kind="course_details_template",
+    )
+    output = getattr(result, "output_path", None)
+    if isinstance(output, str) and output.strip():
+        return Path(output)
+    return output_path
+
+
+def generate_marks_template_from_course_details(course_details_path: Path, output_path: Path) -> Path:
+    template_id = resolve_template_id_from_workbook_path(course_details_path)
+    result = generate_workbook(
+        template_id=template_id,
+        output_path=output_path,
+        workbook_name=output_path.name,
+        workbook_kind="marks_template",
+        context={"course_details_path": str(course_details_path)},
+    )
+    output = getattr(result, "output_path", None)
+    if isinstance(output, str) and output.strip():
+        return Path(output)
+    return output_path
 
 
 def _build_filled_marks_workbook(tmp_path: Path) -> Path:

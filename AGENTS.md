@@ -142,6 +142,17 @@
 - Batch validation/generation helpers may call single-workbook entrypoints in a loop, but business-rule ownership remains in single-workbook validators.
 - Aggregate-all-errors behavior for a workbook must be implemented in template validation code, not in module or router layers.
 
+## Workbook Output Save/Collision Guardrail
+
+- Single-workbook generation flows must use native save-file dialog UX (`getSaveFileName`) in module/UI layers.
+- Multi-workbook generation flows must use directory-selection UX and batch generation for the first pass.
+- Do not duplicate per-module collision parsing/resolution logic for multi-workbook outputs.
+- Reuse `common/workbook_output_resolution.py` as the shared source of truth for:
+  - extracting overwrite collisions from generation results
+  - resolving collision actions (bulk overwrite vs per-file output selection)
+- For multi-workbook collision retries, modules must rerun generation only for collided/selected source files and pass per-source output overrides through router context.
+- Prefer `O(N + K)` collision handling (`N` total files, `K` collided files); avoid `O(2N)` pre-parse-only planning passes.
+
 ## Single Source Of Truth Guardrail (Validation Issues)
 
 - Validation issue semantics (code -> category/severity/i18n/default) must be centralized in `common/error_catalog.py`.

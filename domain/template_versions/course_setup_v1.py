@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from common.constants import (
-    FILE_EXTENSION_XLSX,
-    FILENAME_JOIN_SEPARATOR,
     LAYOUT_MANIFEST_KEY_SHEET_ORDER,
     LAYOUT_MANIFEST_KEY_SHEETS,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
@@ -28,7 +26,6 @@ from common.constants import (
     LIKERT_MAX,
     LIKERT_MIN,
     MIN_MARK_VALUE,
-    MARKS_TEMPLATE_NAME_SUFFIX,
 )
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
@@ -50,10 +47,9 @@ from common.registry import (
     WEIGHT_TOTAL_ROUND_DIGITS,
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
-    get_sheet_schema_by_key,
 )
 from common.sample_setup_data import SAMPLE_SETUP_DATA
-from common.utils import coerce_excel_number, normalize, sanitize_filename_token
+from common.utils import coerce_excel_number, normalize
 from common.workbook_integrity.workbook_signing import sign_payload
 from domain.assessment_semantics import parse_assessment_components
 from domain.co_token_parser import parse_co_tokens
@@ -97,14 +93,9 @@ _MARK_COMPONENT_SHEET_KINDS = {
 _SUPPORTED_OPERATIONS = frozenset(
     {
         "generate_workbook",
-        "validate_course_details_rules",
-        "extract_marks_template_context",
-        "write_marks_template_workbook",
         "validate_filled_marks_manifest_schema",
         "consume_last_marks_anomaly_warnings",
-        "generate_final_report",
         "generate_co_attainment",
-        "validate_final_report_workbook",
     }
 )
 
@@ -133,14 +124,9 @@ class CourseSetupV1Strategy:
         context: Mapping[str, Any] | None,
         fallback: str,
     ) -> str:
-        kind = normalize(workbook_kind)
-        payload = dict(context or {})
-        if kind != "marks_template":
-            return fallback
-        source_path = str(payload.get("course_details_path") or "").strip()
-        if not source_path:
-            return fallback
-        return self._build_marks_template_default_name_from_workbook(source_path, fallback=fallback)
+        del workbook_kind
+        del context
+        return fallback
 
     def generate_workbook(
         self,
@@ -164,46 +150,6 @@ class CourseSetupV1Strategy:
             )
         kind = normalize(workbook_kind)
         payload = dict(context or {})
-        if kind == "course_details_template":
-            from domain.template_versions.course_setup_v1_template_workbook import (
-                generate_course_details_template,
-            )
-
-            return generate_course_details_template(
-                output_path=output_path,
-                template_id=self.template_id,
-                cancel_token=cancel_token,
-            )
-        if kind == "marks_template":
-            source = str(payload.get("course_details_path") or "").strip()
-            if not source:
-                raise validation_error_from_key(
-                    "common.validation_failed_invalid_data",
-                    code="WORKBOOK_SOURCE_REQUIRED",
-                    workbook_kind=workbook_kind,
-                )
-            from domain.template_versions.course_setup_v1_template_workbook import (
-                generate_marks_template_from_course_details,
-            )
-
-            return generate_marks_template_from_course_details(
-                source,
-                output_path,
-                cancel_token=cancel_token,
-            )
-        if kind == "final_report":
-            source = str(payload.get("filled_marks_path") or "").strip()
-            if not source:
-                raise validation_error_from_key(
-                    "common.validation_failed_invalid_data",
-                    code="WORKBOOK_SOURCE_REQUIRED",
-                    workbook_kind=workbook_kind,
-                )
-            return self.generate_final_report(
-                source,
-                output_path,
-                cancel_token=cancel_token,
-            )
         if kind == "co_attainment":
             source_paths_raw = payload.get("source_paths")
             source_paths = [Path(path) for path in source_paths_raw] if isinstance(source_paths_raw, list) else []
@@ -257,61 +203,25 @@ class CourseSetupV1Strategy:
             template_id=self.template_id,
         )
 
-    def _build_marks_template_default_name_from_workbook(self, workbook_path: str, *, fallback: str) -> str:
-        try:
-            import openpyxl
-        except ModuleNotFoundError:
-            return fallback
-
-        workbook = None
-        try:
-            workbook = openpyxl.load_workbook(workbook_path, data_only=True)
-            metadata_sheet_name = get_sheet_name_by_key(self.template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
-            if metadata_sheet_name not in workbook.sheetnames:
-                return fallback
-            metadata_sheet = workbook[metadata_sheet_name]
-            fields: dict[str, str] = {}
-            for row in metadata_sheet.iter_rows(min_row=2, values_only=True):
-                key = normalize(row[0] if len(row) > 0 else None)
-                if not key:
-                    continue
-                value = row[1] if len(row) > 1 else None
-                coerced = coerce_excel_number(value)
-                fields[key] = str(coerced).strip() if coerced is not None else ""
-
-            name_token_keys = self._name_token_keys_for_template()
-            if not name_token_keys:
-                return fallback
-            parts = [sanitize_filename_token(fields.get(key, "")) for key in name_token_keys]
-            if any(not part for part in parts):
-                return fallback
-            parts.append(MARKS_TEMPLATE_NAME_SUFFIX)
-            return f"{FILENAME_JOIN_SEPARATOR.join(parts)}{FILE_EXTENSION_XLSX}"
-        except Exception:
-            return fallback
-        finally:
-            if workbook is not None:
-                workbook.close()
-
-    def _name_token_keys_for_template(self) -> tuple[str, ...]:
-        schema = get_sheet_schema_by_key(self.template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
-        if schema is None:
-            return tuple()
-        raw = schema.sheet_rules.get("workbook_name_tokens")
-        if not isinstance(raw, (tuple, list)):
-            return tuple()
-        keys = [normalize(item) for item in raw if isinstance(item, str) and normalize(item)]
-        return tuple(keys)
-
     def validate_course_details_rules(self, workbook: object, *, context: object) -> None:
-        validate_course_details_rules(workbook)
-
-    def extract_marks_template_context(self, workbook: object, *, context: object) -> dict[str, Any]:
-        from domain.template_versions.course_setup_v1_template_workbook import (
-            _extract_marks_template_context,
+        del workbook
+        del context
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind="course_details_template",
+            template_id=self.template_id,
         )
 
-        return _extract_marks_template_context(workbook)
+    def extract_marks_template_context(self, workbook: object, *, context: object) -> dict[str, Any]:
+        del workbook
+        del context
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind="marks_template",
+            template_id=self.template_id,
+        )
 
     def write_marks_template_workbook(
         self,
@@ -321,15 +231,15 @@ class CourseSetupV1Strategy:
         context: object,
         cancel_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
-        from domain.template_versions.course_setup_v1_template_workbook import (
-            _write_marks_template_workbook,
-        )
-
-        return _write_marks_template_workbook(
-            workbook,
-            context_data,
+        del workbook
+        del context_data
+        del context
+        del cancel_token
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind="marks_template",
             template_id=self.template_id,
-            cancel_token=cancel_token,
         )
 
     def validate_filled_marks_manifest_schema(self, workbook: object, manifest: object) -> None:
@@ -345,12 +255,14 @@ class CourseSetupV1Strategy:
         *,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
-        from domain.template_versions.course_setup_v1_final_report import generate_final_co_report
-
-        return generate_final_co_report(
-            filled_marks_path,
-            output_path,
-            cancel_token=cancel_token,
+        del filled_marks_path
+        del output_path
+        del cancel_token
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind="final_report",
+            template_id=self.template_id,
         )
 
     def generate_co_attainment(
@@ -375,45 +287,6 @@ class CourseSetupV1Strategy:
             co_attainment_percent=co_attainment_percent,
             co_attainment_level=co_attainment_level,
         )
-
-    def validate_final_report_workbook(
-        self,
-        workbook: Any,
-        *,
-        template_id: str,
-        verify_signature: Any,
-    ) -> Any:
-        from domain.template_strategy_router import FinalReportWorkbookSignature
-        from domain.template_versions.course_setup_v1_coordinator_engine import (
-            read_course_metadata_signature,
-            read_layout_manifest_co_sheet_counts,
-        )
-
-        sheet_counts = read_layout_manifest_co_sheet_counts(
-            workbook,
-            verify_signature=verify_signature,
-        )
-        if sheet_counts is None:
-            return None
-        metadata = read_course_metadata_signature(
-            workbook,
-            course_code_key="Course_Code",
-            total_outcomes_key="Total_Outcomes",
-            section_key="Section",
-        )
-        if metadata is None:
-            return None
-        direct_sheet_count, indirect_sheet_count = sheet_counts
-        course_code, total_outcomes, section = metadata
-        return FinalReportWorkbookSignature(
-            template_id=template_id,
-            course_code=course_code,
-            total_outcomes=total_outcomes,
-            section=section,
-            direct_sheet_count=direct_sheet_count,
-            indirect_sheet_count=indirect_sheet_count,
-        )
-
 
 def validate_course_details_rules(workbook: Any) -> None:
     metadata_sheet = workbook[COURSE_METADATA_SHEET]

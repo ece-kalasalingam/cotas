@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
 from common.constants import (
@@ -26,6 +26,10 @@ from common.excel_sheet_layout import build_marks_template_xlsxwriter_formats
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import (
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_SECTION_KEY,
+    COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
@@ -37,7 +41,7 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.utils import coerce_excel_number, normalize
+from common.utils import canonical_path_key, coerce_excel_number, normalize
 from common.workbook_integrity import (
     add_system_layout_sheet,
     copy_system_hash_sheet,
@@ -47,6 +51,9 @@ from common.workbook_integrity.constants import SYSTEM_LAYOUT_SHEET
 from domain.template_versions.course_setup_v2_impl.co_token_parser import parse_co_tokens
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
     parse_assessment_components,
+)
+from domain.template_versions.course_setup_v2_impl.course_semantics import (
+    build_marks_template_filename_base_from_identity,
 )
 from domain.template_versions.course_setup_v2_impl.course_template_validator import (
     validate_course_details_rules as _validate_course_details_rules_v2,
@@ -60,21 +67,30 @@ def _ve(translation_key: str, *, code: str, **context: Any) -> ValidationError:
     return validation_error_from_key(translation_key, code=code, **context)
 
 
-def generate_marks_template_from_course_details(
-    course_details_path: str | Path,
-    output_path: str | Path,
+def _prepare_marks_generation_from_workbook(
+    source_workbook: Any,
     *,
     cancel_token: CancellationToken | None = None,
-) -> Path:
-    """Generate marks-entry workbook from a validated course-details workbook."""
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise _ve(
-            "instructor.validation.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+) -> tuple[str, dict[str, Any]]:
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    # Fail fast: validate full course-details workbook before template generation starts.
+    _validate_course_details_rules_v2(source_workbook)
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    template_id = read_valid_template_id_from_system_hash_sheet(source_workbook)
+    context = _extract_marks_template_context_by_template(source_workbook, template_id)
+    return template_id, context
 
+
+def _render_marks_template_to_output(
+    *,
+    source_workbook: Any,
+    output_path: Path,
+    template_id: str,
+    context: dict[str, Any],
+    cancel_token: CancellationToken | None = None,
+) -> Path:
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
@@ -83,32 +99,9 @@ def generate_marks_template_from_course_details(
             code="XLSXWRITER_MISSING",
         ) from exc
 
-    source_file = Path(course_details_path)
-    if not source_file.exists():
-        raise _ve(
-            "instructor.validation.workbook_not_found",
-            code="WORKBOOK_NOT_FOUND",
-            workbook=str(source_file),
-        )
-
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     temp_output = output.with_name(f"{output.name}.{uuid4().hex}{WORKBOOK_TEMP_SUFFIX}")
-
-    try:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        # Open once in formula-visible mode so validator checks remain authoritative.
-        source_workbook = openpyxl.load_workbook(source_file, data_only=False)
-    except JobCancelledError:
-        raise
-    except Exception as exc:
-        raise _ve(
-            "instructor.validation.workbook_open_failed",
-            code="WORKBOOK_OPEN_FAILED",
-            workbook=str(source_file),
-        ) from exc
-
     target_workbook = xlsxwriter.Workbook(str(temp_output), {"constant_memory": True})
     target_closed = False
 
@@ -127,14 +120,6 @@ def generate_marks_template_from_course_details(
                 _logger.warning("Failed to cleanup temp marks template file: %s", temp_output)
 
     try:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        # Fail fast: validate full course-details workbook before template generation starts.
-        _validate_course_details_rules_v2(source_workbook)
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        template_id = read_valid_template_id_from_system_hash_sheet(source_workbook)
-        context = _extract_marks_template_context_by_template(source_workbook, template_id)
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
 
@@ -167,17 +152,261 @@ def generate_marks_template_from_course_details(
     except Exception as exc:
         _cleanup_incomplete_output()
         _logger.exception(
-            "Failed to generate marks template. source=%s output=%s",
-            source_file,
+            "Failed to generate marks template. output=%s",
             output,
         )
         raise AppSystemError(
             t("instructor.system.template_generate_failed", output=output)
         ) from exc
+
+    return output
+
+
+def generate_marks_template_from_course_details(
+    course_details_path: str | Path,
+    output_path: str | Path,
+    *,
+    allow_overwrite: bool = False,
+    cancel_token: CancellationToken | None = None,
+) -> Path:
+    """Generate marks-entry workbook from a validated course-details workbook."""
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise _ve(
+            "instructor.validation.openpyxl_missing",
+            code="OPENPYXL_MISSING",
+        ) from exc
+
+    source_file = Path(course_details_path)
+    if not source_file.exists():
+        raise _ve(
+            "instructor.validation.workbook_not_found",
+            code="WORKBOOK_NOT_FOUND",
+            workbook=str(source_file),
+        )
+    output_target = Path(output_path)
+    if output_target.exists() and not allow_overwrite:
+        raise _ve(
+            "common.validation_failed_invalid_data",
+            code="OUTPUT_PATH_ALREADY_EXISTS",
+            output_path=str(output_target),
+        )
+
+    try:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        # Open once in formula-visible mode so validator checks remain authoritative.
+        source_workbook = openpyxl.load_workbook(source_file, data_only=False)
+    except JobCancelledError:
+        raise
+    except Exception as exc:
+        raise _ve(
+            "instructor.validation.workbook_open_failed",
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(source_file),
+        ) from exc
+
+    try:
+        template_id, context = _prepare_marks_generation_from_workbook(
+            source_workbook,
+            cancel_token=cancel_token,
+        )
+        return _render_marks_template_to_output(
+            source_workbook=source_workbook,
+            output_path=output_target,
+            template_id=template_id,
+            context=context,
+            cancel_token=cancel_token,
+        )
     finally:
         source_workbook.close()
 
-    return output
+
+def _marks_output_base_from_context(context: dict[str, Any]) -> str:
+    metadata_rows = context.get("metadata_rows")
+    if not isinstance(metadata_rows, list):
+        raise _ve(
+            "common.validation_failed_invalid_data",
+            code="COURSE_METADATA_MISSING",
+        )
+    return build_marks_template_filename_base_from_identity(
+        academic_year=_metadata_value_for_key(metadata_rows, COURSE_METADATA_ACADEMIC_YEAR_KEY),
+        course_code=_metadata_value_for_key(metadata_rows, COURSE_METADATA_COURSE_CODE_KEY),
+        semester=_metadata_value_for_key(metadata_rows, COURSE_METADATA_SEMESTER_KEY),
+        section=_metadata_value_for_key(metadata_rows, COURSE_METADATA_SECTION_KEY),
+    )
+
+
+def _metadata_value_for_key(metadata_rows: Sequence[Sequence[Any]], key: str) -> str:
+    wanted = normalize(key)
+    for row in metadata_rows:
+        if len(row) < 2:
+            continue
+        if normalize(row[0]) == wanted:
+            return str(row[1] or "").strip()
+    return ""
+
+
+def generate_marks_templates_from_course_details_batch(
+    *,
+    workbook_paths: Sequence[str | Path],
+    output_dir: str | Path,
+    allow_overwrite: bool = False,
+    output_path_overrides: Mapping[str, str | Path] | None = None,
+    cancel_token: CancellationToken | None = None,
+) -> dict[str, object]:
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise _ve(
+            "instructor.validation.openpyxl_missing",
+            code="OPENPYXL_MISSING",
+        ) from exc
+
+    output_root = Path(output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
+    normalized_output_overrides: dict[str, Path] = {}
+    for raw_key, raw_output in dict(output_path_overrides or {}).items():
+        source_key = canonical_path_key(raw_key)
+        output_value = str(raw_output).strip()
+        if not source_key or not output_value:
+            continue
+        normalized_output_overrides[source_key] = Path(output_value)
+
+    seen_source_keys: set[str] = set()
+    seen_output_path_keys: set[str] = set()
+    results: dict[str, object] = {}
+    generated = 0
+    failed = 0
+    skipped = 0
+
+    for raw_path in workbook_paths:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+
+        source = Path(raw_path)
+        source_key = canonical_path_key(source)
+        source_value = str(source)
+
+        if source_key in seen_source_keys:
+            results[source_key] = {
+                "status": "skipped",
+                "source_path": source_value,
+                "workbook_path": None,
+                "output": None,
+                "output_path": None,
+                "output_url": None,
+                "reason": "duplicate_source",
+            }
+            skipped += 1
+            continue
+        seen_source_keys.add(source_key)
+
+        try:
+            if cancel_token is not None:
+                cancel_token.raise_if_cancelled()
+            source_workbook = openpyxl.load_workbook(source, data_only=False)
+        except JobCancelledError:
+            raise
+        except Exception as exc:
+            results[source_key] = {
+                "status": "failed",
+                "source_path": source_value,
+                "workbook_path": None,
+                "output": None,
+                "output_path": None,
+                "output_url": None,
+                "reason": str(exc),
+            }
+            failed += 1
+            continue
+
+        try:
+            template_id, context = _prepare_marks_generation_from_workbook(
+                source_workbook,
+                cancel_token=cancel_token,
+            )
+            output_base = _marks_output_base_from_context(context)
+            output_name = f"{output_base}.xlsx"
+            output_path = normalized_output_overrides.get(source_key, output_root / output_name)
+            output_path_key = canonical_path_key(output_path)
+            if output_path_key in seen_output_path_keys:
+                results[source_key] = {
+                    "status": "failed",
+                    "source_path": source_value,
+                    "workbook_path": None,
+                    "output": str(output_path),
+                    "output_path": str(output_path),
+                    "output_url": str(output_path),
+                    "reason": "output_name_collision",
+                }
+                failed += 1
+                continue
+            seen_output_path_keys.add(output_path_key)
+
+            if output_path.exists() and not allow_overwrite:
+                results[source_key] = {
+                    "status": "failed",
+                    "source_path": source_value,
+                    "workbook_path": None,
+                    "output": str(output_path),
+                    "output_path": str(output_path),
+                    "output_url": str(output_path),
+                    "reason": "output_already_exists",
+                    "existing_output_path": str(output_path),
+                }
+                failed += 1
+                continue
+            generated_path = _render_marks_template_to_output(
+                source_workbook=source_workbook,
+                output_path=output_path,
+                template_id=template_id,
+                context=context,
+                cancel_token=cancel_token,
+            )
+            output_value = str(generated_path)
+            results[source_key] = {
+                "status": "generated",
+                "source_path": source_value,
+                "workbook_path": output_value,
+                "output": output_value,
+                "output_path": output_value,
+                "output_url": output_value,
+                "reason": None,
+            }
+            generated += 1
+        except JobCancelledError:
+            raise
+        except Exception as exc:
+            results[source_key] = {
+                "status": "failed",
+                "source_path": source_value,
+                "workbook_path": None,
+                "output": None,
+                "output_path": None,
+                "output_url": None,
+                "reason": str(exc),
+            }
+            failed += 1
+        finally:
+            source_workbook.close()
+
+    generated_paths = [
+        str(entry.get("workbook_path"))
+        for entry in results.values()
+        if isinstance(entry, dict) and str(entry.get("status")) == "generated" and entry.get("workbook_path")
+    ]
+
+    return {
+        "total": len(seen_source_keys) + skipped,
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "generated_workbook_paths": generated_paths,
+        "output_urls": list(generated_paths),
+        "results": results,
+    }
 
 
 def _extract_marks_template_context_by_template(workbook: Any, template_id: str) -> dict[str, Any]:
@@ -610,4 +839,7 @@ def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
     return rows
 
 
-__all__ = ["generate_marks_template_from_course_details"]
+__all__ = [
+    "generate_marks_template_from_course_details",
+    "generate_marks_templates_from_course_details_batch",
+]

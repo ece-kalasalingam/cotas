@@ -36,7 +36,6 @@ from common.utils import (
     canonical_path_key,
     coerce_excel_number,
     normalize,
-    sanitize_filename_token,
 )
 from common.workbook_integrity import read_valid_template_id_from_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
@@ -396,27 +395,6 @@ def _validate_course_details_workbook_impl(
         raise
     finally:
         workbook.close()
-
-
-def _filename_token(value: str) -> str:
-    token = sanitize_filename_token(value)
-    return token if token else "NA"
-
-
-def build_marks_template_filename_base(
-    workbook_path: str | Path,
-    *,
-    cancel_token: CancellationToken | None = None,
-) -> str:
-    identity = _validate_course_details_workbook_impl(
-        workbook_path=workbook_path,
-        cancel_token=cancel_token,
-    )
-    ay = _filename_token(identity.academic_year)
-    course_code = _filename_token(identity.course_code)
-    semester = _filename_token(identity.semester)
-    section = _filename_token(identity.section)
-    return f"{ay}_{course_code}_{semester}_{section}_Marks"
 
 
 def _validate_sheet_order(workbook: Any, sheet_schemas: Sequence[SheetSchema]) -> None:
@@ -980,7 +958,6 @@ def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[A
 
 
 __all__ = [
-    "build_marks_template_filename_base",
     "validate_course_details_rules",
     "validate_course_details_workbook",
     "validate_course_details_workbooks",

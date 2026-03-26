@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import pkgutil
 import re
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -87,6 +86,8 @@ class _TemplateStrategy(Protocol):
 
 _VERIFY_SIGNATURE = Callable[[str, str], bool]
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_ACTIVE_TEMPLATE_IDS = ("COURSE_SETUP_V2",)
+_ACTIVE_TEMPLATE_IDS_NORMALIZED = frozenset(normalize(item) for item in _ACTIVE_TEMPLATE_IDS)
 
 
 def _tokenize_template_id(template_id: str) -> list[str]:
@@ -104,30 +105,22 @@ def _strategy_names_from_template_id(template_id: str) -> tuple[str, str]:
 
 def available_template_ids() -> tuple[str, ...]:
     discovered: list[str] = []
-    try:
-        package = importlib.import_module("domain.template_versions")
-    except Exception:
-        return tuple()
-    package_path = getattr(package, "__path__", None)
-    if package_path is None:
-        return tuple()
-    for _, module_name, _is_pkg in pkgutil.iter_modules(package_path):
-        if module_name.startswith("_"):
+    for template_id in _ACTIVE_TEMPLATE_IDS:
+        module_name, class_name = _strategy_names_from_template_id(template_id)
+        if not module_name or not class_name:
             continue
-        class_name = "".join(part.capitalize() for part in module_name.split("_")) + "Strategy"
         try:
             module = importlib.import_module(f"domain.template_versions.{module_name}")
             strategy_cls = getattr(module, class_name, None)
             if strategy_cls is None:
                 continue
             strategy = strategy_cls()
-            template_id = str(getattr(strategy, "template_id", "")).strip()
-            if template_id:
-                discovered.append(template_id)
+            resolved_template_id = str(getattr(strategy, "template_id", "")).strip()
+            if resolved_template_id:
+                discovered.append(resolved_template_id)
         except Exception:
             continue
-    unique = sorted({item for item in discovered})
-    return tuple(unique)
+    return tuple(sorted({item for item in discovered}))
 
 
 def assert_template_id_matches(
@@ -150,6 +143,13 @@ def assert_template_id_matches(
 
 
 def get_template_strategy(template_id: str) -> _TemplateStrategy:
+    if normalize(template_id) not in _ACTIVE_TEMPLATE_IDS_NORMALIZED:
+        raise validation_error_from_key(
+            "validation.template.unknown",
+            code="UNKNOWN_TEMPLATE",
+            template_id=template_id,
+            available=", ".join(available_template_ids()),
+        )
     module_name, class_name = _strategy_names_from_template_id(template_id)
     if not module_name or not class_name:
         raise validation_error_from_key(

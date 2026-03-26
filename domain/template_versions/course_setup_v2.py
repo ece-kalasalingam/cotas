@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from common.error_catalog import validation_error_from_key
-from common.exceptions import ConfigurationError, JobCancelledError
+from common.exceptions import ConfigurationError
 from common.jobs import CancellationToken
-from common.utils import canonical_path_key, normalize
+from common.utils import normalize
 
 _SUPPORTED_OPERATIONS = frozenset(
     {
@@ -67,27 +67,6 @@ class CourseSetupV2Strategy:
         kind = normalize(workbook_kind)
         if kind == "course_details_template":
             generated_path = _course_template_generator()(
-                output_path=output_path,
-                cancel_token=cancel_token,
-            )
-            output_value = str(generated_path)
-            return _WorkbookGenerationResult(
-                status="generated",
-                workbook_path=output_value,
-                output_path=output_value,
-                output_url=output_value,
-                reason=None,
-            )
-        if kind == "marks_template":
-            source = str((context or {}).get("course_details_path") or "").strip()
-            if not source:
-                raise validation_error_from_key(
-                    "common.validation_failed_invalid_data",
-                    code="WORKBOOK_SOURCE_REQUIRED",
-                    workbook_kind=workbook_kind,
-                )
-            generated_path = _marks_template_generator()(
-                course_details_path=source,
                 output_path=output_path,
                 cancel_token=cancel_token,
             )
@@ -177,19 +156,36 @@ class CourseSetupV2Strategy:
             expected_template_id=self.template_id,
         )
         kind = normalize(workbook_kind)
-        runner = _get_workbooks_batch_runner(kind)
-        if runner is None:
-            raise validation_error_from_key(
-                "common.validation_failed_invalid_data",
-                code="WORKBOOK_KIND_UNSUPPORTED",
-                workbook_kind=workbook_kind,
-                template_id=self.template_id,
+        allow_overwrite = _overwrite_existing_enabled(context)
+        output_path_overrides = _output_path_overrides_from_context(context)
+        if kind == "marks_template":
+            return _marks_template_batch_generator()(
+                workbook_paths=workbook_paths,
+                output_dir=Path(output_dir),
+                allow_overwrite=allow_overwrite,
+                output_path_overrides=output_path_overrides,
+                cancel_token=cancel_token,
             )
-        return runner(
-            workbook_paths=workbook_paths,
-            output_dir=Path(output_dir),
-            cancel_token=cancel_token,
-            context=context,
+        if kind == "course_details_template":
+            unexpected_workbook_paths = [str(raw).strip() for raw in workbook_paths if str(raw).strip()]
+            if unexpected_workbook_paths:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="WORKBOOK_PATHS_NOT_APPLICABLE",
+                    workbook_kind=workbook_kind,
+                    expected="empty_sequence",
+                )
+            return _course_template_batch_generator()(
+                workbook_paths=(),
+                output_dir=Path(output_dir),
+                allow_overwrite=allow_overwrite,
+                cancel_token=cancel_token,
+            )
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind=workbook_kind,
+            template_id=self.template_id,
         )
 
 
@@ -202,148 +198,32 @@ class _WorkbookGenerationResult:
     reason: str | None = None
 
 
-def _run_marks_template_batch(
-    *,
-    workbook_paths: Sequence[str | Path],
-    output_dir: Path,
-    cancel_token: CancellationToken | None,
-    context: Mapping[str, Any] | None,
-) -> dict[str, object]:
-    del context
-    generator = _marks_template_generator()
-    seen_keys: set[str] = set()
-    seen_output_names: set[str] = set()
-    results: dict[str, object] = {}
-    generated = 0
-    failed = 0
-    skipped = 0
-
-    for raw_path in workbook_paths:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-
-        source = Path(raw_path)
-        key = canonical_path_key(source)
-
-        if key in seen_keys:
-            results[key] = {
-                "status": "skipped",
-                "source_path": str(source),
-                "workbook_path": None,
-                "output": None,
-                "output_path": None,
-                "output_url": None,
-                "reason": "duplicate_source",
-            }
-            skipped += 1
-            continue
-        seen_keys.add(key)
-
-        try:
-            output_base = _marks_template_filename_builder()(
-                workbook_path=source,
-                cancel_token=cancel_token,
-            )
-        except JobCancelledError:
-            raise
-        except Exception as exc:
-            results[key] = {
-                "status": "failed",
-                "source_path": str(source),
-                "workbook_path": None,
-                "output": None,
-                "output_path": None,
-                "output_url": None,
-                "reason": str(exc),
-            }
-            failed += 1
-            continue
-
-        output_name = f"{output_base}.xlsx"
-        if output_name in seen_output_names:
-            results[key] = {
-                "status": "failed",
-                "source_path": str(source),
-                "workbook_path": None,
-                "output": None,
-                "output_path": None,
-                "output_url": None,
-                "reason": "output_name_collision",
-            }
-            failed += 1
-            continue
-        seen_output_names.add(output_name)
-
-        output_path = output_dir / output_name
-        try:
-            generator(
-                course_details_path=str(source),
-                output_path=output_path,
-                cancel_token=cancel_token,
-            )
-            output_value = str(output_path)
-            results[key] = {
-                "status": "generated",
-                "source_path": str(source),
-                "workbook_path": output_value,
-                "output": output_value,
-                "output_path": output_value,
-                "output_url": output_value,
-                "reason": None,
-            }
-            generated += 1
-        except JobCancelledError:
-            raise
-        except Exception as exc:
-            results[key] = {
-                "status": "failed",
-                "source_path": str(source),
-                "workbook_path": None,
-                "output": None,
-                "output_path": None,
-                "output_url": None,
-                "reason": str(exc),
-            }
-            failed += 1
-
-    generated_paths = [
-        str(entry.get("workbook_path"))
-        for entry in results.values()
-        if isinstance(entry, dict) and str(entry.get("status")) == "generated" and entry.get("workbook_path")
-    ]
-
-    return {
-        "total": len(seen_keys) + skipped,
-        "generated": generated,
-        "failed": failed,
-        "skipped": skipped,
-        "generated_workbook_paths": generated_paths,
-        "output_urls": list(generated_paths),
-        "results": results,
-    }
-
-
-def _get_workbooks_batch_runner(
-    kind: str,
-) -> Callable[..., dict[str, object]] | None:
-    if kind == "marks_template":
-        return _run_marks_template_batch
-    # future: if kind == "co_template": return _run_co_template_batch
-    return None
-
-
 @lru_cache(maxsize=1)
-def _marks_template_generator() -> Callable[..., Path]:
+def _marks_template_batch_generator() -> Callable[..., dict[str, object]]:
     try:
         from domain.template_versions.course_setup_v2_impl import marks_template as marks_template_impl
     except Exception as exc:
         raise ConfigurationError("Unable to import V2 marks template implementation module.") from exc
-    fn = getattr(marks_template_impl, "generate_marks_template_from_course_details", None)
+    fn = getattr(marks_template_impl, "generate_marks_templates_from_course_details_batch", None)
     if not callable(fn):
         raise ConfigurationError(
-            "V2 marks template implementation missing generate_marks_template_from_course_details()."
+            "V2 marks template implementation missing generate_marks_templates_from_course_details_batch()."
         )
-    return cast(Callable[..., Path], fn)
+    return cast(Callable[..., dict[str, object]], fn)
+
+
+@lru_cache(maxsize=1)
+def _course_template_batch_generator() -> Callable[..., dict[str, object]]:
+    try:
+        from domain.template_versions.course_setup_v2_impl import course_template as course_template_impl
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 course template implementation module.") from exc
+    fn = getattr(course_template_impl, "generate_course_details_templates_batch", None)
+    if not callable(fn):
+        raise ConfigurationError(
+            "V2 course template implementation missing generate_course_details_templates_batch()."
+        )
+    return cast(Callable[..., dict[str, object]], fn)
 
 
 @lru_cache(maxsize=1)
@@ -388,20 +268,34 @@ def _course_template_batch_validator() -> Callable[..., dict[str, object]]:
     return fn
 
 
-@lru_cache(maxsize=1)
-def _marks_template_filename_builder() -> Callable[..., str]:
-    try:
-        from domain.template_versions.course_setup_v2_impl.course_template_validator import (
-            build_marks_template_filename_base,
-        )
-    except Exception as exc:
-        raise ConfigurationError("Unable to import V2 marks-template filename builder.") from exc
-    fn = build_marks_template_filename_base
-    if not callable(fn):
-        raise ConfigurationError(
-            "V2 course template validator missing build_marks_template_filename_base()."
-        )
-    return cast(Callable[..., str], fn)
+def _overwrite_existing_enabled(context: Mapping[str, Any] | None) -> bool:
+    if not isinstance(context, Mapping):
+        return False
+    raw = context.get("overwrite_existing", False)
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str):
+        token = normalize(raw)
+        return token in {"1", "true", "yes", "y", "on"}
+    return False
+
+
+def _output_path_overrides_from_context(context: Mapping[str, Any] | None) -> dict[str, str]:
+    if not isinstance(context, Mapping):
+        return {}
+    raw = context.get("output_path_overrides")
+    if not isinstance(raw, Mapping):
+        return {}
+    overrides: dict[str, str] = {}
+    for key, value in raw.items():
+        source = str(key).strip()
+        output = str(value).strip()
+        if not source or not output:
+            continue
+        overrides[source] = output
+    return overrides
 
 
 __all__ = ["CourseSetupV2Strategy"]

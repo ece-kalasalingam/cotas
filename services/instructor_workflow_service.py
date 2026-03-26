@@ -16,8 +16,11 @@ from common.constants import (
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
-from domain.instructor_engine import validate_course_details_workbook
-from domain.template_strategy_router import generate_workbook, read_valid_template_id_from_system_hash_sheet
+from domain.template_strategy_router import (
+    generate_workbook,
+    read_valid_template_id_from_system_hash_sheet,
+    validate_workbook,
+)
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
@@ -84,7 +87,11 @@ class InstructorWorkflowService(WorkflowServiceBase):
             context=context,
             operation=WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
             cancel_token=cancel_token,
-            work=lambda _effective_cancel_token: validate_course_details_workbook(workbook_path),
+            work=lambda effective_cancel_token: validate_workbook(
+                workbook_path=workbook_path,
+                workbook_kind="course_details",
+                cancel_token=effective_cancel_token,
+            ),
         )
 
     def generate_marks_template(

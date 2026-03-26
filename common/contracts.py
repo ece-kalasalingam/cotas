@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from common.attainment_policy import (
+    has_valid_co_attainment_percent,
+    thresholds_all_numeric,
+    thresholds_non_decreasing,
+    thresholds_within_range_0_100,
+)
 from common.constants import (
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
@@ -102,15 +108,25 @@ def _validate_attainment_policy_contracts() -> None:
 
 def _validate_attainment_threshold_contracts() -> None:
     thresholds = (LEVEL_1_THRESHOLD, LEVEL_2_THRESHOLD, LEVEL_3_THRESHOLD)
-    if any((not isinstance(value, (int, float))) for value in thresholds):
+    if not thresholds_all_numeric(*thresholds):
         raise ConfigurationError("Level thresholds must be numeric.")
-    if any((value < 0.0 or value > 100.0) for value in thresholds):
+    if not thresholds_within_range_0_100(
+        float(LEVEL_1_THRESHOLD),
+        float(LEVEL_2_THRESHOLD),
+        float(LEVEL_3_THRESHOLD),
+    ):
         raise ConfigurationError("Level thresholds must be in the range 0 to 100.")
-    if not (LEVEL_1_THRESHOLD <= LEVEL_2_THRESHOLD <= LEVEL_3_THRESHOLD):
+    if not thresholds_non_decreasing(
+        float(LEVEL_1_THRESHOLD),
+        float(LEVEL_2_THRESHOLD),
+        float(LEVEL_3_THRESHOLD),
+    ):
         raise ConfigurationError("Level thresholds must be non-decreasing (L1 <= L2 <= L3).")
-    if not isinstance(CO_ATTAINMENT_PERCENT_DEFAULT, (int, float)):
+    if isinstance(CO_ATTAINMENT_PERCENT_DEFAULT, bool):
         raise ConfigurationError("CO_ATTAINMENT_PERCENT_DEFAULT must be numeric.")
-    if not (0.0 <= float(CO_ATTAINMENT_PERCENT_DEFAULT) <= 100.0):
+    if not has_valid_co_attainment_percent(CO_ATTAINMENT_PERCENT_DEFAULT):
+        if not isinstance(CO_ATTAINMENT_PERCENT_DEFAULT, (int, float)):
+            raise ConfigurationError("CO_ATTAINMENT_PERCENT_DEFAULT must be numeric.")
         raise ConfigurationError("CO_ATTAINMENT_PERCENT_DEFAULT must be in the range 0 to 100.")
     if not isinstance(CO_ATTAINMENT_LEVEL_DEFAULT, int):
         raise ConfigurationError("CO_ATTAINMENT_LEVEL_DEFAULT must be an integer level index.")

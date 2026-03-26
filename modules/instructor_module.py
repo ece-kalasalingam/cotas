@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -24,6 +25,7 @@ from common.constants import (
     ID_COURSE_SETUP,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
 )
+from common.error_catalog import validation_error_from_key
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.jobs import CancellationToken
@@ -34,12 +36,16 @@ from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
+from common.workbook_output_resolution import (
+    extract_overwrite_conflicts_from_generation_result,
+    resolve_overwrite_conflicts,
+)
 from common.i18n import t
 from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
 from domain.template_strategy_router import (
     generate_workbook,
-    resolve_template_id_from_workbook_path,
+    generate_workbooks,
     validate_workbooks,
 )
 
@@ -69,13 +75,11 @@ class InstructorModule(QWidget):
         super().__init__()
 
         self.course_template_path: str | None = None
-        self.course_details_path: str | None = None
         self.course_details_paths: list[str] = []
         self.marks_template_path: str | None = None
         self.marks_template_paths: list[str] = []
         self._uploaded_course_details_paths: list[str] = []
         self._validated_course_details_paths: list[str] = []
-        self._validated_template_ids_by_path_key: dict[str, str] = {}
         self._ready_for_marks_generation = False
         self._syncing_drop_widget_files = False
 
@@ -293,13 +297,6 @@ class InstructorModule(QWidget):
                 ]
                 self._uploaded_course_details_paths = list(self.course_details_paths)
                 self._validated_course_details_paths = list(self.course_details_paths)
-                self.course_details_path = self.course_details_paths[0] if self.course_details_paths else None
-                retained_keys = {canonical_path_key(path) for path in self.course_details_paths}
-                self._validated_template_ids_by_path_key = {
-                    key: value
-                    for key, value in self._validated_template_ids_by_path_key.items()
-                    if key in retained_keys
-                }
                 self._ready_for_marks_generation = bool(self.course_details_paths)
                 self._refresh_ui()
                 return
@@ -307,9 +304,7 @@ class InstructorModule(QWidget):
         had_state = bool(self._uploaded_course_details_paths or self._validated_course_details_paths)
         self._uploaded_course_details_paths = [path for path in files if path]
         self._validated_course_details_paths = []
-        self._validated_template_ids_by_path_key.clear()
         self.course_details_paths = []
-        self.course_details_path = None
         self.marks_template_paths = []
         self.marks_template_path = None
         self._ready_for_marks_generation = False
@@ -321,37 +316,52 @@ class InstructorModule(QWidget):
         if self.state.busy:
             return
 
-        save_path, _ = QFileDialog.getSaveFileName(
+        start_dir = resolve_dialog_start_path(APP_NAME)
+        default_path = str(Path(start_dir) / "Course_Details_Template.xlsx")
+        output_path, _ = QFileDialog.getSaveFileName(
             self,
             t("instructor.dialog.course_template.save_title"),
-            resolve_dialog_start_path(APP_NAME, t("instructor.dialog.course_template.default_name")),
+            default_path,
             t("instructor.dialog.filter.excel"),
         )
-        if not save_path:
+        if not output_path:
             return
-        self._remember_dialog_dir_safe(save_path)
+        selected_output = Path(output_path)
+        self._remember_dialog_dir_safe(str(selected_output))
 
         process_key = "instructor.log.process.generate_course_details_template"
         process_name = t(process_key)
         user_success_message, user_error_message = _localized_log_messages(process_key)
         token = CancellationToken()
 
-        def _work() -> Path:
+        def _work() -> object:
             token.raise_if_cancelled()
-            result = generate_workbook(
+            return generate_workbook(
                 template_id=ID_COURSE_SETUP,
-                output_path=save_path,
-                workbook_name=Path(save_path).name,
+                output_path=selected_output,
+                workbook_name=selected_output.name,
                 workbook_kind="course_details_template",
                 cancel_token=token,
             )
-            if isinstance(result, Path):
-                return result
-            output = getattr(result, "output_path", None)
-            return Path(output) if output is not None else Path(save_path)
 
-        def _on_success(_result: object) -> None:
-            self.course_template_path = save_path
+        def _on_success(result: object) -> None:
+            output_value = str(
+                getattr(result, "workbook_path", None)
+                or getattr(result, "output_path", None)
+                or selected_output
+            ).strip()
+            if not output_value:
+                self._handle_async_failure(
+                    validation_error_from_key(
+                        "common.validation_failed_invalid_data",
+                        code="WORKBOOK_GENERATE_FAILED",
+                        workbook_kind="course_details_template",
+                    ),
+                    process_name=process_name,
+                    user_error_message=user_error_message,
+                )
+                return
+            self.course_template_path = output_value
             self._publish_status_key("instructor.status.template_download_path_selected")
             log_process_message(
                 process_name,
@@ -370,7 +380,13 @@ class InstructorModule(QWidget):
         def _on_failure(exc: Exception) -> None:
             self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
 
-        self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
+        self._start_async_operation(
+            token=token,
+            job_id=None,
+            work=_work,
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
 
     def _upload_course_details_async(self) -> None:
         if self.state.busy:
@@ -395,9 +411,7 @@ class InstructorModule(QWidget):
         staged_uploaded_paths = self._merge_uploaded_paths(selected_paths)
         self._uploaded_course_details_paths = list(staged_uploaded_paths)
         self._validated_course_details_paths = []
-        self._validated_template_ids_by_path_key.clear()
         self.course_details_paths = []
-        self.course_details_path = None
         self.marks_template_paths = []
         self.marks_template_path = None
         self._ready_for_marks_generation = False
@@ -431,20 +445,13 @@ class InstructorModule(QWidget):
             rejection_items = [
                 item for item in data.get("rejections", []) if isinstance(item, dict)
             ]
-            template_ids = data.get("template_ids", {})
             total = int(data.get("total", 0))
             replacing_existing = had_previous_validated
             self._validated_course_details_paths = list(valid_paths)
             self._uploaded_course_details_paths = list(valid_paths)
             self.course_details_paths = list(valid_paths)
-            self.course_details_path = valid_paths[0] if valid_paths else None
             self.marks_template_paths = []
             self.marks_template_path = None
-            self._validated_template_ids_by_path_key = {}
-            if isinstance(template_ids, dict):
-                for key, value in template_ids.items():
-                    if isinstance(key, str) and isinstance(value, str) and key and value:
-                        self._validated_template_ids_by_path_key[key] = value
             self._set_course_details_widget_files(self.course_details_paths)
             self._ready_for_marks_generation = bool(self.course_details_paths)
 
@@ -498,140 +505,137 @@ class InstructorModule(QWidget):
             )
             return
 
-        output_plan: list[tuple[str, str]] = []
-        if len(source_paths) == 1:
-            source_path = source_paths[0]
-            default_name = self._marks_template_default_name(source_path)
-            save_path, _ = QFileDialog.getSaveFileName(
-                self,
-                t("instructor.dialog.marks_template.save_title"),
-                resolve_dialog_start_path(APP_NAME, default_name),
-                t("instructor.dialog.filter.excel"),
-            )
-            if not save_path:
-                return
-            output_plan = [(source_path, save_path)]
-            self._remember_dialog_dir_safe(save_path)
-        else:
-            output_dir = QFileDialog.getExistingDirectory(
-                self,
-                t("instructor.dialog.marks_template.save_title"),
-                resolve_dialog_start_path(APP_NAME),
-            )
-            if not output_dir:
-                return
-            self._remember_dialog_dir_safe(output_dir)
-            for source_path in source_paths:
-                output_name = self._marks_template_default_name(source_path)
-                output_path = str(Path(output_dir) / output_name)
-                output_plan.append((source_path, output_path))
+        output_dir = QFileDialog.getExistingDirectory(
+            self,
+            t("instructor.dialog.marks_template.save_title"),
+            resolve_dialog_start_path(APP_NAME),
+        )
+        if not output_dir:
+            return
+        self._remember_dialog_dir_safe(output_dir)
 
         process_key = "instructor.log.process.generate_marks_template"
         process_name = t(process_key)
         user_success_message, user_error_message = _localized_log_messages(process_key)
-        token = CancellationToken()
+        template_id = ID_COURSE_SETUP
 
-        def _work() -> dict[str, object]:
-            generated: list[str] = []
-            generated_items: list[dict[str, str]] = []
-            failed: list[dict[str, str]] = []
-            total = len(output_plan)
-            processed = 0
-            for source_path, output_path in output_plan:
+        all_generated_paths: list[str] = []
+        per_file_native_limit = 5
+
+        def _start_generation(
+            run_sources: list[str],
+            *,
+            overwrite_existing: bool,
+            output_path_overrides: dict[str, str] | None = None,
+        ) -> None:
+            token = CancellationToken()
+
+            def _work() -> dict[str, object]:
                 token.raise_if_cancelled()
-                try:
-                    source_key = canonical_path_key(source_path)
-                    template_id = self._validated_template_ids_by_path_key.get(source_key)
-                    if not template_id:
-                        template_id = resolve_template_id_from_workbook_path(source_path)
-                    result = generate_workbook(
-                        template_id=template_id,
-                        output_path=output_path,
-                        workbook_name=Path(output_path).name,
-                        workbook_kind="marks_template",
-                        cancel_token=token,
-                        context={"course_details_path": source_path},
-                    )
-                    resolved_output = output_path
-                    if isinstance(result, Path):
-                        resolved_output = str(result)
-                    else:
-                        output = getattr(result, "output_path", None)
-                        if isinstance(output, Path):
-                            resolved_output = str(output)
-                        elif isinstance(output, str) and output.strip():
-                            resolved_output = output
-                    generated.append(resolved_output)
-                    generated_items.append(
-                        {
-                            "source": source_path,
-                            "output_url": resolved_output,
-                        }
-                    )
-                except Exception as exc:
-                    failed.append(
-                        {
-                            "source": source_path,
-                            "reason": str(exc).strip() or exc.__class__.__name__,
-                        }
-                    )
-                processed += 1
-                if processed % 10 == 0 or processed == total:
-                    self._publish_status_key(
-                        "instructor.status.marks_template_generation_progress",
-                        processed=processed,
-                        total=total,
-                    )
-            return {"generated": generated, "generated_items": generated_items, "failed": failed, "total": total}
-
-        def _on_success(result: object) -> None:
-            data = result if isinstance(result, dict) else {}
-            generated_items = [
-                item
-                for item in data.get("generated_items", [])
-                if isinstance(item, dict)
-                and isinstance(item.get("output_url"), str)
-                and str(item.get("output_url")).strip()
-            ]
-            generated = [str(item["output_url"]) for item in generated_items]
-            failed = [x for x in data.get("failed", []) if isinstance(x, dict)]
-            total = int(data.get("total", 0))
-
-            self.marks_template_paths = generated
-            self.marks_template_path = generated[-1] if generated else None
-            if generated:
-                self._publish_status_key("instructor.status.marks_template_generated")
-
-            if failed:
-                details = "; ".join(
-                    f"{item.get('source', '')} -> {item.get('reason', '')}" for item in failed[:5]
+                generation_context: dict[str, object] = {"overwrite_existing": overwrite_existing}
+                if output_path_overrides:
+                    generation_context["output_path_overrides"] = output_path_overrides
+                return generate_workbooks(
+                    template_id=template_id,
+                    workbook_paths=run_sources,
+                    output_dir=output_dir,
+                    workbook_kind="marks_template",
+                    cancel_token=token,
+                    context=generation_context,
                 )
-                self._publish_status_key("instructor.status.marks_template_per_file_failures", details=details)
 
-            log_process_message(
-                process_name,
-                logger=self._logger,
-                success_message=f"{process_name} completed successfully.",
-                user_success_message=user_success_message,
+            def _on_success(result: object) -> None:
+                data = result if isinstance(result, dict) else {}
+                generated = [
+                    str(path)
+                    for path in data.get("generated_workbook_paths", [])
+                    if isinstance(path, str) and path.strip()
+                ]
+                for path in generated:
+                    if path not in all_generated_paths:
+                        all_generated_paths.append(path)
+
+                overwrite_conflicts = extract_overwrite_conflicts_from_generation_result(data)
+                if overwrite_conflicts and not overwrite_existing:
+                    resolved = resolve_overwrite_conflicts(
+                        overwrite_conflicts,
+                        per_file_native_limit=per_file_native_limit,
+                        ask_overwrite_all=self._prompt_overwrite_all_conflicts,
+                        ask_output_path=self._prompt_output_path_for_collision,
+                    )
+                    retry_sources = resolved.retry_sources
+                    retry_overrides = resolved.output_path_overrides
+                    if retry_sources:
+                        _start_generation(
+                            retry_sources,
+                            overwrite_existing=True,
+                            output_path_overrides=retry_overrides,
+                        )
+                        return
+
+                results = data.get("results", {})
+                failed: list[dict[str, str]] = []
+                if isinstance(results, dict):
+                    for item in results.values():
+                        if not isinstance(item, dict):
+                            continue
+                        if str(item.get("status") or "").strip() != "failed":
+                            continue
+                        source = str(item.get("source_path") or "").strip()
+                        reason = str(item.get("reason") or "").strip()
+                        failed.append({"source": source, "reason": reason or "failed"})
+                total = int(data.get("total", 0))
+                skipped = int(data.get("skipped", 0))
+
+                self._publish_status_key(
+                    "instructor.status.marks_template_generation_progress",
+                    processed=total,
+                    total=total,
+                )
+
+                self.marks_template_paths = list(all_generated_paths)
+                self.marks_template_path = self.marks_template_paths[-1] if self.marks_template_paths else None
+                if self.marks_template_paths:
+                    self._publish_status_key("instructor.status.marks_template_generated")
+
+                if failed:
+                    details = "; ".join(
+                        f"{item.get('source', '')} -> {item.get('reason', '')}" for item in failed[:5]
+                    )
+                    self._publish_status_key("instructor.status.marks_template_per_file_failures", details=details)
+
+                log_process_message(
+                    process_name,
+                    logger=self._logger,
+                    success_message=f"{process_name} completed successfully.",
+                    user_success_message=user_success_message,
+                )
+                self._runtime.notify_message_key(
+                    "instructor.toast.marks_template_generation_summary",
+                    channels=("toast",),
+                    kwargs={
+                        "generated": len(self.marks_template_paths),
+                        "processed": total,
+                        "total": total,
+                        "failed": len(failed),
+                        "skipped": skipped,
+                    },
+                    toast_title_key="instructor.msg.success_title",
+                    toast_level="success" if self.marks_template_paths else "warning",
+                )
+
+            def _on_failure(exc: Exception) -> None:
+                self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
+
+            self._start_async_operation(
+                token=token,
+                job_id=None,
+                work=_work,
+                on_success=_on_success,
+                on_failure=_on_failure,
             )
-            self._runtime.notify_message_key(
-                "instructor.toast.marks_template_generation_summary",
-                channels=("toast",),
-                kwargs={
-                    "generated": len(generated),
-                    "processed": total,
-                    "total": total,
-                    "failed": len(failed),
-                    "skipped": 0,
-                },
-                toast_title_key="instructor.msg.success_title",
-                toast_level="success" if generated else "warning",
-            )
 
-        def _on_failure(exc: Exception) -> None:
-            self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
-
-        self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
+        _start_generation(source_paths, overwrite_existing=False)
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         self._runtime.remember_dialog_dir_safe(selected_path)
@@ -666,25 +670,6 @@ class InstructorModule(QWidget):
                 file_path=file_path,
                 channels=("status", "activity_log"),
             )
-
-    def _marks_template_default_name(self, source_path: str) -> str:
-        fallback = t("instructor.dialog.marks_template.default_name")
-        ext = Path(fallback).suffix or ".xlsx"
-        try:
-            from domain.template_versions.course_setup_v2_impl.course_template_validator import (
-                build_marks_template_filename_base,
-            )
-
-            base = build_marks_template_filename_base(source_path)
-            if base.strip():
-                return f"{base}{ext}"
-        except Exception:
-            pass
-        source_name = Path(source_path).stem.strip()
-        if not source_name:
-            return fallback
-        base_fallback = Path(fallback).stem.strip() or "Marks"
-        return f"{source_name}_{base_fallback}{ext}"
 
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()
@@ -728,6 +713,36 @@ class InstructorModule(QWidget):
             on_failure=on_failure,
             on_finally=on_finally,
         )
+
+    def _prompt_overwrite_all_conflicts(self, output_paths: list[str]) -> bool:
+        preview = "\n".join(output_paths[:5])
+        extra_count = len(output_paths) - 5
+        extra_suffix = f"\n... (+{extra_count} more)" if extra_count > 0 else ""
+        choice = QMessageBox.question(
+            self,
+            t("instructor.msg.validation_title"),
+            (
+                "Some marks-template outputs already exist.\n\n"
+                f"{preview}{extra_suffix}\n\n"
+                "Overwrite all collided files?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return choice == QMessageBox.StandardButton.Yes
+
+    def _prompt_output_path_for_collision(self, suggested_output: str) -> str | None:
+        selected_output, _ = QFileDialog.getSaveFileName(
+            self,
+            t("instructor.dialog.marks_template.save_title"),
+            suggested_output,
+            t("instructor.dialog.filter.excel"),
+        )
+        chosen_output = str(selected_output or "").strip()
+        if not chosen_output:
+            return None
+        self._remember_dialog_dir_safe(chosen_output)
+        return chosen_output
 
     def _handle_async_failure(self, exc: Exception, *, process_name: str, user_error_message: str) -> None:
         if isinstance(exc, JobCancelledError):

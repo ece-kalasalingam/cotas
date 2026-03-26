@@ -7,7 +7,8 @@ from typing import Any, Callable, cast
 import pytest
 
 from common.exceptions import AppSystemError
-from domain import instructor_template_engine as mod
+from common.constants import ID_COURSE_SETUP
+from domain.template_strategy_router import generate_workbook
 
 
 @pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows-only permission integration check")
@@ -35,7 +36,12 @@ def test_generate_course_template_reports_permission_failure_on_locked_destinati
         locking_fn(handle.fileno(), lock_non_block_value, 1)
         try:
             with pytest.raises(AppSystemError):
-                mod.generate_course_details_template(output)
+                generate_workbook(
+                    template_id=ID_COURSE_SETUP,
+                    output_path=output,
+                    workbook_name=output.name,
+                    workbook_kind="course_details_template",
+                )
         finally:
             handle.seek(0)
             locking_fn(handle.fileno(), unlock_value, 1)
