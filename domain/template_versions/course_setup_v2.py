@@ -17,7 +17,6 @@ _SUPPORTED_OPERATIONS = frozenset(
     {
         "generate_workbook",
         "generate_workbooks",
-        "validate_workbook",
         "validate_workbooks",
     }
 )
@@ -85,33 +84,6 @@ class CourseSetupV2Strategy:
             template_id=self.template_id,
         )
 
-    def validate_workbook(
-        self,
-        *,
-        template_id: str,
-        workbook_kind: str,
-        workbook_path: str | Path,
-        cancel_token: CancellationToken | None = None,
-        context: Mapping[str, Any] | None = None,
-    ) -> str:
-        from domain.template_strategy_router import assert_template_id_matches
-
-        assert_template_id_matches(
-            actual_template_id=template_id,
-            expected_template_id=self.template_id,
-        )
-        if normalize(workbook_kind) not in {"course_details", "course_details_template"}:
-            raise validation_error_from_key(
-                "common.validation_failed_invalid_data",
-                code="WORKBOOK_KIND_UNSUPPORTED",
-                workbook_kind=workbook_kind,
-                template_id=self.template_id,
-            )
-        return _course_template_validator()(
-            workbook_path=workbook_path,
-            cancel_token=cancel_token,
-        )
-
     def validate_workbooks(
         self,
         *,
@@ -127,7 +99,7 @@ class CourseSetupV2Strategy:
             actual_template_id=template_id,
             expected_template_id=self.template_id,
         )
-        if normalize(workbook_kind) not in {"course_details", "course_details_template"}:
+        if normalize(workbook_kind) != "course_details":
             raise validation_error_from_key(
                 "common.validation_failed_invalid_data",
                 code="WORKBOOK_KIND_UNSUPPORTED",
@@ -166,21 +138,6 @@ class CourseSetupV2Strategy:
                 output_path_overrides=output_path_overrides,
                 cancel_token=cancel_token,
             )
-        if kind == "course_details_template":
-            unexpected_workbook_paths = [str(raw).strip() for raw in workbook_paths if str(raw).strip()]
-            if unexpected_workbook_paths:
-                raise validation_error_from_key(
-                    "common.validation_failed_invalid_data",
-                    code="WORKBOOK_PATHS_NOT_APPLICABLE",
-                    workbook_kind=workbook_kind,
-                    expected="empty_sequence",
-                )
-            return _course_template_batch_generator()(
-                workbook_paths=(),
-                output_dir=Path(output_dir),
-                allow_overwrite=allow_overwrite,
-                cancel_token=cancel_token,
-            )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",
             code="WORKBOOK_KIND_UNSUPPORTED",
@@ -213,20 +170,6 @@ def _marks_template_batch_generator() -> Callable[..., dict[str, object]]:
 
 
 @lru_cache(maxsize=1)
-def _course_template_batch_generator() -> Callable[..., dict[str, object]]:
-    try:
-        from domain.template_versions.course_setup_v2_impl import course_template as course_template_impl
-    except Exception as exc:
-        raise ConfigurationError("Unable to import V2 course template implementation module.") from exc
-    fn = getattr(course_template_impl, "generate_course_details_templates_batch", None)
-    if not callable(fn):
-        raise ConfigurationError(
-            "V2 course template implementation missing generate_course_details_templates_batch()."
-        )
-    return cast(Callable[..., dict[str, object]], fn)
-
-
-@lru_cache(maxsize=1)
 def _course_template_generator() -> Callable[..., Path]:
     try:
         from domain.template_versions.course_setup_v2_impl.course_template import (
@@ -237,20 +180,6 @@ def _course_template_generator() -> Callable[..., Path]:
     fn = generate_course_details_template
     if not callable(fn):
         raise ConfigurationError("V2 course template implementation missing generate_course_details_template().")
-    return fn
-
-
-@lru_cache(maxsize=1)
-def _course_template_validator() -> Callable[..., str]:
-    try:
-        from domain.template_versions.course_setup_v2_impl.course_template_validator import (
-            validate_course_details_workbook,
-        )
-    except Exception as exc:
-        raise ConfigurationError("Unable to import V2 course template validator module.") from exc
-    fn = validate_course_details_workbook
-    if not callable(fn):
-        raise ConfigurationError("V2 course template validator missing validate_course_details_workbook().")
     return fn
 
 
@@ -299,3 +228,4 @@ def _output_path_overrides_from_context(context: Mapping[str, Any] | None) -> di
 
 
 __all__ = ["CourseSetupV2Strategy"]
+

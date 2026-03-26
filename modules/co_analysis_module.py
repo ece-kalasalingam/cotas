@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
@@ -11,11 +11,11 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidgetItem,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -46,10 +46,9 @@ from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
-from common.removable_file_item_widget import (
-    RemovableFileItemWidget as _SharedRemovableFileItemWidget,
-)
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
+from common.utils import resolve_dialog_start_path
+from domain import BusyWorkflowState
 
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _logger = logging.getLogger(__name__)
@@ -67,18 +66,6 @@ class _LogSink:
         return
 
 
-class _COAnalysisFileItemWidget(_SharedRemovableFileItemWidget):
-    def __init__(self, file_path: str, parent: QWidget | None = None) -> None:
-        super().__init__(
-            file_path,
-            remove_fallback_text=t("coordinator.file.remove_fallback"),
-            open_file_tooltip=t("outputs.open_file"),
-            open_folder_tooltip=t("outputs.open_folder"),
-            remove_tooltip=t("coordinator.file.remove_tooltip"),
-            parent=parent,
-        )
-
-
 class COAnalysisModule(QWidget):
     status_changed = Signal(str)
     _THRESHOLD_VALIDATION_KEY = "coordinator.thresholds.invalid_rule"
@@ -88,11 +75,12 @@ class COAnalysisModule(QWidget):
         super().__init__()
         self._files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
-        self._actions_enabled = False
+        self.state = BusyWorkflowState()
         self._threshold_violation_active = False
         self._logger = _logger
         self._ui_log_handler: logging.Handler | None = None
         self._user_log_entries: list[dict[str, object]] = []
+        self._pending_clear_count = 0
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._runtime = ModuleRuntime(
             module=self,
@@ -298,6 +286,13 @@ class COAnalysisModule(QWidget):
         self.drop_widget.set_summary_text_builder(lambda _count: t("coordinator.summary", count=len(self._files)))
         self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self.drop_widget.drop_list.setObjectName("coordinatorDropList")
+        self.drop_widget.files_dropped.connect(self._on_files_dropped)
+        self.drop_widget.files_rejected.connect(self._on_files_rejected)
+        self.drop_widget.files_changed.connect(self._on_drop_widget_files_changed)
+        self.drop_widget.browse_requested.connect(self._browse_files)
+        self.drop_widget.clear_button.pressed.connect(self._on_clear_all_pressed)
+        self.drop_widget.clear_button.clicked.connect(self._on_clear_all_clicked)
+        self.drop_widget.submit_requested.connect(self._on_submit_requested)
         self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
         right_layout.addWidget(self.drop_widget, 1)
 
@@ -313,6 +308,9 @@ class COAnalysisModule(QWidget):
         self.user_log_view = _LogSink()
         self._ui_engine.set_footer_visible(False)
         self.shortcut_add_file = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
+        self.shortcut_add_file.activated.connect(self._browse_files)
+        self.shortcut_save_output = QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self)
+        self.shortcut_save_output.activated.connect(self._on_submit_requested)
 
     def retranslate_ui(self) -> None:
         self.title_label.setText(t("coordinator.title"))
@@ -338,6 +336,14 @@ class COAnalysisModule(QWidget):
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
 
+    def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
+        self.state.set_busy(busy, job_id=job_id)
+        host_window = self.window()
+        set_switch = getattr(host_window, "set_language_switch_enabled", None)
+        if callable(set_switch):
+            set_switch(not busy)
+        self._refresh_ui()
+
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()
 
@@ -348,9 +354,16 @@ class COAnalysisModule(QWidget):
         _rerender_user_log_impl(self, ns=_messages_namespace())
 
     def _refresh_ui(self) -> None:
-        enabled = bool(self._actions_enabled)
+        enabled = not self.state.busy
+        has_files = bool(self._files)
+        can_submit = (
+            has_files
+            and self._has_valid_attainment_thresholds()
+            and self._has_valid_co_attainment_target()
+            and enabled
+        )
         self.drop_widget.setEnabled(enabled)
-        self.drop_widget.set_submit_allowed(False)
+        self.drop_widget.set_submit_allowed(can_submit)
         # Keep numeric policy controls enabled even while action flows are disabled.
         self.threshold_l1_input.setEnabled(True)
         self.threshold_l2_input.setEnabled(True)
@@ -358,13 +371,8 @@ class COAnalysisModule(QWidget):
         self.co_attainment_percent_input.setEnabled(True)
         self.co_attainment_level_input.setEnabled(True)
         self.drop_list.setEnabled(enabled)
-        self.clear_button.setEnabled(False)
-        self.calculate_button.setEnabled(False)
-        for row in range(self.drop_list.count()):
-            item = self.drop_list.item(row)
-            widget = self.drop_list.itemWidget(item)
-            if isinstance(widget, _COAnalysisFileItemWidget):
-                widget.remove_btn.setEnabled(False)
+        self.clear_button.setEnabled(enabled and has_files)
+        self.calculate_button.setEnabled(can_submit)
         self._refresh_summary()
 
     def _read_attainment_thresholds(self) -> tuple[float, float, float]:
@@ -427,27 +435,58 @@ class COAnalysisModule(QWidget):
         self.drop_widget.set_summary_text_builder(lambda _count: t("coordinator.summary", count=count))
         self.drop_widget.summary_label.setEnabled(count > 0)
 
-    def _new_file_item_widget(
-        self,
-        file_path: str,
-        *,
-        parent: QWidget | None = None,
-    ) -> _COAnalysisFileItemWidget:
-        return _COAnalysisFileItemWidget(file_path, parent=parent)
+    def _on_drop_widget_files_changed(self, file_paths: list[str]) -> None:
+        self._files = [Path(path) for path in file_paths if path]
+        self._refresh_ui()
 
-    def _add_uploaded_paths(self, added_paths: list[Path]) -> None:
-        for path in added_paths:
-            self._files.append(path)
-            path_text = str(path)
-            if len(path_text) >= 2 and path_text[1] == ":":
-                path_text = str(PureWindowsPath(path_text))
-            item = QListWidgetItem()
-            item.setToolTip(path_text)
-            item.setData(Qt.ItemDataRole.UserRole, path_text)
-            self.drop_list.addItem(item)
-            row_widget = self._new_file_item_widget(path_text, parent=self.drop_list)
-            item.setSizeHint(row_widget.sizeHint())
-            self.drop_list.setItemWidget(item, row_widget)
+    def _on_files_dropped(self, dropped_files: list[str]) -> None:
+        dropped_count = len([path for path in dropped_files if path])
+        if dropped_count <= 0:
+            return
+        self._publish_status_key("coordinator.status.added", added=dropped_count, total=len(self._files))
+
+    def _on_files_rejected(self, rejected_files: list[str]) -> None:
+        rejected_count = len([path for path in rejected_files if path])
+        if rejected_count <= 0:
+            return
+        self._publish_status_key("coordinator.status.ignored", count=rejected_count)
+
+    def _browse_files(self) -> None:
+        if self.state.busy:
+            return
+        selected_files, _ = QFileDialog.getOpenFileNames(
+            self,
+            t("co_analysis.dialog.select_files"),
+            resolve_dialog_start_path(APP_NAME),
+            t("instructor.dialog.filter.excel_open"),
+        )
+        if not selected_files:
+            return
+        self._remember_dialog_dir_safe(selected_files[0])
+        self.drop_widget.add_files(selected_files, emit_drop=True)
+
+    def _on_clear_all_pressed(self) -> None:
+        self._pending_clear_count = len(self._files)
+
+    def _on_clear_all_clicked(self) -> None:
+        cleared_count = self._pending_clear_count
+        self._pending_clear_count = 0
+        if cleared_count <= 0:
+            return
+        self._publish_status_key("coordinator.status.cleared", count=cleared_count)
+
+    def _on_submit_requested(self) -> None:
+        if self.state.busy:
+            return
+        if not self._files:
+            return
+        if not self._has_valid_attainment_thresholds() or not self._has_valid_co_attainment_target():
+            self._notify_threshold_violation(force=False)
+            return
+        self._publish_status_key("coordinator.status.operation_cancelled")
+
+    def _remember_dialog_dir_safe(self, selected_path: str) -> None:
+        self._runtime.remember_dialog_dir_safe(selected_path)
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         return tuple(

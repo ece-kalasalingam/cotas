@@ -10,7 +10,6 @@ from common.constants import (
     WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
     WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
     WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
-    WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
     WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
 )
 from common.error_catalog import validation_error_from_key
@@ -18,8 +17,8 @@ from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
 from domain.template_strategy_router import (
     generate_workbook,
+    generate_workbooks,
     read_valid_template_id_from_system_hash_sheet,
-    validate_workbook,
 )
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
@@ -75,25 +74,6 @@ class InstructorWorkflowService(WorkflowServiceBase):
                 fallback=Path(output_path),
             ),
         )
-
-    def validate_course_details_workbook(
-        self,
-        workbook_path: str | Path,
-        *,
-        context: JobContext,
-        cancel_token: CancellationToken | None = None,
-    ) -> str:
-        return self._execute_with_telemetry(
-            context=context,
-            operation=WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK,
-            cancel_token=cancel_token,
-            work=lambda effective_cancel_token: validate_workbook(
-                workbook_path=workbook_path,
-                workbook_kind="course_details",
-                cancel_token=effective_cancel_token,
-            ),
-        )
-
     def generate_marks_template(
         self,
         course_details_path: str | Path,
@@ -107,14 +87,18 @@ class InstructorWorkflowService(WorkflowServiceBase):
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._result_to_path(
-                generate_workbook(
+            work=lambda effective_cancel_token: self._extract_single_generated_workbook_path(
+                generate_workbooks(
                     template_id=template_id,
-                    output_path=output_path,
-                    workbook_name=Path(output_path).name,
+                    workbook_paths=[course_details_path],
+                    output_dir=Path(output_path).parent,
                     workbook_kind="marks_template",
                     cancel_token=effective_cancel_token,
-                    context={"course_details_path": str(course_details_path)},
+                    context={
+                        "output_path_overrides": {
+                            str(course_details_path): str(output_path),
+                        }
+                    },
                 ),
                 fallback=Path(output_path),
             ),
@@ -128,22 +112,13 @@ class InstructorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
-        template_id = self._resolve_template_id_from_workbook(filled_marks_path)
+        del filled_marks_path
+        del output_path
         return self._execute_with_telemetry(
             context=context,
             operation=WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._result_to_path(
-                generate_workbook(
-                    template_id=template_id,
-                    output_path=output_path,
-                    workbook_name=Path(output_path).name,
-                    workbook_kind="final_report",
-                    cancel_token=effective_cancel_token,
-                    context={"filled_marks_path": str(filled_marks_path)},
-                ),
-                fallback=Path(output_path),
-            ),
+            work=lambda _effective_cancel_token: (_raise_final_report_generation_removed()),
         )
 
     def _handle_domain_exception(
@@ -203,3 +178,24 @@ class InstructorWorkflowService(WorkflowServiceBase):
         if isinstance(output, str) and output.strip():
             return Path(output)
         return fallback
+
+    @staticmethod
+    def _extract_single_generated_workbook_path(result: object, *, fallback: Path) -> Path:
+        if isinstance(result, dict):
+            generated_paths = result.get("generated_workbook_paths")
+            if isinstance(generated_paths, list) and generated_paths:
+                first = str(generated_paths[0]).strip()
+                if first:
+                    return Path(first)
+        return InstructorWorkflowService._result_to_path(result, fallback=fallback)
+
+
+def _raise_final_report_generation_removed() -> Path:
+    raise validation_error_from_key(
+        "common.validation_failed_invalid_data",
+        code="WORKBOOK_KIND_UNSUPPORTED",
+        workbook_kind="final_report",
+        expected="course_details_template|marks_template|course_details",
+    )
+
+

@@ -9,8 +9,10 @@ import pytest
 openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
+from common.constants import ID_COURSE_SETUP
 from common.jobs import CancellationToken
 from domain import coordinator_engine as coordinator_processing
+from domain.template_strategy_router import validate_workbooks
 from services.coordinator_workflow_service import CoordinatorWorkflowService
 from services.instructor_workflow_service import InstructorWorkflowService
 
@@ -108,7 +110,12 @@ def _build_final_report(
         _prefix_student_regnos(course_details, reg_prefix)
 
     context_prepare = instructor.create_job_context(step_id=f"prepare_marks_{section}")
-    instructor.validate_course_details_workbook(course_details, context=context_prepare, cancel_token=CancellationToken())
+    validate_workbooks(
+        template_id=ID_COURSE_SETUP,
+        workbook_paths=[course_details],
+        workbook_kind="course_details",
+        cancel_token=CancellationToken(),
+    )
     instructor.generate_marks_template(
         course_details,
         marks_template,
@@ -171,4 +178,6 @@ def test_coordinator_workflow_service_end_to_end_collects_and_calculates(tmp_pat
         assert isinstance(ws["B13"].value, str)
     finally:
         wb.close()
+
+
 

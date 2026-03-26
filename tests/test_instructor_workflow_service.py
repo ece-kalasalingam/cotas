@@ -201,10 +201,10 @@ def test_service_logs_stable_error_code_for_validation_errors(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = service_mod.InstructorWorkflowService()
-    context = service.create_job_context(step_id="validate_course_template")
+    context = service.create_job_context(step_id="generate_final_report")
     monkeypatch.setattr(
         service_mod,
-        "validate_workbook",
+        "generate_workbook",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             service_mod.ValidationError("bad data", code="BAD_DATA")
         ),
@@ -212,7 +212,15 @@ def test_service_logs_stable_error_code_for_validation_errors(
 
     caplog.set_level(logging.INFO, logger=service_mod.__name__)
     with pytest.raises(service_mod.ValidationError):
-        service.validate_course_details_workbook(tmp_path / "broken.xlsx", context=context)
+        src = tmp_path / "filled.txt"
+        dst = tmp_path / "report.xlsx"
+        src.write_text("data", encoding="utf-8")
+        monkeypatch.setattr(
+            service_mod.InstructorWorkflowService,
+            "_resolve_template_id_from_workbook",
+            lambda _self, _path: "COURSE_SETUP_V2",
+        )
+        service.generate_final_report(src, dst, context=context)
 
     codes = [getattr(record, "error_code", None) for record in caplog.records]
     assert "BAD_DATA" in codes
@@ -248,4 +256,6 @@ def test_call_with_optional_cancel_token_signature_fallback_branch(monkeypatch: 
 
     assert out == "ok"
     assert called == [("a", "b")]
+
+
 

@@ -13,9 +13,9 @@ from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken, JobContext
 from domain.template_versions.course_setup_v1_coordinator_engine import (
     _analyze_dropped_files,
+    _generate_co_attainment_workbook_course_setup_v1,
+    extract_final_report_signature_from_path,
 )
-from domain.template_strategy_router import generate_workbook
-from domain.template_versions.course_setup_v1_coordinator_engine import extract_final_report_signature_from_path
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
@@ -96,17 +96,14 @@ class CoordinatorWorkflowService(WorkflowServiceBase):
             context=context,
             operation=COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: generate_workbook(
-                template_id=signature.template_id,
+            work=lambda effective_cancel_token: _generate_co_attainment_workbook_course_setup_v1(
+                source_paths=source_paths,
                 output_path=output_path,
-                workbook_name=output_path.name,
-                workbook_kind="co_attainment",
-                cancel_token=effective_cancel_token,
-                context={
-                    "source_paths": [str(path) for path in source_paths],
-                    "thresholds": tuple(thresholds) if thresholds is not None else None,
-                    "co_attainment_percent": co_attainment_percent,
-                    "co_attainment_level": co_attainment_level,
-                },
+                token=effective_cancel_token,
+                total_outcomes=signature.total_outcomes,
+                template_id=signature.template_id,
+                thresholds=tuple(thresholds) if thresholds is not None else None,
+                co_attainment_percent=co_attainment_percent,
+                co_attainment_level=co_attainment_level,
             ),
         )

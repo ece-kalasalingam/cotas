@@ -175,18 +175,6 @@ def validate_course_details_rules(workbook: Any) -> None:
     collector.raise_if_any()
 
 
-def validate_course_details_workbook(
-    workbook_path: str | Path,
-    *,
-    cancel_token: CancellationToken | None = None,
-) -> str:
-    identity = _validate_course_details_workbook_impl(
-        workbook_path=workbook_path,
-        cancel_token=cancel_token,
-    )
-    return identity.template_id
-
-
 def validate_course_details_workbooks(
     workbook_paths: Sequence[str | Path],
     *,
@@ -959,6 +947,7 @@ def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[A
 
 __all__ = [
     "validate_course_details_rules",
-    "validate_course_details_workbook",
     "validate_course_details_workbooks",
 ]
+
+

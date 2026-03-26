@@ -12,6 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from common.constants import ID_COURSE_SETUP
+from domain.template_strategy_router import validate_workbooks
 from services import InstructorWorkflowService
 
 
@@ -47,7 +49,7 @@ def main() -> int:
     service = InstructorWorkflowService()
     timings: dict[str, list[float]] = {
         "generate_course_details_template": [],
-        "validate_course_details_workbook": [],
+        "validate_course_details_workbooks": [],
         "generate_marks_template": [],
         "generate_final_report": [],
     }
@@ -69,11 +71,9 @@ def main() -> int:
             )
 
             ctx2 = service.create_job_context(step_id="step2", payload={"i": index})
-            timings["validate_course_details_workbook"].append(
+            timings["validate_course_details_workbooks"].append(
                 _time_call(
-                    lambda: service.validate_course_details_workbook(
-                        course_details, context=ctx2
-                    )
+                    lambda: validate_workbooks(template_id=ID_COURSE_SETUP, workbook_paths=[course_details], workbook_kind="course_details", cancel_token=None)
                 )
             )
 
@@ -126,3 +126,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+

@@ -50,17 +50,6 @@ class _TemplateStrategy(Protocol):
     ) -> object:
         ...
 
-    def validate_workbook(
-        self,
-        *,
-        template_id: str,
-        workbook_kind: str,
-        workbook_path: str | Path,
-        cancel_token: CancellationToken | None,
-        context: Mapping[str, Any] | None,
-    ) -> str:
-        ...
-
     def validate_workbooks(
         self,
         *,
@@ -88,6 +77,9 @@ _VERIFY_SIGNATURE = Callable[[str, str], bool]
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 _ACTIVE_TEMPLATE_IDS = ("COURSE_SETUP_V2",)
 _ACTIVE_TEMPLATE_IDS_NORMALIZED = frozenset(normalize(item) for item in _ACTIVE_TEMPLATE_IDS)
+_SINGLE_GENERATION_KIND = "course_details_template"
+_BATCH_GENERATION_KIND = "marks_template"
+_BATCH_VALIDATION_KINDS = frozenset({"course_details"})
 
 
 def _tokenize_template_id(template_id: str) -> list[str]:
@@ -187,6 +179,11 @@ def generate_workbook(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> object:
+    _assert_workbook_kind_supported(
+        workbook_kind=workbook_kind,
+        expected_kinds=(_SINGLE_GENERATION_KIND,),
+        template_id=template_id,
+    )
     strategy = get_template_strategy(template_id)
     raw = strategy.generate_workbook(
         template_id=template_id,
@@ -199,24 +196,6 @@ def generate_workbook(
     return _normalize_generate_workbook_result(raw=raw, fallback_output=Path(output_path))
 
 
-def validate_workbook(
-    *,
-    workbook_path: str | Path,
-    workbook_kind: str = "course_details",
-    cancel_token: CancellationToken | None = None,
-    context: Mapping[str, Any] | None = None,
-) -> str:
-    template_id = resolve_template_id_from_workbook_path(workbook_path)
-    strategy = get_template_strategy(template_id)
-    return strategy.validate_workbook(
-        template_id=template_id,
-        workbook_kind=workbook_kind,
-        workbook_path=workbook_path,
-        cancel_token=cancel_token,
-        context=context,
-    )
-
-
 def validate_workbooks(
     *,
     template_id: str,
@@ -225,6 +204,11 @@ def validate_workbooks(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
+    _assert_workbook_kind_supported(
+        workbook_kind=workbook_kind,
+        expected_kinds=_BATCH_VALIDATION_KINDS,
+        template_id=template_id,
+    )
     strategy = get_template_strategy(template_id)
     return strategy.validate_workbooks(
         template_id=template_id,
@@ -244,6 +228,11 @@ def generate_workbooks(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
+    _assert_workbook_kind_supported(
+        workbook_kind=workbook_kind,
+        expected_kinds=(_BATCH_GENERATION_KIND,),
+        template_id=template_id,
+    )
     strategy = get_template_strategy(template_id)
     raw = strategy.generate_workbooks(
         template_id=template_id,
@@ -272,6 +261,26 @@ def _extract_output_path_from_result(raw: object) -> str | None:
     if isinstance(output, str) and output.strip():
         return output.strip()
     return None
+
+
+def _assert_workbook_kind_supported(
+    *,
+    workbook_kind: str,
+    expected_kinds: Sequence[str],
+    template_id: str,
+) -> None:
+    normalized_kind = normalize(workbook_kind)
+    normalized_expected = {normalize(item) for item in expected_kinds}
+    if normalized_kind in normalized_expected:
+        return
+    expected_label = ", ".join(expected_kinds)
+    raise validation_error_from_key(
+        "common.validation_failed_invalid_data",
+        code="WORKBOOK_KIND_UNSUPPORTED",
+        workbook_kind=workbook_kind,
+        template_id=template_id,
+        expected=expected_label,
+    )
 
 
 def _normalize_generate_workbook_result(
@@ -400,7 +409,6 @@ __all__ = [
     "available_template_ids",
     "generate_workbook",
     "generate_workbooks",
-    "validate_workbook",
     "validate_workbooks",
     "get_template_strategy",
     "read_template_id_from_system_hash_sheet_if_valid",
