@@ -1,0 +1,17 @@
+# Normalize text files and keep repository line endings stable.
+* text=auto
+
+# Source files should stay LF across platforms.
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.ini text eol=lf
+*.txt text eol=lf
+
+# Windows scripts keep CRLF for best shell compatibility.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
