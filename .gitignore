@@ -58,3 +58,5 @@ Thumbs.db
 coverage.xml
 coverage.json
 version.txt
+.claude
+.claude/
