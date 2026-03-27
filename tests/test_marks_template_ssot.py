@@ -20,7 +20,11 @@ from common.registry import (
     get_dynamic_sheet_template,
     resolve_dynamic_sheet_headers,
 )
-from domain.template_strategy_router import generate_workbook, resolve_template_id_from_workbook_path
+from domain.template_strategy_router import (
+    generate_workbook,
+    generate_workbooks,
+    resolve_template_id_from_workbook_path,
+)
 
 
 def generate_course_details_template(output_path: Path) -> Path:
@@ -38,16 +42,21 @@ def generate_course_details_template(output_path: Path) -> Path:
 
 def generate_marks_template_from_course_details(course_details_path: Path, output_path: Path) -> Path:
     template_id = resolve_template_id_from_workbook_path(course_details_path)
-    result = generate_workbook(
+    result = generate_workbooks(
         template_id=template_id,
-        output_path=output_path,
-        workbook_name=output_path.name,
+        workbook_paths=[course_details_path],
+        output_dir=output_path.parent,
         workbook_kind="marks_template",
-        context={"course_details_path": str(course_details_path)},
+        context={
+            "overwrite_existing": True,
+            "output_path_overrides": {str(course_details_path): str(output_path)},
+        },
     )
-    output = getattr(result, "output_path", None)
-    if isinstance(output, str) and output.strip():
-        return Path(output)
+    generated = result.get("generated_workbook_paths", []) if isinstance(result, dict) else []
+    if isinstance(generated, list) and generated:
+        output = str(generated[0]).strip()
+        if output:
+            return Path(output)
     return output_path
 
 

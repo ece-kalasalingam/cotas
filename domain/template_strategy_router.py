@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import re
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -266,7 +266,7 @@ def _extract_output_path_from_result(raw: object) -> str | None:
 def _assert_workbook_kind_supported(
     *,
     workbook_kind: str,
-    expected_kinds: Sequence[str],
+    expected_kinds: Iterable[str],
     template_id: str,
 ) -> None:
     normalized_kind = normalize(workbook_kind)
@@ -281,6 +281,25 @@ def _assert_workbook_kind_supported(
         template_id=template_id,
         expected=expected_label,
     )
+
+
+def _to_int_with_default(value: object, *, default: int = 0) -> int:
+    candidate = value or default
+    if isinstance(candidate, bool):
+        return default
+    if isinstance(candidate, int):
+        return candidate
+    if isinstance(candidate, float):
+        return int(candidate)
+    if isinstance(candidate, str):
+        token = candidate.strip()
+        if not token:
+            return default
+        try:
+            return int(token)
+        except ValueError:
+            return default
+    return default
 
 
 def _normalize_generate_workbook_result(
@@ -334,10 +353,10 @@ def _normalize_generate_workbooks_result(raw: dict[str, object]) -> dict[str, ob
             }
             if status == "generated" and output_path:
                 generated_paths.append(output_path)
-    total = int(raw.get("total", len(normalized_results)) or 0)
-    generated = int(raw.get("generated", len(generated_paths)) or 0)
-    failed = int(raw.get("failed", 0) or 0)
-    skipped = int(raw.get("skipped", 0) or 0)
+    total = _to_int_with_default(raw.get("total", len(normalized_results)))
+    generated = _to_int_with_default(raw.get("generated", len(generated_paths)))
+    failed = _to_int_with_default(raw.get("failed", 0))
+    skipped = _to_int_with_default(raw.get("skipped", 0))
     return {
         "total": total,
         "generated": generated,

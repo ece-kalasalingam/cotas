@@ -13,7 +13,6 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.sheet_schema import SheetSchema
 from common.utils import coerce_excel_number, normalize
 from domain.template_versions.course_setup_v2_impl.schema_columns import (
     required_column_index,
@@ -47,7 +46,7 @@ class AssessmentComponent:
     participation: str
 
 
-def _assessment_schema() -> SheetSchema:
+def _assessment_schema():
     schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if schema is None:
         raise ConfigurationError(

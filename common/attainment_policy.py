@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TypeGuard
 
-def _is_numeric(value: object) -> bool:
+
+NumericValue = int | float
+
+
+def _is_numeric(value: object) -> TypeGuard[NumericValue]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
@@ -20,7 +25,7 @@ def thresholds_non_decreasing(l1: float, l2: float, l3: float) -> bool:
 
 
 def has_valid_attainment_thresholds(l1: object, l2: object, l3: object) -> bool:
-    if not thresholds_all_numeric(l1, l2, l3):
+    if not (_is_numeric(l1) and _is_numeric(l2) and _is_numeric(l3)):
         return False
     v1 = float(l1)
     v2 = float(l2)

@@ -56,7 +56,7 @@ from domain.template_versions.course_setup_v2_impl.course_semantics import (
     build_marks_template_filename_base_from_identity,
 )
 from domain.template_versions.course_setup_v2_impl.course_template_validator import (
-    validate_course_details_rules as _validate_course_details_rules_v2,
+    validate_course_details_workbooks as _validate_course_details_workbooks_v2,
 )
 from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 
@@ -70,12 +70,40 @@ def _ve(translation_key: str, *, code: str, **context: Any) -> ValidationError:
 def _prepare_marks_generation_from_workbook(
     source_workbook: Any,
     *,
+    source_path: str | Path,
     cancel_token: CancellationToken | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if cancel_token is not None:
         cancel_token.raise_if_cancelled()
-    # Fail fast: validate full course-details workbook before template generation starts.
-    _validate_course_details_rules_v2(source_workbook)
+    # Keep generation aligned with the same public validator entrypoint used by upload validation.
+    validation_result = _validate_course_details_workbooks_v2(
+        [str(source_path)],
+        cancel_token=cancel_token,
+    )
+    valid_paths_raw = validation_result.get("valid_paths", [])
+    valid_paths = [str(path) for path in valid_paths_raw] if isinstance(valid_paths_raw, list) else []
+    source_key = canonical_path_key(source_path)
+    valid_path_keys = {canonical_path_key(path) for path in valid_paths}
+    if source_key not in valid_path_keys:
+        rejections_raw = validation_result.get("rejections", [])
+        rejection_items = [
+            item
+            for item in rejections_raw
+            if isinstance(item, dict)
+        ] if isinstance(rejections_raw, list) else []
+        issue = next(
+            (
+                dict(item.get("issue", {}))
+                for item in rejection_items
+                if canonical_path_key(str(item.get("path", "")).strip()) == source_key
+            ),
+            {},
+        )
+        raise _ve(
+            "common.validation_failed_invalid_data",
+            code=str(issue.get("code", "COURSE_DETAILS_VALIDATION_FAILED")),
+            workbook=str(source_path),
+        )
     if cancel_token is not None:
         cancel_token.raise_if_cancelled()
     template_id = read_valid_template_id_from_system_hash_sheet(source_workbook)
@@ -210,6 +238,7 @@ def generate_marks_template_from_course_details(
     try:
         template_id, context = _prepare_marks_generation_from_workbook(
             source_workbook,
+            source_path=source_file,
             cancel_token=cancel_token,
         )
         return _render_marks_template_to_output(
@@ -325,6 +354,7 @@ def generate_marks_templates_from_course_details_batch(
         try:
             template_id, context = _prepare_marks_generation_from_workbook(
                 source_workbook,
+                source_path=source,
                 cancel_token=cancel_token,
             )
             output_base = _marks_output_base_from_context(context)
