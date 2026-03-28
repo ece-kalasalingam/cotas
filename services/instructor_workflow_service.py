@@ -6,8 +6,6 @@ import logging
 from pathlib import Path
 
 from common.constants import (
-    ID_COURSE_SETUP,
-    WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
     WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
     WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
     WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
@@ -16,7 +14,6 @@ from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
 from domain.template_strategy_router import (
-    generate_workbook,
     generate_workbooks,
     read_valid_template_id_from_system_hash_sheet,
 )
@@ -51,29 +48,6 @@ _TELEMETRY = WorkflowTelemetryConfig(
 class InstructorWorkflowService(WorkflowServiceBase):
     def __init__(self) -> None:
         super().__init__(logger=_logger, telemetry=_TELEMETRY)
-
-    def generate_course_details_template(
-        self,
-        output_path: str | Path,
-        *,
-        context: JobContext,
-        cancel_token: CancellationToken | None = None,
-    ) -> Path:
-        return self._execute_with_telemetry(
-            context=context,
-            operation=WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE,
-            cancel_token=cancel_token,
-            work=lambda effective_cancel_token: self._result_to_path(
-                generate_workbook(
-                    template_id=ID_COURSE_SETUP,
-                    output_path=output_path,
-                    workbook_name=Path(output_path).name,
-                    workbook_kind="course_details_template",
-                    cancel_token=effective_cancel_token,
-                ),
-                fallback=Path(output_path),
-            ),
-        )
     def generate_marks_template(
         self,
         course_details_path: str | Path,

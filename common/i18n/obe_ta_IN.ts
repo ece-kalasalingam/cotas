@@ -67,6 +67,38 @@
       <translation>ஆய்விற்கான கோப்புகளை தேர்வு செய்யவும்</translation>
     </message>
     <message>
+      <source>co_analysis.action.download_co_description_template</source>
+      <translation>CO Description Template பதிவிறக்கவும்</translation>
+    </message>
+    <message>
+      <source>co_analysis.action.download_co_description_template_link_html</source>
+      <translation>&lt;a href="{href}"&gt;{label}&lt;/a&gt;</translation>
+    </message>
+    <message>
+      <source>co_analysis.dialog.co_description_template.save_title</source>
+      <translation>CO Description Template-ஐ சேமிக்கவும்</translation>
+    </message>
+    <message>
+      <source>co_analysis.log.process.generate_co_description_template</source>
+      <translation>CO Description Template உருவாக்கு</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.co_description_template_generated</source>
+      <translation>CO Description template வெற்றிகரமாக உருவாக்கப்பட்டது.</translation>
+    </message>
+    <message>
+      <source>co_analysis.toast.co_description_template_generated</source>
+      <translation>CO Description template வெற்றிகரமாக உருவாக்கப்பட்டது.</translation>
+    </message>
+    <message>
+      <source>co_analysis.msg.failed_to_generate_co_description_template</source>
+      <translation>CO Description template உருவாக்க முடியவில்லை.</translation>
+    </message>
+    <message>
+      <source>co_analysis.system.co_description_template_generate_failed</source>
+      <translation>'{output}' இல் CO Description template உருவாக்க முடியவில்லை.</translation>
+    </message>
+    <message>
       <source>co_analysis.status.co_count_mismatch</source>
       <translation>மொத்த விளைவு எண்ணிக்கை பொருந்தாததால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
     </message>
@@ -184,7 +216,7 @@
     </message>
     <message>
       <source>coordinator.drop_hint</source>
-      <translation>coordinator.drop_hint</translation>
+      <translation>Marks Filled workbooks-ஐ பதிவேற்றவும்.</translation>
     </message>
     <message>
       <source>coordinator.duplicate.body</source>

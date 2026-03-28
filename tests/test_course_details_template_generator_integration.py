@@ -24,6 +24,45 @@ def generate_course_details_template(output_path: Path) -> Path:
     return output_path
 
 
+def generate_co_description_template(output_path: Path) -> Path:
+    result = generate_workbook(
+        template_id=ID_COURSE_SETUP,
+        output_path=output_path,
+        workbook_name=output_path.name,
+        workbook_kind="co_description_template",
+    )
+    output = getattr(result, "output_path", None)
+    if isinstance(output, str) and output.strip():
+        return Path(output)
+    return output_path
+
+
+def test_generated_co_description_template_structure_and_integrity(tmp_path: Path) -> None:
+    output = tmp_path / "co_description_template.xlsx"
+    generate_co_description_template(output)
+
+    workbook = openpyxl.load_workbook(output)
+    try:
+        assert workbook.sheetnames == ["CO_Description", "__SYSTEM_HASH__"]
+
+        co_desc_sheet = workbook["CO_Description"]
+        assert co_desc_sheet["A1"].value == "CO#"
+        assert co_desc_sheet["C1"].value == "Domain_Level"
+        assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
+        assert co_desc_sheet["A2"].value == 1
+        co_validations = list(co_desc_sheet.data_validations.dataValidation)
+        assert co_validations
+        assert any("A2:A301" in str(validation.sqref) for validation in co_validations)
+        assert any("C2:C301" in str(validation.sqref) for validation in co_validations)
+        assert any("D2:D301" in str(validation.sqref) for validation in co_validations)
+
+        hash_sheet = workbook["__SYSTEM_HASH__"]
+        assert hash_sheet.sheet_state == "hidden"
+        assert hash_sheet["A2"].value == ID_COURSE_SETUP
+    finally:
+        workbook.close()
+
+
 def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
     output = tmp_path / "course_setup.xlsx"
     generate_course_details_template(output)

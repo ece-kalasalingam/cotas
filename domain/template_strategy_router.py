@@ -77,7 +77,7 @@ _VERIFY_SIGNATURE = Callable[[str, str], bool]
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 _ACTIVE_TEMPLATE_IDS = ("COURSE_SETUP_V2",)
 _ACTIVE_TEMPLATE_IDS_NORMALIZED = frozenset(normalize(item) for item in _ACTIVE_TEMPLATE_IDS)
-_SINGLE_GENERATION_KIND = "course_details_template"
+_SINGLE_GENERATION_KINDS = ("course_details_template", "co_description_template")
 _BATCH_GENERATION_KIND = "marks_template"
 _BATCH_VALIDATION_KINDS = frozenset({"course_details"})
 
@@ -181,7 +181,7 @@ def generate_workbook(
 ) -> object:
     _assert_workbook_kind_supported(
         workbook_kind=workbook_kind,
-        expected_kinds=(_SINGLE_GENERATION_KIND,),
+        expected_kinds=_SINGLE_GENERATION_KINDS,
         template_id=template_id,
     )
     strategy = get_template_strategy(template_id)

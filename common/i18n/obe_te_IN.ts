@@ -67,6 +67,38 @@
       <translation>విశ్లేషణ కోసం ఫైళ్లను ఎంచుకోండి</translation>
     </message>
     <message>
+      <source>co_analysis.action.download_co_description_template</source>
+      <translation>CO Description Template డౌన్‌లోడ్ చేయండి</translation>
+    </message>
+    <message>
+      <source>co_analysis.action.download_co_description_template_link_html</source>
+      <translation>&lt;a href="{href}"&gt;{label}&lt;/a&gt;</translation>
+    </message>
+    <message>
+      <source>co_analysis.dialog.co_description_template.save_title</source>
+      <translation>CO Description Template ను సేవ్ చేయండి</translation>
+    </message>
+    <message>
+      <source>co_analysis.log.process.generate_co_description_template</source>
+      <translation>CO Description Template రూపొందించండి</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.co_description_template_generated</source>
+      <translation>CO Description template విజయవంతంగా రూపొందించబడింది.</translation>
+    </message>
+    <message>
+      <source>co_analysis.toast.co_description_template_generated</source>
+      <translation>CO Description template విజయవంతంగా రూపొందించబడింది.</translation>
+    </message>
+    <message>
+      <source>co_analysis.msg.failed_to_generate_co_description_template</source>
+      <translation>CO Description template రూపొందించలేకపోయాం.</translation>
+    </message>
+    <message>
+      <source>co_analysis.system.co_description_template_generate_failed</source>
+      <translation>'{output}' వద్ద CO Description template రూపొందించలేకపోయాం.</translation>
+    </message>
+    <message>
       <source>co_analysis.status.co_count_mismatch</source>
       <translation>మొత్తం ఫలితాల సంఖ్య సరిపోలకపోవడంతో {count} ఫైల్(లు) తిరస్కరించబడ్డాయి.</translation>
     </message>
@@ -184,7 +216,7 @@
     </message>
     <message>
       <source>coordinator.drop_hint</source>
-      <translation>coordinator.drop_hint</translation>
+      <translation>Marks Filled workbooks ను అప్‌లోడ్ చేయండి.</translation>
     </message>
     <message>
       <source>coordinator.duplicate.body</source>

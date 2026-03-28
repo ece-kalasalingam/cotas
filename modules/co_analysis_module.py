@@ -26,6 +26,7 @@ from common.constants import (
     APP_NAME,
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
+    ID_COURSE_SETUP,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
@@ -35,7 +36,10 @@ from common.constants import (
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
 from common.drag_drop_file_widget import ManagedDropFileWidget
+from common.error_catalog import validation_error_from_key
+from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
+from common.jobs import CancellationToken
 from common.attainment_policy import (
     has_valid_attainment_thresholds as _has_valid_attainment_thresholds_policy,
     has_valid_co_attainment_percent as _has_valid_co_attainment_percent_policy,
@@ -47,11 +51,13 @@ from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
-from common.utils import resolve_dialog_start_path
+from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
+from domain.template_strategy_router import generate_workbook
 
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _logger = logging.getLogger(__name__)
+_DOWNLOAD_CO_DESCRIPTION_TEMPLATE_HREF = "download-co-description-template"
 
 
 def _messages_namespace() -> dict[str, object]:
@@ -78,6 +84,8 @@ class COAnalysisModule(QWidget):
         self.state = BusyWorkflowState()
         self._threshold_violation_active = False
         self._logger = _logger
+        self._cancel_token: CancellationToken | None = None
+        self._active_jobs: list[object] = []
         self._ui_log_handler: logging.Handler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._pending_clear_count = 0
@@ -263,18 +271,17 @@ class COAnalysisModule(QWidget):
         left_layout.addLayout(thresholds_layout)
         left_layout.addStretch(1)
 
-        right_pane = QWidget()
-        right_pane.setObjectName("coordinatorActiveCard")
-        right_layout = QVBoxLayout(right_pane)
-        right_scroll = QScrollArea()
-        right_scroll.setObjectName("coordinatorRightScroll")
-        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        right_scroll.viewport().setObjectName("coordinatorRightScrollViewport")
-        right_scroll.setWidget(right_pane)
-        top_layout.addWidget(right_scroll, 1)
+        self.download_co_description_template_link = QLabel()
+        self.download_co_description_template_link.setTextFormat(Qt.TextFormat.RichText)
+        self.download_co_description_template_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.download_co_description_template_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.download_co_description_template_link.setOpenExternalLinks(False)
+        self.download_co_description_template_link.linkActivated.connect(
+            self._on_download_co_description_template_link_activated
+        )
+        thresholds_layout.addWidget(self.download_co_description_template_link)
 
         self.drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
@@ -294,7 +301,19 @@ class COAnalysisModule(QWidget):
         self.drop_widget.clear_button.clicked.connect(self._on_clear_all_clicked)
         self.drop_widget.submit_requested.connect(self._on_submit_requested)
         self.drop_widget.set_clear_button_text(t("coordinator.clear_all"))
+        right_pane = QWidget()
+        right_pane.setObjectName("coordinatorActiveCard")
+        right_layout = QVBoxLayout(right_pane)
         right_layout.addWidget(self.drop_widget, 1)
+        right_scroll = QScrollArea()
+        right_scroll.setObjectName("coordinatorRightScroll")
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        right_scroll.viewport().setObjectName("coordinatorRightScrollViewport")
+        right_scroll.setWidget(right_pane)
+        top_layout.addWidget(right_scroll, 1)
 
         self.drop_zone = self.drop_widget.drop_zone
         self.drop_list = self.drop_widget.drop_list
@@ -327,6 +346,7 @@ class COAnalysisModule(QWidget):
         self.co_attainment_description_label.setText(t("coordinator.co_attainment.description"))
         self.co_attainment_percent_label.setText(t("coordinator.co_attainment.percent.label"))
         self.co_attainment_level_label.setText(t("coordinator.co_attainment.level.label"))
+        self._set_download_co_description_template_link_enabled(not self.state.busy)
         self._refresh_summary()
         self._rerender_user_log()
 
@@ -363,6 +383,7 @@ class COAnalysisModule(QWidget):
             and enabled
         )
         self.drop_widget.setEnabled(enabled)
+        self._set_download_co_description_template_link_enabled(enabled)
         self.drop_widget.set_submit_allowed(can_submit)
         # Keep numeric policy controls enabled even while action flows are disabled.
         self.threshold_l1_input.setEnabled(True)
@@ -374,6 +395,97 @@ class COAnalysisModule(QWidget):
         self.clear_button.setEnabled(enabled and has_files)
         self.calculate_button.setEnabled(can_submit)
         self._refresh_summary()
+
+    def _set_download_co_description_template_link_enabled(self, enabled: bool) -> None:
+        text = t("co_analysis.action.download_co_description_template")
+        if enabled:
+            self.download_co_description_template_link.setText(
+                t(
+                    "co_analysis.action.download_co_description_template_link_html",
+                    href=_DOWNLOAD_CO_DESCRIPTION_TEMPLATE_HREF,
+                    label=text,
+                )
+            )
+        else:
+            self.download_co_description_template_link.setText(text)
+        self.download_co_description_template_link.setEnabled(enabled)
+
+    def _on_download_co_description_template_link_activated(self, _href: str) -> None:
+        if self.state.busy:
+            return
+        self._download_co_description_template_async()
+
+    def _download_co_description_template_async(self) -> None:
+        if self.state.busy:
+            return
+        start_dir = resolve_dialog_start_path(APP_NAME)
+        default_path = str(Path(start_dir) / "CO_Description_Template.xlsx")
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            t("co_analysis.dialog.co_description_template.save_title"),
+            default_path,
+            t("instructor.dialog.filter.excel"),
+        )
+        if not output_path:
+            return
+        selected_output = Path(output_path)
+        self._remember_dialog_dir_safe(str(selected_output))
+        process_name = t("co_analysis.log.process.generate_co_description_template")
+        token = CancellationToken()
+
+        def _work() -> object:
+            token.raise_if_cancelled()
+            return generate_workbook(
+                template_id=ID_COURSE_SETUP,
+                output_path=selected_output,
+                workbook_name=selected_output.name,
+                workbook_kind="co_description_template",
+                cancel_token=token,
+            )
+
+        def _on_success(result: object) -> None:
+            output_value = str(
+                getattr(result, "workbook_path", None)
+                or getattr(result, "output_path", None)
+                or selected_output
+            ).strip()
+            if not output_value:
+                self._handle_async_failure(
+                    validation_error_from_key(
+                        "common.validation_failed_invalid_data",
+                        code="WORKBOOK_GENERATE_FAILED",
+                        workbook_kind="co_description_template",
+                    ),
+                    process_name=process_name,
+                )
+                return
+            result_path = Path(output_value)
+            if all(canonical_path_key(path) != canonical_path_key(result_path) for path in self._downloaded_outputs):
+                self._downloaded_outputs.append(result_path)
+            self._publish_status_key("co_analysis.status.co_description_template_generated")
+            log_process_message(
+                process_name,
+                logger=self._logger,
+                success_message=f"{process_name} completed successfully.",
+                user_success_message=t("co_analysis.status.co_description_template_generated"),
+            )
+            self._runtime.notify_message_key(
+                "co_analysis.toast.co_description_template_generated",
+                channels=("toast",),
+                toast_title_key="coordinator.title",
+                toast_level="success",
+            )
+
+        def _on_failure(exc: Exception) -> None:
+            self._handle_async_failure(exc, process_name=process_name)
+
+        self._start_async_operation(
+            token=token,
+            job_id=None,
+            work=_work,
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
 
     def _read_attainment_thresholds(self) -> tuple[float, float, float]:
         return (
@@ -487,6 +599,52 @@ class COAnalysisModule(QWidget):
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
         self._runtime.remember_dialog_dir_safe(selected_path)
+
+    def _start_async_operation(
+        self,
+        *,
+        token: CancellationToken,
+        job_id: str | None,
+        work,
+        on_success,
+        on_failure,
+        on_finally=None,
+    ) -> None:
+        self._runtime.set_async_runner(self._async_runner)
+        self._runtime.start_async_operation(
+            token=token,
+            job_id=job_id,
+            work=work,
+            on_success=on_success,
+            on_failure=on_failure,
+            on_finally=on_finally,
+        )
+
+    def _handle_async_failure(self, exc: Exception, *, process_name: str) -> None:
+        if isinstance(exc, JobCancelledError):
+            return
+        if isinstance(exc, ValidationError):
+            self._runtime.notify_message(
+                str(exc),
+                channels=("toast",),
+                toast_title=t("coordinator.title"),
+                toast_level="error",
+            )
+        elif isinstance(exc, AppSystemError):
+            self._runtime.notify_message(
+                str(exc),
+                channels=("toast",),
+                toast_title=t("coordinator.title"),
+                toast_level="error",
+            )
+        else:
+            self._runtime.notify_message_key(
+                "co_analysis.msg.failed_to_generate_co_description_template",
+                channels=("toast",),
+                toast_title_key="coordinator.title",
+                toast_level="error",
+            )
+        log_process_message(process_name, logger=self._logger, error=exc, user_error_message=str(exc))
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         return tuple(

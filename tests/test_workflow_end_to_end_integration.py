@@ -12,7 +12,7 @@ pytest.importorskip("xlsxwriter")
 from common.constants import ID_COURSE_SETUP
 from common.jobs import CancellationToken
 from domain import coordinator_engine as coordinator_processing
-from domain.template_strategy_router import validate_workbooks
+from domain.template_strategy_router import generate_workbook, validate_workbooks
 from services.coordinator_workflow_service import CoordinatorWorkflowService
 from services.instructor_workflow_service import InstructorWorkflowService
 
@@ -103,8 +103,13 @@ def _build_final_report(
     marks_template = root / f"marks_template_{section}.xlsx"
     final_report = root / f"final_report_{section}.xlsx"
 
-    context_template = instructor.create_job_context(step_id=f"generate_course_template_{section}")
-    instructor.generate_course_details_template(course_details, context=context_template, cancel_token=CancellationToken())
+    generate_workbook(
+        template_id=ID_COURSE_SETUP,
+        output_path=course_details,
+        workbook_name=course_details.name,
+        workbook_kind="course_details_template",
+        cancel_token=CancellationToken(),
+    )
     _set_course_section(course_details, section)
     if reg_prefix:
         _prefix_student_regnos(course_details, reg_prefix)

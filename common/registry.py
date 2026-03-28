@@ -517,6 +517,13 @@ def get_sheet_schema_by_key(template_id: str, sheet_key: str) -> SheetSchema | N
     for sheet in blueprint.sheets:
         if sheet.key == target:
             return sheet
+    # COURSE_SETUP_V2 may intentionally omit some optional sheets from its
+    # default workbook blueprint while still needing schema access for other
+    # workbook kinds (for example, CO description template generation).
+    if str(template_id).strip() in {COURSE_SETUP_V1.type_id, COURSE_SETUP_V2.type_id}:
+        catalog_sheet = _course_setup_sheet_catalog().get(target)
+        if catalog_sheet is not None:
+            return _clone_sheet(catalog_sheet)
     return None
 
 

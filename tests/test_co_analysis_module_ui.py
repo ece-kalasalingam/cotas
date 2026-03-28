@@ -84,3 +84,55 @@ def test_submit_shows_threshold_violation_when_invalid(
     module._on_submit_requested()
     assert "coordinator.thresholds.invalid_rule" in seen_keys
     _dispose_widget(module, qapp)
+
+
+def test_download_co_description_template_link_triggers_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    module, seen_keys = _build_module_with_message_capture(monkeypatch)
+    output_path = tmp_path / "CO_Description_Template.xlsx"
+    called: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        co_analysis_ui.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output_path), "Excel Files (*.xlsx)"),
+    )
+
+    def _fake_generate_workbook(**kwargs):
+        called["workbook_kind"] = kwargs.get("workbook_kind")
+        called["template_id"] = kwargs.get("template_id")
+        return type(
+            "_Result",
+            (),
+            {
+                "output_path": str(output_path),
+                "workbook_path": str(output_path),
+            },
+        )()
+
+    monkeypatch.setattr(co_analysis_ui, "generate_workbook", _fake_generate_workbook)
+
+    def _run_inline(*, token, job_id, work, on_success, on_failure, on_finally=None):
+        del token, job_id
+        try:
+            result = work()
+            on_success(result)
+        except Exception as exc:  # pragma: no cover - defensive
+            on_failure(exc)
+        if on_finally is not None:
+            on_finally()
+
+    monkeypatch.setattr(module, "_start_async_operation", _run_inline)
+
+    module._download_co_description_template_async()
+    qapp.processEvents()
+
+    assert called["workbook_kind"] == "co_description_template"
+    assert called["template_id"] == co_analysis_ui.ID_COURSE_SETUP
+    assert output_path in module._downloaded_outputs
+    assert "co_analysis.status.co_description_template_generated" in seen_keys
+    assert "co_analysis.toast.co_description_template_generated" in seen_keys
+    _dispose_widget(module, qapp)

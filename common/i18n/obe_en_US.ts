@@ -67,6 +67,38 @@
       <translation>Select files for analysis</translation>
     </message>
     <message>
+      <source>co_analysis.action.download_co_description_template</source>
+      <translation>Download CO Description Template</translation>
+    </message>
+    <message>
+      <source>co_analysis.action.download_co_description_template_link_html</source>
+      <translation>&lt;a href="{href}"&gt;{label}&lt;/a&gt;</translation>
+    </message>
+    <message>
+      <source>co_analysis.dialog.co_description_template.save_title</source>
+      <translation>Save CO Description Template</translation>
+    </message>
+    <message>
+      <source>co_analysis.log.process.generate_co_description_template</source>
+      <translation>Generate CO Description Template</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.co_description_template_generated</source>
+      <translation>CO Description template generated successfully.</translation>
+    </message>
+    <message>
+      <source>co_analysis.toast.co_description_template_generated</source>
+      <translation>CO Description template generated successfully.</translation>
+    </message>
+    <message>
+      <source>co_analysis.msg.failed_to_generate_co_description_template</source>
+      <translation>Failed to generate CO Description template.</translation>
+    </message>
+    <message>
+      <source>co_analysis.system.co_description_template_generate_failed</source>
+      <translation>Failed to generate CO Description template at '{output}'.</translation>
+    </message>
+    <message>
       <source>co_analysis.status.co_count_mismatch</source>
       <translation>{count} file(s) rejected due to Total Outcomes mismatch.</translation>
     </message>
@@ -195,7 +227,7 @@ Total Outcomes Mismatch: {co_count_mismatch}</translation>
     </message>
     <message>
       <source>coordinator.drop_hint</source>
-      <translation>Upload Final CO report workbooks generated from the Instructor module.</translation>
+      <translation>Upload the Marks Filled workbooks.</translation>
     </message>
     <message>
       <source>coordinator.duplicate.body</source>

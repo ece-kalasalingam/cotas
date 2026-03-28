@@ -77,6 +77,19 @@ class CourseSetupV2Strategy:
                 output_url=output_value,
                 reason=None,
             )
+        if kind == "co_description_template":
+            generated_path = _co_description_template_generator()(
+                output_path=output_path,
+                cancel_token=cancel_token,
+            )
+            output_value = str(generated_path)
+            return _WorkbookGenerationResult(
+                status="generated",
+                workbook_path=output_value,
+                output_path=output_value,
+                output_url=output_value,
+                reason=None,
+            )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",
             code="WORKBOOK_KIND_UNSUPPORTED",
@@ -194,6 +207,22 @@ def _course_template_batch_validator() -> Callable[..., dict[str, object]]:
     fn = validate_course_details_workbooks
     if not callable(fn):
         raise ConfigurationError("V2 course template validator missing validate_course_details_workbooks().")
+    return fn
+
+
+@lru_cache(maxsize=1)
+def _co_description_template_generator() -> Callable[..., Path]:
+    try:
+        from domain.template_versions.course_setup_v2_impl.co_description_template import (
+            generate_co_description_template,
+        )
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 CO description template implementation module.") from exc
+    fn = generate_co_description_template
+    if not callable(fn):
+        raise ConfigurationError(
+            "V2 CO description implementation missing generate_co_description_template()."
+        )
     return fn
 
 
