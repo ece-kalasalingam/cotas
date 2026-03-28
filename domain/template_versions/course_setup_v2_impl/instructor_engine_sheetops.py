@@ -52,7 +52,7 @@ from common.excel_sheet_layout import (
     XLSX_PAPER_SIZE_A4,
 )
 from common.error_catalog import validation_error_from_key
-from common.sheet_schema import ValidationRule
+from common.sheet_schema import SheetSchema, ValidationRule
 from common.utils import (
     coerce_excel_number,
     normalize,
@@ -935,6 +935,10 @@ def generate_worksheet(
     data: Sequence[Sequence[Any]],
     header_format: Any,
     body_format: Any,
+    *,
+    wrap_columns: Sequence[int] = (),
+    wrapped_body_format: Any | None = None,
+    wrapped_column_format: Any | None = None,
 ) -> Any:
     """Create a worksheet with strict validation and efficient row writes."""
     if not sheet_name or not isinstance(sheet_name, str):
@@ -962,18 +966,31 @@ def generate_worksheet(
     worksheet = workbook.add_worksheet(sheet_name)
     col_widths: dict[int, int] = {}
     write_row = worksheet.write_row
+    write_cell = worksheet.write
     write_row(0, 0, headers, header_format)
     for col_index, value in enumerate(headers):
         col_widths[col_index] = max(12, len(str(value)) + 2)
 
+    wrap_set = set(wrap_columns)
     apply_xlsxwriter_column_widths(
         worksheet,
         col_widths,
         default_width=12,
+        wrap_columns=tuple(wrap_set),
+        wrap_format=wrapped_column_format or wrapped_body_format,
     )
 
     for row_offset, row_values in enumerate(data, start=1):
-        write_row(row_offset, 0, row_values, body_format)
+        if wrap_set and wrapped_body_format is not None:
+            for col_index, value in enumerate(row_values):
+                write_cell(
+                    row_offset,
+                    col_index,
+                    value,
+                    wrapped_body_format if col_index in wrap_set else body_format,
+                )
+        else:
+            write_row(row_offset, 0, row_values, body_format)
 
     apply_xlsxwriter_viewport(
         worksheet,
@@ -1006,6 +1023,46 @@ def _protect_sheet(worksheet: Any) -> None:
     # Keep locked-cell selection disabled and unlocked-cell selection enabled so
     # keyboard navigation (Tab) jumps between mark-entry cells.
     protect_xlsxwriter_sheet(worksheet)
+
+
+def write_schema_sheet(
+    *,
+    workbook: Any,
+    sheet_schema: SheetSchema,
+    data: Sequence[Sequence[Any]],
+    header_format: Any,
+    body_format: Any,
+    cancel_token: Any | None = None,
+    wrap_columns: Sequence[int] = (),
+    wrapped_body_format: Any | None = None,
+    wrapped_column_format: Any | None = None,
+) -> Any:
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    if len(sheet_schema.header_matrix) != 1:
+        raise validation_error_from_key(
+            "instructor.validation.sheet_single_header_row",
+            code="SHEET_HEADER_MATRIX_INVALID",
+            sheet_name=sheet_schema.name,
+        )
+    worksheet = generate_worksheet(
+        workbook=workbook,
+        sheet_name=sheet_schema.name,
+        headers=sheet_schema.header_matrix[0],
+        data=data,
+        header_format=header_format,
+        body_format=body_format,
+        wrap_columns=wrap_columns,
+        wrapped_body_format=wrapped_body_format,
+        wrapped_column_format=wrapped_column_format,
+    )
+    for validation in sheet_schema.validations:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        _apply_validation(worksheet, validation)
+    if sheet_schema.is_protected:
+        _protect_sheet(worksheet)
+    return worksheet
 
 
 

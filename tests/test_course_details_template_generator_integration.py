@@ -43,13 +43,23 @@ def test_generated_co_description_template_structure_and_integrity(tmp_path: Pat
 
     workbook = openpyxl.load_workbook(output)
     try:
-        assert workbook.sheetnames == ["CO_Description", "__SYSTEM_HASH__"]
+        assert workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]
+
+        course_sheet = workbook["Course_Metadata"]
+        assert course_sheet["A1"].value == "Field"
+        assert course_sheet["B1"].value == "Value"
+        assert course_sheet["A2"].value == "Course_Code"
+        assert course_sheet["B2"].value == "ECE000"
 
         co_desc_sheet = workbook["CO_Description"]
         assert co_desc_sheet["A1"].value == "CO#"
         assert co_desc_sheet["C1"].value == "Domain_Level"
         assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
         assert co_desc_sheet["A2"].value == 1
+        assert bool(co_desc_sheet["B1"].alignment.wrap_text)
+        assert bool(co_desc_sheet["D1"].alignment.wrap_text)
+        assert bool(co_desc_sheet["B2"].alignment.wrap_text)
+        assert bool(co_desc_sheet["D2"].alignment.wrap_text)
         co_validations = list(co_desc_sheet.data_validations.dataValidation)
         assert co_validations
         assert any("A2:A301" in str(validation.sqref) for validation in co_validations)
@@ -96,6 +106,10 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
         assert co_desc_sheet["A1"].value == "CO#"
         assert co_desc_sheet["C1"].value == "Domain_Level"
         assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
+        assert bool(co_desc_sheet["B1"].alignment.wrap_text)
+        assert bool(co_desc_sheet["D1"].alignment.wrap_text)
+        assert bool(co_desc_sheet["B2"].alignment.wrap_text)
+        assert bool(co_desc_sheet["D2"].alignment.wrap_text)
         co_validations = list(co_desc_sheet.data_validations.dataValidation)
         assert co_validations
         assert any("A2:A301" in str(validation.sqref) for validation in co_validations)

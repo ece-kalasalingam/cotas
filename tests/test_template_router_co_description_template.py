@@ -23,7 +23,7 @@ def test_router_accepts_co_description_template_kind(tmp_path: Path) -> None:
     resolved_output = str(getattr(result, "output_path", output)).strip()
     workbook = openpyxl.load_workbook(resolved_output)
     try:
-        assert workbook.sheetnames == ["CO_Description", "__SYSTEM_HASH__"]
+        assert workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]
     finally:
         workbook.close()
 
@@ -38,4 +38,3 @@ def test_router_rejects_unknown_single_generation_kind(tmp_path: Path) -> None:
             workbook_kind="unsupported_template",
         )
     assert getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"
-

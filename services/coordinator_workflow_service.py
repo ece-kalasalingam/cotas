@@ -13,8 +13,10 @@ from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken, JobContext
 from domain.template_versions.course_setup_v1_coordinator_engine import (
     _analyze_dropped_files,
-    _generate_co_attainment_workbook_course_setup_v1,
     extract_final_report_signature_from_path,
+)
+from domain.template_strategy_router import (
+    generate_workbook as generate_workbook_by_template,
 )
 from services import workflow_service_base as _workflow_base
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
@@ -42,6 +44,9 @@ _TELEMETRY = WorkflowTelemetryConfig(
     event_step_cancelled=_EVENT_STEP_CANCELLED,
     event_step_failed=_EVENT_STEP_FAILED,
 )
+
+# Backward-compatible indirection for tests/patching.
+_generate_co_attainment_workbook = generate_workbook_by_template
 
 
 class CoordinatorWorkflowService(WorkflowServiceBase):
@@ -92,18 +97,45 @@ class CoordinatorWorkflowService(WorkflowServiceBase):
                 code="WORKBOOK_OPEN_FAILED",
                 workbook=str(source_paths[0]),
             )
+        for path in source_paths[1:]:
+            item_signature = extract_final_report_signature_from_path(path)
+            if item_signature is None:
+                raise validation_error_from_key(
+                    "validation.workbook.open_failed",
+                    code="WORKBOOK_OPEN_FAILED",
+                    workbook=str(path),
+                )
+            if str(item_signature.template_id).strip() != str(signature.template_id).strip():
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="COA_TEMPLATE_MIXED",
+                    template_id=item_signature.template_id,
+                    available=signature.template_id,
+                    workbook=str(path),
+                )
+            if int(item_signature.total_outcomes) != int(signature.total_outcomes):
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="COA_CO_COUNT_MISMATCH",
+                    workbook=str(path),
+                    expected=signature.total_outcomes,
+                    found=item_signature.total_outcomes,
+                )
         return self._execute_with_telemetry(
             context=context,
             operation=COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT,
             cancel_token=cancel_token,
-            work=lambda effective_cancel_token: _generate_co_attainment_workbook_course_setup_v1(
-                source_paths=source_paths,
-                output_path=output_path,
-                token=effective_cancel_token,
-                total_outcomes=signature.total_outcomes,
+            work=lambda effective_cancel_token: _generate_co_attainment_workbook(
                 template_id=signature.template_id,
-                thresholds=tuple(thresholds) if thresholds is not None else None,
-                co_attainment_percent=co_attainment_percent,
-                co_attainment_level=co_attainment_level,
+                output_path=output_path,
+                workbook_name=output_path.name,
+                workbook_kind="co_attainment",
+                cancel_token=effective_cancel_token,
+                context={
+                    "source_paths": [str(path) for path in source_paths],
+                    "thresholds": tuple(thresholds) if thresholds is not None else None,
+                    "co_attainment_percent": co_attainment_percent,
+                    "co_attainment_level": co_attainment_level,
+                },
             ),
         )

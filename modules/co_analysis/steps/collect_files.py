@@ -14,6 +14,8 @@ from common.exceptions import AppSystemError
 from common.jobs import CancellationToken, JobContext
 from modules.co_analysis.steps.shared_execution import handle_step_failure
 
+_MAX_ANOMALY_WARNING_LINES = 12
+
 
 def _compact_context_text(context: object) -> str:
     if not isinstance(context, dict):
@@ -266,6 +268,18 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
                 "co_analysis.status.validation_warnings",
                 count=len(anomaly_warnings),
             )
+            displayed_warnings = anomaly_warnings[:_MAX_ANOMALY_WARNING_LINES]
+            for warning in displayed_warnings:
+                typed_module._publish_status_key(
+                    "co_analysis.status.validation_warning_line",
+                    warning=warning,
+                )
+            hidden_warning_count = len(anomaly_warnings) - len(displayed_warnings)
+            if hidden_warning_count > 0:
+                typed_module._publish_status_key(
+                    "co_analysis.status.validation_warning_more",
+                    count=hidden_warning_count,
+                )
             typed_ns["show_toast"](
                 typed_module,
                 typed_ns["t"]("co_analysis.validation.anomaly_warnings_body", count=len(anomaly_warnings)),
@@ -324,3 +338,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
         on_failure=_on_failure,
         on_finally=typed_module._drain_next_batch,
     )
+
+
+
+

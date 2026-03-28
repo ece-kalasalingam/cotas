@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="en_US">
   <context>
     <name>main</name>
@@ -165,6 +165,14 @@
     <message>
       <source>co_analysis.status.validation_warnings</source>
       <translation>{count} validation warning(s) reported.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.validation_warning_line</source>
+      <translation>Validation warning: {warning}</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.validation_warning_more</source>
+      <translation>... and {count} more warning(s).</translation>
     </message>
     <message>
       <source>co_analysis.validation.anomaly_warnings_body</source>

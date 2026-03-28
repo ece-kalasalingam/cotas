@@ -45,6 +45,8 @@ def _build_module_with_message_capture(
         "notify_message_key",
         _capture_notify_message_key,
     )
+    monkeypatch.setattr(co_analysis_ui, "validate_uploaded_source_workbook", lambda _path: None)
+    monkeypatch.setattr(co_analysis_ui, "consume_last_source_anomaly_warnings", lambda: [])
     monkeypatch.setattr(co_analysis_ui.COAnalysisModule, "_setup_ui_logging", lambda self: None)
     return co_analysis_ui.COAnalysisModule(), seen_keys
 

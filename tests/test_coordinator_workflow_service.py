@@ -59,17 +59,30 @@ def test_calculate_attainment_passes_token_to_generator(monkeypatch: pytest.Monk
     seen = {"token": None}
 
     def _fake_generate(
-        src_paths,
-        output_path,
         *,
-        token=None,
-        thresholds=None,
-        co_attainment_percent=None,
-        co_attainment_level=None,
+        template_id,
+        output_path,
+        workbook_name=None,
+        workbook_kind=None,
+        cancel_token=None,
+        context=None,
     ):
-        seen["token"] = token
+        del template_id
+        del workbook_name
+        del workbook_kind
+        del context
+        seen["token"] = cancel_token
         return output_path
     monkeypatch.setattr(service_mod, "_generate_co_attainment_workbook", _fake_generate)
+    monkeypatch.setattr(
+        service_mod,
+        "extract_final_report_signature_from_path",
+        lambda _path: type(
+            "_Sig",
+            (),
+            {"template_id": "COURSE_SETUP_V2", "total_outcomes": 6},
+        )(),
+    )
 
     result = service.calculate_attainment(
         source,

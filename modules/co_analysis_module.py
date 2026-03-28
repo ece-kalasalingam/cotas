@@ -54,6 +54,10 @@ from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
 from domain.template_strategy_router import generate_workbook
+from modules.co_analysis.validators.uploaded_workbook_validator import (
+    consume_last_source_anomaly_warnings,
+    validate_uploaded_source_workbook,
+)
 
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _logger = logging.getLogger(__name__)
@@ -89,6 +93,7 @@ class COAnalysisModule(QWidget):
         self._ui_log_handler: logging.Handler | None = None
         self._user_log_entries: list[dict[str, object]] = []
         self._pending_clear_count = 0
+        self._syncing_validated_files = False
         self._async_runner = AsyncOperationRunner(self, run_async=run_in_background)
         self._runtime = ModuleRuntime(
             module=self,
@@ -548,14 +553,81 @@ class COAnalysisModule(QWidget):
         self.drop_widget.summary_label.setEnabled(count > 0)
 
     def _on_drop_widget_files_changed(self, file_paths: list[str]) -> None:
-        self._files = [Path(path) for path in file_paths if path]
+        if self._syncing_validated_files:
+            self._files = [Path(path) for path in file_paths if path]
+            self._refresh_ui()
+            return
+
+        accepted_paths: list[str] = []
+        rejected_items: list[tuple[str, Exception]] = []
+        anomaly_warnings: list[str] = []
+        for raw_path in file_paths:
+            path_text = str(raw_path or "").strip()
+            if not path_text:
+                continue
+            workbook_path = Path(path_text)
+            try:
+                validate_uploaded_source_workbook(workbook_path)
+                accepted_paths.append(path_text)
+                warnings = consume_last_source_anomaly_warnings()
+                if warnings:
+                    anomaly_warnings.extend([f"{workbook_path.name} -> {item}" for item in warnings])
+            except Exception as exc:
+                rejected_items.append((path_text, exc))
+                _ = consume_last_source_anomaly_warnings()
+
+        original_paths = [str(path).strip() for path in file_paths if str(path).strip()]
+        if accepted_paths != original_paths:
+            self._syncing_validated_files = True
+            try:
+                self.drop_widget.set_files(accepted_paths)
+            finally:
+                self._syncing_validated_files = False
+
+        if rejected_items:
+            self._publish_status_key("coordinator.status.ignored", count=len(rejected_items))
+            for path_text, exc in rejected_items[:12]:
+                code = str(getattr(exc, "code", type(exc).__name__) or "UNKNOWN").strip() or "UNKNOWN"
+                context = self._compact_context_text(getattr(exc, "context", {}))
+                self._publish_status_key(
+                    "co_analysis.status.rejected_code_with_context",
+                    file=Path(path_text).name,
+                    code=code,
+                    context=context,
+                )
+
+        if anomaly_warnings:
+            self._publish_status_key("co_analysis.status.validation_warnings", count=len(anomaly_warnings))
+            displayed = anomaly_warnings[:12]
+            for warning in displayed:
+                self._publish_status_key("co_analysis.status.validation_warning_line", warning=warning)
+            hidden_count = len(anomaly_warnings) - len(displayed)
+            if hidden_count > 0:
+                self._publish_status_key("co_analysis.status.validation_warning_more", count=hidden_count)
+
+        self._files = [Path(path) for path in accepted_paths]
         self._refresh_ui()
+
+    @staticmethod
+    def _compact_context_text(context: object) -> str:
+        if not isinstance(context, dict):
+            return ""
+        fields = ("sheet_name", "cell", "row", "range", "column")
+        parts: list[str] = []
+        for key in fields:
+            value = context.get(key)
+            token = str(value).strip() if value is not None else ""
+            if token:
+                parts.append(f"{key}={token}")
+        return ", ".join(parts)
 
     def _on_files_dropped(self, dropped_files: list[str]) -> None:
         dropped_count = len([path for path in dropped_files if path])
         if dropped_count <= 0:
             return
-        self._publish_status_key("coordinator.status.added", added=dropped_count, total=len(self._files))
+        first_path = next((value for value in dropped_files if value), "")
+        if first_path:
+            self._remember_dialog_dir_safe(first_path)
 
     def _on_files_rejected(self, rejected_files: list[str]) -> None:
         rejected_count = len([path for path in rejected_files if path])

@@ -79,28 +79,14 @@ def generate_course_details_template(
         body_format = format_bundle["body"]
 
         for sheet_schema in blueprint.sheets:
-            if cancel_token is not None:
-                cancel_token.raise_if_cancelled()
-            if len(sheet_schema.header_matrix) != 1:
-                raise validation_error_from_key(
-                    "instructor.validation.sheet_single_header_row",
-                    code="SHEET_HEADER_MATRIX_INVALID",
-                    sheet_name=sheet_schema.name,
-                )
-            worksheet = _shareops.generate_worksheet(
+            _shareops.write_schema_sheet(
                 workbook=workbook,
-                sheet_name=sheet_schema.name,
-                headers=sheet_schema.header_matrix[0],
+                sheet_schema=sheet_schema,
                 data=SAMPLE_SETUP_DATA.get(sheet_schema.name, []),
                 header_format=header_format,
                 body_format=body_format,
+                cancel_token=cancel_token,
             )
-            for validation in sheet_schema.validations:
-                if cancel_token is not None:
-                    cancel_token.raise_if_cancelled()
-                _shareops._apply_validation(worksheet, validation)
-            if sheet_schema.is_protected:
-                _shareops._protect_sheet(worksheet)
 
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()

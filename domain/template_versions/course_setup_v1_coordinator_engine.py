@@ -72,7 +72,6 @@ from common.utils import (
 from common.workbook_integrity.workbook_signing import sign_payload, verify_payload_signature
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
-    FinalReportWorkbookSignature,
     generate_workbook,
     get_template_strategy,
     read_template_id_from_system_hash_sheet_if_valid,
@@ -93,6 +92,16 @@ _DEDUP_SQLITE_THRESHOLD_ENTRIES = 10_000
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
 _SIGNATURE_VALIDATION_MAX_WORKERS = 8
+
+
+@dataclass(slots=True, frozen=True)
+class FinalReportWorkbookSignature:
+    template_id: str
+    course_code: str
+    total_outcomes: int
+    section: str
+    direct_sheet_count: int
+    indirect_sheet_count: int
 
 
 _FinalReportSignature = FinalReportWorkbookSignature
@@ -1371,5 +1380,4 @@ def _generate_co_attainment_workbook_course_setup_v1(
         inner_join_drop_count=inner_join_drop_count,
         inner_join_drop_details=tuple(inner_join_drop_details),
     )
-
 

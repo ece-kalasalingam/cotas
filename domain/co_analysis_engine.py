@@ -109,7 +109,7 @@ def analyze_uploaded_workbooks(
     invalid_mark_value_files = 0
     invalid_other_validation_files = 0
     anomaly_warnings: list[str] = []
-    validation_failures: list[dict[str, str]] = []
+    validation_failures: list[dict[str, object]] = []
     baseline_total_outcomes: int | None = None
     validated_candidates: list[tuple[Path, str, tuple[str, ...] | None, set[str], int | None]] = []
     for raw_path in candidate_paths:
@@ -732,3 +732,4 @@ def _merge_report_sheets(
                 row += 1
         finally:
             wb.close()
+

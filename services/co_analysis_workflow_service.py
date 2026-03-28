@@ -15,6 +15,10 @@ from domain.co_analysis_engine import (
     analyze_uploaded_workbooks,
     generate_co_analysis_workbook,
 )
+from modules.co_analysis.validators.uploaded_workbook_validator import (
+    consume_last_source_anomaly_warnings,
+    validate_uploaded_source_workbook,
+)
 from services.workflow_service_base import WorkflowServiceBase, WorkflowTelemetryConfig
 
 _logger = logging.getLogger(__name__)
@@ -81,6 +85,9 @@ class CoAnalysisWorkflowService(WorkflowServiceBase):
                 "common.validation_failed_invalid_data",
                 code="COA_SOURCE_WORKBOOK_REQUIRED",
             )
+        for source_path in source_paths:
+            validate_uploaded_source_workbook(source_path)
+            _ = consume_last_source_anomaly_warnings()
         return self._execute_with_telemetry(
             context=context,
             operation=CO_ANALYSIS_WORKFLOW_OPERATION_GENERATE_WORKBOOK,
