@@ -1,4 +1,4 @@
-﻿"""Central validation issue catalog used by engines, UI logging, and toast messages."""
+"""Central validation issue catalog used by engines, UI logging, and toast messages."""
 
 from __future__ import annotations
 
@@ -262,6 +262,44 @@ _VALIDATION_ISSUE_CATALOG: Mapping[str, ValidationIssueSpec] = {
     "COURSE_DETAILS_UNEXPECTED_REJECTION": ValidationIssueSpec(
         code="COURSE_DETAILS_UNEXPECTED_REJECTION",
         translation_key="validation.course_details.unexpected_rejection",
+        category="validation",
+        severity="warning",
+        default_message="File skipped due to an unexpected validation failure.",
+    ),
+    "MARKS_TEMPLATE_DUPLICATE_PATH": ValidationIssueSpec(
+        code="MARKS_TEMPLATE_DUPLICATE_PATH",
+        translation_key="validation.marks_template.duplicate_path",
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate file path skipped.",
+    ),
+    "MARKS_TEMPLATE_SECTION_DUPLICATE": ValidationIssueSpec(
+        code="MARKS_TEMPLATE_SECTION_DUPLICATE",
+        translation_key="validation.marks_template.duplicate_section",
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate section skipped for same course cohort.",
+    ),
+    "MARKS_TEMPLATE_COHORT_MISMATCH": ValidationIssueSpec(
+        code="MARKS_TEMPLATE_COHORT_MISMATCH",
+        translation_key="validation.marks_template.cohort_mismatch",
+        category="validation",
+        severity="warning",
+        default_message=(
+            "File skipped because course cohort metadata does not match "
+            "(course code, semester, academic year, total outcomes must match)."
+        ),
+    ),
+    "MARKS_TEMPLATE_STUDENT_REG_DUPLICATE": ValidationIssueSpec(
+        code="MARKS_TEMPLATE_STUDENT_REG_DUPLICATE",
+        translation_key="validation.marks_template.duplicate_reg_no",
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate student register number found across uploaded workbooks.",
+    ),
+    "MARKS_TEMPLATE_UNEXPECTED_REJECTION": ValidationIssueSpec(
+        code="MARKS_TEMPLATE_UNEXPECTED_REJECTION",
+        translation_key="validation.marks_template.unexpected_rejection",
         category="validation",
         severity="warning",
         default_message="File skipped due to an unexpected validation failure.",

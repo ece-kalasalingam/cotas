@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from logging import Logger
+from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping, Protocol, TypedDict, cast
 
 from PySide6.QtWidgets import QWidget
 
+from common.exceptions import ConfigurationError
 from common.toast import show_toast
 from common.ui_logging import (
     UILogHandler,
@@ -126,6 +128,26 @@ def _format_log_line(ns: MessagesNamespace, message: str, timestamp: datetime | 
     return ns["format_log_line_at"](message, timestamp=timestamp)
 
 
+def _context_with_aliases(context: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(context)
+    if "sheet_name" not in payload and "sheet" in payload:
+        payload["sheet_name"] = payload.get("sheet")
+    if "sheet" not in payload and "sheet_name" in payload:
+        payload["sheet"] = payload.get("sheet_name")
+    return payload
+
+
+def _format_reason_fallback(template: str, context: Mapping[str, object]) -> str:
+    text = str(template or "").strip()
+    if not text:
+        return text
+    payload = _context_with_aliases(context)
+    try:
+        return text.format(**payload)
+    except Exception:
+        return text
+
+
 def _normalize_channels(
     channels: Iterable[NotificationChannel] | None,
     *,
@@ -142,6 +164,26 @@ def _normalize_channels(
     return normalized
 
 
+def _safe_translate(ns: MessagesNamespace, key: str, **kwargs: object) -> str:
+    try:
+        text = ns["t"](key, **kwargs)
+    except Exception:
+        return key
+    return text if isinstance(text, str) and text.strip() else key
+
+
+def _ensure_i18n_for_log_channels(*, message: str, ns: MessagesNamespace, channels: set[NotificationChannel]) -> None:
+    if "status" not in channels and "activity_log" not in channels:
+        return
+    parsed = ns["parse_i18n_log_message"](message)
+    if parsed is not None:
+        return
+    raise ConfigurationError(
+        "Plain text is not allowed for status/activity_log channels. "
+        "Use notify_message_key(...) or build_status_message(...)."
+    )
+
+
 def notify_message(
     module: object,
     message: str,
@@ -155,6 +197,7 @@ def notify_message(
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
     targets = _normalize_channels(channels, default=("status", "activity_log"))
+    _ensure_i18n_for_log_channels(message=message, ns=typed_ns, channels=targets)
     if "activity_log" in targets:
         append_user_log(typed_module, message, ns=typed_ns)
     if "status" in targets:
@@ -226,19 +269,29 @@ def notify_validation_issue(
 
     if translation_key:
         if file_path:
-            reason_kwargs = dict(context)
-            reason_text = typed_ns["t"](translation_key, **reason_kwargs)
+            reason_kwargs = _context_with_aliases(context)
+            reason_text: str
+            reason_payload: object
+            try:
+                reason_text = typed_ns["t"](translation_key, **reason_kwargs)
+                reason_payload = {"__t_key__": translation_key, "__kwargs__": reason_kwargs}
+            except Exception:
+                reason_text = _format_reason_fallback(fallback_reason, reason_kwargs) or translation_key
+                reason_payload = reason_text
             payload_kwargs: dict[str, object] = {
                 "file": file_path,
                 "code": code or "VALIDATION_ERROR",
-                "reason": {"__t_key__": translation_key, "__kwargs__": reason_kwargs},
+                "reason": reason_payload,
             }
-            fallback = typed_ns["t"](
-                "instructor.validation.file_issue_line",
-                file=file_path,
-                code=code or "VALIDATION_ERROR",
-                reason=reason_text,
-            )
+            try:
+                fallback = typed_ns["t"](
+                    "instructor.validation.file_issue_line",
+                    file=file_path,
+                    code=code or "VALIDATION_ERROR",
+                    reason=reason_text,
+                )
+            except Exception:
+                fallback = f"{file_path}: [{code or 'VALIDATION_ERROR'}] {reason_text}"
             notify_message(
                 module,
                 typed_ns["build_i18n_log_message"](
@@ -261,6 +314,7 @@ def notify_validation_issue(
         return
 
     if file_path and fallback_reason:
+        formatted_reason = _format_reason_fallback(fallback_reason, context)
         notify_message(
             module,
             typed_ns["build_i18n_log_message"](
@@ -268,9 +322,9 @@ def notify_validation_issue(
                 kwargs={
                     "file": file_path,
                     "code": code or "VALIDATION_ERROR",
-                    "reason": fallback_reason,
+                    "reason": formatted_reason,
                 },
-                fallback=f"{file_path}: [{code or 'VALIDATION_ERROR'}] {fallback_reason}",
+                fallback=f"{file_path}: [{code or 'VALIDATION_ERROR'}] {formatted_reason}",
             ),
             ns=typed_ns,
             channels=_normalize_channels(channels, default=("activity_log",)),
@@ -278,11 +332,247 @@ def notify_validation_issue(
         return
 
     if fallback_reason:
-        notify_message(module, fallback_reason, ns=typed_ns, channels=channels)
+        formatted_reason = _format_reason_fallback(fallback_reason, context)
+        payload = typed_ns["build_i18n_log_message"](
+            "common.validation_failed_invalid_data",
+            kwargs={},
+            fallback=formatted_reason,
+        )
+        notify_message(module, payload, ns=typed_ns, channels=channels)
+
+
+def emit_validation_batch_feedback(
+    module: object,
+    *,
+    ns: Mapping[str, object],
+    rejections: Iterable[Mapping[str, object]],
+    valid_count: int,
+    issue_channels: Iterable[NotificationChannel] | None = ("status", "activity_log"),
+    summary_channels: Iterable[NotificationChannel] | None = ("toast",),
+) -> None:
+    typed_ns = cast(MessagesNamespace, ns)
+    rejection_items = [
+        item
+        for item in rejections
+        if isinstance(item, Mapping) and isinstance(item.get("issue"), Mapping)
+    ]
+    rejected_count = len(rejection_items)
+    accepted_count = max(0, int(valid_count))
+    title_key = (
+        "validation.batch.title_success"
+        if rejected_count == 0 and accepted_count > 0
+        else "validation.batch.title_error"
+    )
+    title_text = _safe_translate(typed_ns, title_key)
+
+    accepted_text = (
+        _safe_translate(typed_ns, "validation.batch.accepted_count", count=accepted_count)
+        if accepted_count > 0
+        else ""
+    )
+    rejected_text = (
+        _safe_translate(typed_ns, "validation.batch.rejected_count", count=rejected_count)
+        if rejected_count > 0
+        else ""
+    )
+
+    detail_entries_text: list[str] = []
+    detail_entries_marker: list[object] = []
+    for item in rejection_items:
+        issue_payload = cast(Mapping[str, object], item.get("issue"))
+        raw_path = item.get("path")
+        path_text = str(raw_path).strip() if isinstance(raw_path, str) else ""
+        file_label = Path(path_text).name if path_text else ""
+        code = str(issue_payload.get("code", "VALIDATION_ERROR")).strip() or "VALIDATION_ERROR"
+        translation_key = str(issue_payload.get("translation_key", "")).strip()
+        fallback_reason = str(issue_payload.get("message", "")).strip()
+        issue_context_raw = issue_payload.get("context")
+        issue_context = dict(issue_context_raw) if isinstance(issue_context_raw, Mapping) else {}
+        generic_reason = _safe_translate(typed_ns, "common.validation_failed_invalid_data")
+        reason_text = _format_reason_fallback(fallback_reason, issue_context)
+        reason_marker: object = reason_text
+        reason_context = _context_with_aliases(issue_context)
+        if translation_key:
+            try:
+                translated = typed_ns["t"](translation_key, **reason_context)
+                if isinstance(translated, str) and translated.strip() and translated != translation_key:
+                    reason_text = translated
+                else:
+                    reason_text = generic_reason
+            except Exception:
+                reason_text = generic_reason
+            reason_marker = {
+                "__t_key__": translation_key,
+                "kwargs": reason_context,
+                "fallback": reason_text or generic_reason,
+            }
+        elif not reason_text:
+            reason_text = code
+            reason_marker = reason_text
+        file_text = file_label or path_text or "-"
+        entry = f"{file_text}: [{code}] {reason_text}"
+        detail_entries_text.append(entry)
+        detail_entries_marker.append(
+            {
+                "__t_key__": "validation.batch.detail_entry",
+                "kwargs": {"file": file_text, "code": code, "reason": reason_marker},
+                "fallback": entry,
+            }
+        )
+
+    details_preview_marker: object = ""
+    details_text = ""
+    if detail_entries_text:
+        max_lines = 3
+        preview = "; ".join(detail_entries_text[:max_lines])
+        hidden = len(detail_entries_text) - max_lines
+        if hidden > 0:
+            preview = (
+                f"{preview}; "
+                + _safe_translate(typed_ns, "validation.batch.more_suffix", count=hidden)
+            )
+        details_text = _safe_translate(typed_ns, "validation.batch.details_prefix", details=preview)
+        if len(detail_entries_marker) == 1:
+            details_preview_marker = {
+                "__t_key__": "validation.batch.details_entries_1",
+                "kwargs": {"entry1": detail_entries_marker[0]},
+                "fallback": detail_entries_text[0],
+            }
+        elif len(detail_entries_marker) == 2:
+            details_preview_marker = {
+                "__t_key__": "validation.batch.details_entries_2",
+                "kwargs": {"entry1": detail_entries_marker[0], "entry2": detail_entries_marker[1]},
+                "fallback": "; ".join(detail_entries_text[:2]),
+            }
+        elif hidden > 0:
+            details_preview_marker = {
+                "__t_key__": "validation.batch.details_entries_3_more",
+                "kwargs": {
+                    "entry1": detail_entries_marker[0],
+                    "entry2": detail_entries_marker[1],
+                    "entry3": detail_entries_marker[2],
+                    "more": {
+                        "__t_key__": "validation.batch.more_suffix",
+                        "kwargs": {"count": hidden},
+                        "fallback": f"+{hidden} more",
+                    },
+                },
+                "fallback": preview,
+            }
+        else:
+            details_preview_marker = {
+                "__t_key__": "validation.batch.details_entries_3",
+                "kwargs": {
+                    "entry1": detail_entries_marker[0],
+                    "entry2": detail_entries_marker[1],
+                    "entry3": detail_entries_marker[2],
+                },
+                "fallback": "; ".join(detail_entries_text[:3]),
+            }
+
+    toast_lines = [line for line in (accepted_text, rejected_text) if line]
+    toast_body = "\n".join(toast_lines) if toast_lines else title_text
+    toast_level: ToastLevel = "success" if rejected_count == 0 and accepted_count > 0 else "warning"
+    notify_message(
+        module,
+        toast_body,
+        ns=typed_ns,
+        channels=summary_channels,
+        toast_title=title_text,
+        toast_level=toast_level,
+    )
+
+    accepted_segment: object = ""
+    if accepted_count > 0:
+        accepted_segment = {
+            "__t_key__": "validation.batch.activity_segment",
+            "kwargs": {
+                "segment": {
+                    "__t_key__": "validation.batch.accepted_count",
+                    "kwargs": {"count": accepted_count},
+                }
+            },
+        }
+    rejected_segment: object = ""
+    if rejected_count > 0:
+        rejected_segment = {
+            "__t_key__": "validation.batch.activity_segment",
+            "kwargs": {
+                "segment": {
+                    "__t_key__": "validation.batch.rejected_count",
+                    "kwargs": {"count": rejected_count},
+                }
+            },
+        }
+    details_segment: object = ""
+    if details_text:
+        details_segment = {
+            "__t_key__": "validation.batch.activity_segment",
+            "kwargs": {
+                "segment": {
+                    "__t_key__": "validation.batch.details_prefix",
+                    "kwargs": {"details": details_preview_marker},
+                    "fallback": details_text,
+                }
+            },
+        }
+
+    if accepted_segment or rejected_segment or details_segment:
+        activity_payload = typed_ns["build_i18n_log_message"](
+            "validation.batch.activity_line",
+            kwargs={
+                "title": {"__t_key__": title_key, "kwargs": {}},
+                "accepted": accepted_segment,
+                "rejected": rejected_segment,
+                "details": details_segment,
+            },
+            fallback=(
+                f"{title_text} | "
+                + " | ".join(part for part in (accepted_text, rejected_text, details_text) if part)
+            ),
+        )
+        notify_message(
+            module,
+            activity_payload,
+            ns=typed_ns,
+            channels=issue_channels,
+        )
+
+
+def emit_workbook_generation_feedback(
+    module: object,
+    *,
+    ns: Mapping[str, object],
+    success_count: int,
+    failed_count: int,
+    channels: Iterable[NotificationChannel] | None = ("status", "activity_log", "toast"),
+) -> None:
+    typed_ns = cast(MessagesNamespace, ns)
+    success = max(0, int(success_count))
+    failed = max(0, int(failed_count))
+    segments: list[str] = []
+    if success > 0:
+        segments.append(_safe_translate(typed_ns, "workbook.generation.segment.success", count=success))
+    if failed > 0:
+        segments.append(_safe_translate(typed_ns, "workbook.generation.segment.failed", count=failed))
+    if not segments:
+        segments.append(_safe_translate(typed_ns, "workbook.generation.segment.none"))
+    notify_message_key(
+        module,
+        "workbook.generation.summary",
+        ns=typed_ns,
+        channels=_normalize_channels(channels, default=("status", "activity_log", "toast")),
+        kwargs={"segments": ", ".join(segments)},
+        toast_title_key="instructor.msg.success_title",
+        toast_level="success" if failed == 0 and success > 0 else "warning",
+    )
 
 
 def publish_status(module: object, message: str, *, ns: Mapping[str, object]) -> None:
-    notify_message(module, message, ns=ns, channels=("status", "activity_log"))
+    del module, message, ns
+    raise ConfigurationError(
+        "publish_status(message) is disallowed. Use publish_status_key(...) or notify_message_key(...)."
+    )
 
 
 def publish_status_key(
@@ -317,6 +607,11 @@ def setup_ui_logging(module: object, *, ns: Mapping[str, object]) -> None:
 def append_user_log(module: object, message: str, *, ns: Mapping[str, object]) -> None:
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
+    _ensure_i18n_for_log_channels(
+        message=message,
+        ns=typed_ns,
+        channels={"activity_log"},
+    )
     parsed = typed_ns["parse_i18n_log_message"](message)
     localized = typed_ns["resolve_i18n_log_message"](message)
     timestamp = datetime.now()

@@ -187,12 +187,17 @@ def calculate_attainment_async(module: object, *, ns: Mapping[str, object]) -> N
             job_id=job_context.job_id if job_context else job_id,
             step_id=job_context.step_id if job_context else COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT,
         )
-        typed_ns["show_toast"](
-            typed_module,
-            t("coordinator.status.calculate_completed"),
-            title=t("coordinator.title"),
-            level="info",
-        )
+        runtime = getattr(typed_module, "_runtime", None)
+        emit_generation = getattr(runtime, "emit_workbook_generation_feedback", None)
+        if callable(emit_generation):
+            emit_generation(success_count=1, failed_count=0)
+        else:
+            typed_ns["show_toast"](
+                typed_module,
+                t("coordinator.status.calculate_completed"),
+                title=t("coordinator.title"),
+                level="info",
+            )
         if duplicate_reg_count:
             typed_ns["show_toast"](
                 typed_module,

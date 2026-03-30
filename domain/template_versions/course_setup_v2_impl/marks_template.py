@@ -616,6 +616,7 @@ def _write_marks_template_workbook(
     body_fmt = format_bundle["body"]
     wrapped_body_fmt = format_bundle["body_wrap"]
     wrapped_column_fmt = format_bundle["column_wrap"]
+    unbordered_wrapped_column_fmt = format_bundle.get("column_wrap_unbordered", wrapped_column_fmt)
     num_fmt = format_bundle["num"]
     header_num_fmt = format_bundle["header_num"]
     unlocked_body_fmt = format_bundle["unlocked_body"]
@@ -627,53 +628,6 @@ def _write_marks_template_workbook(
 
     students = context["students"]
     assessment_wrap_columns = _assessment_wrapped_columns_from_schema(template_id)
-    _sheetops._write_two_column_copy_sheet(
-        workbook=workbook,
-        title=context["course_metadata_sheet"],
-        header=context["course_metadata_headers"],
-        rows=context["metadata_rows"],
-        header_fmt=header_fmt,
-        body_fmt=body_fmt,
-    )
-    _sheetops._write_multi_column_copy_sheet(
-        workbook=workbook,
-        title=context["assessment_sheet"],
-        header=context["assessment_headers"],
-        rows=context["assessment_rows"],
-        header_fmt=header_fmt,
-        body_fmt=body_fmt,
-        num_fmt=num_fmt,
-        metadata_rows=context["metadata_rows"],
-        wrapped_body_fmt=wrapped_body_fmt,
-        wrap_columns=assessment_wrap_columns,
-        fit_all_columns_single_page=True,
-    )
-    _sheetops._write_multi_column_copy_sheet(
-        workbook=workbook,
-        title=context["question_map_sheet"],
-        header=context["question_map_headers"],
-        rows=context["question_rows"],
-        header_fmt=header_fmt,
-        body_fmt=body_fmt,
-        num_fmt=num_fmt,
-        metadata_rows=context["metadata_rows"],
-        wrapped_body_fmt=wrapped_body_fmt,
-        fit_all_columns_single_page=True,
-    )
-    _sheetops._write_multi_column_copy_sheet(
-        workbook=workbook,
-        title=context["students_sheet"],
-        header=context["students_output_headers"],
-        rows=context["students_output_rows"],
-        header_fmt=header_fmt,
-        body_fmt=body_fmt,
-        num_fmt=num_fmt,
-        metadata_rows=context["metadata_rows"],
-        wrapped_body_fmt=wrapped_body_fmt,
-        wrapped_column_fmt=wrapped_column_fmt,
-        use_common_student_columns=True,
-    )
-
     for plan in component_plans:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
@@ -724,6 +678,56 @@ def _write_marks_template_workbook(
                 wrapped_column_fmt,
             )
 
+    _sheetops._write_two_column_copy_sheet(
+        workbook=workbook,
+        title=context["course_metadata_sheet"],
+        header=context["course_metadata_headers"],
+        rows=context["metadata_rows"],
+        header_fmt=header_fmt,
+        body_fmt=body_fmt,
+    )
+    _sheetops._write_multi_column_copy_sheet(
+        workbook=workbook,
+        title=context["assessment_sheet"],
+        header=context["assessment_headers"],
+        rows=context["assessment_rows"],
+        header_fmt=header_fmt,
+        body_fmt=body_fmt,
+        num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        wrapped_column_fmt=unbordered_wrapped_column_fmt,
+        wrap_columns=assessment_wrap_columns,
+        fit_all_columns_single_page=True,
+        header_row_height=18.0,
+    )
+    _sheetops._write_multi_column_copy_sheet(
+        workbook=workbook,
+        title=context["question_map_sheet"],
+        header=context["question_map_headers"],
+        rows=context["question_rows"],
+        header_fmt=header_fmt,
+        body_fmt=body_fmt,
+        num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        fit_all_columns_single_page=True,
+    )
+    _sheetops._write_multi_column_copy_sheet(
+        workbook=workbook,
+        title=context["students_sheet"],
+        header=context["students_output_headers"],
+        rows=context["students_output_rows"],
+        header_fmt=header_fmt,
+        body_fmt=body_fmt,
+        num_fmt=num_fmt,
+        metadata_rows=context["metadata_rows"],
+        wrapped_body_fmt=wrapped_body_fmt,
+        wrapped_column_fmt=wrapped_column_fmt,
+        wrap_columns=(2,),
+        use_common_student_columns=True,
+    )
+
     return {
         "schema_version": WORKBOOK_INTEGRITY_SCHEMA_VERSION,
         LAYOUT_MANIFEST_KEY_SHEET_ORDER: [entry[LAYOUT_SHEET_SPEC_KEY_NAME] for entry in layout_sheets]
@@ -756,7 +760,7 @@ def _precompute_marks_layout_manifest(
     total_outcomes = context["total_outcomes"]
     student_identity_hash = _sheetops._student_identity_hash(students)
 
-    layout_sheets: list[dict[str, Any]] = [
+    support_layout_sheets: list[dict[str, Any]] = [
         _sheetops._build_two_column_copy_sheet_spec(
             title=context["course_metadata_sheet"],
             header=context["course_metadata_headers"],
@@ -781,6 +785,7 @@ def _precompute_marks_layout_manifest(
             metadata_rows=metadata_rows,
         ),
     ]
+    layout_sheets: list[dict[str, Any]] = []
     component_plans: list[dict[str, Any]] = []
 
     used_sheet_names = {
@@ -857,6 +862,7 @@ def _precompute_marks_layout_manifest(
                 }
             )
 
+    layout_sheets.extend(support_layout_sheets)
     return layout_sheets, component_plans
 
 

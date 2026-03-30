@@ -58,7 +58,7 @@ from common.removable_file_item_widget import (
 from common.removable_file_item_widget import (
     RemovableFileItemWidget as _SharedRemovableFileItemWidget,
 )
-from common.i18n import t
+from common.i18n import get_language, t
 from common.ui_stylings import (
     COORDINATOR_DROP_LIST_ITEM_SPACING,
     COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
@@ -96,6 +96,8 @@ from services import CoordinatorWorkflowService
 _logger = logging.getLogger(__name__)
 _QT_COMPAT_EXPORTS = (QListWidget,)
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
+_TAMIL_LANGUAGE_CODES = {"ta-in", "ta_in"}
+_TAMIL_COMPACT_TEXT_STYLE = "font-size: 12px;"
 
 
 def _has_valid_final_co_report(path: Path) -> bool:
@@ -498,10 +500,15 @@ class CoordinatorModule(QWidget):
         self.co_attainment_description_label.setText(t("coordinator.co_attainment.description"))
         self.co_attainment_percent_label.setText(t("coordinator.co_attainment.percent.label"))
         self.co_attainment_level_label.setText(t("coordinator.co_attainment.level.label"))
+        self._apply_locale_text_density()
         self._refresh_summary()
 
-    def _publish_status(self, message: str) -> None:
-        self._runtime.publish_status(message)
+    def _apply_locale_text_density(self) -> None:
+        is_tamil = get_language().strip().lower() in _TAMIL_LANGUAGE_CODES
+        style = _TAMIL_COMPACT_TEXT_STYLE if is_tamil else ""
+        self.hint_label.setStyleSheet(style)
+        self.threshold_description_label.setStyleSheet(style)
+        self.co_attainment_description_label.setStyleSheet(style)
 
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
         self._runtime.publish_status_key(text_key, **kwargs)
@@ -661,9 +668,6 @@ class CoordinatorModule(QWidget):
 
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()
-
-    def _append_user_log(self, message: str) -> None:
-        self._runtime.append_user_log(message)
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())

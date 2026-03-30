@@ -234,3 +234,45 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
     assert per_file_prompts == []
     assert len(module.marks_template_paths) == len(source_paths)
     _dispose_widget(module, qapp)
+
+
+def test_course_details_validation_uses_shared_batch_feedback(
+    monkeypatch: pytest.MonkeyPatch, qapp: QApplication
+) -> None:
+    module = _build_instructor_module(monkeypatch)
+    monkeypatch.setattr(
+        instructor_ui.InstructorModule,
+        "_start_async_operation",
+        _run_async_inline,
+    )
+    monkeypatch.setattr(
+        instructor_ui,
+        "validate_workbooks",
+        lambda **kwargs: {
+            "valid_paths": ["C:/valid.xlsx"],
+            "invalid_paths": ["C:/invalid.xlsx"],
+            "mismatched_paths": [],
+            "duplicate_paths": [],
+            "duplicate_sections": [],
+            "rejections": [
+                {
+                    "path": "C:/invalid.xlsx",
+                    "issue": {
+                        "code": "COURSE_DETAILS_COHORT_MISMATCH",
+                        "translation_key": "validation.course_details.cohort_mismatch",
+                        "message": "mismatch",
+                        "context": {"workbook": "C:/invalid.xlsx", "fields": "Course_Code"},
+                    },
+                }
+            ],
+            "total": len(kwargs.get("workbook_paths", [])),
+        },
+    )
+
+    module._upload_course_details_from_paths_async(["C:/valid.xlsx", "C:/invalid.xlsx"])
+
+    assert any(
+        "validation.batch.title_error" in str(entry.get("message", ""))
+        for entry in getattr(module, "_user_log_entries", [])
+    )
+    _dispose_widget(module, qapp)

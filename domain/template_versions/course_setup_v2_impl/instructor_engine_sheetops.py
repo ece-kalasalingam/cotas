@@ -144,6 +144,7 @@ def _write_multi_column_copy_sheet(
     wrap_columns: Sequence[int] = (),
     fit_all_columns_single_page: bool = False,
     use_common_student_columns: bool = False,
+    header_row_height: float | None = None,
 ) -> None:
     ws = workbook.add_worksheet(title)
     metadata = list(metadata_rows or [])
@@ -155,6 +156,8 @@ def _write_multi_column_copy_sheet(
         ws.write(row_index, 2, row[1] if len(row) > 1 else "", metadata_value_fmt)
 
     ws.write_row(header_row_index, 0, list(header), header_fmt)
+    if header_row_height is not None:
+        ws.set_row(header_row_index, header_row_height)
 
     first_data_row = header_row_index + 1
     for row_index, row in enumerate(rows, start=first_data_row):
@@ -324,9 +327,10 @@ def _build_direct_co_wise_sheet_spec(
         first_data_row = header_start_row + 3
         first_mark_col = _excel_col_name(3)
         last_mark_col = _excel_col_name(total_col - 1)
-        first_row_formula = _FORMULA_SUM_TEMPLATE.format(
-            start=f"{first_mark_col}{first_data_row + 1}",
-            end=f"{last_mark_col}{first_data_row + 1}",
+        first_row_formula = _build_total_formula_with_absent(
+            first_mark_col_name=first_mark_col,
+            last_mark_col_name=last_mark_col,
+            row_1_based=first_data_row + 1,
         )
         formula_anchors.append([f"{_excel_col_name(total_col)}{first_data_row + 1}", first_row_formula])
 
@@ -511,9 +515,10 @@ def _write_direct_co_wise_sheet(
         ws.write_formula(
             row_offset,
             total_col,
-            _FORMULA_SUM_TEMPLATE.format(
-                start=f"{first_mark_col}{row_offset + 1}",
-                end=f"{last_mark_col}{row_offset + 1}",
+            _build_total_formula_with_absent(
+                first_mark_col_name=first_mark_col,
+                last_mark_col_name=last_mark_col,
+                row_1_based=row_offset + 1,
             ),
             num_fmt,
         )
@@ -860,6 +865,19 @@ def _build_direct_non_co_formula(
     )
 
 
+def _build_total_formula_with_absent(
+    *,
+    first_mark_col_name: str,
+    last_mark_col_name: str,
+    row_1_based: int,
+) -> str:
+    marks_range = f"{first_mark_col_name}{row_1_based}:{last_mark_col_name}{row_1_based}"
+    return (
+        f'=IF(COUNTIF({marks_range},"A")+COUNTIF({marks_range},"a")>0,'
+        f'"A",SUM({marks_range}))'
+    )
+
+
 def _build_marks_validation_error_message(max_marks_value: Any) -> str:
     coerced_max = coerce_excel_number(max_marks_value)
     if isinstance(coerced_max, bool) or not isinstance(coerced_max, (int, float)):
@@ -1063,7 +1081,5 @@ def write_schema_sheet(
     if sheet_schema.is_protected:
         _protect_sheet(worksheet)
     return worksheet
-
-
 
 

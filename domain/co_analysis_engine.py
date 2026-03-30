@@ -39,6 +39,7 @@ from common.workbook_integrity.constants import SYSTEM_LAYOUT_SHEET
 from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
 from domain.template_strategy_router import (
     assert_template_id_matches,
+    generate_workbook,
     get_template_strategy,
     read_valid_template_id_from_system_hash_sheet,
 )
@@ -64,6 +65,7 @@ _VALIDATION_REASON_MARKS_UNFILLED = "marks_unfilled"
 _VALIDATION_REASON_LAYOUT_OR_MANIFEST = "layout_or_manifest"
 _VALIDATION_REASON_TEMPLATE_MISMATCH = "template_mismatch"
 _VALIDATION_REASON_MARK_VALUE = "mark_value"
+_VALIDATION_REASON_COHORT_MISMATCH = "cohort_mismatch"
 _VALIDATION_REASON_OTHER = "other_validation"
 COURSE_METADATA_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
 STUDENTS_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_STUDENTS)
@@ -101,7 +103,7 @@ def analyze_uploaded_workbooks(
     unsupported_or_missing_files = 0
     invalid_source_workbook_files = 0
     duplicate_reg_number_files = 0
-    co_count_mismatch_files = 0
+    cohort_mismatch_files = 0
     invalid_system_hash_files = 0
     invalid_marks_unfilled_files = 0
     invalid_layout_manifest_files = 0
@@ -128,20 +130,27 @@ def analyze_uploaded_workbooks(
             if warnings:
                 anomaly_warnings.extend([f"{path.name} -> {msg}" for msg in warnings])
         except ValidationError as exc:
-            invalid_source_workbook_files += 1
-            invalid += 1
             reason = _classify_validation_reason(exc)
+            invalid += 1
             if reason == _VALIDATION_REASON_SYSTEM_HASH:
+                invalid_source_workbook_files += 1
                 invalid_system_hash_files += 1
             elif reason == _VALIDATION_REASON_MARKS_UNFILLED:
+                invalid_source_workbook_files += 1
                 invalid_marks_unfilled_files += 1
             elif reason == _VALIDATION_REASON_LAYOUT_OR_MANIFEST:
+                invalid_source_workbook_files += 1
                 invalid_layout_manifest_files += 1
             elif reason == _VALIDATION_REASON_TEMPLATE_MISMATCH:
+                invalid_source_workbook_files += 1
                 invalid_template_mismatch_files += 1
             elif reason == _VALIDATION_REASON_MARK_VALUE:
+                invalid_source_workbook_files += 1
                 invalid_mark_value_files += 1
+            elif reason == _VALIDATION_REASON_COHORT_MISMATCH:
+                cohort_mismatch_files += 1
             else:
+                invalid_source_workbook_files += 1
                 invalid_other_validation_files += 1
             validation_failures.append(
                 {
@@ -198,7 +207,7 @@ def analyze_uploaded_workbooks(
             invalid += 1
             continue
         if baseline_total_outcomes is not None and total_outcomes is not None and total_outcomes != baseline_total_outcomes:
-            co_count_mismatch_files += 1
+            cohort_mismatch_files += 1
             invalid += 1
             continue
         is_duplicate = False
@@ -224,7 +233,8 @@ def analyze_uploaded_workbooks(
         "invalid_source_workbook_files": invalid_source_workbook_files,
         "anomaly_warnings": anomaly_warnings,
         "duplicate_reg_number_files": duplicate_reg_number_files,
-        "co_count_mismatch_files": co_count_mismatch_files,
+        "cohort_mismatch_files": cohort_mismatch_files,
+        "co_count_mismatch_files": cohort_mismatch_files,
         "invalid_system_hash_files": invalid_system_hash_files,
         "invalid_marks_unfilled_files": invalid_marks_unfilled_files,
         "invalid_layout_manifest_files": invalid_layout_manifest_files,
@@ -257,6 +267,8 @@ def _classify_validation_reason(exc: ValidationError) -> str:
         return _VALIDATION_REASON_LAYOUT_OR_MANIFEST
     if code in {"unknown_template", "coa_template_validator_missing"}:
         return _VALIDATION_REASON_TEMPLATE_MISMATCH
+    if code in {"marks_template_cohort_mismatch"}:
+        return _VALIDATION_REASON_COHORT_MISMATCH
     if code in {
         "coa_mark_value_invalid",
         "coa_mark_precision_invalid",
@@ -553,14 +565,18 @@ def build_co_analysis_workbook(
             first_report.close()
 
         coordinator_output = temp_root / "co_analysis_co_sheets.xlsx"
-        strategy = get_template_strategy(resolved_template_id)
-        strategy.generate_co_attainment(
-            generated_final_reports,
-            coordinator_output,
-            token=token or CancellationToken(),
-            thresholds=thresholds,
-            co_attainment_percent=co_attainment_percent,
-            co_attainment_level=co_attainment_level,
+        generate_workbook(
+            template_id=resolved_template_id,
+            output_path=coordinator_output,
+            workbook_name=coordinator_output.name,
+            workbook_kind="co_attainment",
+            cancel_token=token or CancellationToken(),
+            context={
+                "source_paths": [str(path) for path in generated_final_reports],
+                "thresholds": tuple(thresholds) if thresholds is not None else None,
+                "co_attainment_percent": co_attainment_percent,
+                "co_attainment_level": co_attainment_level,
+            },
         )
 
         coordinator_wb = load_workbook(coordinator_output, data_only=False)
@@ -732,4 +748,3 @@ def _merge_report_sheets(
                 row += 1
         finally:
             wb.close()
-

@@ -344,6 +344,13 @@ def build_marks_template_xlsxwriter_formats(
             "locked": False,
         }
     )
+    formats["column_wrap_unbordered"] = workbook.add_format(
+        {
+            "align": "left",
+            "valign": "vcenter",
+            "text_wrap": True,
+        }
+    )
 
     if cache_attr:
         setattr(workbook, cache_attr, formats)

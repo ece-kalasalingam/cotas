@@ -36,15 +36,16 @@ from common.constants import (
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
 from common.drag_drop_file_widget import ManagedDropFileWidget
-from common.error_catalog import validation_error_from_key
+from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
-from common.i18n import t
+from common.i18n import get_language, t
 from common.jobs import CancellationToken
 from common.attainment_policy import (
     has_valid_attainment_thresholds as _has_valid_attainment_thresholds_policy,
     has_valid_co_attainment_percent as _has_valid_co_attainment_percent_policy,
 )
 from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import build_status_message as _build_status_message
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
@@ -60,6 +61,11 @@ from modules.co_analysis.validators.uploaded_workbook_validator import (
 )
 
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
+_LEFT_PANE_SCROLLBAR_GUTTER = 12
+_LEFT_PANE_CONTENT_RIGHT_PADDING = 10
+_LEFT_PANE_TEXT_RIGHT_SAFE_GAP = 28
+_TAMIL_LANGUAGE_CODES = {"ta-in", "ta_in"}
+_TAMIL_COMPACT_TEXT_STYLE = "font-size: 12px;"
 _logger = logging.getLogger(__name__)
 _DOWNLOAD_CO_DESCRIPTION_TEMPLATE_HREF = "download-co-description-template"
 
@@ -137,8 +143,19 @@ class COAnalysisModule(QWidget):
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.viewport().setObjectName("coordinatorLeftScrollViewport")
         left_content = QWidget()
-        left_layout = QVBoxLayout(left_content)
-        left_layout.setContentsMargins(*MODULE_LEFT_PANE_CONTENT_MARGINS)
+        left_content_layout = QHBoxLayout(left_content)
+        left_margin, top_margin, right_margin, bottom_margin = MODULE_LEFT_PANE_CONTENT_MARGINS
+        left_content_layout.setContentsMargins(
+            left_margin,
+            top_margin,
+            right_margin + _LEFT_PANE_CONTENT_RIGHT_PADDING,
+            bottom_margin,
+        )
+        left_content_layout.setSpacing(0)
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, _LEFT_PANE_CONTENT_RIGHT_PADDING, 0)
+        left_content_layout.addLayout(left_layout, 1)
+        left_content_layout.addSpacing(_LEFT_PANE_SCROLLBAR_GUTTER)
         left_layout.setSpacing(MODULE_LEFT_PANE_LAYOUT_SPACING)
         left_scroll.setWidget(left_content)
         left_card_layout.addWidget(left_scroll, 1)
@@ -153,7 +170,8 @@ class COAnalysisModule(QWidget):
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
         self.hint_label.setWordWrap(True)
-        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop)
+        self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.hint_label.setMaximumWidth(_LEFT_PANE_WIDTH - _LEFT_PANE_TEXT_RIGHT_SAFE_GAP)
         left_layout.addWidget(self.hint_label)
 
         thresholds_layout = QVBoxLayout()
@@ -164,7 +182,8 @@ class COAnalysisModule(QWidget):
         thresholds_layout.addWidget(self.threshold_title_label)
         self.threshold_description_label = QLabel()
         self.threshold_description_label.setWordWrap(True)
-        self.threshold_description_label.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop)
+        self.threshold_description_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.threshold_description_label.setMaximumWidth(_LEFT_PANE_WIDTH - _LEFT_PANE_TEXT_RIGHT_SAFE_GAP)
         thresholds_layout.addWidget(self.threshold_description_label)
 
         threshold_rows = QGridLayout()
@@ -226,7 +245,8 @@ class COAnalysisModule(QWidget):
 
         self.co_attainment_description_label = QLabel()
         self.co_attainment_description_label.setWordWrap(True)
-        self.co_attainment_description_label.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignTop)
+        self.co_attainment_description_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.co_attainment_description_label.setMaximumWidth(_LEFT_PANE_WIDTH - _LEFT_PANE_TEXT_RIGHT_SAFE_GAP)
         thresholds_layout.addWidget(self.co_attainment_description_label)
 
         co_attainment_rows = QGridLayout()
@@ -351,12 +371,17 @@ class COAnalysisModule(QWidget):
         self.co_attainment_description_label.setText(t("coordinator.co_attainment.description"))
         self.co_attainment_percent_label.setText(t("coordinator.co_attainment.percent.label"))
         self.co_attainment_level_label.setText(t("coordinator.co_attainment.level.label"))
+        self._apply_locale_text_density()
         self._set_download_co_description_template_link_enabled(not self.state.busy)
         self._refresh_summary()
         self._rerender_user_log()
 
-    def _publish_status(self, message: str) -> None:
-        self._runtime.notify_message(message, channels=("status", "activity_log"))
+    def _apply_locale_text_density(self) -> None:
+        is_tamil = get_language().strip().lower() in _TAMIL_LANGUAGE_CODES
+        style = _TAMIL_COMPACT_TEXT_STYLE if is_tamil else ""
+        self.hint_label.setStyleSheet(style)
+        self.threshold_description_label.setStyleSheet(style)
+        self.co_attainment_description_label.setStyleSheet(style)
 
     def _publish_status_key(self, text_key: str, **kwargs: Any) -> None:
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
@@ -371,9 +396,6 @@ class COAnalysisModule(QWidget):
 
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()
-
-    def _append_user_log(self, message: str) -> None:
-        self._runtime.append_user_log(message)
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())
@@ -472,17 +494,23 @@ class COAnalysisModule(QWidget):
                 process_name,
                 logger=self._logger,
                 success_message=f"{process_name} completed successfully.",
-                user_success_message=t("co_analysis.status.co_description_template_generated"),
+                user_success_message=_build_status_message(
+                    "co_analysis.status.co_description_template_generated",
+                    translate=t,
+                    fallback=t("co_analysis.status.co_description_template_generated"),
+                ),
             )
-            self._runtime.notify_message_key(
-                "co_analysis.toast.co_description_template_generated",
-                channels=("toast",),
-                toast_title_key="coordinator.title",
-                toast_level="success",
+            self._runtime.emit_workbook_generation_feedback(
+                success_count=1,
+                failed_count=0,
             )
 
         def _on_failure(exc: Exception) -> None:
-            self._handle_async_failure(exc, process_name=process_name)
+            self._handle_async_failure(
+                exc,
+                process_name=process_name,
+                process_key="co_analysis.log.process.generate_co_description_template",
+            )
 
         self._start_async_operation(
             token=token,
@@ -584,17 +612,31 @@ class COAnalysisModule(QWidget):
             finally:
                 self._syncing_validated_files = False
 
+        has_rejections = bool(rejected_items)
+        has_accepted = bool(accepted_paths)
+        if has_accepted and not has_rejections:
+            self.drop_widget.set_validation_state("success")
+        elif has_accepted and has_rejections:
+            self.drop_widget.set_validation_state("warning")
+        elif has_rejections:
+            self.drop_widget.set_validation_state("error")
+        else:
+            self.drop_widget.set_validation_state("neutral")
+
         if rejected_items:
-            self._publish_status_key("coordinator.status.ignored", count=len(rejected_items))
-            for path_text, exc in rejected_items[:12]:
-                code = str(getattr(exc, "code", type(exc).__name__) or "UNKNOWN").strip() or "UNKNOWN"
-                context = self._compact_context_text(getattr(exc, "context", {}))
-                self._publish_status_key(
-                    "co_analysis.status.rejected_code_with_context",
-                    file=Path(path_text).name,
-                    code=code,
-                    context=context,
-                )
+            rejection_payloads = [
+                self._build_validation_rejection_payload(path_text=path_text, exc=exc)
+                for path_text, exc in rejected_items
+            ]
+            self._runtime.emit_validation_batch_feedback(
+                rejections=rejection_payloads,
+                valid_count=len(accepted_paths),
+            )
+        elif accepted_paths:
+            self._runtime.emit_validation_batch_feedback(
+                rejections=[],
+                valid_count=len(accepted_paths),
+            )
 
         if anomaly_warnings:
             self._publish_status_key("co_analysis.status.validation_warnings", count=len(anomaly_warnings))
@@ -607,6 +649,27 @@ class COAnalysisModule(QWidget):
 
         self._files = [Path(path) for path in accepted_paths]
         self._refresh_ui()
+
+    @staticmethod
+    def _build_validation_rejection_payload(*, path_text: str, exc: Exception) -> dict[str, object]:
+        code = str(getattr(exc, "code", type(exc).__name__) or "VALIDATION_ERROR").strip() or "VALIDATION_ERROR"
+        raw_context = getattr(exc, "context", {})
+        context = dict(raw_context) if isinstance(raw_context, dict) else {}
+        if "workbook" not in context:
+            context["workbook"] = path_text
+        fallback_reason = str(exc).strip()
+        if fallback_reason.upper() == code.upper():
+            fallback_reason = ""
+        resolved = resolve_validation_issue(code, context=context, fallback_message=fallback_reason)
+        issue_payload: dict[str, object] = {
+            "code": resolved.code,
+            "category": resolved.category,
+            "severity": resolved.severity,
+            "translation_key": resolved.translation_key,
+            "message": resolved.message,
+            "context": dict(resolved.context),
+        }
+        return {"path": path_text, "issue": issue_payload}
 
     @staticmethod
     def _compact_context_text(context: object) -> str:
@@ -625,6 +688,7 @@ class COAnalysisModule(QWidget):
         dropped_count = len([path for path in dropped_files if path])
         if dropped_count <= 0:
             return
+        self.drop_widget.set_validation_state("info")
         first_path = next((value for value in dropped_files if value), "")
         if first_path:
             self._remember_dialog_dir_safe(first_path)
@@ -634,6 +698,7 @@ class COAnalysisModule(QWidget):
         if rejected_count <= 0:
             return
         self._publish_status_key("coordinator.status.ignored", count=rejected_count)
+        self.drop_widget.set_validation_state("warning")
 
     def _browse_files(self) -> None:
         if self.state.busy:
@@ -658,6 +723,7 @@ class COAnalysisModule(QWidget):
         if cleared_count <= 0:
             return
         self._publish_status_key("coordinator.status.cleared", count=cleared_count)
+        self.drop_widget.set_validation_state("neutral")
 
     def _on_submit_requested(self) -> None:
         if self.state.busy:
@@ -692,7 +758,17 @@ class COAnalysisModule(QWidget):
             on_finally=on_finally,
         )
 
-    def _handle_async_failure(self, exc: Exception, *, process_name: str) -> None:
+    def _handle_async_failure(self, exc: Exception, *, process_name: str, process_key: str | None = None) -> None:
+        self.drop_widget.set_validation_state("error")
+        process_ref: object = process_name
+        if isinstance(process_key, str) and process_key.strip():
+            process_ref = {"__t_key__": process_key}
+        error_payload = _build_status_message(
+            "common.error_while_process",
+            translate=t,
+            kwargs={"process": process_ref},
+            fallback=t("common.error_while_process", process=process_name),
+        )
         if isinstance(exc, JobCancelledError):
             return
         if isinstance(exc, ValidationError):
@@ -702,6 +778,25 @@ class COAnalysisModule(QWidget):
                 toast_title=t("coordinator.title"),
                 toast_level="error",
             )
+            resolved = resolve_validation_issue(
+                str(getattr(exc, "code", "VALIDATION_ERROR")),
+                context=(getattr(exc, "context", {}) or {}),
+                fallback_message=str(exc),
+            )
+            validation_payload = _build_status_message(
+                resolved.translation_key,
+                translate=t,
+                kwargs=resolved.context,
+                fallback=resolved.message or str(exc),
+            )
+            log_process_message(
+                process_name,
+                logger=self._logger,
+                error=exc,
+                user_error_message=error_payload,
+                user_validation_message=validation_payload,
+            )
+            return
         elif isinstance(exc, AppSystemError):
             self._runtime.notify_message(
                 str(exc),
@@ -709,6 +804,13 @@ class COAnalysisModule(QWidget):
                 toast_title=t("coordinator.title"),
                 toast_level="error",
             )
+            log_process_message(
+                process_name,
+                logger=self._logger,
+                error=exc,
+                user_error_message=error_payload,
+            )
+            return
         else:
             self._runtime.notify_message_key(
                 "co_analysis.msg.failed_to_generate_co_description_template",
@@ -716,7 +818,12 @@ class COAnalysisModule(QWidget):
                 toast_title_key="coordinator.title",
                 toast_level="error",
             )
-        log_process_message(process_name, logger=self._logger, error=exc, user_error_message=str(exc))
+        log_process_message(
+            process_name,
+            logger=self._logger,
+            error=exc,
+            user_error_message=error_payload,
+        )
 
     def _output_items(self) -> tuple[OutputItem, ...]:
         return tuple(

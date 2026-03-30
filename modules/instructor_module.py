@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
+from typing import Mapping, cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -264,6 +264,7 @@ class InstructorModule(QWidget):
         selected_paths = [path for path in dropped_files if path]
         if not selected_paths:
             return
+        self.course_details_drop_widget.set_validation_state("info")
         self._upload_course_details_from_paths_async(selected_paths)
 
     def _on_course_details_files_rejected(self, files: list[str]) -> None:
@@ -271,11 +272,13 @@ class InstructorModule(QWidget):
         if rejected_count <= 0:
             return
         self._publish_status_key("instructor.status.course_details_drop_files_rejected", count=rejected_count)
+        self.course_details_drop_widget.set_validation_state("warning")
 
     def _on_clear_course_details_clicked(self) -> None:
         if self.state.busy:
             return
         self.course_details_drop_widget.clear_files()
+        self.course_details_drop_widget.set_validation_state("neutral")
 
     def _on_course_details_files_changed(self, files: list[str]) -> None:
         if self.state.busy:
@@ -369,12 +372,9 @@ class InstructorModule(QWidget):
                 success_message=f"{process_name} completed successfully.",
                 user_success_message=user_success_message,
             )
-            self._runtime.notify_message_key(
-                "instructor.log.completed_process",
-                channels=("toast",),
-                kwargs={"process": t(process_key)},
-                toast_title_key="instructor.msg.success_title",
-                toast_level="success",
+            self._runtime.emit_workbook_generation_feedback(
+                success_count=1,
+                failed_count=0,
             )
 
         def _on_failure(exc: Exception) -> None:
@@ -472,20 +472,20 @@ class InstructorModule(QWidget):
             )
 
             duplicate_count = len(duplicate_paths) + len(duplicate_sections)
-            self._publish_course_details_rejection_details(rejection_items)
-            if invalid_paths or mismatched_paths or duplicate_count:
-                self._runtime.notify_message_key(
-                    "instructor.toast.course_details_validation_summary",
-                    channels=("toast",),
-                    kwargs={
-                        "valid": len(self.course_details_paths),
-                        "invalid": len(invalid_paths),
-                        "mismatched": len(mismatched_paths),
-                        "duplicates": duplicate_count,
-                    },
-                    toast_title_key="instructor.msg.validation_title",
-                    toast_level="warning",
-                )
+            self._runtime.emit_validation_batch_feedback(
+                rejections=cast(list[Mapping[str, object]], rejection_items),
+                valid_count=len(self.course_details_paths),
+            )
+            has_rejections = bool(invalid_paths or mismatched_paths or duplicate_count)
+            has_valid = bool(self.course_details_paths)
+            if has_valid and not has_rejections:
+                self.course_details_drop_widget.set_validation_state("success")
+            elif has_valid and has_rejections:
+                self.course_details_drop_widget.set_validation_state("warning")
+            elif has_rejections:
+                self.course_details_drop_widget.set_validation_state("error")
+            else:
+                self.course_details_drop_widget.set_validation_state("neutral")
 
         def _on_failure(exc: Exception) -> None:
             self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
@@ -585,7 +585,6 @@ class InstructorModule(QWidget):
                         reason = str(item.get("reason") or "").strip()
                         failed.append({"source": source, "reason": reason or "failed"})
                 total = int(data.get("total", 0))
-                skipped = int(data.get("skipped", 0))
 
                 self._publish_status_key(
                     "instructor.status.marks_template_generation_progress",
@@ -610,18 +609,9 @@ class InstructorModule(QWidget):
                     success_message=f"{process_name} completed successfully.",
                     user_success_message=user_success_message,
                 )
-                self._runtime.notify_message_key(
-                    "instructor.toast.marks_template_generation_summary",
-                    channels=("toast",),
-                    kwargs={
-                        "generated": len(self.marks_template_paths),
-                        "processed": total,
-                        "total": total,
-                        "failed": len(failed),
-                        "skipped": skipped,
-                    },
-                    toast_title_key="instructor.msg.success_title",
-                    toast_level="success" if self.marks_template_paths else "warning",
+                self._runtime.emit_workbook_generation_feedback(
+                    success_count=len(self.marks_template_paths),
+                    failed_count=len(failed),
                 )
 
             def _on_failure(exc: Exception) -> None:
@@ -658,30 +648,12 @@ class InstructorModule(QWidget):
         finally:
             self._syncing_drop_widget_files = False
 
-    def _publish_course_details_rejection_details(self, rejection_items: list[dict[str, object]]) -> None:
-        for item in rejection_items:
-            issue_payload = item.get("issue")
-            if not isinstance(issue_payload, dict):
-                continue
-            workbook = item.get("path")
-            file_path = str(workbook).strip() if isinstance(workbook, str) else None
-            self._runtime.notify_validation_issue(
-                cast(dict[str, object], issue_payload),
-                file_path=file_path,
-                channels=("status", "activity_log"),
-            )
-
     def _setup_ui_logging(self) -> None:
         self._runtime.setup_ui_logging()
 
-    def _append_user_log(self, message: str) -> None:
-        self._runtime.append_user_log(message)
-
-    def _publish_status(self, message: str) -> None:
-        self._runtime.notify_message(message, channels=("status", "activity_log"))
-
     def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
+
 
     def _rerender_user_log(self) -> None:
         _rerender_user_log_impl(self, ns=_messages_namespace())
@@ -745,6 +717,7 @@ class InstructorModule(QWidget):
         return chosen_output
 
     def _handle_async_failure(self, exc: Exception, *, process_name: str, user_error_message: str) -> None:
+        self.course_details_drop_widget.set_validation_state("error")
         if isinstance(exc, JobCancelledError):
             return
         if isinstance(exc, ValidationError):

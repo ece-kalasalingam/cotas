@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="en_US">
   <context>
     <name>main</name>
@@ -99,16 +99,16 @@
       <translation>Failed to generate CO Description template at '{output}'.</translation>
     </message>
     <message>
-      <source>co_analysis.status.co_count_mismatch</source>
-      <translation>{count} file(s) rejected due to Total Outcomes mismatch.</translation>
+      <source>co_analysis.status.cohort_mismatch</source>
+      <translation>{count} file(s) rejected due to cohort mismatch (Course Code, Semester, Academic Year, or Total Outcomes).</translation>
     </message>
     <message>
       <source>co_analysis.status.duplicate_reg_numbers</source>
       <translation>{count} file(s) rejected due to duplicate register numbers.</translation>
     </message>
     <message>
-      <source>co_analysis.status.ignored_reason.co_count_mismatch</source>
-      <translation>Total Outcomes Mismatch={count}</translation>
+      <source>co_analysis.status.ignored_reason.cohort_mismatch</source>
+      <translation>Cohort Mismatch={count}</translation>
     </message>
     <message>
       <source>co_analysis.status.ignored_reason.duplicate_reg</source>
@@ -179,8 +179,8 @@
       <translation>{count} validation anomaly warning(s) were reported in uploaded files.</translation>
     </message>
     <message>
-      <source>co_analysis.validation.co_count_mismatch_body</source>
-      <translation>{count} file(s) were rejected because Total Outcomes differs from the selected batch.</translation>
+      <source>co_analysis.validation.cohort_mismatch_body</source>
+      <translation>{count} file(s) were rejected because cohort metadata differs from the selected batch.</translation>
     </message>
     <message>
       <source>co_analysis.validation.rejection_breakdown_body</source>
@@ -195,7 +195,7 @@ Invalid Mark Value/Format: {mark_value}
 Other Validation Failures: {invalid_other}
 Duplicates: {duplicates}
 Duplicate Register Numbers: {duplicate_reg}
-Total Outcomes Mismatch: {co_count_mismatch}</translation>
+Cohort Mismatch: {cohort_mismatch}</translation>
     </message>
     <message>
       <source>co_analysis.validation.rejection_breakdown_title</source>
@@ -628,12 +628,28 @@ Total Outcomes Mismatch: {co_count_mismatch}</translation>
       <translation>Failed to generate course details template at '{output}'.</translation>
     </message>
     <message>
-      <source>instructor.toast.course_details_validation_summary</source>
-      <translation>Validation complete: {valid} valid, {invalid} invalid, {mismatched} wrong template, {duplicates} duplicate input.</translation>
+      <source>instructor.toast.marks_template_generation_summary</source>
+      <translation>Marks template generation complete: {segments}.</translation>
     </message>
     <message>
-      <source>instructor.toast.marks_template_generation_summary</source>
-      <translation>Marks template generation complete: processed {processed}/{total}, generated {generated}, failed {failed}, skipped {skipped}.</translation>
+      <source>instructor.toast.marks_template_generation_segment_processed</source>
+      <translation>processed {processed}/{total}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_generated</source>
+      <translation>generated {generated}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_failed</source>
+      <translation>failed {failed}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_skipped</source>
+      <translation>skipped {skipped}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_none</source>
+      <translation>no changes</translation>
     </message>
     <message>
       <source>instructor.toast.validation_warnings_body</source>
@@ -1102,6 +1118,74 @@ Details: {error}</translation>
       <translation>Navigation</translation>
     </message>
     <message>
+      <source>validation.batch.accepted_count</source>
+      <translation>Accepted: {count}</translation>
+    </message>
+    <message>
+      <source>validation.batch.activity_line</source>
+      <translation>{title}{accepted}{rejected}{details}</translation>
+    </message>
+    <message>
+      <source>validation.batch.activity_segment</source>
+      <translation> | {segment}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_prefix</source>
+      <translation>Details: {details}</translation>
+    </message>
+    <message>
+      <source>validation.batch.detail_entry</source>
+      <translation>{file}: [{code}] {reason}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_1</source>
+      <translation>{entry1}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_2</source>
+      <translation>{entry1}; {entry2}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_3</source>
+      <translation>{entry1}; {entry2}; {entry3}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_3_more</source>
+      <translation>{entry1}; {entry2}; {entry3}; {more}</translation>
+    </message>
+    <message>
+      <source>validation.batch.more_suffix</source>
+      <translation>+{count} more</translation>
+    </message>
+    <message>
+      <source>validation.batch.rejected_count</source>
+      <translation>Rejected: {count}</translation>
+    </message>
+    <message>
+      <source>validation.batch.title_error</source>
+      <translation>Validation Error</translation>
+    </message>
+    <message>
+      <source>validation.batch.title_success</source>
+      <translation>Validation Success</translation>
+    </message>
+    <message>
+      <source>workbook.generation.summary</source>
+      <translation>Workbook(s) generated: {segments}</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.success</source>
+      <translation>Success ({count})</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.failed</source>
+      <translation>Failed ({count})</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.none</source>
+      <translation>No outputs</translation>
+    </message>
+    <message>
       <source>validation.course_details.cohort_mismatch</source>
       <translation>Cohort mismatch in {workbook}. These fields must match the first valid file: {fields}.</translation>
     </message>
@@ -1116,6 +1200,34 @@ Details: {error}</translation>
     <message>
       <source>validation.course_details.unexpected_rejection</source>
       <translation>File was skipped due to an unexpected validation failure: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.cohort_mismatch</source>
+      <translation>Cohort mismatch in {workbook}. These fields must match the first valid file: {fields}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_path</source>
+      <translation>Duplicate file path skipped: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_section</source>
+      <translation>Duplicate section skipped for this cohort (section '{section}') in file: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_reg_no</source>
+      <translation>Duplicate student register number found in file: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.unexpected_rejection</source>
+      <translation>File was skipped due to an unexpected validation failure: {workbook}.</translation>
+    </message>
+    <message>
+      <source>common.error_while_process</source>
+      <translation>An error occurred while {process}.</translation>
+    </message>
+    <message>
+      <source>common.validation_failed_invalid_data</source>
+      <translation>Validation failed due to invalid workbook data.</translation>
     </message>
     <message>
       <source>validation.dependency.openpyxl_missing</source>
@@ -1203,3 +1315,4 @@ Details: {error}</translation>
     </message>
   </context>
 </TS>
+

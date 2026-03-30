@@ -9,7 +9,8 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
 from common.constants import ID_COURSE_SETUP
-from domain.co_analysis_engine import generate_co_analysis_workbook
+from common.exceptions import ValidationError
+from domain.co_analysis_engine import _classify_validation_reason, generate_co_analysis_workbook
 from domain.template_strategy_router import (
     generate_workbook,
     generate_workbooks,
@@ -124,3 +125,77 @@ def test_generate_co_analysis_workbook_creates_direct_indirect_and_co_sheets(tmp
         assert co_sheet.cell(row=1, column=3).value is not None
     finally:
         wb.close()
+
+
+def test_build_co_analysis_workbook_routes_co_attainment_via_router(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from domain import co_analysis_engine as engine_mod
+
+    source = tmp_path / "source.xlsx"
+    wb_source = openpyxl.Workbook()
+    wb_source.save(source)
+    wb_source.close()
+
+    captured: dict[str, object] = {}
+
+    class _FakeStrategy:
+        def generate_final_report(self, source_path: Path, output_path: Path, *, cancel_token=None) -> None:
+            del source_path
+            del cancel_token
+            wb = openpyxl.Workbook()
+            ws_meta = wb.active
+            ws_meta.title = "Course_Metadata"
+            ws_meta["A1"] = "Field"
+            ws_meta["B1"] = "Value"
+            ws_meta["A2"] = "Total Outcomes"
+            ws_meta["B2"] = 1
+            wb.create_sheet("CO1_Direct")
+            wb.create_sheet("CO1_Indirect")
+            wb.save(output_path)
+            wb.close()
+
+    def _fake_generate_workbook(**kwargs):
+        captured.update(kwargs)
+        out_path = Path(kwargs["output_path"])
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "CO1"
+        ws["A1"] = "Course Code"
+        ws["B1"] = "CS101"
+        wb.save(out_path)
+        wb.close()
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(engine_mod, "read_valid_template_id_from_system_hash_sheet", lambda _wb: ID_COURSE_SETUP)
+    monkeypatch.setattr(engine_mod, "_course_metadata_headers", lambda _tid: ("Field", "Value"))
+    monkeypatch.setattr(engine_mod, "_style_registry_for_template", lambda _tid: ({"bg_color": "#FFFFFF"}, {}))
+    monkeypatch.setattr(engine_mod, "_protect_openpyxl_sheet", lambda _sheet: None)
+    monkeypatch.setattr(engine_mod, "_merge_report_sheets", lambda **kwargs: None)
+    monkeypatch.setattr(engine_mod, "_read_total_outcomes_from_course_metadata", lambda _wb: 1)
+    monkeypatch.setattr(engine_mod, "get_template_strategy", lambda _tid: _FakeStrategy())
+    monkeypatch.setattr(engine_mod, "generate_workbook", _fake_generate_workbook)
+
+    output = tmp_path / "co_analysis.xlsx"
+    result = engine_mod.build_co_analysis_workbook(
+        output,
+        [(set(["r1"]), {"section": "A"})],
+        source_paths=[source],
+        thresholds=(40.0, 60.0, 75.0),
+        co_attainment_percent=80.0,
+        co_attainment_level=2,
+    )
+
+    assert result == output
+    assert captured["workbook_kind"] == "co_attainment"
+    assert captured["template_id"] == ID_COURSE_SETUP
+    context = captured["context"]
+    assert isinstance(context, dict)
+    assert context["co_attainment_percent"] == 80.0
+    assert context["co_attainment_level"] == 2
+
+
+def test_classify_validation_reason_maps_marks_cohort_mismatch_code() -> None:
+    exc = ValidationError("cohort mismatch", code="MARKS_TEMPLATE_COHORT_MISMATCH")
+    assert _classify_validation_reason(exc) == "cohort_mismatch"

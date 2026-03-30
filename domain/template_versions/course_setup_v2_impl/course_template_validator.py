@@ -30,24 +30,29 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.sheet_schema import SheetSchema, ValidationRule
 from common.sample_setup_data import SAMPLE_SETUP_DATA
+from common.sheet_schema import SheetSchema, ValidationRule
 from common.utils import (
-    canonical_path_key,
     coerce_excel_number,
     normalize,
 )
 from common.workbook_integrity import read_valid_template_id_from_system_hash_sheet
+from domain.template_strategy_router import (
+    assert_template_id_matches,
+)
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
     parse_assessment_components,
 )
-from domain.template_versions.course_setup_v2_impl.co_token_parser import parse_co_tokens
+from domain.template_versions.course_setup_v2_impl.co_token_parser import (
+    parse_co_tokens,
+)
 from domain.template_versions.course_setup_v2_impl.schema_columns import (
     column_index_by_key,
     required_column_index,
 )
-from domain.template_strategy_router import (
-    assert_template_id_matches,
+from domain.template_versions.course_setup_v2_impl.validation_batch_runner import (
+    BatchValidationAccumulator,
+    BatchValidationRunner,
 )
 
 _TEMPLATE_ID = "COURSE_SETUP_V2"
@@ -180,151 +185,26 @@ def validate_course_details_workbooks(
     *,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, object]:
-    unique_paths: list[str] = []
-    seen_path_keys: set[str] = set()
-    duplicate_paths: list[str] = []
-    for raw in workbook_paths:
-        path = str(raw).strip()
-        if not path:
-            continue
-        key = canonical_path_key(path)
-        if key in seen_path_keys:
-            duplicate_paths.append(path)
-            continue
-        seen_path_keys.add(key)
-        unique_paths.append(path)
-
-    valid_paths: list[str] = []
-    invalid_paths: list[str] = []
-    mismatched_paths: list[str] = []
-    duplicate_sections: list[str] = []
-    template_ids: dict[str, str] = {}
-    baseline_cohort: tuple[str, str, str, int] | None = None
-    baseline_identity: _CourseIdentity | None = None
-    seen_sections: set[str] = set()
-    rejections: list[dict[str, object]] = []
-
-    for path in duplicate_paths:
-        issue = _issue_dict(
-            code="COURSE_DETAILS_DUPLICATE_PATH",
-            context={"workbook": path},
-            fallback_message="Duplicate file path skipped.",
-        )
-        rejections.append(
-            {
-                "path": path,
-                "reason_kind": "duplicate_path",
-                "issue": issue,
-            }
+    def _validate_path(path: str) -> _CourseIdentity:
+        return _validate_course_details_workbook_impl(
+            workbook_path=path,
+            cancel_token=cancel_token,
         )
 
-    for path in unique_paths:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        try:
-            identity = _validate_course_details_workbook_impl(
-                workbook_path=path,
-                cancel_token=cancel_token,
-            )
-        except JobCancelledError:
-            raise
-        except ValidationError as exc:
-            invalid_paths.append(path)
-            issue = _issue_dict(
-                code=str(getattr(exc, "code", "VALIDATION_ERROR")),
-                context=dict(getattr(exc, "context", {}) or {}),
-                fallback_message=str(exc).strip() or "Validation failed.",
-            )
-            rejections.append(
-                {
-                    "path": path,
-                    "reason_kind": "invalid",
-                    "issue": issue,
-                }
-            )
-            continue
-        except Exception as exc:
-            invalid_paths.append(path)
-            issue = _issue_dict(
-                code="COURSE_DETAILS_UNEXPECTED_REJECTION",
-                context={"workbook": path},
-                fallback_message=str(exc).strip() or "File skipped due to an unexpected validation failure.",
-            )
-            rejections.append(
-                {
-                    "path": path,
-                    "reason_kind": "invalid",
-                    "issue": issue,
-                }
-            )
-            continue
-        cohort = identity.cohort_key()
-        if baseline_cohort is None:
-            baseline_cohort = cohort
-            baseline_identity = identity
-        elif cohort != baseline_cohort:
-            mismatched_paths.append(path)
-            mismatch_fields: list[str] = []
-            if baseline_identity is not None:
-                if normalize(identity.course_code) != normalize(baseline_identity.course_code):
-                    mismatch_fields.append(COURSE_METADATA_COURSE_CODE_KEY)
-                if normalize(identity.semester) != normalize(baseline_identity.semester):
-                    mismatch_fields.append(COURSE_METADATA_SEMESTER_KEY)
-                if normalize(identity.academic_year) != normalize(baseline_identity.academic_year):
-                    mismatch_fields.append(COURSE_METADATA_ACADEMIC_YEAR_KEY)
-                if int(identity.total_outcomes) != int(baseline_identity.total_outcomes):
-                    mismatch_fields.append(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
-            issue = _issue_dict(
-                code="COURSE_DETAILS_COHORT_MISMATCH",
-                context={
-                    "workbook": path,
-                    "fields": ", ".join(mismatch_fields) if mismatch_fields else "cohort",
-                },
-                fallback_message=(
-                    "File skipped because course cohort metadata does not match "
-                    "(course code, semester, academic year, total outcomes must match)."
-                ),
-            )
-            rejections.append(
-                {
-                    "path": path,
-                    "reason_kind": "cohort_mismatch",
-                    "issue": issue,
-                }
-            )
-            continue
-        section_key = normalize(identity.section)
-        if section_key in seen_sections:
-            duplicate_sections.append(path)
-            issue = _issue_dict(
-                code="COURSE_DETAILS_SECTION_DUPLICATE",
-                context={
-                    "workbook": path,
-                    "section": identity.section,
-                },
-                fallback_message="Duplicate section skipped for same course cohort.",
-            )
-            rejections.append(
-                {
-                    "path": path,
-                    "reason_kind": "duplicate_section",
-                    "issue": issue,
-                }
-            )
-            continue
-        seen_sections.add(section_key)
-        valid_paths.append(path)
-        template_ids[canonical_path_key(path)] = identity.template_id
+    def _on_validated(acc: BatchValidationAccumulator, path: str, identity: _CourseIdentity) -> None:
+        acc.add_valid(path=path, template_id=identity.template_id)
 
-    return {
-        "valid_paths": valid_paths,
-        "invalid_paths": invalid_paths,
-        "mismatched_paths": mismatched_paths,
-        "duplicate_paths": duplicate_paths,
-        "duplicate_sections": duplicate_sections,
-        "template_ids": template_ids,
-        "rejections": rejections,
-    }
+    runner = BatchValidationRunner[_CourseIdentity](
+        issue_builder=_issue_dict,
+        duplicate_path_issue_code="COURSE_DETAILS_DUPLICATE_PATH",
+        unexpected_issue_code="COURSE_DETAILS_UNEXPECTED_REJECTION",
+    )
+    return runner.run(
+        workbook_paths=workbook_paths,
+        validate_path=_validate_path,
+        on_validated=_on_validated,
+        cancel_token=cancel_token,
+    )
 
 
 def _validate_course_details_workbook_impl(

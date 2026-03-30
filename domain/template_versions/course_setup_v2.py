@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ConfigurationError
@@ -18,7 +18,6 @@ _SUPPORTED_OPERATIONS = frozenset(
         "generate_workbook",
         "generate_workbooks",
         "validate_workbooks",
-        "validate_filled_marks_manifest_schema",
         "consume_last_marks_anomaly_warnings",
         "generate_co_attainment",
     }
@@ -146,16 +145,23 @@ class CourseSetupV2Strategy:
             actual_template_id=template_id,
             expected_template_id=self.template_id,
         )
-        if normalize(workbook_kind) != "course_details":
-            raise validation_error_from_key(
-                "common.validation_failed_invalid_data",
-                code="WORKBOOK_KIND_UNSUPPORTED",
-                workbook_kind=workbook_kind,
-                template_id=self.template_id,
+        kind = normalize(workbook_kind)
+        if kind == "course_details":
+            return _course_template_batch_validator()(
+                workbook_paths=workbook_paths,
+                cancel_token=cancel_token,
             )
-        return _course_template_batch_validator()(
-            workbook_paths=workbook_paths,
-            cancel_token=cancel_token,
+        if kind == "marks_template":
+            return _marks_template_batch_validator()(
+                workbook_paths=workbook_paths,
+                template_id=self.template_id,
+                cancel_token=cancel_token,
+            )
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind=workbook_kind,
+            template_id=self.template_id,
         )
 
     def generate_workbooks(
@@ -190,12 +196,6 @@ class CourseSetupV2Strategy:
             code="WORKBOOK_KIND_UNSUPPORTED",
             workbook_kind=workbook_kind,
             template_id=self.template_id,
-        )
-
-    def validate_filled_marks_manifest_schema(self, workbook: object, manifest: object) -> None:
-        _marks_template_validator()(
-            workbook=workbook,
-            manifest=manifest,
         )
 
     def consume_last_marks_anomaly_warnings(self) -> list[str]:
@@ -237,6 +237,11 @@ class _WorkbookGenerationResult:
     output_path: str
     output_url: str
     reason: str | None = None
+
+
+class _FinalReportSignatureLike(Protocol):
+    template_id: str
+    total_outcomes: int
 
 
 @lru_cache(maxsize=1)
@@ -298,19 +303,17 @@ def _co_description_template_generator() -> Callable[..., Path]:
 
 
 @lru_cache(maxsize=1)
-def _marks_template_validator() -> Callable[..., None]:
+def _marks_template_batch_validator() -> Callable[..., dict[str, object]]:
     try:
         from domain.template_versions.course_setup_v2_impl.marks_template_validator import (
-            validate_filled_marks_manifest_schema,
+            validate_filled_marks_workbooks,
         )
     except Exception as exc:
         raise ConfigurationError("Unable to import V2 marks template validator module.") from exc
-    fn = validate_filled_marks_manifest_schema
+    fn = validate_filled_marks_workbooks
     if not callable(fn):
-        raise ConfigurationError(
-            "V2 marks template validator missing validate_filled_marks_manifest_schema()."
-        )
-    return fn
+        raise ConfigurationError("V2 marks template validator missing validate_filled_marks_workbooks().")
+    return cast(Callable[..., dict[str, object]], fn)
 
 
 @lru_cache(maxsize=1)
@@ -346,7 +349,7 @@ def _co_attainment_generator() -> Callable[..., object]:
 
 
 @lru_cache(maxsize=1)
-def _final_report_signature_reader() -> Callable[..., object]:
+def _final_report_signature_reader() -> Callable[[Path], _FinalReportSignatureLike | None]:
     try:
         from domain.template_versions.course_setup_v1_coordinator_engine import (
             extract_final_report_signature_from_path,
@@ -356,7 +359,7 @@ def _final_report_signature_reader() -> Callable[..., object]:
     fn = extract_final_report_signature_from_path
     if not callable(fn):
         raise ConfigurationError("Missing extract_final_report_signature_from_path().")
-    return fn
+    return cast(Callable[[Path], _FinalReportSignatureLike | None], fn)
 
 
 def _overwrite_existing_enabled(context: Mapping[str, Any] | None) -> bool:

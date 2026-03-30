@@ -68,7 +68,7 @@
     </message>
     <message>
       <source>co_analysis.action.download_co_description_template</source>
-      <translation>CO Description Template பதிவிறக்கவும்</translation>
+      <translation>CO விளக்க வார்ப்புருவைப் பதிவிறக்கவும்</translation>
     </message>
     <message>
       <source>co_analysis.action.download_co_description_template_link_html</source>
@@ -99,16 +99,16 @@
       <translation>'{output}' இல் CO Description template உருவாக்க முடியவில்லை.</translation>
     </message>
     <message>
-      <source>co_analysis.status.co_count_mismatch</source>
-      <translation>மொத்த விளைவு எண்ணிக்கை பொருந்தாததால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
+      <source>co_analysis.status.cohort_mismatch</source>
+      <translation>கோஹோர்ட் பொருந்தாமை (Course Code, Semester, Academic Year அல்லது Total Outcomes) காரணமாக {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
     </message>
     <message>
       <source>co_analysis.status.duplicate_reg_numbers</source>
       <translation>நகல் பதிவு எண்கள் காரணமாக {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
     </message>
     <message>
-      <source>co_analysis.status.ignored_reason.co_count_mismatch</source>
-      <translation>மொத்த விளைவு எண்ணிக்கை பொருந்தாமை={count}</translation>
+      <source>co_analysis.status.ignored_reason.cohort_mismatch</source>
+      <translation>கோஹோர்ட் பொருந்தாமை={count}</translation>
     </message>
     <message>
       <source>co_analysis.status.ignored_reason.duplicate_reg</source>
@@ -179,12 +179,12 @@
       <translation>பதிவேற்றிய கோப்புகளில் {count} சரிபார்ப்பு அசாதாரண எச்சரிக்கை(கள்) அறிக்கையிடப்பட்டன.</translation>
     </message>
     <message>
-      <source>co_analysis.validation.co_count_mismatch_body</source>
-      <translation>தேர்ந்தெடுத்த தொகுப்புடன் மொத்த விளைவு எண்ணிக்கை வேறுபட்டதால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
+      <source>co_analysis.validation.cohort_mismatch_body</source>
+      <translation>தேர்ந்தெடுத்த தொகுப்புடன் கோஹோர்ட் மெட்டாடேட்டா வேறுபட்டதால் {count} கோப்பு(கள்) நிராகரிக்கப்பட்டன.</translation>
     </message>
     <message>
       <source>co_analysis.validation.rejection_breakdown_body</source>
-      <translation>காரணப்படி நிராகரிக்கப்பட்ட கோப்புகள்:\nஆதரிக்காதது/இல்லை: {unsupported_or_missing}\nதவறான பணிப்புத்தகம்: {invalid_workbook}\nசிஸ்டம் ஹாஷ்/அடையாள தோல்வி: {invalid_hash}\nநிரப்பப்படாத மதிப்பெண்கள்: {marks_unfilled}\nலேஅவுட்/மனிபெஸ்ட் தோல்வி: {layout_manifest}\nவார்ப்புரு பொருந்தாமை: {template_mismatch}\nதவறான மார்க் மதிப்பு/வடிவம்: {mark_value}\nபிற சரிபார்ப்பு தோல்விகள்: {invalid_other}\nநகல்கள்: {duplicates}\nநகல் பதிவு எண்கள்: {duplicate_reg}\nமொத்த விளைவு எண்ணிக்கை பொருந்தாமை: {co_count_mismatch}</translation>
+      <translation>காரணப்படி நிராகரிக்கப்பட்ட கோப்புகள்:\nஆதரிக்காதது/இல்லை: {unsupported_or_missing}\nதவறான பணிப்புத்தகம்: {invalid_workbook}\nசிஸ்டம் ஹாஷ்/அடையாள தோல்வி: {invalid_hash}\nநிரப்பப்படாத மதிப்பெண்கள்: {marks_unfilled}\nலேஅவுட்/மனிபெஸ்ட் தோல்வி: {layout_manifest}\nவார்ப்புரு பொருந்தாமை: {template_mismatch}\nதவறான மார்க் மதிப்பு/வடிவம்: {mark_value}\nபிற சரிபார்ப்பு தோல்விகள்: {invalid_other}\nநகல்கள்: {duplicates}\nநகல் பதிவு எண்கள்: {duplicate_reg}\nகோஹோர்ட் பொருந்தாமை: {cohort_mismatch}</translation>
     </message>
     <message>
       <source>co_analysis.validation.rejection_breakdown_title</source>
@@ -196,7 +196,7 @@
     </message>
     <message>
       <source>coordinator.calculate</source>
-      <translation>coordinator.calculate</translation>
+      <translation>CO அடைவை கணக்கிடு</translation>
     </message>
     <message>
       <source>coordinator.clear_all</source>
@@ -224,7 +224,7 @@
     </message>
     <message>
       <source>coordinator.drop_hint</source>
-      <translation>Marks Filled workbooks-ஐ பதிவேற்றவும்.</translation>
+      <translation>மதிப்பெண்கள் பூர்த்தி செய்யப்பட்ட பணிப்புத்தகம்(களை) பதிவேற்றவும்.</translation>
     </message>
     <message>
       <source>coordinator.duplicate.body</source>
@@ -335,7 +335,9 @@
     </message>
     <message>
       <source>coordinator.thresholds.description</source>
-      <translation>coordinator.thresholds.description</translation>
+      <translation>- L1 வரம்பு - பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய ஒழுங்கில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.
+- L2 வரம்பு - முதல் தரம்.
+- L3 வரம்பு - சிறப்புத் தரம்.</translation>
     </message>
     <message>
       <source>coordinator.thresholds.invalid_rule</source>
@@ -355,11 +357,11 @@
     </message>
     <message>
       <source>coordinator.thresholds.title</source>
-      <translation>coordinator.thresholds.title</translation>
+      <translation>CO அடைவு வரம்புகள்</translation>
     </message>
     <message>
       <source>coordinator.title</source>
-      <translation>coordinator.title</translation>
+      <translation>பாட அடைவு</translation>
     </message>
     <message>
       <source>help.doc_error_body</source>
@@ -527,11 +529,11 @@
     </message>
     <message>
       <source>instructor.log.completed_process</source>
-      <translation>instructor.log.completed_process</translation>
+      <translation>{process} வெற்றிகரமாக முடிந்தது.</translation>
     </message>
     <message>
       <source>instructor.log.error_while_process</source>
-      <translation>instructor.log.error_while_process</translation>
+      <translation>{process} செயலில் பிழை ஏற்பட்டது.</translation>
     </message>
     <message>
       <source>instructor.log.process.generate_course_details_template</source>
@@ -614,72 +616,88 @@
       <translation>instructor.system.template_generate_failed</translation>
     </message>
     <message>
-      <source>instructor.toast.course_details_validation_summary</source>
-      <translation>சரிபார்ப்பு முடிந்தது: {valid} செல்லுபடியாகும், {invalid} செல்லுபடியாகாதது, {mismatched} தவறான வார்ப்புரு, {duplicates} நகல் உள்ளீடு.</translation>
+      <source>instructor.toast.marks_template_generation_summary</source>
+      <translation>மதிப்பெண் வார்ப்புரு உருவாக்கம் முடிந்தது: {segments}.</translation>
     </message>
     <message>
-      <source>instructor.toast.marks_template_generation_summary</source>
-      <translation>மதிப்பெண் வார்ப்புரு உருவாக்கம் முடிந்தது: செயலாக்கப்பட்டது {processed}/{total}, உருவாக்கப்பட்டது {generated}, தோல்வி {failed}, தவிர்க்கப்பட்டது {skipped}.</translation>
+      <source>instructor.toast.marks_template_generation_segment_processed</source>
+      <translation>செயலாக்கப்பட்டது {processed}/{total}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_generated</source>
+      <translation>உருவாக்கப்பட்டது {generated}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_failed</source>
+      <translation>தோல்வி {failed}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_skipped</source>
+      <translation>தவிர்க்கப்பட்டது {skipped}</translation>
+    </message>
+    <message>
+      <source>instructor.toast.marks_template_generation_segment_none</source>
+      <translation>மாற்றங்கள் இல்லை</translation>
     </message>
     <message>
       <source>instructor.toast.validation_warnings_body</source>
-      <translation>instructor.toast.validation_warnings_body</translation>
+      <translation>Validation completed with anomaly warnings. Check activity log details.</translation>
     </message>
     <message>
       <source>instructor.toast.validation_warnings_title</source>
-      <translation>instructor.toast.validation_warnings_title</translation>
+      <translation>Validation Warnings</translation>
     </message>
     <message>
       <source>instructor.validation.allowed_values_required</source>
-      <translation>instructor.validation.allowed_values_required</translation>
+      <translation>{sheet_name} row {row}: '{field}' must be one of [{allowed}].</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_component_duplicate</source>
-      <translation>instructor.validation.assessment_component_duplicate</translation>
+      <translation>Assessment_Config row {row}: duplicate component '{component}'.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_component_required</source>
-      <translation>instructor.validation.assessment_component_required</translation>
+      <translation>Assessment_Config row {row}: Component is required.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_component_required_one</source>
-      <translation>instructor.validation.assessment_component_required_one</translation>
+      <translation>Assessment_Config must contain at least one component.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_direct_missing</source>
-      <translation>instructor.validation.assessment_direct_missing</translation>
+      <translation>Assessment_Config must have at least one direct component.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_direct_total_invalid</source>
-      <translation>instructor.validation.assessment_direct_total_invalid</translation>
+      <translation>Assessment_Config direct component weights must total 100. Found: {found}.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_indirect_missing</source>
-      <translation>instructor.validation.assessment_indirect_missing</translation>
+      <translation>Assessment_Config must have at least one indirect component.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_indirect_total_invalid</source>
-      <translation>instructor.validation.assessment_indirect_total_invalid</translation>
+      <translation>Assessment_Config indirect component weights must total 100. Found: {found}.</translation>
     </message>
     <message>
       <source>instructor.validation.assessment_weight_numeric</source>
-      <translation>instructor.validation.assessment_weight_numeric</translation>
+      <translation>Assessment_Config row {row}: Weight (%) must be numeric.</translation>
     </message>
     <message>
       <source>instructor.validation.co_description_number_duplicate</source>
-      <translation>instructor.validation.co_description_number_duplicate</translation>
+      <translation>CO_Description row {row}: duplicate CO# '{co_number}'.</translation>
     </message>
     <message>
       <source>instructor.validation.co_description_number_positive_int_required</source>
-      <translation>instructor.validation.co_description_number_positive_int_required</translation>
+      <translation>CO_Description row {row}: 'CO#' must be a whole number greater than zero.</translation>
     </message>
     <message>
       <source>instructor.validation.co_description_row_required_one</source>
-      <translation>instructor.validation.co_description_row_required_one</translation>
+      <translation>CO_Description must contain at least one row.</translation>
     </message>
     <message>
       <source>instructor.validation.co_description_summary_length_invalid</source>
-      <translation>instructor.validation.co_description_summary_length_invalid</translation>
+      <translation>CO_Description row {row}: 'Summary_of_Topics/Expts./Project' must be between {minimum} and {maximum} characters.</translation>
     </message>
     <message>
       <source>instructor.validation.course_details_missing</source>
@@ -687,35 +705,35 @@
     </message>
     <message>
       <source>instructor.validation.course_metadata_duplicate_field</source>
-      <translation>instructor.validation.course_metadata_duplicate_field</translation>
+      <translation>Course_Metadata row {row}: duplicate field '{field}'.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_field_empty</source>
-      <translation>instructor.validation.course_metadata_field_empty</translation>
+      <translation>Course_Metadata row {row}: Field cannot be empty.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_field_must_be_int</source>
-      <translation>instructor.validation.course_metadata_field_must_be_int</translation>
+      <translation>Course_Metadata field '{field}' must be an integer.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_field_must_be_non_empty_str</source>
-      <translation>instructor.validation.course_metadata_field_must_be_non_empty_str</translation>
+      <translation>Course_Metadata field '{field}' must be a non-empty string.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_missing_fields</source>
-      <translation>instructor.validation.course_metadata_missing_fields</translation>
+      <translation>Course_Metadata is missing required fields: {fields}.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_total_outcomes_invalid</source>
-      <translation>instructor.validation.course_metadata_total_outcomes_invalid</translation>
+      <translation>Course_Metadata field 'Total_Outcomes' must be an integer &gt; 0.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_unknown_field</source>
-      <translation>instructor.validation.course_metadata_unknown_field</translation>
+      <translation>Course_Metadata row {row}: unknown field '{field}'.</translation>
     </message>
     <message>
       <source>instructor.validation.course_metadata_value_required</source>
-      <translation>instructor.validation.course_metadata_value_required</translation>
+      <translation>Course_Metadata row {row}: Value is required for '{field}'.</translation>
     </message>
     <message>
       <source>instructor.validation.file_issue_line</source>
@@ -723,279 +741,279 @@
     </message>
     <message>
       <source>instructor.validation.final_report.direct_component_marks_shape_invalid</source>
-      <translation>instructor.validation.final_report.direct_component_marks_shape_invalid</translation>
+      <translation>Final report generation failed: invalid marks shape for component '{component}'.</translation>
     </message>
     <message>
       <source>instructor.validation.final_report.direct_component_sheet_missing</source>
-      <translation>instructor.validation.final_report.direct_component_sheet_missing</translation>
+      <translation>Final report generation failed: missing direct component sheet for '{component}'.</translation>
     </message>
     <message>
       <source>instructor.validation.final_report.layout_manifest_invalid</source>
-      <translation>instructor.validation.final_report.layout_manifest_invalid</translation>
+      <translation>Final report generation failed: layout manifest is invalid.</translation>
     </message>
     <message>
       <source>instructor.validation.final_report.no_direct_components</source>
-      <translation>instructor.validation.final_report.no_direct_components</translation>
+      <translation>Final report generation failed: no direct components found.</translation>
     </message>
     <message>
       <source>instructor.validation.header_mismatch</source>
-      <translation>instructor.validation.header_mismatch</translation>
+      <translation>Header mismatch in sheet '{sheet_name}'. Expected: {expected}.</translation>
     </message>
     <message>
       <source>instructor.validation.headers_empty</source>
-      <translation>instructor.validation.headers_empty</translation>
+      <translation>Headers cannot be empty for sheet '{sheet_name}'.</translation>
     </message>
     <message>
       <source>instructor.validation.headers_unique</source>
-      <translation>instructor.validation.headers_unique</translation>
+      <translation>Headers must be unique for sheet '{sheet_name}'.</translation>
     </message>
     <message>
       <source>instructor.validation.invalid_sheet_name</source>
-      <translation>instructor.validation.invalid_sheet_name</translation>
+      <translation>Invalid sheet name.</translation>
     </message>
     <message>
       <source>instructor.validation.openpyxl_missing</source>
-      <translation>instructor.validation.openpyxl_missing</translation>
+      <translation>openpyxl is not installed. Install it to validate uploaded course details.</translation>
     </message>
     <message>
       <source>instructor.validation.question_co_no_repeat</source>
-      <translation>instructor.validation.question_co_no_repeat</translation>
+      <translation>Question_Map row {row}: CO values cannot repeat.</translation>
     </message>
     <message>
       <source>instructor.validation.question_co_out_of_range</source>
-      <translation>instructor.validation.question_co_out_of_range</translation>
+      <translation>Question_Map row {row}: CO value out of range 1..{total_outcomes}.</translation>
     </message>
     <message>
       <source>instructor.validation.question_co_required</source>
-      <translation>instructor.validation.question_co_required</translation>
+      <translation>Question_Map row {row}: CO must contain at least one value.</translation>
     </message>
     <message>
       <source>instructor.validation.question_co_wise_requires_one</source>
-      <translation>instructor.validation.question_co_wise_requires_one</translation>
+      <translation>Question_Map row {row}: component '{component}' requires exactly one CO per question.</translation>
     </message>
     <message>
       <source>instructor.validation.question_component_required</source>
-      <translation>instructor.validation.question_component_required</translation>
+      <translation>Question_Map row {row}: Component is required.</translation>
     </message>
     <message>
       <source>instructor.validation.question_component_unknown</source>
-      <translation>instructor.validation.question_component_unknown</translation>
+      <translation>Question_Map row {row}: unknown component '{component}'.</translation>
     </message>
     <message>
       <source>instructor.validation.question_duplicate_for_component</source>
-      <translation>instructor.validation.question_duplicate_for_component</translation>
+      <translation>Question_Map row {row}: duplicate question '{question}' for component '{component}'.</translation>
     </message>
     <message>
       <source>instructor.validation.question_label_required</source>
-      <translation>instructor.validation.question_label_required</translation>
+      <translation>Question_Map row {row}: Q_No/Rubric_Parameter is required.</translation>
     </message>
     <message>
       <source>instructor.validation.question_map_row_required_one</source>
-      <translation>instructor.validation.question_map_row_required_one</translation>
+      <translation>Question_Map must contain at least one question row.</translation>
     </message>
     <message>
       <source>instructor.validation.question_max_marks_numeric</source>
-      <translation>instructor.validation.question_max_marks_numeric</translation>
+      <translation>Question_Map row {row}: Max_Marks must be numeric.</translation>
     </message>
     <message>
       <source>instructor.validation.question_max_marks_positive</source>
-      <translation>instructor.validation.question_max_marks_positive</translation>
+      <translation>Question_Map row {row}: Max_Marks must be greater than zero.</translation>
     </message>
     <message>
       <source>instructor.validation.row_length_mismatch</source>
-      <translation>instructor.validation.row_length_mismatch</translation>
+      <translation>Row {row} length mismatch in '{sheet_name}': expected {expected}, got {found}.</translation>
     </message>
     <message>
       <source>instructor.validation.sheet_single_header_row</source>
-      <translation>instructor.validation.sheet_single_header_row</translation>
+      <translation>Sheet '{sheet_name}' must define exactly one header row.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.absence_policy_violation</source>
-      <translation>instructor.validation.step2.absence_policy_violation</translation>
+      <translation>Sheet '{sheet_name}' row {row} has mixed absence and numeric entries in {range}. Enter either all A/a or all numeric marks.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.anchor_spec_invalid</source>
-      <translation>instructor.validation.step2.anchor_spec_invalid</translation>
+      <translation>Sheet '{sheet_name}' has invalid anchor specification in layout manifest.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.anchor_value_mismatch</source>
-      <translation>instructor.validation.step2.anchor_value_mismatch</translation>
+      <translation>Sheet '{sheet_name}' cell {cell} was modified. Expected '{expected}', found '{found}'.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.co_formula_mismatch</source>
-      <translation>instructor.validation.step2.co_formula_mismatch</translation>
+      <translation>Sheet '{sheet_name}' CO split formula was modified at {cell}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.formula_anchor_spec_invalid</source>
-      <translation>instructor.validation.step2.formula_anchor_spec_invalid</translation>
+      <translation>Sheet '{sheet_name}' has invalid formula anchor specification in layout manifest.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.formula_mismatch</source>
-      <translation>instructor.validation.step2.formula_mismatch</translation>
+      <translation>Sheet '{sheet_name}' formula at {cell} was modified.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.header_row_invalid</source>
-      <translation>instructor.validation.step2.header_row_invalid</translation>
+      <translation>Sheet '{sheet_name}' has invalid header row metadata: {header_row}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.header_row_mismatch</source>
-      <translation>instructor.validation.step2.header_row_mismatch</translation>
+      <translation>Sheet '{sheet_name}' header mismatch at row {row}. Expected: {expected}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.headers_missing</source>
-      <translation>instructor.validation.step2.headers_missing</translation>
+      <translation>Sheet '{sheet_name}' is missing expected header definitions in layout manifest.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.indirect_mark_must_be_integer</source>
-      <translation>instructor.validation.step2.indirect_mark_must_be_integer</translation>
+      <translation>Sheet '{sheet_name}' cell {cell} has invalid indirect mark '{value}'. Use an integer Likert value.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.layout_hash_mismatch</source>
-      <translation>instructor.validation.step2.layout_hash_mismatch</translation>
+      <translation>Layout hash mismatch. Please use an untampered generated marks template.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.layout_header_mismatch</source>
-      <translation>instructor.validation.step2.layout_header_mismatch</translation>
+      <translation>Invalid layout sheet header at {column}. Expected '{expected}'.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.layout_manifest_json_invalid</source>
-      <translation>instructor.validation.step2.layout_manifest_json_invalid</translation>
+      <translation>Layout manifest JSON is invalid.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.layout_manifest_missing</source>
-      <translation>instructor.validation.step2.layout_manifest_missing</translation>
+      <translation>Layout manifest or layout hash is missing in system layout sheet.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.layout_sheet_missing</source>
-      <translation>instructor.validation.step2.layout_sheet_missing</translation>
+      <translation>Missing required layout sheet '{sheet}' in filled marks workbook.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.manifest_root_invalid</source>
-      <translation>instructor.validation.step2.manifest_root_invalid</translation>
+      <translation>Layout manifest root must be an object.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.manifest_sheet_spec_invalid</source>
-      <translation>instructor.validation.step2.manifest_sheet_spec_invalid</translation>
+      <translation>Layout manifest contains an invalid sheet specification.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.manifest_structure_invalid</source>
-      <translation>instructor.validation.step2.manifest_structure_invalid</translation>
+      <translation>Layout manifest must contain both 'sheet_order' and 'sheets'.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.mark_entry_empty</source>
-      <translation>instructor.validation.step2.mark_entry_empty</translation>
+      <translation>Sheet '{sheet_name}' has an empty mark-entry cell at {cell}. Fill all marks before upload.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.mark_precision_invalid</source>
-      <translation>instructor.validation.step2.mark_precision_invalid</translation>
+      <translation>Sheet '{sheet_name}' cell {cell} has too many decimal places in '{value}'. Maximum allowed is {decimals}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.mark_value_invalid</source>
-      <translation>instructor.validation.step2.mark_value_invalid</translation>
+      <translation>Sheet '{sheet_name}' cell {cell} has invalid mark value '{value}'. Allowed: A/a or numeric between {minimum} and {maximum}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.no_component_sheets</source>
-      <translation>instructor.validation.step2.no_component_sheets</translation>
+      <translation>No component mark-entry sheets found in filled marks workbook.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.sheet_missing</source>
-      <translation>instructor.validation.step2.sheet_missing</translation>
+      <translation>Expected sheet '{sheet_name}' is missing in workbook.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.sheet_order_mismatch</source>
-      <translation>instructor.validation.step2.sheet_order_mismatch</translation>
+      <translation>Filled marks sheets mismatch. Expected order: {expected}. Found: {found}.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.structure_snapshot_mismatch</source>
-      <translation>instructor.validation.step2.structure_snapshot_mismatch</translation>
+      <translation>Sheet '{sheet_name}' mark-structure cell {cell} was modified.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.structure_snapshot_missing</source>
-      <translation>instructor.validation.step2.structure_snapshot_missing</translation>
+      <translation>Sheet '{sheet_name}' is missing mark-structure metadata in layout manifest.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.student_identity_cross_sheet_mismatch</source>
-      <translation>instructor.validation.step2.student_identity_cross_sheet_mismatch</translation>
+      <translation>Student Reg. No./Name rows in sheet '{sheet_name}' do not match sheet '{reference_sheet}'.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.student_identity_mismatch</source>
-      <translation>instructor.validation.step2.student_identity_mismatch</translation>
+      <translation>Sheet '{sheet_name}' student Reg. No./Name rows were modified.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.student_identity_spec_invalid</source>
-      <translation>instructor.validation.step2.student_identity_spec_invalid</translation>
+      <translation>Sheet '{sheet_name}' has invalid student identity metadata in layout manifest.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.student_reg_duplicate</source>
-      <translation>instructor.validation.step2.student_reg_duplicate</translation>
+      <translation>Sheet '{sheet_name}' has duplicate student Reg. No. '{reg_no}'.</translation>
     </message>
     <message>
       <source>instructor.validation.step2.total_formula_mismatch</source>
-      <translation>instructor.validation.step2.total_formula_mismatch</translation>
+      <translation>Sheet '{sheet_name}' total formula was modified at {cell}.</translation>
     </message>
     <message>
       <source>instructor.validation.students_duplicate_reg_no</source>
-      <translation>instructor.validation.students_duplicate_reg_no</translation>
+      <translation>Students row {row}: duplicate Reg_No '{reg_no}'.</translation>
     </message>
     <message>
       <source>instructor.validation.students_reg_and_name_required</source>
-      <translation>instructor.validation.students_reg_and_name_required</translation>
+      <translation>Students row {row}: both Reg_No and Student_Name are required.</translation>
     </message>
     <message>
       <source>instructor.validation.students_row_required_one</source>
-      <translation>instructor.validation.students_row_required_one</translation>
+      <translation>Students sheet must contain at least one student row.</translation>
     </message>
     <message>
       <source>instructor.validation.system_hash_mismatch</source>
-      <translation>instructor.validation.system_hash_mismatch</translation>
+      <translation>Template hash mismatch. Please use a valid generated template.</translation>
     </message>
     <message>
       <source>instructor.validation.system_hash_missing_template_hash_header</source>
-      <translation>instructor.validation.system_hash_missing_template_hash_header</translation>
+      <translation>Invalid system hash sheet format: missing Template_Hash header.</translation>
     </message>
     <message>
       <source>instructor.validation.system_hash_missing_template_id_header</source>
-      <translation>instructor.validation.system_hash_missing_template_id_header</translation>
+      <translation>Invalid system hash sheet format: missing Template_ID header.</translation>
     </message>
     <message>
       <source>instructor.validation.system_hash_template_id_missing</source>
-      <translation>instructor.validation.system_hash_template_id_missing</translation>
+      <translation>Template_ID is missing in system hash sheet.</translation>
     </message>
     <message>
       <source>instructor.validation.system_sheet_missing</source>
-      <translation>instructor.validation.system_sheet_missing</translation>
+      <translation>Missing required system sheet '{sheet}' in uploaded workbook.</translation>
     </message>
     <message>
       <source>instructor.validation.unexpected_header</source>
-      <translation>instructor.validation.unexpected_header</translation>
+      <translation>Unexpected header in sheet '{sheet_name}' at column {col}.</translation>
     </message>
     <message>
       <source>instructor.validation.unknown_template</source>
-      <translation>instructor.validation.unknown_template</translation>
+      <translation>Unknown workbook template '{template_id}'. Available templates: {available}.</translation>
     </message>
     <message>
       <source>instructor.validation.validator_missing</source>
-      <translation>instructor.validation.validator_missing</translation>
+      <translation>No validator implemented for template '{template_id}'.</translation>
     </message>
     <message>
       <source>instructor.validation.workbook_not_found</source>
-      <translation>instructor.validation.workbook_not_found</translation>
+      <translation>Course details workbook not found: {workbook}</translation>
     </message>
     <message>
       <source>instructor.validation.workbook_open_failed</source>
-      <translation>instructor.validation.workbook_open_failed</translation>
+      <translation>Unable to open course details workbook '{workbook}'.</translation>
     </message>
     <message>
       <source>instructor.validation.workbook_sheet_mismatch</source>
-      <translation>instructor.validation.workbook_sheet_mismatch</translation>
+      <translation>Workbook sheets do not match template '{template_id}'. Expected: {expected}. Found: {found}.</translation>
     </message>
     <message>
       <source>instructor.validation.xlsxwriter_missing</source>
-      <translation>instructor.validation.xlsxwriter_missing</translation>
+      <translation>xlsxwriter is not installed. Install it to generate course templates.</translation>
     </message>
     <message>
       <source>instructor.validation.yes_no_required</source>
-      <translation>instructor.validation.yes_no_required</translation>
+      <translation>{sheet_name} row {row}: '{field}' must be YES or NO.</translation>
     </message>
     <message>
       <source>instructor.workflow_title</source>
@@ -1088,104 +1106,200 @@
       <translation>வழிசெலுத்தல்</translation>
     </message>
     <message>
+      <source>validation.batch.accepted_count</source>
+      <translation>ஏற்றப்பட்டது: {count}</translation>
+    </message>
+    <message>
+      <source>validation.batch.activity_line</source>
+      <translation>{title}{accepted}{rejected}{details}</translation>
+    </message>
+    <message>
+      <source>validation.batch.activity_segment</source>
+      <translation> | {segment}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_prefix</source>
+      <translation>விவரம்: {details}</translation>
+    </message>
+    <message>
+      <source>validation.batch.detail_entry</source>
+      <translation>{file}: [{code}] {reason}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_1</source>
+      <translation>{entry1}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_2</source>
+      <translation>{entry1}; {entry2}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_3</source>
+      <translation>{entry1}; {entry2}; {entry3}</translation>
+    </message>
+    <message>
+      <source>validation.batch.details_entries_3_more</source>
+      <translation>{entry1}; {entry2}; {entry3}; {more}</translation>
+    </message>
+    <message>
+      <source>validation.batch.more_suffix</source>
+      <translation>மேலும் +{count}</translation>
+    </message>
+    <message>
+      <source>validation.batch.rejected_count</source>
+      <translation>நிராகரிக்கப்பட்டது: {count}</translation>
+    </message>
+    <message>
+      <source>validation.batch.title_error</source>
+      <translation>சரிபார்ப்பு பிழை</translation>
+    </message>
+    <message>
+      <source>validation.batch.title_success</source>
+      <translation>சரிபார்ப்பு வெற்றி</translation>
+    </message>
+    <message>
+      <source>workbook.generation.summary</source>
+      <translation>பணிப்புத்தகம்(கள்) உருவாக்கப்பட்டது: {segments}</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.success</source>
+      <translation>வெற்றி ({count})</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.failed</source>
+      <translation>தோல்வி ({count})</translation>
+    </message>
+    <message>
+      <source>workbook.generation.segment.none</source>
+      <translation>வெளியீடு இல்லை</translation>
+    </message>
+    <message>
       <source>validation.course_details.cohort_mismatch</source>
-      <translation>Cohort mismatch in {workbook}. These fields must match the first valid file: {fields}.</translation>
+      <translation>{workbook} இல் தொகுதி பொருந்தவில்லை. இந்த புலங்கள் முதல் செல்லுபடியாகிய கோப்புடன் பொருந்த வேண்டும்: {fields}.</translation>
     </message>
     <message>
       <source>validation.course_details.duplicate_path</source>
-      <translation>Duplicate file path skipped: {workbook}.</translation>
+      <translation>நகல் கோப்பு பாதை தவிர்க்கப்பட்டது: {workbook}.</translation>
     </message>
     <message>
       <source>validation.course_details.duplicate_section</source>
-      <translation>Duplicate section skipped for this cohort (section '{section}') in file: {workbook}.</translation>
+      <translation>இந்த தொகுதிக்கான நகல் பிரிவு (பிரிவு '{section}') கோப்பில் தவிர்க்கப்பட்டது: {workbook}.</translation>
     </message>
     <message>
       <source>validation.course_details.unexpected_rejection</source>
-      <translation>File was skipped due to an unexpected validation failure: {workbook}.</translation>
+      <translation>எதிர்பாராத சரிபார்ப்பு தோல்வி காரணமாக கோப்பு தவிர்க்கப்பட்டது: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.cohort_mismatch</source>
+      <translation>{workbook} இல் தொகுதி பொருந்தவில்லை. இந்த புலங்கள் முதல் செல்லுபடியாகிய கோப்புடன் பொருந்த வேண்டும்: {fields}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_path</source>
+      <translation>நகல் கோப்பு பாதை தவிர்க்கப்பட்டது: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_section</source>
+      <translation>இந்த தொகுதிக்கான நகல் பிரிவு (பிரிவு '{section}') கோப்பில் தவிர்க்கப்பட்டது: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.duplicate_reg_no</source>
+      <translation>கோப்பில் நகல் மாணவர் பதிவு எண் கண்டறியப்பட்டது: {workbook}.</translation>
+    </message>
+    <message>
+      <source>validation.marks_template.unexpected_rejection</source>
+      <translation>எதிர்பாராத சரிபார்ப்பு தோல்வி காரணமாக கோப்பு தவிர்க்கப்பட்டது: {workbook}.</translation>
+    </message>
+    <message>
+      <source>common.error_while_process</source>
+      <translation>{process} செயலில் பிழை ஏற்பட்டது.</translation>
+    </message>
+    <message>
+      <source>common.validation_failed_invalid_data</source>
+      <translation>தவறான workbook தரவு காரணமாக சரிபார்ப்பு தோல்வியடைந்தது.</translation>
     </message>
     <message>
       <source>validation.dependency.openpyxl_missing</source>
-      <translation>validation.dependency.openpyxl_missing</translation>
+      <translation>openpyxl நிறுவப்படவில்லை. பதிவேற்றப்பட்ட பாட விவரங்களை சரிபார்க்க அதை நிறுவவும்.</translation>
     </message>
     <message>
       <source>validation.dependency.xlsxwriter_missing</source>
-      <translation>validation.dependency.xlsxwriter_missing</translation>
+      <translation>xlsxwriter நிறுவப்படவில்லை. பாட வார்ப்புருக்களை உருவாக்க அதை நிறுவவும்.</translation>
     </message>
     <message>
       <source>validation.layout.hash_mismatch</source>
-      <translation>validation.layout.hash_mismatch</translation>
+      <translation>Layout hash பொருந்தவில்லை. மாற்றமில்லாத உருவாக்கப்பட்ட marks template ஐ பயன்படுத்தவும்.</translation>
     </message>
     <message>
       <source>validation.layout.header_mismatch</source>
-      <translation>validation.layout.header_mismatch</translation>
+      <translation>{column} இல் layout sheet header தவறு. எதிர்பார்ப்பு '{expected}'.</translation>
     </message>
     <message>
       <source>validation.layout.manifest_json_invalid</source>
-      <translation>validation.layout.manifest_json_invalid</translation>
+      <translation>Layout manifest JSON தவறானது.</translation>
     </message>
     <message>
       <source>validation.layout.manifest_missing</source>
-      <translation>validation.layout.manifest_missing</translation>
+      <translation>System layout sheet இல் layout manifest அல்லது layout hash இல்லை.</translation>
     </message>
     <message>
       <source>validation.layout.sheet_missing</source>
-      <translation>validation.layout.sheet_missing</translation>
+      <translation>பூர்த்தி செய்யப்பட்ட மதிப்பெண் workbook-இல் தேவையான layout sheet '{sheet}' இல்லை.</translation>
     </message>
     <message>
       <source>validation.mark.absence_policy_violation</source>
-      <translation>validation.mark.absence_policy_violation</translation>
+      <translation>தாள் '{sheet_name}' வரி {row} இல் {range} பகுதியில் இல்லாத குறி மற்றும் எண் மதிப்புகள் கலந்துள்ளன. முழுவதும் A/a அல்லது முழுவதும் எண் மதிப்புகளை மட்டும் உள்ளிடவும்.</translation>
     </message>
     <message>
       <source>validation.mark.entry_empty</source>
-      <translation>validation.mark.entry_empty</translation>
+      <translation>தாள் '{sheet_name}' இல் {cell} செல்லில் மதிப்பெண் பதிவு காலியாக உள்ளது. பதிவேற்றுவதற்கு முன் அனைத்து மதிப்பெண்களையும் நிரப்பவும்.</translation>
     </message>
     <message>
       <source>validation.mark.indirect_integer_required</source>
-      <translation>validation.mark.indirect_integer_required</translation>
+      <translation>தாள் '{sheet_name}' செல்ல் {cell} இல் மறைமுக மதிப்பெண் '{value}' தவறானது. முழு எண் Likert மதிப்பை பயன்படுத்தவும்.</translation>
     </message>
     <message>
       <source>validation.mark.precision_invalid</source>
-      <translation>validation.mark.precision_invalid</translation>
+      <translation>தாள் '{sheet_name}' செல்ல் {cell} இல் '{value}' மதிப்பில் தசம இலக்கங்கள் அதிகமாக உள்ளன. அதிகபட்சம் {decimals} அனுமதி.</translation>
     </message>
     <message>
       <source>validation.mark.value_invalid</source>
-      <translation>validation.mark.value_invalid</translation>
+      <translation>தாள் '{sheet_name}' செல்ல் {cell} இல் '{value}' மதிப்பு தவறானது. அனுமதிக்கப்பட்ட வரம்பு {minimum} முதல் {maximum}.</translation>
     </message>
     <message>
       <source>validation.system.sheet_missing</source>
-      <translation>validation.system.sheet_missing</translation>
+      <translation>தேவையான SYSTEM_HASH தாள் இல்லை.</translation>
     </message>
     <message>
       <source>validation.system_hash.header_template_hash_missing</source>
-      <translation>validation.system_hash.header_template_hash_missing</translation>
+      <translation>SYSTEM_HASH தாளில் 'TEMPLATE_HASH' header இல்லை.</translation>
     </message>
     <message>
       <source>validation.system_hash.header_template_id_missing</source>
-      <translation>validation.system_hash.header_template_id_missing</translation>
+      <translation>SYSTEM_HASH தாளில் 'TEMPLATE_ID' header இல்லை.</translation>
     </message>
     <message>
       <source>validation.system_hash.mismatch</source>
-      <translation>validation.system_hash.mismatch</translation>
+      <translation>System hash பொருந்தவில்லை. மாற்றமில்லாத உருவாக்கப்பட்ட வார்ப்புருவை பயன்படுத்தவும்.</translation>
     </message>
     <message>
       <source>validation.system_hash.template_id_missing</source>
-      <translation>validation.system_hash.template_id_missing</translation>
+      <translation>SYSTEM_HASH தாளில் template id மதிப்பு இல்லை.</translation>
     </message>
     <message>
       <source>validation.template.unknown</source>
-      <translation>validation.template.unknown</translation>
+      <translation>அறியப்படாத template id '{template_id}'.</translation>
     </message>
     <message>
       <source>validation.template.validator_missing</source>
-      <translation>validation.template.validator_missing</translation>
+      <translation>template id '{template_id}' க்கான validator அமைக்கப்படவில்லை.</translation>
     </message>
     <message>
       <source>validation.workbook.not_found</source>
-      <translation>validation.workbook.not_found</translation>
+      <translation>Workbook கிடைக்கவில்லை: {workbook}.</translation>
     </message>
     <message>
       <source>validation.workbook.open_failed</source>
-      <translation>validation.workbook.open_failed</translation>
+      <translation>Workbook திறக்க முடியவில்லை: {workbook}. அது மற்ற செயலியில் திறந்து உள்ளதா என்று சரிபார்க்கவும்.</translation>
     </message>
   </context>
 </TS>

@@ -57,6 +57,16 @@ def test_resolve_i18n_log_message_falls_back_on_translation_failure(monkeypatch)
     assert ui_logging.resolve_i18n_log_message(payload) == "safe fallback"
 
 
+def test_resolve_i18n_log_message_falls_back_when_translation_returns_raw_key(monkeypatch) -> None:
+    monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: key)
+    payload = ui_logging.build_i18n_log_message(
+        "validation.batch.title_error",
+        kwargs={},
+        fallback="Validation Error",
+    )
+    assert ui_logging.resolve_i18n_log_message(payload) == "Validation Error"
+
+
 def test_resolve_i18n_kwargs_handles_nested_translation(monkeypatch) -> None:
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: f"<{key}:{kwargs.get('n', '')}>")
     kwargs = {

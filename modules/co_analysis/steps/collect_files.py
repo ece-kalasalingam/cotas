@@ -42,7 +42,7 @@ def _reason_key_counts(
     invalid_other_validation_files: int,
     duplicates: int,
     duplicate_reg_number_files: int,
-    co_count_mismatch_files: int,
+    cohort_mismatch_files: int,
 ) -> list[tuple[str, int]]:
     return [
         ("co_analysis.status.ignored_reason.unsupported_or_missing", unsupported_or_missing_files),
@@ -55,7 +55,7 @@ def _reason_key_counts(
         ("co_analysis.status.ignored_reason.invalid_other", invalid_other_validation_files),
         ("co_analysis.status.ignored_reason.duplicates", duplicates),
         ("co_analysis.status.ignored_reason.duplicate_reg", duplicate_reg_number_files),
-        ("co_analysis.status.ignored_reason.co_count_mismatch", co_count_mismatch_files),
+        ("co_analysis.status.ignored_reason.cohort_mismatch", cohort_mismatch_files),
     ]
 
 
@@ -168,7 +168,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
         unsupported_or_missing_files = int(result.get("unsupported_or_missing_files", 0))
         invalid_source_workbook_files = int(result.get("invalid_source_workbook_files", 0))
         duplicate_reg_number_files = int(result.get("duplicate_reg_number_files", 0))
-        co_count_mismatch_files = int(result.get("co_count_mismatch_files", 0))
+        cohort_mismatch_files = int(result.get("cohort_mismatch_files", result.get("co_count_mismatch_files", 0)))
         invalid_system_hash_files = int(result.get("invalid_system_hash_files", 0))
         invalid_marks_unfilled_files = int(result.get("invalid_marks_unfilled_files", 0))
         invalid_layout_manifest_files = int(result.get("invalid_layout_manifest_files", 0))
@@ -188,7 +188,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
             invalid_other_validation_files=invalid_other_validation_files,
             duplicates=duplicates,
             duplicate_reg_number_files=duplicate_reg_number_files,
-            co_count_mismatch_files=co_count_mismatch_files,
+            cohort_mismatch_files=cohort_mismatch_files,
         )
 
         typed_module._add_uploaded_paths(added_paths)
@@ -210,7 +210,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
                     invalid_workbook=invalid_source_workbook_files,
                     duplicates=duplicates,
                     duplicate_reg=duplicate_reg_number_files,
-                    co_count_mismatch=co_count_mismatch_files,
+                    cohort_mismatch=cohort_mismatch_files,
                     invalid_hash=invalid_system_hash_files,
                     marks_unfilled=invalid_marks_unfilled_files,
                     layout_manifest=invalid_layout_manifest_files,
@@ -232,14 +232,14 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
                 title=typed_ns["t"]("coordinator.regno_dedup.title"),
                 level="warning",
             )
-        if co_count_mismatch_files:
+        if cohort_mismatch_files:
             typed_module._publish_status_key(
-                "co_analysis.status.co_count_mismatch",
-                count=co_count_mismatch_files,
+                "co_analysis.status.cohort_mismatch",
+                count=cohort_mismatch_files,
             )
             typed_ns["show_toast"](
                 typed_module,
-                typed_ns["t"]("co_analysis.validation.co_count_mismatch_body", count=co_count_mismatch_files),
+                typed_ns["t"]("co_analysis.validation.cohort_mismatch_body", count=cohort_mismatch_files),
                 title=typed_ns["t"]("coordinator.title"),
                 level="warning",
             )
@@ -292,7 +292,7 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
             success_message=(
                 "collecting co analysis files completed successfully. "
                 f"added={len(added_paths)}, duplicates={duplicates}, invalid={invalid}, "
-                f"co_count_mismatch_files={co_count_mismatch_files}, "
+                f"cohort_mismatch_files={cohort_mismatch_files}, "
                 f"ignored={ignored}, duplicate_reg_number_files={duplicate_reg_number_files}, "
                 f"unsupported_or_missing_files={unsupported_or_missing_files}, "
                 f"invalid_source_workbook_files={invalid_source_workbook_files}, "
@@ -338,7 +338,6 @@ def collect_files_async(module: object, candidate_paths: list[str], *, ns: Mappi
         on_failure=_on_failure,
         on_finally=typed_module._drain_next_batch,
     )
-
 
 
 

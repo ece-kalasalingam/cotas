@@ -136,3 +136,18 @@ def test_managed_drop_widget_applies_tooltips_to_row_actions(qapp: QApplication)
     assert row.open_file_btn.toolTip() == "Open File"
     assert row.open_folder_btn.toolTip() == "Open Folder"
     assert row.remove_btn.toolTip() == "Remove File"
+
+
+def test_managed_drop_widget_supports_validation_state_transitions(qapp: QApplication) -> None:
+    widget = ManagedDropFileWidget(drop_mode="multiple")
+    assert widget.drop_zone.property("validationState") == "neutral"
+    widget.set_validation_state("info")
+    assert widget.drop_zone.property("validationState") == "info"
+    widget.set_validation_state("success")
+    assert widget.drop_zone.property("validationState") == "success"
+    widget.set_validation_state("warning")
+    assert widget.drop_zone.property("validationState") == "warning"
+    widget.set_validation_state("error")
+    assert widget.drop_zone.property("validationState") == "error"
+    widget.clear_files()
+    assert widget.drop_zone.property("validationState") == "neutral"

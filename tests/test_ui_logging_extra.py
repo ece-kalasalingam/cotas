@@ -30,6 +30,12 @@ def test_resolve_i18n_log_message_embedded_payload_fallback_on_translation_error
     assert ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"
 
 
+def test_resolve_i18n_log_message_embedded_payload_fallback_on_raw_key(monkeypatch) -> None:
+    payload = '__I18N_LOG__:{"key":"k","kwargs":{},"fallback":"fb"}'
+    monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: key)
+    assert ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"
+
+
 def test_resolve_i18n_kwargs_nested_translation_fallback_on_error(monkeypatch) -> None:
     def _boom(*_args, **_kwargs):
         raise RuntimeError("x")

@@ -187,8 +187,14 @@
   - `notify_message(...)`
   - `notify_message_key(...)`
   where `channels` controls target surfaces (`status`, `toast`, `activity_log`) in any combination.
-- Prefer key-based status emission (`publish_status_key`) over raw localized strings for retranslation-safe logs.
-- `publish_status(...)` / `publish_status_key(...)` remain valid compatibility wrappers.
+- Strict rule: any `status`/`activity_log` message must be an i18n payload (for example via
+  `notify_message_key(...)` or `build_status_message(...)`); plain text is disallowed.
+- `notify_message(...)` may carry plain text only for `channels=("toast",)` paths.
+- `publish_status(message)` and raw `append_user_log(message)` wrappers are disallowed for module code;
+  use `publish_status_key(...)` / `notify_message_key(...)` instead.
+- Runtime contract is strict-fail: passing plain text into `status`/`activity_log` paths must raise
+  `ConfigurationError` instead of silently accepting.
+- `publish_status_key(...)` remains a valid compatibility wrapper.
 - Modules that render logs must keep compatible message state fields:
   - `status_changed`
   - `_user_log_entries`
@@ -260,9 +266,11 @@
   retranslate on language switch.
 - Rule: any user-facing status/log message that must remain translatable after language change must be emitted
   as an i18n payload, not as `t(...)` plain text.
+- This is mandatory across all modules and step/helper submodules (not only Instructor/CO Analysis).
 - In modules, prefer key-based logging:
   - use `self._runtime.notify_message_key(..., channels=(\"status\", \"activity_log\"))` for combined status+activity log emission.
   - use `self._runtime.publish_status_key(...)` (or module helper wrappers like `_publish_status_key(...)`)
+  - do not use raw `notify_message(...)` for `status`/`activity_log` channels.
   - avoid `self._publish_status(t("..."))` for translatable lifecycle/status lines.
 - For helpers/widgets/step modules:
   - emit i18n payloads through `module_messages`/`ModuleRuntime` abstractions.
@@ -270,6 +278,11 @@
 - Footer/shared activity rendering expectations:
   - shared footer log rerender happens in `main_window.py`
   - rerender path should resolve from stored i18n payload/raw message, not only from pre-localized text.
+- CI guardrails:
+  - AST policy tests must fail if module code uses raw `status`/`activity_log` emission
+    (`notify_message(...)` with those channels, `publish_status(...)`, `append_user_log(...)`).
+  - Locale coverage tests must fail on missing translation keys or key-echo translations for module-emitted
+    status/activity i18n keys in enabled locales.
 
 ## Release Entry Gate
 

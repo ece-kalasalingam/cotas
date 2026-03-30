@@ -98,13 +98,19 @@ def resolve_i18n_log_message(message: str) -> str:
                 return message
             key, kwargs, fallback = inner
             try:
-                return prefix + t(key, **_resolve_i18n_kwargs(kwargs))
+                translated = t(key, **_resolve_i18n_kwargs(kwargs))
+                if isinstance(translated, str) and translated == key and isinstance(fallback, str) and fallback:
+                    return prefix + fallback
+                return prefix + translated
             except Exception:
                 return prefix + (fallback or message[marker:])
         return message
     key, kwargs, fallback = parsed
     try:
-        return t(key, **_resolve_i18n_kwargs(kwargs))
+        translated = t(key, **_resolve_i18n_kwargs(kwargs))
+        if isinstance(translated, str) and translated == key and isinstance(fallback, str) and fallback:
+            return fallback
+        return translated
     except Exception:
         return fallback or message
 
@@ -113,15 +119,41 @@ def _resolve_i18n_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Resolve nested translation-key markers inside kwargs."""
     resolved: dict[str, Any] = {}
     for key, value in kwargs.items():
+        if isinstance(value, list):
+            resolved_list: list[Any] = []
+            for item in value:
+                if isinstance(item, dict):
+                    nested_key = item.get("__t_key__")
+                    nested_kwargs = item.get("kwargs", {})
+                    if isinstance(nested_key, str) and nested_key:
+                        nested_safe_kwargs = nested_kwargs if isinstance(nested_kwargs, dict) else {}
+                        fallback = item.get("fallback", nested_key)
+                        try:
+                            translated = t(nested_key, **_resolve_i18n_kwargs(nested_safe_kwargs))
+                            if isinstance(translated, str) and translated == nested_key and isinstance(fallback, str):
+                                resolved_list.append(fallback)
+                            else:
+                                resolved_list.append(translated)
+                        except Exception:
+                            resolved_list.append(fallback)
+                        continue
+                resolved_list.append(item)
+            resolved[key] = resolved_list
+            continue
         if isinstance(value, dict):
             nested_key = value.get("__t_key__")
             nested_kwargs = value.get("kwargs", {})
             if isinstance(nested_key, str) and nested_key:
                 nested_safe_kwargs = nested_kwargs if isinstance(nested_kwargs, dict) else {}
+                fallback = value.get("fallback", nested_key)
                 try:
-                    resolved[key] = t(nested_key, **_resolve_i18n_kwargs(nested_safe_kwargs))
+                    translated = t(nested_key, **_resolve_i18n_kwargs(nested_safe_kwargs))
+                    if isinstance(translated, str) and translated == nested_key and isinstance(fallback, str):
+                        resolved[key] = fallback
+                    else:
+                        resolved[key] = translated
                 except Exception:
-                    resolved[key] = value.get("fallback", nested_key)
+                    resolved[key] = fallback
                 continue
         resolved[key] = value
     return resolved

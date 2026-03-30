@@ -211,6 +211,7 @@ class ManagedDropFileWidget(QWidget):
         self._file_filter = file_filter
         self._summary_text_builder: Callable[[int], str] = lambda count: f"Files: {count}"
         self._submit_allowed = True
+        self._validation_state: Literal["neutral", "info", "success", "warning", "error"] = "neutral"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -223,6 +224,7 @@ class ManagedDropFileWidget(QWidget):
         self.drop_zone.setMouseTracking(True)
         self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         self.drop_zone.setProperty("dragActive", False)
+        self.drop_zone.setProperty("validationState", self._validation_state)
         self.drop_zone.installEventFilter(self)
 
         zone_layout = QVBoxLayout(self.drop_zone)
@@ -313,6 +315,7 @@ class ManagedDropFileWidget(QWidget):
 
     def clear_files(self) -> None:
         if not self._files and self.drop_list.count() == 0:
+            self.set_validation_state("neutral")
             return
         self._files.clear()
         self.drop_list.clear()
@@ -320,6 +323,7 @@ class ManagedDropFileWidget(QWidget):
         self._update_clear_button_state()
         self._update_submit_button_state()
         self.files_changed.emit(self.files())
+        self.set_validation_state("neutral")
 
     def set_files(self, paths: list[str]) -> None:
         self._files.clear()
@@ -330,6 +334,20 @@ class ManagedDropFileWidget(QWidget):
             self._update_clear_button_state()
             self._update_submit_button_state()
             self.files_changed.emit(self.files())
+
+    def set_validation_state(
+        self,
+        state: Literal["neutral", "info", "success", "warning", "error"],
+    ) -> None:
+        if state == self._validation_state:
+            return
+        self._validation_state = state
+        self.drop_zone.setProperty("validationState", state)
+        style = self.drop_zone.style()
+        if style is not None:
+            style.unpolish(self.drop_zone)
+            style.polish(self.drop_zone)
+        self.drop_zone.update()
 
     def add_files(self, paths: list[str], *, emit_drop: bool = True) -> list[str]:
         normalized = [path for path in paths if path]

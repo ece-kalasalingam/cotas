@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Sequence
 
 from common.constants import (
@@ -24,9 +26,29 @@ from common.constants import (
     LIKERT_MIN,
     MIN_MARK_VALUE,
 )
-from common.error_catalog import validation_error_from_key
+from common.error_catalog import resolve_validation_issue, validation_error_from_key
+from common.exceptions import ValidationError
+from common.jobs import CancellationToken
+from common.registry import (
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_SEMESTER_KEY,
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+    COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
+    get_sheet_name_by_key,
+    get_sheet_schema_by_key,
+)
 from common.utils import coerce_excel_number, normalize
 from common.workbook_integrity.workbook_signing import sign_payload
+from domain.template_versions.course_setup_v2_impl.course_template_validator import (
+    _validate_course_metadata_rules,
+    _validated_non_empty_data_rows,
+)
+from domain.template_versions.course_setup_v2_impl.validation_batch_runner import (
+    BatchValidationAccumulator,
+    BatchValidationRunner,
+    ValidationRejectionDecision,
+)
 
 _logger = logging.getLogger(__name__)
 _MAX_DECIMAL_PLACES = 2
@@ -41,6 +63,71 @@ _MARK_COMPONENT_SHEET_KINDS = {
     LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
     LAYOUT_SHEET_KIND_INDIRECT,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class _MarksWorkbookIdentity:
+    template_id: str
+    course_code: str
+    semester: str
+    academic_year: str
+    total_outcomes: int
+    section: str
+    reg_numbers: frozenset[str]
+
+    def cohort_key(self) -> tuple[str, str, str, int]:
+        return (
+            normalize(self.course_code),
+            normalize(self.semester),
+            normalize(self.academic_year),
+            int(self.total_outcomes),
+        )
+
+
+class _ValidationCollector:
+    def __init__(self) -> None:
+        self._issues: list[dict[str, object]] = []
+
+    def add(self, exc: ValidationError) -> None:
+        self._issues.append(
+            _issue_dict(
+                code=str(getattr(exc, "code", "VALIDATION_ERROR")),
+                context=dict(getattr(exc, "context", {}) or {}),
+                fallback_message=str(exc).strip() or "Validation failed.",
+            )
+        )
+
+    def capture(self, fn, *args, **kwargs) -> Any | None:
+        try:
+            return fn(*args, **kwargs)
+        except ValidationError as exc:
+            self.add(exc)
+            return None
+
+    def capture_ok(self, fn, *args, **kwargs) -> bool:
+        try:
+            fn(*args, **kwargs)
+            return True
+        except ValidationError as exc:
+            self.add(exc)
+            return False
+
+    def raise_if_any(self) -> None:
+        if not self._issues:
+            return
+        if len(self._issues) == 1:
+            issue = self._issues[0]
+            raise ValidationError(
+                str(issue.get("message", "Validation failed.")),
+                code=str(issue.get("code", "VALIDATION_ERROR")),
+                context=dict(issue.get("context", {}) or {}),
+            )
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="MARKS_TEMPLATE_VALIDATION_FAILED",
+            issue_count=len(self._issues),
+            issues=list(self._issues),
+        )
 
 
 def _reset_marks_anomaly_warnings() -> None:
@@ -63,11 +150,14 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
     if not isinstance(sheet_order, list) or not isinstance(sheet_specs, list):
         raise validation_error_from_key("instructor.validation.step2.manifest_structure_invalid")
 
+    collector = _ValidationCollector()
     if list(workbook.sheetnames) != sheet_order:
-        raise validation_error_from_key(
-            "instructor.validation.step2.sheet_order_mismatch",
-            expected=sheet_order,
-            found=list(workbook.sheetnames),
+        collector.add(
+            validation_error_from_key(
+                "instructor.validation.step2.sheet_order_mismatch",
+                expected=sheet_order,
+                found=list(workbook.sheetnames),
+            )
         )
 
     has_marks_component = False
@@ -75,34 +165,54 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
     baseline_student_sheet: str | None = None
     for spec in sheet_specs:
         if not isinstance(spec, dict):
-            raise validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid")
+            collector.add(validation_error_from_key("instructor.validation.step2.manifest_sheet_spec_invalid"))
+            continue
         sheet_name = spec.get(LAYOUT_SHEET_SPEC_KEY_NAME)
         header_row = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADER_ROW)
         headers = spec.get(LAYOUT_SHEET_SPEC_KEY_HEADERS)
         anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_ANCHORS, [])
         formula_anchors = spec.get(LAYOUT_SHEET_SPEC_KEY_FORMULA_ANCHORS, [])
         if not isinstance(sheet_name, str) or sheet_name not in workbook.sheetnames:
-            raise validation_error_from_key(
-                "instructor.validation.step2.sheet_missing", sheet_name=sheet_name
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.sheet_missing",
+                    sheet_name=sheet_name,
+                )
             )
+            continue
         if not isinstance(header_row, int) or header_row <= 0:
-            raise validation_error_from_key(
-                "instructor.validation.step2.header_row_invalid",
-                sheet_name=sheet_name,
-                header_row=header_row,
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.header_row_invalid",
+                    sheet_name=sheet_name,
+                    header_row=header_row,
+                )
             )
+            continue
         if not isinstance(headers, list) or not headers:
-            raise validation_error_from_key(
-                "instructor.validation.step2.headers_missing", sheet_name=sheet_name
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.headers_missing",
+                    sheet_name=sheet_name,
+                )
             )
+            continue
         if not isinstance(anchors, list):
-            raise validation_error_from_key(
-                "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.anchor_spec_invalid",
+                    sheet_name=sheet_name,
+                )
             )
+            continue
         if not isinstance(formula_anchors, list):
-            raise validation_error_from_key(
-                "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.formula_anchor_spec_invalid",
+                    sheet_name=sheet_name,
+                )
             )
+            continue
 
         worksheet = workbook[sheet_name]
         expected_headers = [normalize(value) for value in headers]
@@ -111,55 +221,78 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
             for col_index in range(len(expected_headers))
         ]
         if actual_headers != expected_headers:
-            raise validation_error_from_key(
-                "instructor.validation.step2.header_row_mismatch",
-                sheet_name=sheet_name,
-                row=header_row,
-                expected=headers,
+            collector.add(
+                validation_error_from_key(
+                    "instructor.validation.step2.header_row_mismatch",
+                    sheet_name=sheet_name,
+                    row=header_row,
+                    expected=headers,
+                )
             )
 
         for anchor in anchors:
             if not isinstance(anchor, list) or len(anchor) != 2:
-                raise validation_error_from_key(
-                    "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.anchor_spec_invalid",
+                        sheet_name=sheet_name,
+                    )
                 )
+                continue
             cell_ref, expected_value = anchor
             if not isinstance(cell_ref, str) or not cell_ref:
-                raise validation_error_from_key(
-                    "instructor.validation.step2.anchor_spec_invalid", sheet_name=sheet_name
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.anchor_spec_invalid",
+                        sheet_name=sheet_name,
+                    )
                 )
+                continue
             actual_value = worksheet[cell_ref].value
             if not _filled_marks_values_match(expected_value, actual_value):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.anchor_value_mismatch",
-                    sheet_name=sheet_name,
-                    cell=cell_ref,
-                    expected=expected_value,
-                    found=actual_value,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.anchor_value_mismatch",
+                        sheet_name=sheet_name,
+                        cell=cell_ref,
+                        expected=expected_value,
+                        found=actual_value,
+                    )
                 )
         for formula_anchor in formula_anchors:
             if not isinstance(formula_anchor, list) or len(formula_anchor) != 2:
-                raise validation_error_from_key(
-                    "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.formula_anchor_spec_invalid",
+                        sheet_name=sheet_name,
+                    )
                 )
+                continue
             cell_ref, expected_formula = formula_anchor
             if not isinstance(cell_ref, str) or not isinstance(expected_formula, str):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.formula_anchor_spec_invalid", sheet_name=sheet_name
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.formula_anchor_spec_invalid",
+                        sheet_name=sheet_name,
+                    )
                 )
+                continue
             actual_formula = worksheet[cell_ref].value
             if _normalized_formula(actual_formula) != _normalized_formula(expected_formula):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.formula_mismatch",
-                    sheet_name=sheet_name,
-                    cell=cell_ref,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.formula_mismatch",
+                        sheet_name=sheet_name,
+                        cell=cell_ref,
+                    )
                 )
 
         sheet_kind = spec.get(LAYOUT_SHEET_SPEC_KEY_KIND)
         is_mark_component = sheet_kind in _MARK_COMPONENT_SHEET_KINDS
         if is_mark_component:
             has_marks_component = True
-            _validate_component_structure_snapshot(
+            collector.capture(
+                _validate_component_structure_snapshot,
                 worksheet=worksheet,
                 sheet_name=sheet_name,
                 sheet_kind=sheet_kind,
@@ -167,7 +300,8 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
                 structure=spec.get(LAYOUT_SHEET_SPEC_KEY_MARK_STRUCTURE),
                 header_count=len(expected_headers),
             )
-            actual_student_hash = _validate_component_student_identity(
+            actual_student_hash = collector.capture(
+                _validate_component_student_identity,
                 worksheet=worksheet,
                 sheet_name=sheet_name,
                 sheet_kind=sheet_kind,
@@ -175,16 +309,19 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
                 expected_student_count=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_COUNT),
                 expected_student_hash=spec.get(LAYOUT_SHEET_SPEC_KEY_STUDENT_IDENTITY_HASH),
             )
-            if baseline_student_hash is None:
+            if isinstance(actual_student_hash, str) and baseline_student_hash is None:
                 baseline_student_hash = actual_student_hash
                 baseline_student_sheet = sheet_name
-            elif actual_student_hash != baseline_student_hash:
-                raise validation_error_from_key(
-                    "instructor.validation.step2.student_identity_cross_sheet_mismatch",
-                    sheet_name=sheet_name,
-                    reference_sheet=baseline_student_sheet,
+            elif isinstance(actual_student_hash, str) and actual_student_hash != baseline_student_hash:
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.student_identity_cross_sheet_mismatch",
+                        sheet_name=sheet_name,
+                        reference_sheet=baseline_student_sheet,
+                    )
                 )
-            _validate_non_empty_marks_entries(
+            collector.capture(
+                _validate_non_empty_marks_entries,
                 worksheet=worksheet,
                 sheet_name=sheet_name,
                 sheet_kind=sheet_kind,
@@ -193,7 +330,291 @@ def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> No
             )
 
     if not has_marks_component:
-        raise validation_error_from_key("instructor.validation.step2.no_component_sheets")
+        collector.add(validation_error_from_key("instructor.validation.step2.no_component_sheets"))
+    collector.raise_if_any()
+
+
+def validate_filled_marks_workbooks(
+    workbook_paths: Sequence[str | Path],
+    *,
+    template_id: str,
+    cancel_token: CancellationToken | None = None,
+) -> dict[str, object]:
+    baseline_cohort: tuple[str, str, str, int] | None = None
+    baseline_identity: _MarksWorkbookIdentity | None = None
+    seen_sections: set[str] = set()
+    seen_reg_numbers: set[str] = set()
+
+    def _validate_path(path: str) -> _MarksWorkbookIdentity:
+        return _validate_filled_marks_workbook_impl(
+            workbook_path=path,
+            expected_template_id=template_id,
+            cancel_token=cancel_token,
+        )
+
+    def _on_validated(acc: BatchValidationAccumulator, path: str, identity: _MarksWorkbookIdentity) -> None:
+        nonlocal baseline_cohort
+        nonlocal baseline_identity
+        cohort = identity.cohort_key()
+        if baseline_cohort is None:
+            baseline_cohort = cohort
+            baseline_identity = identity
+            seen_sections.add(normalize(identity.section))
+            seen_reg_numbers.update(identity.reg_numbers)
+            acc.add_valid(path=path, template_id=identity.template_id)
+            return
+        if cohort != baseline_cohort:
+            mismatch_fields: list[str] = []
+            if baseline_identity is not None:
+                if normalize(identity.course_code) != normalize(baseline_identity.course_code):
+                    mismatch_fields.append(COURSE_METADATA_COURSE_CODE_KEY)
+                if normalize(identity.semester) != normalize(baseline_identity.semester):
+                    mismatch_fields.append(COURSE_METADATA_SEMESTER_KEY)
+                if normalize(identity.academic_year) != normalize(baseline_identity.academic_year):
+                    mismatch_fields.append(COURSE_METADATA_ACADEMIC_YEAR_KEY)
+                if int(identity.total_outcomes) != int(baseline_identity.total_outcomes):
+                    mismatch_fields.append(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
+            issue = _issue_dict(
+                code="MARKS_TEMPLATE_COHORT_MISMATCH",
+                context={
+                    "workbook": path,
+                    "fields": ", ".join(mismatch_fields) if mismatch_fields else "cohort",
+                },
+                fallback_message=(
+                    "File skipped because course cohort metadata does not match "
+                    "(course code, semester, academic year, total outcomes must match)."
+                ),
+            )
+            acc.add_rejection(
+                path=path,
+                issue=issue,
+                decision=ValidationRejectionDecision(
+                    reason_kind="cohort_mismatch",
+                    mark_invalid=False,
+                    mark_mismatched=True,
+                ),
+            )
+            return
+        section_key = normalize(identity.section)
+        if section_key in seen_sections:
+            issue = _issue_dict(
+                code="MARKS_TEMPLATE_SECTION_DUPLICATE",
+                context={
+                    "workbook": path,
+                    "section": identity.section,
+                },
+                fallback_message="Duplicate section skipped for same course cohort.",
+            )
+            acc.add_rejection(
+                path=path,
+                issue=issue,
+                decision=ValidationRejectionDecision(
+                    reason_kind="duplicate_section",
+                    mark_invalid=False,
+                    mark_duplicate_section=True,
+                ),
+            )
+            return
+        duplicated_reg_numbers = sorted(
+            reg_no for reg_no in identity.reg_numbers if reg_no in seen_reg_numbers
+        )
+        if duplicated_reg_numbers:
+            issue = _issue_dict(
+                code="MARKS_TEMPLATE_STUDENT_REG_DUPLICATE",
+                context={
+                    "workbook": path,
+                    "duplicates": ", ".join(duplicated_reg_numbers[:5]),
+                    "count": len(duplicated_reg_numbers),
+                },
+                fallback_message="Duplicate student register numbers found across workbooks.",
+            )
+            acc.add_rejection(
+                path=path,
+                issue=issue,
+                decision=ValidationRejectionDecision(
+                    reason_kind="duplicate_reg_no",
+                    mark_invalid=True,
+                ),
+            )
+            return
+        seen_sections.add(section_key)
+        seen_reg_numbers.update(identity.reg_numbers)
+        acc.add_valid(path=path, template_id=identity.template_id)
+
+    def _classify_validation_error(
+        _path: str,
+        _exc: ValidationError,
+        issue: dict[str, object],
+    ) -> ValidationRejectionDecision:
+        reason_kind = (
+            "template_mismatch"
+            if str(issue.get("code", "")).strip() == "UNKNOWN_TEMPLATE"
+            else "invalid"
+        )
+        return ValidationRejectionDecision(
+            reason_kind=reason_kind,
+            mark_invalid=True,
+            mark_mismatched=reason_kind == "template_mismatch",
+        )
+
+    runner = BatchValidationRunner[_MarksWorkbookIdentity](
+        issue_builder=_issue_dict,
+        duplicate_path_issue_code="MARKS_TEMPLATE_DUPLICATE_PATH",
+        unexpected_issue_code="MARKS_TEMPLATE_UNEXPECTED_REJECTION",
+    )
+    return runner.run(
+        workbook_paths=workbook_paths,
+        validate_path=_validate_path,
+        on_validated=_on_validated,
+        cancel_token=cancel_token,
+        classify_validation_error=_classify_validation_error,
+    )
+
+
+def _validate_filled_marks_workbook_impl(
+    *,
+    workbook_path: str | Path,
+    expected_template_id: str,
+    cancel_token: CancellationToken | None = None,
+) -> _MarksWorkbookIdentity:
+    from domain.template_strategy_router import (
+        assert_template_id_matches,
+        read_valid_system_workbook_payload,
+    )
+
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise validation_error_from_key(
+            "validation.dependency.openpyxl_missing",
+            code="OPENPYXL_MISSING",
+        ) from exc
+
+    workbook_file = Path(workbook_path)
+    if not workbook_file.exists():
+        raise validation_error_from_key(
+            "validation.workbook.not_found",
+            code="WORKBOOK_NOT_FOUND",
+            workbook=str(workbook_file),
+        )
+
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False, read_only=True)
+    except Exception as exc:
+        raise validation_error_from_key(
+            "validation.workbook.open_failed",
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(workbook_file),
+        ) from exc
+    try:
+        payload = read_valid_system_workbook_payload(workbook)
+    finally:
+        workbook.close()
+
+    collector = _ValidationCollector()
+    collector.capture(
+        assert_template_id_matches,
+        actual_template_id=payload.template_id,
+        expected_template_id=expected_template_id,
+    )
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+
+    try:
+        workbook = openpyxl.load_workbook(workbook_file, data_only=False)
+    except Exception as exc:
+        raise validation_error_from_key(
+            "validation.workbook.open_failed",
+            code="WORKBOOK_OPEN_FAILED",
+            workbook=str(workbook_file),
+        ) from exc
+    identity: _MarksWorkbookIdentity | None = None
+    try:
+        manifest_ok = collector.capture_ok(
+            validate_filled_marks_manifest_schema,
+            workbook=workbook,
+            manifest=payload.manifest,
+        )
+        if manifest_ok:
+            captured_identity = collector.capture(
+                _read_marks_workbook_identity,
+                workbook=workbook,
+                template_id=payload.template_id,
+            )
+            if isinstance(captured_identity, _MarksWorkbookIdentity):
+                identity = captured_identity
+    finally:
+        workbook.close()
+    collector.raise_if_any()
+    if identity is None:
+        raise validation_error_from_key("common.validation_failed_invalid_data", code="MARKS_TEMPLATE_IDENTITY_MISSING")
+    return identity
+
+
+def _read_marks_workbook_identity(*, workbook: Any, template_id: str) -> _MarksWorkbookIdentity:
+    metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+    metadata_schema = get_sheet_schema_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+    if metadata_schema is None:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="SCHEMA_MISSING",
+            sheet_name=metadata_sheet_name,
+        )
+    if metadata_sheet_name not in workbook.sheetnames:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="SHEET_DATA_REQUIRED",
+            sheet_name=metadata_sheet_name,
+        )
+    metadata_rows = _validated_non_empty_data_rows(workbook[metadata_sheet_name], metadata_schema)
+    identity = _validate_course_metadata_rules({metadata_sheet_name: metadata_rows})
+    return _MarksWorkbookIdentity(
+        template_id=template_id,
+        course_code=identity.course_code,
+        semester=identity.semester,
+        academic_year=identity.academic_year,
+        total_outcomes=identity.total_outcomes,
+        section=identity.section,
+        reg_numbers=_extract_marks_workbook_reg_numbers(workbook=workbook),
+    )
+
+
+def _extract_marks_workbook_reg_numbers(*, workbook: Any) -> frozenset[str]:
+    reg_header_tokens = {"reg no", "reg_no", "regno"}
+    reg_numbers: set[str] = set()
+    for sheet_name in workbook.sheetnames:
+        worksheet = workbook[sheet_name]
+        max_col = int(getattr(worksheet, "max_column", 0) or 0)
+        if max_col <= 0:
+            continue
+        header_row = 1
+        reg_col: int | None = None
+        for col in range(1, max_col + 1):
+            header_value = normalize(worksheet.cell(row=header_row, column=col).value)
+            if header_value in reg_header_tokens:
+                reg_col = col
+                break
+        if reg_col is None:
+            continue
+        max_row = int(getattr(worksheet, "max_row", 0) or 0)
+        for row in range(header_row + 1, max_row + 1):
+            raw = worksheet.cell(row=row, column=reg_col).value
+            token = normalize(raw)
+            if token:
+                reg_numbers.add(token)
+    return frozenset(reg_numbers)
+
+
+def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) -> dict[str, object]:
+    resolved = resolve_validation_issue(code, context, fallback_message=fallback_message)
+    return {
+        "code": resolved.code,
+        "category": resolved.category,
+        "severity": resolved.severity,
+        "translation_key": resolved.translation_key,
+        "message": resolved.message,
+        "context": dict(resolved.context),
+    }
 
 
 def _filled_marks_values_match(expected_value: object, actual_value: object) -> bool:
@@ -635,5 +1056,6 @@ def _log_marks_anomaly_warnings_from_stats(
 
 __all__ = [
     "consume_last_marks_anomaly_warnings",
+    "validate_filled_marks_workbooks",
     "validate_filled_marks_manifest_schema",
 ]

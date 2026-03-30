@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from logging import Logger
+from collections.abc import Iterable
 from typing import Mapping
 
 from common.jobs import CancellationToken
+from common.exceptions import ConfigurationError
 from common.module_messages import (
     NotificationChannel,
     ToastLevel,
-    append_user_log,
+    emit_workbook_generation_feedback,
+    emit_validation_batch_feedback,
     notify_validation_issue,
     notify_message,
     notify_message_key,
-    publish_status,
     publish_status_key,
     show_toast_key,
     show_toast_plain,
@@ -55,10 +57,18 @@ class ModuleRuntime:
         setup_ui_logging(self._module, ns=self._messages_namespace_factory())
 
     def append_user_log(self, message: str) -> None:
-        append_user_log(self._module, message, ns=self._messages_namespace_factory())
+        del message
+        raise ConfigurationError(
+            "ModuleRuntime.append_user_log(message) is disallowed. "
+            "Use notify_message_key(...) / publish_status_key(...) for translatable log entries."
+        )
 
     def publish_status(self, message: str) -> None:
-        publish_status(self._module, message, ns=self._messages_namespace_factory())
+        del message
+        raise ConfigurationError(
+            "ModuleRuntime.publish_status(message) is disallowed. "
+            "Use publish_status_key(...) or notify_message_key(...)."
+        )
 
     def publish_status_key(self, text_key: str, **kwargs: object) -> None:
         publish_status_key(self._module, text_key, ns=self._messages_namespace_factory(), **kwargs)
@@ -121,6 +131,38 @@ class ModuleRuntime:
             ns=self._messages_namespace_factory(),
             issue=issue,
             file_path=file_path,
+            channels=channels,
+        )
+
+    def emit_validation_batch_feedback(
+        self,
+        *,
+        rejections: Iterable[Mapping[str, object]],
+        valid_count: int,
+        issue_channels: tuple[NotificationChannel, ...] = ("status", "activity_log"),
+        summary_channels: tuple[NotificationChannel, ...] = ("toast",),
+    ) -> None:
+        emit_validation_batch_feedback(
+            self._module,
+            ns=self._messages_namespace_factory(),
+            rejections=rejections,
+            valid_count=valid_count,
+            issue_channels=issue_channels,
+            summary_channels=summary_channels,
+        )
+
+    def emit_workbook_generation_feedback(
+        self,
+        *,
+        success_count: int,
+        failed_count: int,
+        channels: tuple[NotificationChannel, ...] = ("status", "activity_log", "toast"),
+    ) -> None:
+        emit_workbook_generation_feedback(
+            self._module,
+            ns=self._messages_namespace_factory(),
+            success_count=success_count,
+            failed_count=failed_count,
             channels=channels,
         )
 

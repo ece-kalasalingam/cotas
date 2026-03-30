@@ -122,3 +122,62 @@ def test_collect_files_async_emits_capped_anomaly_warning_lines() -> None:
     assert warning_more and warning_more[-1][1]["count"] == 3
     assert any(level == "warning" for _body, _title, level in toasts)
 
+
+def test_collect_files_async_uses_cohort_mismatch_reason_keys() -> None:
+    class _CohortMismatchWorkflowService(_WorkflowService):
+        def collect_files(
+            self,
+            candidate_paths,
+            *,
+            existing_paths,
+            validate_uploaded_source_workbook,
+            consume_last_source_anomaly_warnings,
+            context,
+            cancel_token=None,
+        ):
+            del candidate_paths
+            del existing_paths
+            del validate_uploaded_source_workbook
+            del consume_last_source_anomaly_warnings
+            del context
+            del cancel_token
+            return {
+                "added": [],
+                "duplicates": 0,
+                "invalid": 1,
+                "ignored": 1,
+                "unsupported_or_missing_files": 0,
+                "invalid_source_workbook_files": 0,
+                "duplicate_reg_number_files": 0,
+                "cohort_mismatch_files": 1,
+                "invalid_system_hash_files": 0,
+                "invalid_marks_unfilled_files": 0,
+                "invalid_layout_manifest_files": 0,
+                "invalid_template_mismatch_files": 0,
+                "invalid_mark_value_files": 0,
+                "invalid_other_validation_files": 0,
+                "validation_failures": [],
+                "anomaly_warnings": [],
+            }
+
+    module = _Module()
+    module._workflow_service = _CohortMismatchWorkflowService()
+    toasts: list[tuple[str, str, str]] = []
+
+    def _show_toast(_module, body: str, *, title: str, level: str) -> None:
+        toasts.append((body, title, level))
+
+    ns = {
+        "_validate_uploaded_source_workbook": lambda _path: None,
+        "_consume_last_source_anomaly_warnings": lambda: [],
+        "t": lambda key, **kwargs: key.format(**kwargs) if kwargs else key,
+        "show_toast": _show_toast,
+        "log_process_message": lambda *args, **kwargs: None,
+        "build_i18n_log_message": lambda *args, **kwargs: "done",
+        "JobCancelledError": Exception,
+    }
+
+    collect_files_async(module, ["a.xlsx"], ns=ns)
+
+    assert any(key == "co_analysis.status.cohort_mismatch" for key, _ in module.published)
+    assert any("co_analysis.status.ignored_reason.cohort_mismatch" in body for body, _title, _level in toasts)

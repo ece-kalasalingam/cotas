@@ -86,6 +86,7 @@ QPushButton {
 QPushButton:disabled {
     border: 1px solid palette(mid);
 }
+
 """
 
 MAIN_ACTIVITYBAR_STYLESHEET = """

@@ -179,12 +179,17 @@ def save_workbook_async(module: object, *, ns: Mapping[str, object]) -> None:
             job_id=job_context.job_id,
             step_id=job_context.step_id,
         )
-        typed_ns["show_toast"](
-            typed_module,
-            typed_ns["t"]("coordinator.status.calculate_completed"),
-            title=typed_ns["t"]("coordinator.title"),
-            level="info",
-        )
+        runtime = getattr(typed_module, "_runtime", None)
+        emit_generation = getattr(runtime, "emit_workbook_generation_feedback", None)
+        if callable(emit_generation):
+            emit_generation(success_count=1, failed_count=0)
+        else:
+            typed_ns["show_toast"](
+                typed_module,
+                typed_ns["t"]("coordinator.status.calculate_completed"),
+                title=typed_ns["t"]("coordinator.title"),
+                level="info",
+            )
 
     def _on_failure(exc: Exception) -> None:
         handle_step_failure(

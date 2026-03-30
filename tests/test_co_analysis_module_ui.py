@@ -138,3 +138,31 @@ def test_download_co_description_template_link_triggers_generation(
     assert "co_analysis.status.co_description_template_generated" in seen_keys
     assert "co_analysis.toast.co_description_template_generated" in seen_keys
     _dispose_widget(module, qapp)
+
+
+def test_marks_upload_validation_emits_issue_and_summary_toast(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+) -> None:
+    module, seen_keys = _build_module_with_message_capture(monkeypatch)
+
+    def _fake_validate(path: Path) -> None:
+        if path.name.lower().startswith("bad"):
+            raise co_analysis_ui.ValidationError(
+                "mismatch",
+                code="MARKS_TEMPLATE_COHORT_MISMATCH",
+                context={"workbook": str(path), "fields": "Course_Code"},
+            )
+
+    monkeypatch.setattr(co_analysis_ui, "validate_uploaded_source_workbook", _fake_validate)
+    monkeypatch.setattr(co_analysis_ui, "consume_last_source_anomaly_warnings", lambda: [])
+
+    module.drop_widget.add_files(["C:/good.xlsx", "C:/bad.xlsx"], emit_drop=True)
+    qapp.processEvents()
+
+    assert any(
+        "validation.batch.title_error" in str(entry.get("message", ""))
+        for entry in getattr(module, "_user_log_entries", [])
+    )
+    assert seen_keys == []
+    _dispose_widget(module, qapp)
