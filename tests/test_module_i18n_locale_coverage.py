@@ -12,6 +12,17 @@ KEY_CALLS = {"notify_message_key", "publish_status_key", "_publish_status_key", 
 
 
 def _collect_module_i18n_keys() -> set[str]:
+    """Collect module i18n keys.
+    
+    Args:
+        None.
+    
+    Returns:
+        set[str]: Return value.
+    
+    Raises:
+        None.
+    """
     keys: set[str] = set()
     for path in MODULES_ROOT.rglob("*.py"):
         if "__pycache__" in path.parts:
@@ -54,6 +65,17 @@ def _collect_module_i18n_keys() -> set[str]:
 
 
 def _load_locale_map(locale_file: str) -> dict[str, str]:
+    """Load locale map.
+    
+    Args:
+        locale_file: Parameter value (str).
+    
+    Returns:
+        dict[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     root = ET.parse(REPO_ROOT / "common" / "i18n" / locale_file).getroot()
     mapping: dict[str, str] = {}
     for message in root.findall(".//message"):
@@ -66,6 +88,17 @@ def _load_locale_map(locale_file: str) -> dict[str, str]:
 
 
 def test_module_emitted_i18n_keys_have_non_key_translations_in_all_locales() -> None:
+    """Test module emitted i18n keys have non key translations in all locales.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     keys = sorted(_collect_module_i18n_keys())
     violations: list[str] = []
     for locale in LOCALES:

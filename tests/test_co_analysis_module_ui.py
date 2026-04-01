@@ -14,6 +14,17 @@ from modules import co_analysis_module as co_analysis_ui
 
 @pytest.fixture(scope="module")
 def qapp() -> QApplication:
+    """Qapp.
+    
+    Args:
+        None.
+    
+    Returns:
+        QApplication: Return value.
+    
+    Raises:
+        None.
+    """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -21,6 +32,18 @@ def qapp() -> QApplication:
 
 
 def _dispose_widget(widget: object, qapp: QApplication) -> None:
+    """Dispose widget.
+    
+    Args:
+        widget: Parameter value (object).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     close = getattr(widget, "close", None)
     if callable(close):
         close()
@@ -33,10 +56,33 @@ def _dispose_widget(widget: object, qapp: QApplication) -> None:
 def _build_module_with_message_capture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[co_analysis_ui.COAnalysisModule, list[str]]:
+    """Build module with message capture.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        tuple[co_analysis_ui.COAnalysisModule, list[str]]: Return value.
+    
+    Raises:
+        None.
+    """
     seen_keys: list[str] = []
     monkeypatch.setattr(co_analysis_ui, "t", lambda key, **kwargs: key)
 
     def _capture_notify_message_key(self, text_key: str, **kwargs: object) -> None:
+        """Capture notify message key.
+        
+        Args:
+            text_key: Parameter value (str).
+            kwargs: Parameter value (object).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         del self, kwargs
         seen_keys.append(text_key)
 
@@ -45,13 +91,68 @@ def _build_module_with_message_capture(
         "notify_message_key",
         _capture_notify_message_key,
     )
-    monkeypatch.setattr(co_analysis_ui, "validate_uploaded_source_workbook", lambda _path: None)
-    monkeypatch.setattr(co_analysis_ui, "consume_last_source_anomaly_warnings", lambda: [])
-    monkeypatch.setattr(co_analysis_ui.COAnalysisModule, "_setup_ui_logging", lambda self: None)
-    return co_analysis_ui.COAnalysisModule(), seen_keys
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "validate_workbooks",
+        lambda **kwargs: {
+            "valid_paths": list(kwargs.get("workbook_paths", [])),
+            "rejections": [],
+            "invalid_paths": [],
+        },
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "consume_marks_anomaly_warnings",
+        lambda _template_id: [],
+    )
+    monkeypatch.setattr(
+        co_analysis_ui.COAnalysisModule, "_setup_ui_logging", lambda self: None
+    )
+    module = co_analysis_ui.COAnalysisModule()
+
+    def _run_inline(*, token, job_id, work, on_success, on_failure, on_finally=None):
+        """Run inline.
+        
+        Args:
+            token: Parameter value.
+            job_id: Parameter value.
+            work: Parameter value.
+            on_success: Parameter value.
+            on_failure: Parameter value.
+            on_finally: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        del token, job_id
+        try:
+            result = work()
+            on_success(result)
+        except Exception as exc:  # pragma: no cover - defensive
+            on_failure(exc)
+        if on_finally is not None:
+            on_finally()
+
+    monkeypatch.setattr(module, "_start_async_operation", _run_inline)
+    return module, seen_keys
 
 
 def test_drop_widget_syncs_files_and_clear(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    """Test drop widget syncs files and clear.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module, _seen_keys = _build_module_with_message_capture(monkeypatch)
     module.drop_widget.add_files(["C:/a.xlsx", "C:/b.xlsx"], emit_drop=True)
     assert module._files == [Path("C:/a.xlsx"), Path("C:/b.xlsx")]
@@ -66,11 +167,40 @@ def test_drop_widget_syncs_files_and_clear(monkeypatch: pytest.MonkeyPatch, qapp
     _dispose_widget(module, qapp)
 
 
-def test_submit_reports_no_backend_action(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+def test_submit_triggers_async_save_workbook(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    """Test submit triggers async save workbook.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
+    called = {"count": 0}
+
+    def _fake_prepare_co_analysis_async() -> None:
+        """Fake prepare co analysis async.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        called["count"] += 1
+
+    monkeypatch.setattr(module, "_prepare_co_analysis_async", _fake_prepare_co_analysis_async)
     module.drop_widget.add_files(["C:/a.xlsx"], emit_drop=True)
     module._on_submit_requested()
-    assert "coordinator.status.operation_cancelled" in seen_keys
+    assert called["count"] == 1
     _dispose_widget(module, qapp)
 
 
@@ -78,13 +208,25 @@ def test_submit_shows_threshold_violation_when_invalid(
     monkeypatch: pytest.MonkeyPatch,
     qapp: QApplication,
 ) -> None:
+    """Test submit shows threshold violation when invalid.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
     module.drop_widget.add_files(["C:/a.xlsx"], emit_drop=True)
     module.threshold_l1_input.setValue(70.0)
     module.threshold_l2_input.setValue(60.0)
     module.threshold_l3_input.setValue(90.0)
     module._on_submit_requested()
-    assert "coordinator.thresholds.invalid_rule" in seen_keys
+    assert "co_analysis.thresholds.invalid_rule" in seen_keys
     _dispose_widget(module, qapp)
 
 
@@ -93,6 +235,19 @@ def test_download_co_description_template_link_triggers_generation(
     qapp: QApplication,
     tmp_path: Path,
 ) -> None:
+    """Test download co description template link triggers generation.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
     output_path = tmp_path / "CO_Description_Template.xlsx"
     called: dict[str, object] = {}
@@ -104,6 +259,17 @@ def test_download_co_description_template_link_triggers_generation(
     )
 
     def _fake_generate_workbook(**kwargs):
+        """Fake generate workbook.
+        
+        Args:
+            kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         called["workbook_kind"] = kwargs.get("workbook_kind")
         called["template_id"] = kwargs.get("template_id")
         return type(
@@ -118,6 +284,22 @@ def test_download_co_description_template_link_triggers_generation(
     monkeypatch.setattr(co_analysis_ui, "generate_workbook", _fake_generate_workbook)
 
     def _run_inline(*, token, job_id, work, on_success, on_failure, on_finally=None):
+        """Run inline.
+        
+        Args:
+            token: Parameter value.
+            job_id: Parameter value.
+            work: Parameter value.
+            on_success: Parameter value.
+            on_failure: Parameter value.
+            on_finally: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         del token, job_id
         try:
             result = work()
@@ -144,18 +326,60 @@ def test_marks_upload_validation_emits_issue_and_summary_toast(
     monkeypatch: pytest.MonkeyPatch,
     qapp: QApplication,
 ) -> None:
+    """Test marks upload validation emits issue and summary toast.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
 
-    def _fake_validate(path: Path) -> None:
-        if path.name.lower().startswith("bad"):
-            raise co_analysis_ui.ValidationError(
-                "mismatch",
-                code="MARKS_TEMPLATE_COHORT_MISMATCH",
-                context={"workbook": str(path), "fields": "Course_Code"},
-            )
+    def _fake_batch_validate(paths: list[str]) -> dict[str, object]:
+        """Fake batch validate.
+        
+        Args:
+            paths: Parameter value (list[str]).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
+        accepted = [path for path in paths if not Path(path).name.lower().startswith("bad")]
+        rejected = [
+            {
+                "path": path,
+                "issue": {
+                    "code": "MARKS_TEMPLATE_COHORT_MISMATCH",
+                    "category": "validation",
+                    "severity": "error",
+                    "translation_key": "validation.issue",
+                    "message": "mismatch",
+                    "context": {"workbook": path, "fields": "Course_Code"},
+                },
+            }
+            for path in paths
+            if Path(path).name.lower().startswith("bad")
+        ]
+        return {"valid_paths": accepted, "rejections": rejected, "invalid_paths": [item["path"] for item in rejected]}
 
-    monkeypatch.setattr(co_analysis_ui, "validate_uploaded_source_workbook", _fake_validate)
-    monkeypatch.setattr(co_analysis_ui, "consume_last_source_anomaly_warnings", lambda: [])
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "validate_workbooks",
+        lambda **kwargs: _fake_batch_validate(list(kwargs.get("workbook_paths", []))),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "consume_marks_anomaly_warnings",
+        lambda _template_id: [],
+    )
 
     module.drop_widget.add_files(["C:/good.xlsx", "C:/bad.xlsx"], emit_drop=True)
     qapp.processEvents()
@@ -166,3 +390,4 @@ def test_marks_upload_validation_emits_issue_and_summary_toast(
     )
     assert seen_keys == []
     _dispose_widget(module, qapp)
+

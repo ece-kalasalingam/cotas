@@ -8,6 +8,17 @@ from common.workbook_output_resolution import (
 
 
 def test_extract_overwrite_conflicts_from_generation_result_filters_expected_items() -> None:
+    """Test extract overwrite conflicts from generation result filters expected items.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     result = {
         "results": {
             "a": {
@@ -46,6 +57,17 @@ def test_extract_overwrite_conflicts_from_generation_result_filters_expected_ite
 
 
 def test_resolve_overwrite_conflicts_uses_bulk_confirmation_when_above_limit() -> None:
+    """Test resolve overwrite conflicts uses bulk confirmation when above limit.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     conflicts = [
         OverwriteConflict(source_path="C:/src/a.xlsx", output_path="C:/out/a.xlsx"),
         OverwriteConflict(source_path="C:/src/b.xlsx", output_path="C:/out/b.xlsx"),
@@ -54,10 +76,32 @@ def test_resolve_overwrite_conflicts_uses_bulk_confirmation_when_above_limit() -
     observed_paths: list[list[str]] = []
 
     def _ask_overwrite_all(paths: list[str]) -> bool:
+        """Ask overwrite all.
+        
+        Args:
+            paths: Parameter value (list[str]).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         observed_paths.append(paths)
         return True
 
     def _ask_output_path(_suggested_output: str) -> str | None:
+        """Ask output path.
+        
+        Args:
+            _suggested_output: Parameter value (str).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         raise AssertionError("Per-file resolver must not be called in bulk mode.")
 
     resolved = resolve_overwrite_conflicts(
@@ -77,6 +121,17 @@ def test_resolve_overwrite_conflicts_uses_bulk_confirmation_when_above_limit() -
 
 
 def test_resolve_overwrite_conflicts_uses_per_file_resolution_when_within_limit() -> None:
+    """Test resolve overwrite conflicts uses per file resolution when within limit.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     conflicts = [
         OverwriteConflict(source_path="C:/src/a.xlsx", output_path="C:/out/a.xlsx"),
         OverwriteConflict(source_path="C:/src/b.xlsx", output_path="C:/out/b.xlsx"),
@@ -84,9 +139,31 @@ def test_resolve_overwrite_conflicts_uses_per_file_resolution_when_within_limit(
     suggested_outputs: list[str] = []
 
     def _ask_overwrite_all(_paths: list[str]) -> bool:
+        """Ask overwrite all.
+        
+        Args:
+            _paths: Parameter value (list[str]).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         raise AssertionError("Bulk confirmation must not be called in per-file mode.")
 
     def _ask_output_path(suggested_output: str) -> str | None:
+        """Ask output path.
+        
+        Args:
+            suggested_output: Parameter value (str).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         suggested_outputs.append(suggested_output)
         if suggested_output.endswith("/a.xlsx"):
             return "C:/out/custom_a.xlsx"
@@ -105,6 +182,17 @@ def test_resolve_overwrite_conflicts_uses_per_file_resolution_when_within_limit(
 
 
 def test_resolve_overwrite_conflicts_deduplicates_sources_by_canonical_key() -> None:
+    """Test resolve overwrite conflicts deduplicates sources by canonical key.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     conflicts = [
         OverwriteConflict(source_path="C:/SRC/A.xlsx", output_path="C:/out/a.xlsx"),
         OverwriteConflict(source_path="c:/src/a.xlsx", output_path="C:/out/other_a.xlsx"),
@@ -112,9 +200,31 @@ def test_resolve_overwrite_conflicts_deduplicates_sources_by_canonical_key() -> 
     ]
 
     def _ask_overwrite_all(_paths: list[str]) -> bool:
+        """Ask overwrite all.
+        
+        Args:
+            _paths: Parameter value (list[str]).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         return True
 
     def _ask_output_path(_suggested_output: str) -> str | None:
+        """Ask output path.
+        
+        Args:
+            _suggested_output: Parameter value (str).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         return None
 
     resolved = resolve_overwrite_conflicts(

@@ -4,6 +4,17 @@ from common.error_catalog import resolve_validation_issue
 
 
 def test_marks_template_catalog_entries_resolve_to_translation_keys() -> None:
+    """Test marks template catalog entries resolve to translation keys.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     issue = resolve_validation_issue(
         "MARKS_TEMPLATE_COHORT_MISMATCH",
         context={"workbook": "a.xlsx", "fields": "Course_Code"},

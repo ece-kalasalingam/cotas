@@ -28,6 +28,17 @@ from domain.template_strategy_router import (
 
 
 def generate_course_details_template(output_path: Path) -> Path:
+    """Generate course details template.
+    
+    Args:
+        output_path: Parameter value (Path).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     result = generate_workbook(
         template_id="COURSE_SETUP_V2",
         output_path=output_path,
@@ -41,6 +52,18 @@ def generate_course_details_template(output_path: Path) -> Path:
 
 
 def generate_marks_template_from_course_details(course_details_path: Path, output_path: Path) -> Path:
+    """Generate marks template from course details.
+    
+    Args:
+        course_details_path: Parameter value (Path).
+        output_path: Parameter value (Path).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     template_id = resolve_template_id_from_workbook_path(course_details_path)
     result = generate_workbooks(
         template_id=template_id,
@@ -61,6 +84,17 @@ def generate_marks_template_from_course_details(course_details_path: Path, outpu
 
 
 def test_registry_declares_v2_marks_dynamic_sheet_templates() -> None:
+    """Test registry declares v2 marks dynamic sheet templates.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     direct_co = get_dynamic_sheet_template("COURSE_SETUP_V2", COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE)
     direct_non_co = get_dynamic_sheet_template(
         "COURSE_SETUP_V2",
@@ -77,6 +111,17 @@ def test_registry_declares_v2_marks_dynamic_sheet_templates() -> None:
 
 
 def test_instructor_sheetops_does_not_duplicate_marks_dynamic_header_tokens() -> None:
+    """Test instructor sheetops does not duplicate marks dynamic header tokens.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     source = (
         Path(__file__).resolve().parents[1]
         / "domain"
@@ -90,6 +135,17 @@ def test_instructor_sheetops_does_not_duplicate_marks_dynamic_header_tokens() ->
 
 
 def test_marks_template_uses_shared_format_bundle_only() -> None:
+    """Test marks template uses shared format bundle only.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     source = (
         Path(__file__).resolve().parents[1]
         / "domain"
@@ -102,6 +158,17 @@ def test_marks_template_uses_shared_format_bundle_only() -> None:
 
 
 def test_xlsx_style_policy_constants_live_in_excel_layout_module() -> None:
+    """Test xlsx style policy constants live in excel layout module.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     constants_source = (Path(__file__).resolve().parents[1] / "common" / "constants.py").read_text(
         encoding="utf-8"
     )
@@ -115,6 +182,17 @@ def test_xlsx_style_policy_constants_live_in_excel_layout_module() -> None:
 
 
 def test_generated_marks_sheet_headers_match_registry_dynamic_resolvers(tmp_path: Path) -> None:
+    """Test generated marks sheet headers match registry dynamic resolvers.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     course_details = tmp_path / "course_details.xlsx"
     marks_template = tmp_path / "marks_template.xlsx"
     generate_course_details_template(course_details)

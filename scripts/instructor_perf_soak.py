@@ -18,12 +18,34 @@ from services import InstructorWorkflowService
 
 
 def _time_call(fn):
+    """Time call.
+    
+    Args:
+        fn: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     started = time.perf_counter()
     fn()
     return (time.perf_counter() - started) * 1000.0
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     parser = argparse.ArgumentParser(
         description="Run instructor workflow performance/soak checks."
     )

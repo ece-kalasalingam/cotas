@@ -55,6 +55,17 @@ def generate_course_details_template(
     workbook_closed = False
 
     def _cleanup_incomplete_output() -> None:
+        """Cleanup incomplete output.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         nonlocal workbook_closed
         if not workbook_closed:
             try:
@@ -123,6 +134,20 @@ def generate_course_details_templates_batch(
     allow_overwrite: bool = False,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, object]:
+    """Generate course details templates batch.
+    
+    Args:
+        workbook_paths: Parameter value (Sequence[str | Path]).
+        output_dir: Parameter value (str | Path).
+        allow_overwrite: Parameter value (bool).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     unexpected_workbook_paths = [str(raw).strip() for raw in workbook_paths if str(raw).strip()]
     if unexpected_workbook_paths:
         raise validation_error_from_key(

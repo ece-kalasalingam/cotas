@@ -79,6 +79,22 @@ def _write_two_column_copy_sheet(
     header_fmt: Any,
     body_fmt: Any,
 ) -> None:
+    """Write two column copy sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        title: Parameter value (str).
+        header: Parameter value (tuple[str, str]).
+        rows: Parameter value (Sequence[Sequence[Any]]).
+        header_fmt: Parameter value (Any).
+        body_fmt: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(title)
     ws.write_row(0, 0, list(header), header_fmt)
     sample_rows: list[list[Any]] = [list(header)]
@@ -116,6 +132,19 @@ def _build_two_column_copy_sheet_spec(
     header: tuple[str, str],
     rows: Sequence[Sequence[Any]],
 ) -> dict[str, Any]:
+    """Build two column copy sheet spec.
+    
+    Args:
+        title: Parameter value (str).
+        header: Parameter value (tuple[str, str]).
+        rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     anchors = []
     for row_index, row in enumerate(rows, start=2):
         anchors.append([f"A{row_index}", row[0] if len(row) > 0 else ""])
@@ -146,6 +175,30 @@ def _write_multi_column_copy_sheet(
     use_common_student_columns: bool = False,
     header_row_height: float | None = None,
 ) -> None:
+    """Write multi column copy sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        title: Parameter value (str).
+        header: Parameter value (Sequence[str]).
+        rows: Parameter value (Sequence[Sequence[Any]]).
+        header_fmt: Parameter value (Any).
+        body_fmt: Parameter value (Any).
+        num_fmt: Parameter value (Any).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]] | None).
+        wrapped_body_fmt: Parameter value (Any | None).
+        wrapped_column_fmt: Parameter value (Any | None).
+        wrap_columns: Parameter value (Sequence[int]).
+        fit_all_columns_single_page: Parameter value (bool).
+        use_common_student_columns: Parameter value (bool).
+        header_row_height: Parameter value (float | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(title)
     metadata = list(metadata_rows or [])
     header_row_index = len(metadata) + 1 if metadata else 0
@@ -224,6 +277,20 @@ def _build_multi_column_copy_sheet_spec(
     rows: Sequence[Sequence[Any]],
     metadata_rows: Sequence[Sequence[Any]] | None = None,
 ) -> dict[str, Any]:
+    """Build multi column copy sheet spec.
+    
+    Args:
+        title: Parameter value (str).
+        header: Parameter value (Sequence[str]).
+        rows: Parameter value (Sequence[Sequence[Any]]).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]] | None).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     anchors = []
     metadata = list(metadata_rows or [])
     for row_index, row in enumerate(metadata, start=1):
@@ -252,6 +319,17 @@ def _build_multi_column_copy_sheet_spec(
 def _filter_marks_template_metadata_rows(
     metadata_rows: Sequence[Sequence[Any]],
 ) -> list[list[Any]]:
+    """Filter marks template metadata rows.
+    
+    Args:
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        list[list[Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     filtered: list[list[Any]] = []
     for row in metadata_rows:
         if len(row) < 2:
@@ -264,6 +342,17 @@ def _filter_marks_template_metadata_rows(
 
 
 def _dynamic_direct_co_wise_headers(question_count: int) -> list[str]:
+    """Dynamic direct co wise headers.
+    
+    Args:
+        question_count: Parameter value (int).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
     return list(
         resolve_dynamic_sheet_headers(
             _TEMPLATE_ID,
@@ -274,6 +363,17 @@ def _dynamic_direct_co_wise_headers(question_count: int) -> list[str]:
 
 
 def _dynamic_direct_non_co_wise_headers(covered_cos: list[int]) -> list[str]:
+    """Dynamic direct non co wise headers.
+    
+    Args:
+        covered_cos: Parameter value (list[int]).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
     return list(
         resolve_dynamic_sheet_headers(
             _TEMPLATE_ID,
@@ -284,6 +384,17 @@ def _dynamic_direct_non_co_wise_headers(covered_cos: list[int]) -> list[str]:
 
 
 def _dynamic_indirect_headers(total_outcomes: int) -> list[str]:
+    """Dynamic indirect headers.
+    
+    Args:
+        total_outcomes: Parameter value (int).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
     return list(
         resolve_dynamic_sheet_headers(
             _TEMPLATE_ID,
@@ -302,6 +413,22 @@ def _build_direct_co_wise_sheet_spec(
     questions: Sequence[dict[str, Any]],
     student_identity_hash: str,
 ) -> dict[str, Any]:
+    """Build direct co wise sheet spec.
+    
+    Args:
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        questions: Parameter value (Sequence[dict[str, Any]]).
+        student_identity_hash: Parameter value (str).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
     question_count = len(questions)
@@ -358,6 +485,22 @@ def _build_direct_non_co_wise_sheet_spec(
     questions: Sequence[dict[str, Any]],
     student_identity_hash: str,
 ) -> dict[str, Any]:
+    """Build direct non co wise sheet spec.
+    
+    Args:
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        questions: Parameter value (Sequence[dict[str, Any]]).
+        student_identity_hash: Parameter value (str).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
     covered_cos = sorted({co for q in questions for co in q["co_values"]})
@@ -433,6 +576,22 @@ def _build_indirect_sheet_spec(
     total_outcomes: int,
     student_identity_hash: str,
 ) -> dict[str, Any]:
+    """Build indirect sheet spec.
+    
+    Args:
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        total_outcomes: Parameter value (int).
+        student_identity_hash: Parameter value (str).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     header_start_row = len(metadata_rows) + 2
     header_row = header_start_row + 1
     headers = _dynamic_indirect_headers(total_outcomes)
@@ -474,6 +633,29 @@ def _write_direct_co_wise_sheet(
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
 ) -> None:
+    """Write direct co wise sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        questions: Parameter value (Sequence[dict[str, Any]]).
+        header_fmt: Parameter value (Any).
+        body_fmt: Parameter value (Any).
+        wrapped_body_fmt: Parameter value (Any).
+        wrapped_column_fmt: Parameter value (Any).
+        num_fmt: Parameter value (Any).
+        header_num_fmt: Parameter value (Any).
+        unlocked_body_fmt: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     question_count = len(questions)
@@ -592,6 +774,29 @@ def _write_direct_non_co_wise_sheet(
     header_num_fmt: Any,
     unlocked_body_fmt: Any,
 ) -> None:
+    """Write direct non co wise sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        questions: Parameter value (Sequence[dict[str, Any]]).
+        header_fmt: Parameter value (Any).
+        body_fmt: Parameter value (Any).
+        wrapped_body_fmt: Parameter value (Any).
+        wrapped_column_fmt: Parameter value (Any).
+        num_fmt: Parameter value (Any).
+        header_num_fmt: Parameter value (Any).
+        unlocked_body_fmt: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     covered_cos = sorted({co for q in questions for co in q["co_values"]})
@@ -718,6 +923,27 @@ def _write_indirect_sheet(
     wrapped_body_fmt: Any,
     wrapped_column_fmt: Any,
 ) -> None:
+    """Write indirect sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        sheet_name: Parameter value (str).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        students: Parameter value (Sequence[tuple[str, str]]).
+        total_outcomes: Parameter value (int).
+        header_fmt: Parameter value (Any).
+        body_fmt: Parameter value (Any).
+        unlocked_body_fmt: Parameter value (Any).
+        wrapped_body_fmt: Parameter value (Any).
+        wrapped_column_fmt: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(sheet_name)
     header_start_row = _write_component_course_metadata(ws, metadata_rows, component_name, body_fmt)
     headers = _dynamic_indirect_headers(total_outcomes)
@@ -782,6 +1008,20 @@ def _write_component_course_metadata(
     component_name: str,
     body_fmt: Any,
 ) -> int:
+    """Write component course metadata.
+    
+    Args:
+        ws: Parameter value (Any).
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+        body_fmt: Parameter value (Any).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     for row_index, row in enumerate(metadata_rows):
         ws.write(row_index, 1, row[0] if len(row) > 0 else "", body_fmt)
         ws.write(row_index, 2, row[1] if len(row) > 1 else "", body_fmt)
@@ -795,6 +1035,18 @@ def _component_metadata_sample_rows(
     metadata_rows: Sequence[Sequence[Any]],
     component_name: str,
 ) -> list[list[Any]]:
+    """Component metadata sample rows.
+    
+    Args:
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        component_name: Parameter value (str).
+    
+    Returns:
+        list[list[Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     sample_rows: list[list[Any]] = []
     for row in metadata_rows:
         sample_rows.append(["", row[0] if len(row) > 0 else "", row[1] if len(row) > 1 else ""])
@@ -803,6 +1055,17 @@ def _component_metadata_sample_rows(
 
 
 def _component_metadata_anchor_cells(metadata_rows: Sequence[Sequence[Any]]) -> list[list[Any]]:
+    """Component metadata anchor cells.
+    
+    Args:
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        list[list[Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     anchors: list[list[Any]] = []
     for row_index, row in enumerate(metadata_rows, start=1):
         anchors.append([f"B{row_index}", row[0] if len(row) > 0 else ""])
@@ -812,6 +1075,17 @@ def _component_metadata_anchor_cells(metadata_rows: Sequence[Sequence[Any]]) -> 
 
 def _student_identity_hash(students: Sequence[tuple[str, str]]) -> str:
     # Stable signature of ordered student identities copied from course details.
+    """Student identity hash.
+    
+    Args:
+        students: Parameter value (Sequence[tuple[str, str]]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     payload = "\n".join(f"{reg_no.strip()}|{student_name.strip()}" for reg_no, student_name in students)
     return sign_payload(payload)
 
@@ -821,6 +1095,19 @@ def _build_marks_validation_formula_for_column(
     first_data_row: int,
     max_marks_row: int,
 ) -> str:
+    """Build marks validation formula for column.
+    
+    Args:
+        col_index: Parameter value (int).
+        first_data_row: Parameter value (int).
+        max_marks_row: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     col_name = _excel_col_name(col_index)
     excel_data_row = first_data_row + 1
     excel_max_row = max_marks_row + 1
@@ -832,6 +1119,17 @@ def _build_marks_validation_formula_for_column(
 
 
 def _build_indirect_validation_formula(*, excel_data_row: int) -> str:
+    """Build indirect validation formula.
+    
+    Args:
+        excel_data_row: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return (
         f'=OR(D{excel_data_row}="A",D{excel_data_row}="a",'
         f'AND(ISNUMBER(D{excel_data_row}),D{excel_data_row}>={MIN_MARK_VALUE},'
@@ -848,6 +1146,22 @@ def _build_direct_non_co_formula(
     prev_co_col_name: str,
     is_last_residual: bool,
 ) -> str:
+    """Build direct non co formula.
+    
+    Args:
+        total_col_name: Parameter value (str).
+        row_1_based: Parameter value (int).
+        divisor: Parameter value (int).
+        first_co_col_name: Parameter value (str).
+        prev_co_col_name: Parameter value (str).
+        is_last_residual: Parameter value (bool).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     total_ref = f"${total_col_name}{row_1_based}"
     if is_last_residual:
         sum_expr = _FORMULA_SUM_TEMPLATE.format(
@@ -871,6 +1185,19 @@ def _build_total_formula_with_absent(
     last_mark_col_name: str,
     row_1_based: int,
 ) -> str:
+    """Build total formula with absent.
+    
+    Args:
+        first_mark_col_name: Parameter value (str).
+        last_mark_col_name: Parameter value (str).
+        row_1_based: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     marks_range = f"{first_mark_col_name}{row_1_based}:{last_mark_col_name}{row_1_based}"
     return (
         f'=IF(COUNTIF({marks_range},"A")+COUNTIF({marks_range},"a")>0,'
@@ -879,6 +1206,17 @@ def _build_total_formula_with_absent(
 
 
 def _build_marks_validation_error_message(max_marks_value: Any) -> str:
+    """Build marks validation error message.
+    
+    Args:
+        max_marks_value: Parameter value (Any).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     coerced_max = coerce_excel_number(max_marks_value)
     if isinstance(coerced_max, bool) or not isinstance(coerced_max, (int, float)):
         max_value_text = str(max_marks_value).strip()
@@ -896,6 +1234,20 @@ def _set_common_student_columns(
     sample_rows: Sequence[Sequence[Any]],
     wrapped_c_column_format: Any,
 ) -> None:
+    """Set common student columns.
+    
+    Args:
+        ws: Parameter value (Any).
+        last_col: Parameter value (int).
+        sample_rows: Parameter value (Sequence[Sequence[Any]]).
+        wrapped_c_column_format: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widths = compute_sampled_column_widths(
         sample_rows,
         last_col,
@@ -912,10 +1264,33 @@ def _set_common_student_columns(
     )
 
 def _excel_col_name(col_index: int) -> str:
+    """Excel col name.
+    
+    Args:
+        col_index: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return _excel_col_name_one_based(col_index + 1)
 
 
 def _split_equal_with_residual(total: float, parts: int) -> list[float]:
+    """Split equal with residual.
+    
+    Args:
+        total: Parameter value (float).
+        parts: Parameter value (int).
+    
+    Returns:
+        list[float]: Return value.
+    
+    Raises:
+        None.
+    """
     if parts <= 0:
         return []
     if parts == 1:
@@ -927,6 +1302,18 @@ def _split_equal_with_residual(total: float, parts: int) -> list[float]:
 
 
 def _safe_sheet_name(name: str, used_sheet_names: set[str]) -> str:
+    """Safe sheet name.
+    
+    Args:
+        name: Parameter value (str).
+        used_sheet_names: Parameter value (set[str]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     token = re.sub(r"[:\\/?*\[\]]", "_", name).strip() or "Component"
     token = token[:MAX_EXCEL_SHEETNAME_LENGTH]
     base_key = normalize(token)
@@ -1019,6 +1406,18 @@ def generate_worksheet(
 
 
 def _apply_validation(worksheet: Any, rule: ValidationRule) -> None:
+    """Apply validation.
+    
+    Args:
+        worksheet: Parameter value (Any).
+        rule: Parameter value (ValidationRule).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     options = dict(rule.options)
     validation_type = options.pop("validate", None)
     if not validation_type:
@@ -1040,6 +1439,17 @@ def _apply_validation(worksheet: Any, rule: ValidationRule) -> None:
 def _protect_sheet(worksheet: Any) -> None:
     # Keep locked-cell selection disabled and unlocked-cell selection enabled so
     # keyboard navigation (Tab) jumps between mark-entry cells.
+    """Protect sheet.
+    
+    Args:
+        worksheet: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     protect_xlsxwriter_sheet(worksheet)
 
 
@@ -1055,6 +1465,25 @@ def write_schema_sheet(
     wrapped_body_format: Any | None = None,
     wrapped_column_format: Any | None = None,
 ) -> Any:
+    """Write schema sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        sheet_schema: Parameter value (SheetSchema).
+        data: Parameter value (Sequence[Sequence[Any]]).
+        header_format: Parameter value (Any).
+        body_format: Parameter value (Any).
+        cancel_token: Parameter value (Any | None).
+        wrap_columns: Parameter value (Sequence[int]).
+        wrapped_body_format: Parameter value (Any | None).
+        wrapped_column_format: Parameter value (Any | None).
+    
+    Returns:
+        Any: Return value.
+    
+    Raises:
+        None.
+    """
     if cancel_token is not None:
         cancel_token.raise_if_cancelled()
     if len(sheet_schema.header_matrix) != 1:

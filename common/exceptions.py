@@ -28,6 +28,19 @@ class ValidationError(AppError):
         code: str = "VALIDATION_ERROR",
         context: dict[str, Any] | None = None,
     ) -> None:
+        """Init.
+        
+        Args:
+            message: Parameter value (str).
+            code: Parameter value (str).
+            context: Parameter value (dict[str, Any] | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(message or code)
         self.code = code
         self.context = dict(context or {})

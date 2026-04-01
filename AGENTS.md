@@ -60,7 +60,7 @@
 
 ## Single Source Of Truth Guardrail (CO Direct/Indirect Sheet Generation)
 
-- `domain/co_report_sheet_generator.py` is the single source of truth for generating `COx_Direct` and `COx_Indirect` sheets.
+- `domain/template_versions/course_setup_v2_impl/co_report_sheet_generator.py` is the single source of truth for generating `COx_Direct` and `COx_Indirect` sheets.
 - Do not add or keep duplicate direct/indirect sheet write logic in `instructor_report_engine.py`, `coordinator_engine.py`, `co_analysis_engine.py`, or module-layer code.
 - Always use shared helpers from `co_report_sheet_generator.py`:
   - `write_co_outcome_sheets(...)` for writing both sheets

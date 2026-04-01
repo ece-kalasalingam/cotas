@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="te_IN">
   <context>
     <name>main</name>
@@ -195,170 +195,158 @@
       <translation>ఫైళ్లను జోడించడానికి, ఇక్కడికి లాగి వదలండి లేదా Ctrl + O నొక్కండి, లేదంటే ఒక్కసారి క్లిక్ చేయండి.</translation>
     </message>
     <message>
-      <source>coordinator.calculate</source>
+      <source>co_analysis.calculate</source>
       <translation>CO సాధనను లెక్కించండి</translation>
     </message>
     <message>
-      <source>coordinator.clear_all</source>
+      <source>co_analysis.clear_all</source>
       <translation>అన్నీ క్లియర్ చేయండి</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.description</source>
+      <source>co_analysis.co_attainment.description</source>
       <translation>స్థిరీకరించిన స్థాయి మరియు అంతకన్నా పై స్థాయిలో ఉన్న విద్యార్థుల % ఆధారంగా సాధన నిర్ణయించబడుతుంది.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.invalid_percent</source>
+      <source>co_analysis.co_attainment.invalid_percent</source>
       <translation>చెల్లని CO AT%: విలువ 0 నుండి 100 మధ్య ఉండాలి.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.level.label</source>
+      <source>co_analysis.co_attainment.level.label</source>
       <translation>CO AT స్థాయి:</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.percent.label</source>
+      <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
     <message>
-      <source>coordinator.dialog.title</source>
+      <source>co_analysis.dialog.title</source>
       <translation>ఎక్సెల్ ఫైల్స్ ఎంచుకోండి</translation>
     </message>
     <message>
-      <source>coordinator.drop_hint</source>
+      <source>co_analysis.drop_hint</source>
       <translation>మార్కులు నమోదు చేసిన వర్క్‌బుక్(ల)ను అప్‌లోడ్ చేయండి.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.body</source>
+      <source>co_analysis.duplicate.body</source>
       <translation>{count} నకిలీ ఫైల్(లు) ఇప్పటికే జాబితాలో ఉన్నందున దాటవేయబడ్డాయి.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.title</source>
+      <source>co_analysis.duplicate.title</source>
       <translation>ఫైల్ ఇప్పటికే ఉంది</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_fallback</source>
+      <source>co_analysis.file.remove_fallback</source>
       <translation>తొలగించు</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_tooltip</source>
+      <source>co_analysis.file.remove_tooltip</source>
       <translation>ఫైల్ తొలగించు</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.body</source>
+      <source>co_analysis.invalid_final_report.body</source>
       <translation>చెల్లుబాటు అయ్యే తుది CO నివేదిక వర్క్\u200cబుక్\u200cలు మాత్రమే అనుమతించబడతాయి.\n\n{files}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.detail_line</source>
+      <source>co_analysis.invalid_final_report.detail_line</source>
       <translation>{file}: {reason}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.details_prefix</source>
+      <source>co_analysis.invalid_final_report.details_prefix</source>
       <translation>వివరాలు:</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.title</source>
+      <source>co_analysis.invalid_final_report.title</source>
       <translation>చెల్లని తుది CO నివేదిక</translation>
     </message>
     <message>
-      <source>coordinator.join_drop.body</source>
+      <source>co_analysis.join_drop.body</source>
       <translation>కొన్ని వరుసలు Direct లేదా Indirect షీట్లలో మాత్రమే ఉన్నందున అవి పరిగణించబడలేదు. తొలగించిన వరుసలు: {count}. వివరాల కోసం కార్యాచరణ లాగ్ చూడండి.</translation>
     </message>
     <message>
-      <source>coordinator.links.downloaded_output</source>
+      <source>co_analysis.links.downloaded_output</source>
       <translation>డౌన్‌లోడ్ చేసిన అవుట్‌పుట్</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.body</source>
+      <source>co_analysis.regno_dedup.body</source>
       <translation>CO సాధన రూపొందిస్తున్నప్పుడు {count} నకిలీ రిజిస్టర్ నంబర్ నమోదులు తొలగించబడ్డాయి.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_body</source>
+      <source>co_analysis.regno_dedup.log_body</source>
       <translation>{count} నకిలీ రిజిస్టర్ నంబర్ నమోదులు తొలగించబడ్డాయి:
 {details}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail</source>
+      <source>co_analysis.regno_dedup.log_detail</source>
       <translation>రెగ్ నంబర్: {reg_no} | వర్క్‌షీట్: {worksheet} | వర్క్‌బుక్: {workbook}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail_unavailable</source>
+      <source>co_analysis.regno_dedup.log_detail_unavailable</source>
       <translation>డూప్లికేట్ ఎంట్రీ వివరాలు అందుబాటులో లేవు.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.title</source>
+      <source>co_analysis.regno_dedup.title</source>
       <translation>డూప్లికేట్ రిజిస్టర్ నంబర్\u200cలు తీసివేయబడ్డాయి</translation>
     </message>
     <message>
-      <source>coordinator.status.added</source>
+      <source>co_analysis.status.added</source>
       <translation>{added} ఫైల్(లు) జోడించబడ్డాయి. మొత్తం: {total}.</translation>
     </message>
     <message>
-      <source>coordinator.status.calculate_completed</source>
+      <source>co_analysis.status.calculate_completed</source>
       <translation>CO సాధన గణన పూర్తయింది మరియు అవుట్\u200cపుట్ వర్క్\u200cబుక్ రూపొందించబడింది.</translation>
     </message>
     <message>
-      <source>coordinator.status.cleared</source>
+      <source>co_analysis.status.cleared</source>
       <translation>{count} ఫైల్(లు) క్లియర్ చేయబడ్డాయి.</translation>
     </message>
     <message>
-      <source>coordinator.status.ignored</source>
+      <source>co_analysis.status.ignored</source>
       <translation>{count} ఫైల్(లు) పట్టించుకోలేదు (మద్దతు లేని రకం, ఫైల్ దొరకకపోవడం, నకిలీ లేదా చెల్లని తుది నివేదిక వర్క్‌బుక్).</translation>
     </message>
     <message>
-      <source>coordinator.status.operation_cancelled</source>
-      <translation>కోఆర్డినేటర్ ప్రాసెసింగ్ రద్దు చేయబడింది.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_completed</source>
-      <translation>కోఆర్డినేటర్ ప్రాసెసింగ్ పూర్తయింది.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_failed</source>
-      <translation>కోఆర్డినేటర్ ప్రాసెసింగ్ విఫలమైంది.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_started</source>
+      <source>co_analysis.status.processing_started</source>
       <translation>ఎంచుకున్న ఫైల్\u200cలను ప్రాసెస్ చేస్తోంది...</translation>
     </message>
     <message>
-      <source>coordinator.status.queued</source>
+      <source>co_analysis.status.queued</source>
       <translation>ప్రస్తుత ప్రాసెసింగ్ నడుస్తున్నప్పుడు {count} ఫైల్(లు) క్యూలో ఉన్నాయి.</translation>
     </message>
     <message>
-      <source>coordinator.status.removed</source>
+      <source>co_analysis.status.removed</source>
       <translation>{count} ఫైల్(లు) తీసివేయబడ్డాయి.</translation>
     </message>
     <message>
-      <source>coordinator.summary</source>
+      <source>co_analysis.summary</source>
       <translation>ఫైల్\u200cలు: {count}</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.description</source>
+      <source>co_analysis.thresholds.description</source>
       <translation>- L1 పరిమితి - కోర్సు ఉత్తీర్ణత మార్కు లేదా గత నియమావళిలో ఇచ్చిన 3 బ్యాచ్‌ల కోర్సు సగటు.
 - L2 పరిమితి - మొదటి తరగతి.
 - L3 పరిమితి - విశిష్ట తరగతి.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.invalid_rule</source>
+      <source>co_analysis.thresholds.invalid_rule</source>
       <translation>పరిమితి నియమం ఉల్లంఘించబడింది: 0 &lt; L1 &lt; L2 &lt; L3 &lt; 100 ఉండాలి.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l1.label</source>
+      <source>co_analysis.thresholds.l1.label</source>
       <translation>L1 పరిమితి:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l2.label</source>
+      <source>co_analysis.thresholds.l2.label</source>
       <translation>L2 పరిమితి:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l3.label</source>
+      <source>co_analysis.thresholds.l3.label</source>
       <translation>L3 పరిమితి:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.title</source>
+      <source>co_analysis.thresholds.title</source>
       <translation>CO సాధన పరిమితులు</translation>
     </message>
     <message>
-      <source>coordinator.title</source>
+      <source>co_analysis.title</source>
       <translation>కోర్సు సాధన</translation>
     </message>
     <message>
@@ -1030,10 +1018,6 @@
       <translation>CO విశ్లేషణ</translation>
     </message>
     <message>
-      <source>module.coordinator_short</source>
-      <translation>సమన్వయకర్త</translation>
-    </message>
-    <message>
       <source>module.instructor</source>
       <translation>బోధకుడు</translation>
     </message>
@@ -1098,6 +1082,10 @@
     <message>
       <source>status.ready</source>
       <translation>సిద్ధం</translation>
+    </message>
+    <message>
+      <source>status.processing</source>
+      <translation>ప్రాసెసింగ్</translation>
     </message>
     <message>
       <source>toolbar.navigation</source>
@@ -1301,3 +1289,6 @@
     </message>
   </context>
 </TS>
+
+
+

@@ -14,6 +14,20 @@ def _bp(
     sheet_name: str = "Sheet1",
     headers: list[str] | None = None,
 ) -> WorkbookBlueprint:
+    """Bp.
+    
+    Args:
+        type_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+        sheet_name: Parameter value (str).
+        headers: Parameter value (list[str] | None).
+    
+    Returns:
+        WorkbookBlueprint: Return value.
+    
+    Raises:
+        None.
+    """
     return WorkbookBlueprint(
         type_id=type_id,
         style_registry={},
@@ -22,6 +36,17 @@ def _bp(
 
 
 def test_validate_attainment_policy_contracts_requires_sum_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate attainment policy contracts requires sum to one.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "DIRECT_RATIO", 0.8)
     monkeypatch.setattr(contracts, "INDIRECT_RATIO", 0.3)
     with pytest.raises(ConfigurationError, match="must equal 1.0"):
@@ -29,6 +54,17 @@ def test_validate_attainment_policy_contracts_requires_sum_to_one(monkeypatch: p
 
 
 def test_validate_indirect_tool_policy_contracts_requires_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate indirect tool policy contracts requires order.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "LIKERT_MIN", 5)
     monkeypatch.setattr(contracts, "LIKERT_MAX", 5)
     with pytest.raises(ConfigurationError, match="must be less"):
@@ -36,18 +72,51 @@ def test_validate_indirect_tool_policy_contracts_requires_order(monkeypatch: pyt
 
 
 def test_validate_blueprint_registry_contracts_rejects_empty_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects empty registry.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {})
     with pytest.raises(ConfigurationError, match="must not be empty"):
         contracts.validate_blueprint_registry_contracts()
 
 
 def test_validate_blueprint_registry_contracts_rejects_type_id_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects type id mismatch.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"key-a": _bp(type_id="key-b")})
     with pytest.raises(ConfigurationError, match="does not match type_id"):
         contracts.validate_blueprint_registry_contracts()
 
 
 def test_validate_blueprint_registry_contracts_rejects_missing_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects missing sheets.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(
         contracts,
         "BLUEPRINT_REGISTRY",
@@ -58,12 +127,34 @@ def test_validate_blueprint_registry_contracts_rejects_missing_sheets(monkeypatc
 
 
 def test_validate_blueprint_registry_contracts_rejects_empty_sheet_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects empty sheet name.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": _bp(sheet_name="   ")})
     with pytest.raises(ConfigurationError, match="empty sheet name"):
         contracts.validate_blueprint_registry_contracts()
 
 
 def test_validate_blueprint_registry_contracts_rejects_duplicate_sheet_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects duplicate sheet names.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     bp = WorkbookBlueprint(
         type_id="type-a",
         style_registry={},
@@ -78,6 +169,17 @@ def test_validate_blueprint_registry_contracts_rejects_duplicate_sheet_names(mon
 
 
 def test_validate_blueprint_registry_contracts_rejects_missing_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects missing headers.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     bp = WorkbookBlueprint(
         type_id="type-a",
         style_registry={},
@@ -89,18 +191,51 @@ def test_validate_blueprint_registry_contracts_rejects_missing_headers(monkeypat
 
 
 def test_validate_blueprint_registry_contracts_rejects_empty_header_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects empty header value.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": _bp(headers=["A", "  "])})
     with pytest.raises(ConfigurationError, match="empty header values"):
         contracts.validate_blueprint_registry_contracts()
 
 
 def test_validate_blueprint_registry_contracts_rejects_duplicate_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate blueprint registry contracts rejects duplicate headers.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "BLUEPRINT_REGISTRY", {"type-a": _bp(headers=["Name", "name"])})
     with pytest.raises(ConfigurationError, match="duplicate headers"):
         contracts.validate_blueprint_registry_contracts()
 
 
 def test_validate_attainment_threshold_contracts_additional_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test validate attainment threshold contracts additional guards.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(contracts, "LEVEL_1_THRESHOLD", "x")
     monkeypatch.setattr(contracts, "LEVEL_2_THRESHOLD", 50)
     monkeypatch.setattr(contracts, "LEVEL_3_THRESHOLD", 75)

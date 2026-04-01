@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from domain.template_versions.course_setup_v2_impl import (
     course_template_validator as validator,
@@ -11,6 +14,21 @@ from domain.template_versions.course_setup_v2_impl import (
 
 
 def _identity(*, section: str, course_code: str = "CS101", semester: str = "V", year: str = "2026-27", outcomes: int = 3) -> object:
+    """Identity.
+    
+    Args:
+        section: Parameter value (str).
+        course_code: Parameter value (str).
+        semester: Parameter value (str).
+        year: Parameter value (str).
+        outcomes: Parameter value (int).
+    
+    Returns:
+        object: Return value.
+    
+    Raises:
+        None.
+    """
     return validator._CourseIdentity(
         template_id="COURSE_SETUP_V2",
         course_code=course_code,
@@ -24,7 +42,30 @@ def _identity(*, section: str, course_code: str = "CS101", semester: str = "V", 
 def test_course_batch_validator_accepts_mixed_cohorts_and_sections(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test course batch validator accepts mixed cohorts and sections.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del cancel_token
         if workbook_path == "a.xlsx":
             return _identity(section="A")
@@ -55,7 +96,30 @@ def test_course_batch_validator_accepts_mixed_cohorts_and_sections(
 
 
 def test_course_batch_validator_maps_validation_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test course batch validator maps validation failure.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del cancel_token
         if workbook_path == "bad.xlsx":
             raise ValidationError("Invalid workbook", code="SHEET_DATA_REQUIRED", context={"sheet_name": "Students"})
@@ -88,6 +152,95 @@ def test_course_batch_validator_maps_validation_failure(monkeypatch: pytest.Monk
     ],
 )
 def test_course_rule_validators_fail_for_missing_required_data(fn_name: str, args: tuple[object, ...]) -> None:
+    """Test course rule validators fail for missing required data.
+    
+    Args:
+        fn_name: Parameter value (str).
+        args: Parameter value (tuple[object, ...]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     fn = getattr(validator, fn_name)
     with pytest.raises(ValidationError):
         fn(*args)
+
+
+def test_course_workbook_impl_raises_open_failed_for_corrupt_workbook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Test course workbook impl raises open failed for corrupt workbook.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
+    workbook_path = tmp_path / "corrupt_course.xlsx"
+    workbook_path.write_text("not-an-xlsx", encoding="utf-8")
+
+    def _raise_open(*_args, **_kwargs):
+        """Raise open.
+        
+        Args:
+            _args: Parameter value.
+            _kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        raise OSError("corrupt workbook stream")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openpyxl",
+        SimpleNamespace(load_workbook=_raise_open),
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        validator._validate_course_details_workbook_impl(workbook_path=workbook_path)
+
+    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
+    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+
+
+def test_course_workbook_impl_rejects_symlink_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    workbook_path = tmp_path / "linked_course.xlsx"
+    workbook_path.write_text("x", encoding="utf-8")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openpyxl",
+        SimpleNamespace(load_workbook=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected"))),
+    )
+    monkeypatch.setattr(
+        validator,
+        "assert_not_symlink_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="WORKBOOK_SYMLINK_NOT_ALLOWED",
+                workbook=str(workbook_path),
+            )
+        ),
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        validator._validate_course_details_workbook_impl(workbook_path=workbook_path)
+
+    assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"

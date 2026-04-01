@@ -38,12 +38,13 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.utils import coerce_excel_number, normalize
+from common.utils import assert_not_symlink_path, coerce_excel_number, normalize
 from common.workbook_integrity.workbook_signing import sign_payload
 from domain.template_versions.course_setup_v2_impl.course_template_validator import (
     _validate_course_metadata_rules,
     _validated_non_empty_data_rows,
 )
+from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 from domain.template_versions.course_setup_v2_impl.validation_batch_runner import (
     BatchValidationAccumulator,
     BatchValidationRunner,
@@ -76,6 +77,11 @@ class _MarksWorkbookIdentity:
     reg_numbers: frozenset[str]
 
     def cohort_key(self) -> tuple[str, str, str, int]:
+        """Build normalized cohort key tuple for cross-workbook comparison.
+
+        Returns:
+            Tuple of normalized cohort identity fields.
+        """
         return (
             normalize(self.course_code),
             normalize(self.semester),
@@ -86,9 +92,15 @@ class _MarksWorkbookIdentity:
 
 class _ValidationCollector:
     def __init__(self) -> None:
+        """Initialize collector for accumulating structured validation issues."""
         self._issues: list[dict[str, object]] = []
 
     def add(self, exc: ValidationError) -> None:
+        """Capture one validation exception as a normalized issue payload.
+
+        Args:
+            exc: Validation exception to record.
+        """
         self._issues.append(
             _issue_dict(
                 code=str(getattr(exc, "code", "VALIDATION_ERROR")),
@@ -98,6 +110,16 @@ class _ValidationCollector:
         )
 
     def capture(self, fn, *args, **kwargs) -> Any | None:
+        """Run callable and capture validation exceptions as issues.
+
+        Args:
+            fn: Callable to execute.
+            *args: Positional arguments for callable.
+            **kwargs: Keyword arguments for callable.
+
+        Returns:
+            Callable result, or `None` when a validation exception is captured.
+        """
         try:
             return fn(*args, **kwargs)
         except ValidationError as exc:
@@ -105,6 +127,16 @@ class _ValidationCollector:
             return None
 
     def capture_ok(self, fn, *args, **kwargs) -> bool:
+        """Run callable and report success while capturing validation failures.
+
+        Args:
+            fn: Callable to execute.
+            *args: Positional arguments for callable.
+            **kwargs: Keyword arguments for callable.
+
+        Returns:
+            True when callable completed without validation exception.
+        """
         try:
             fn(*args, **kwargs)
             return True
@@ -113,6 +145,11 @@ class _ValidationCollector:
             return False
 
     def raise_if_any(self) -> None:
+        """Raise single or aggregated error when issues were collected.
+
+        Raises:
+            ValidationError: If one or more issues were recorded.
+        """
         if not self._issues:
             return
         if len(self._issues) == 1:
@@ -131,16 +168,35 @@ class _ValidationCollector:
 
 
 def _reset_marks_anomaly_warnings() -> None:
+    """Clear in-memory anomaly warnings captured during the latest run."""
     _last_marks_anomaly_warnings.clear()
 
 
 def consume_last_marks_anomaly_warnings() -> list[str]:
+    """Return and clear anomaly warnings from the latest validation run.
+
+    Returns:
+        Warning messages collected during mark validation.
+    """
     warnings = list(_last_marks_anomaly_warnings)
     _last_marks_anomaly_warnings.clear()
     return warnings
 
 
 def validate_filled_marks_manifest_schema(*, workbook: Any, manifest: Any) -> None:
+    """Validate filled-marks workbook against signed layout manifest constraints.
+
+    Args:
+        workbook: Open workbook object containing filled marks data.
+        manifest: Parsed layout manifest payload from system layout metadata.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If manifest structure, sheet/layout expectations, anchor
+            checks, formulas, identity consistency, or mark-entry rules fail.
+    """
     _reset_marks_anomaly_warnings()
     if not isinstance(manifest, dict):
         raise validation_error_from_key("instructor.validation.step2.manifest_root_invalid")
@@ -340,12 +396,37 @@ def validate_filled_marks_workbooks(
     template_id: str,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, object]:
+    """Validate a batch of filled marks workbooks for one expected template.
+
+    In addition to per-file validation, this enforces cohort compatibility,
+    duplicate section rejection, and cross-workbook register number uniqueness.
+
+    Args:
+        workbook_paths: Source workbook paths to validate.
+        template_id: Expected template id for all workbook inputs.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        Batch validation summary containing valid/invalid/mismatch paths and
+        structured rejection issues.
+
+    Raises:
+        JobCancelledError: If cancellation is requested during batch processing.
+    """
     baseline_cohort: tuple[str, str, str, int] | None = None
     baseline_identity: _MarksWorkbookIdentity | None = None
     seen_sections: set[str] = set()
     seen_reg_numbers: set[str] = set()
 
     def _validate_path(path: str) -> _MarksWorkbookIdentity:
+        """Validate one workbook path and return extracted identity.
+
+        Args:
+            path: Workbook path text.
+
+        Returns:
+            Parsed marks workbook identity.
+        """
         return _validate_filled_marks_workbook_impl(
             workbook_path=path,
             expected_template_id=template_id,
@@ -353,6 +434,13 @@ def validate_filled_marks_workbooks(
         )
 
     def _on_validated(acc: BatchValidationAccumulator, path: str, identity: _MarksWorkbookIdentity) -> None:
+        """Apply cohort/duplication policies and record batch outcome.
+
+        Args:
+            acc: Batch validation accumulator.
+            path: Workbook path text.
+            identity: Parsed workbook identity from validation.
+        """
         nonlocal baseline_cohort
         nonlocal baseline_identity
         cohort = identity.cohort_key()
@@ -446,6 +534,16 @@ def validate_filled_marks_workbooks(
         _exc: ValidationError,
         issue: dict[str, object],
     ) -> ValidationRejectionDecision:
+        """Classify validation issue into batch rejection decision semantics.
+
+        Args:
+            _path: Workbook path text.
+            _exc: Underlying validation exception.
+            issue: Resolved issue payload.
+
+        Returns:
+            Rejection decision flags used by batch accumulator.
+        """
         reason_kind = (
             "template_mismatch"
             if str(issue.get("code", "")).strip() == "UNKNOWN_TEMPLATE"
@@ -477,6 +575,25 @@ def _validate_filled_marks_workbook_impl(
     expected_template_id: str,
     cancel_token: CancellationToken | None = None,
 ) -> _MarksWorkbookIdentity:
+    """Validate one filled marks workbook and return normalized identity details.
+
+    This performs the two-stage trust flow:
+    1) Read-only open for signed template/manifest payload checks.
+    2) Full open for manifest-driven sheet and mark-level validation.
+
+    Args:
+        workbook_path: Path to the workbook file.
+        expected_template_id: Expected template id for the workbook.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        Workbook identity used for cohort/section/register consistency checks.
+
+    Raises:
+        ValidationError: If dependency, file-open, template/manifest integrity,
+            or mark validation checks fail.
+        JobCancelledError: If cancellation is requested while validating.
+    """
     from domain.template_strategy_router import (
         assert_template_id_matches,
         read_valid_system_workbook_payload,
@@ -497,6 +614,7 @@ def _validate_filled_marks_workbook_impl(
             code="WORKBOOK_NOT_FOUND",
             workbook=str(workbook_file),
         )
+    assert_not_symlink_path(workbook_file, context_key="workbook")
 
     try:
         workbook = openpyxl.load_workbook(workbook_file, data_only=False, read_only=True)
@@ -552,6 +670,18 @@ def _validate_filled_marks_workbook_impl(
 
 
 def _read_marks_workbook_identity(*, workbook: Any, template_id: str) -> _MarksWorkbookIdentity:
+    """Read cohort metadata identity and register numbers from workbook.
+
+    Args:
+        workbook: Open workbook containing marks and metadata sheets.
+        template_id: Template id used to resolve metadata sheet schema.
+
+    Returns:
+        Parsed workbook identity for cohort-level compatibility checks.
+
+    Raises:
+        ValidationError: If metadata schema/sheet/data is missing or invalid.
+    """
     metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     metadata_schema = get_sheet_schema_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     if metadata_schema is None:
@@ -580,6 +710,14 @@ def _read_marks_workbook_identity(*, workbook: Any, template_id: str) -> _MarksW
 
 
 def _extract_marks_workbook_reg_numbers(*, workbook: Any) -> frozenset[str]:
+    """Extract normalized register numbers from sheets with reg-no headers.
+
+    Args:
+        workbook: Open workbook to scan.
+
+    Returns:
+        Frozen set of normalized register numbers.
+    """
     reg_header_tokens = {"reg no", "reg_no", "regno"}
     reg_numbers: set[str] = set()
     for sheet_name in workbook.sheetnames:
@@ -606,6 +744,16 @@ def _extract_marks_workbook_reg_numbers(*, workbook: Any) -> frozenset[str]:
 
 
 def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) -> dict[str, object]:
+    """Build normalized issue payload from issue catalog resolution.
+
+    Args:
+        code: Validation issue code.
+        context: Structured context fields for issue rendering.
+        fallback_message: Message used when lookup is unavailable.
+
+    Returns:
+        Issue dictionary for batch validation outputs.
+    """
     resolved = resolve_validation_issue(code, context, fallback_message=fallback_message)
     return {
         "code": resolved.code,
@@ -618,6 +766,15 @@ def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) ->
 
 
 def _filled_marks_values_match(expected_value: object, actual_value: object) -> bool:
+    """Compare expected and actual values with numeric/text normalization.
+
+    Args:
+        expected_value: Expected value from manifest/rule.
+        actual_value: Actual value read from worksheet.
+
+    Returns:
+        True when values match after normalization.
+    """
     expected_coerced = coerce_excel_number(expected_value)
     actual_coerced = coerce_excel_number(actual_value)
     numeric_types = (int, float)
@@ -630,6 +787,14 @@ def _filled_marks_values_match(expected_value: object, actual_value: object) -> 
 
 
 def _normalized_formula(value: object) -> str:
+    """Normalize formula string for stable equality comparisons.
+
+    Args:
+        value: Formula or raw cell value.
+
+    Returns:
+        Normalized token string with spaces and absolute markers removed.
+    """
     token = normalize(value)
     token = token.replace("$", "")
     token = token.replace(" ", "")
@@ -645,6 +810,22 @@ def _validate_component_student_identity(
     expected_student_count: Any,
     expected_student_hash: Any,
 ) -> str:
+    """Validate component-sheet student identity against manifest expectations.
+
+    Args:
+        worksheet: Component worksheet to validate.
+        sheet_name: Sheet name for issue context.
+        sheet_kind: Component sheet kind discriminator.
+        header_row: Header row index.
+        expected_student_count: Expected student count from manifest.
+        expected_student_hash: Expected identity hash from manifest.
+
+    Returns:
+        Computed identity hash from worksheet rows.
+
+    Raises:
+        ValidationError: If identity row structure/count/hash is invalid.
+    """
     if not isinstance(expected_student_count, int) or expected_student_count < 0:
         raise validation_error_from_key(
             "instructor.validation.step2.student_identity_spec_invalid", sheet_name=sheet_name
@@ -682,6 +863,20 @@ def _extract_component_students(
     sheet_kind: Any,
     header_row: int,
 ) -> list[tuple[str, str]]:
+    """Extract ordered `(reg_no, student_name)` rows from one component sheet.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_name: Sheet name for issue context.
+        sheet_kind: Component sheet kind discriminator.
+        header_row: Header row index.
+
+    Returns:
+        Ordered student identity tuples.
+
+    Raises:
+        ValidationError: If student identity rows are partial or duplicated.
+    """
     first_row = _marks_data_start_row(sheet_kind, header_row)
     students: list[tuple[str, str]] = []
     seen_reg_numbers: set[str] = set()
@@ -712,6 +907,14 @@ def _extract_component_students(
 
 
 def _student_identity_hash(students: Sequence[tuple[str, str]]) -> str:
+    """Create deterministic signature hash for ordered student tuples.
+
+    Args:
+        students: Ordered register number and name tuples.
+
+    Returns:
+        Signed hash payload for identity comparison.
+    """
     payload = "\n".join(f"{reg_no.strip()}|{student_name.strip()}" for reg_no, student_name in students)
     return sign_payload(payload)
 
@@ -724,6 +927,22 @@ def _validate_non_empty_marks_entries(
     header_count: int,
     header_row: int,
 ) -> None:
+    """Validate non-empty mark entries, anomalies, and row-total formulas.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_name: Sheet name for issue context.
+        sheet_kind: Component sheet kind discriminator.
+        header_count: Total header column count.
+        header_row: Header row index.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If marks, absence policy, or totals are invalid.
+    """
+    collector = _ValidationCollector()
     student_count = _infer_student_count(worksheet=worksheet, sheet_kind=sheet_kind, header_row=header_row)
     if student_count <= 0:
         return
@@ -747,12 +966,15 @@ def _validate_non_empty_marks_entries(
             cell_value = cell.value
             token = normalize(cell_value)
             if token == "":
-                raise validation_error_from_key(
-                    "instructor.validation.step2.mark_entry_empty",
-                    code="COA_MARK_ENTRY_EMPTY",
-                    sheet_name=sheet_name,
-                    cell=cell.coordinate,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.mark_entry_empty",
+                        code="COA_MARK_ENTRY_EMPTY",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                    )
                 )
+                continue
             if token == "a":
                 has_absent = True
                 absent_count_by_col[col] += 1
@@ -760,56 +982,71 @@ def _validate_non_empty_marks_entries(
             has_numeric = True
             numeric_value = coerce_excel_number(cell_value)
             if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.mark_value_invalid",
-                    code="COA_MARK_VALUE_INVALID",
-                    sheet_name=sheet_name,
-                    cell=cell.coordinate,
-                    value=cell_value,
-                    minimum=minimum,
-                    maximum=maximum_by_col[col],
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.mark_value_invalid",
+                        code="COA_MARK_VALUE_INVALID",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        minimum=minimum,
+                        maximum=maximum_by_col[col],
+                    )
                 )
+                continue
             if not _has_allowed_decimal_precision(float(numeric_value)):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.mark_precision_invalid",
-                    code="COA_MARK_PRECISION_INVALID",
-                    sheet_name=sheet_name,
-                    cell=cell.coordinate,
-                    value=cell_value,
-                    decimals=_MAX_DECIMAL_PLACES,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.mark_precision_invalid",
+                        code="COA_MARK_PRECISION_INVALID",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        decimals=_MAX_DECIMAL_PLACES,
+                    )
                 )
+                continue
             if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT and not _is_integer_value(float(numeric_value)):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.indirect_mark_must_be_integer",
-                    code="COA_INDIRECT_MARK_INTEGER_REQUIRED",
-                    sheet_name=sheet_name,
-                    cell=cell.coordinate,
-                    value=cell_value,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.indirect_mark_must_be_integer",
+                        code="COA_INDIRECT_MARK_INTEGER_REQUIRED",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                    )
                 )
+                continue
             maximum = maximum_by_col[col]
             numeric_float = float(numeric_value)
             if numeric_float < minimum or numeric_float > maximum:
-                raise validation_error_from_key(
-                    "instructor.validation.step2.mark_value_invalid",
-                    code="COA_MARK_VALUE_INVALID",
-                    sheet_name=sheet_name,
-                    cell=cell.coordinate,
-                    value=cell_value,
-                    minimum=minimum,
-                    maximum=maximum,
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.mark_value_invalid",
+                        code="COA_MARK_VALUE_INVALID",
+                        sheet_name=sheet_name,
+                        cell=cell.coordinate,
+                        value=cell_value,
+                        minimum=minimum,
+                        maximum=maximum,
+                    )
                 )
+                continue
             numeric_count_by_col[col] += 1
             frequency_by_value = frequency_by_value_by_col[col]
             frequency_by_value[numeric_float] = frequency_by_value.get(numeric_float, 0) + 1
-        _validate_absence_policy_for_row(
-            sheet_name=sheet_name,
-            worksheet=worksheet,
-            sheet_kind=sheet_kind,
-            row=row,
-            mark_cols=mark_cols,
-            has_absent=has_absent,
-            has_numeric=has_numeric,
-        )
+        try:
+            _validate_absence_policy_for_row(
+                sheet_name=sheet_name,
+                worksheet=worksheet,
+                sheet_kind=sheet_kind,
+                row=row,
+                mark_cols=mark_cols,
+                has_absent=has_absent,
+                has_numeric=has_numeric,
+            )
+        except ValidationError as exc:
+            collector.add(exc)
     _log_marks_anomaly_warnings_from_stats(
         sheet_name=sheet_name,
         mark_cols=mark_cols,
@@ -818,23 +1055,48 @@ def _validate_non_empty_marks_entries(
         numeric_count_by_col=numeric_count_by_col,
         frequency_by_value_by_col=frequency_by_value_by_col,
     )
-    _validate_row_total_consistency(
-        worksheet=worksheet,
-        sheet_name=sheet_name,
-        sheet_kind=sheet_kind,
-        header_count=header_count,
-        header_row=header_row,
-        student_count=student_count,
-    )
+    try:
+        _validate_row_total_consistency(
+            worksheet=worksheet,
+            sheet_name=sheet_name,
+            sheet_kind=sheet_kind,
+            header_count=header_count,
+            header_row=header_row,
+            student_count=student_count,
+        )
+    except ValidationError as exc:
+        collector.add(exc)
+    collector.raise_if_any()
 
 
 def _marks_data_start_row(sheet_kind: Any, header_row: int) -> int:
+    """Resolve first student-data row index for sheet kind.
+
+    Args:
+        sheet_kind: Component sheet kind discriminator.
+        header_row: Header row index.
+
+    Returns:
+        First row index where student data begins.
+    """
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return header_row + 1
     return header_row + 3
 
 
 def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
+    """Resolve mark-entry column range for component sheet kind.
+
+    Args:
+        sheet_kind: Component sheet kind discriminator.
+        header_count: Total header column count.
+
+    Returns:
+        Range of columns containing mark entry cells.
+
+    Raises:
+        ValidationError: If sheet kind is unsupported.
+    """
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
         return range(4, 5)
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
@@ -845,12 +1107,34 @@ def _marks_entry_columns(sheet_kind: Any, header_count: int) -> range:
 
 
 def _mark_min_for_sheet(sheet_kind: Any) -> float:
+    """Resolve minimum allowed mark value for sheet kind.
+
+    Args:
+        sheet_kind: Component sheet kind discriminator.
+
+    Returns:
+        Minimum allowed mark value.
+    """
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return float(max(MIN_MARK_VALUE, LIKERT_MIN))
     return float(MIN_MARK_VALUE)
 
 
 def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) -> float:
+    """Resolve maximum allowed mark for given cell context.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_kind: Component sheet kind discriminator.
+        max_row: Row index containing maxima metadata.
+        col: Column index for target mark cell.
+
+    Returns:
+        Maximum allowed mark value.
+
+    Raises:
+        ValidationError: If maxima metadata is missing or invalid.
+    """
     if sheet_kind == LAYOUT_SHEET_KIND_INDIRECT:
         return float(LIKERT_MAX)
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
@@ -865,6 +1149,16 @@ def _mark_max_for_cell(worksheet: Any, sheet_kind: Any, max_row: int, col: int) 
 
 
 def _infer_student_count(*, worksheet: Any, sheet_kind: Any, header_row: int) -> int:
+    """Count contiguous student rows in a component sheet.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_kind: Component sheet kind discriminator.
+        header_row: Header row index.
+
+    Returns:
+        Number of student rows until first fully blank identity row.
+    """
     first_row = _marks_data_start_row(sheet_kind, header_row)
     count = 0
     row = first_row
@@ -888,6 +1182,23 @@ def _validate_absence_policy_for_row(
     has_absent: bool,
     has_numeric: bool,
 ) -> None:
+    """Validate absence-policy constraints for one student row.
+
+    Args:
+        sheet_name: Sheet name for issue context.
+        worksheet: Component worksheet.
+        sheet_kind: Component sheet kind discriminator.
+        row: Student row index.
+        mark_cols: Mark-entry column range.
+        has_absent: Whether row contains absent marker.
+        has_numeric: Whether row contains numeric mark.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If absent and numeric values are mixed.
+    """
     if has_absent and has_numeric:
         mark_range = (
             f"{worksheet.cell(row=row, column=mark_cols.start).coordinate}:"
@@ -913,6 +1224,23 @@ def _validate_row_total_consistency(
     header_row: int,
     student_count: int,
 ) -> None:
+    """Validate row-level formula consistency for totals/derived columns.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_name: Sheet name for issue context.
+        sheet_kind: Component sheet kind discriminator.
+        header_count: Total header column count.
+        header_row: Header row index.
+        student_count: Number of student rows to validate.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If expected formulas are missing or mismatched.
+    """
+    collector = _ValidationCollector()
     first_row = _marks_data_start_row(sheet_kind, header_row)
     last_row = first_row + student_count - 1
     if last_row < first_row:
@@ -924,16 +1252,29 @@ def _validate_row_total_consistency(
         last_mark_col = header_count - 1
         for row in range(first_row, last_row + 1):
             actual = worksheet.cell(row=row, column=total_col).value
-            expected = _FORMULA_SUM_TEMPLATE.format(
+            expected_sum = _FORMULA_SUM_TEMPLATE.format(
                 start=f"{_excel_col_name(first_mark_col)}{row}",
                 end=f"{_excel_col_name(last_mark_col)}{row}",
             )
-            if _normalized_formula(actual) != _normalized_formula(expected):
-                raise validation_error_from_key(
-                    "instructor.validation.step2.total_formula_mismatch",
-                    sheet_name=sheet_name,
-                    cell=worksheet.cell(row=row, column=total_col).coordinate,
+            expected_with_absent = _sheetops._build_total_formula_with_absent(
+                first_mark_col_name=_excel_col_name(first_mark_col),
+                last_mark_col_name=_excel_col_name(last_mark_col),
+                row_1_based=row,
+            )
+            normalized_actual = _normalized_formula(actual)
+            allowed_formulas = {
+                _normalized_formula(expected_sum),
+                _normalized_formula(expected_with_absent),
+            }
+            if normalized_actual not in allowed_formulas:
+                collector.add(
+                    validation_error_from_key(
+                        "instructor.validation.step2.total_formula_mismatch",
+                        sheet_name=sheet_name,
+                        cell=worksheet.cell(row=row, column=total_col).coordinate,
+                    )
                 )
+        collector.raise_if_any()
         return
 
     if sheet_kind == LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE:
@@ -941,11 +1282,14 @@ def _validate_row_total_consistency(
             for col in range(5, header_count + 1):
                 formula = worksheet.cell(row=row, column=col).value
                 if not isinstance(formula, str) or not formula.startswith("="):
-                    raise validation_error_from_key(
-                        "instructor.validation.step2.co_formula_mismatch",
-                        sheet_name=sheet_name,
-                        cell=worksheet.cell(row=row, column=col).coordinate,
+                    collector.add(
+                        validation_error_from_key(
+                            "instructor.validation.step2.co_formula_mismatch",
+                            sheet_name=sheet_name,
+                            cell=worksheet.cell(row=row, column=col).coordinate,
+                        )
                     )
+        collector.raise_if_any()
         return
 
 
@@ -958,6 +1302,22 @@ def _validate_component_structure_snapshot(
     structure: Any,
     header_count: int,
 ) -> None:
+    """Validate component structure snapshot values from manifest payload.
+
+    Args:
+        worksheet: Component worksheet.
+        sheet_name: Sheet name for issue context.
+        sheet_kind: Component sheet kind discriminator.
+        header_row: Header row index.
+        structure: Manifest structure payload for the sheet.
+        header_count: Total header column count.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If structure snapshot does not match worksheet state.
+    """
     if not isinstance(structure, dict):
         raise validation_error_from_key(
             "instructor.validation.step2.structure_snapshot_missing", sheet_name=sheet_name
@@ -1004,15 +1364,39 @@ def _validate_component_structure_snapshot(
 
 
 def _has_allowed_decimal_precision(value: float) -> bool:
+    """Check whether value fits configured decimal-place precision.
+
+    Args:
+        value: Numeric value to validate.
+
+    Returns:
+        True when value precision is within configured limit.
+    """
     scaled = round(value * (10**_MAX_DECIMAL_PLACES))
     return abs(value - (scaled / (10**_MAX_DECIMAL_PLACES))) <= 1e-9
 
 
 def _is_integer_value(value: float) -> bool:
+    """Check whether numeric value is effectively an integer.
+
+    Args:
+        value: Numeric value to validate.
+
+    Returns:
+        True when value rounds to itself within tolerance.
+    """
     return abs(value - round(value)) <= 1e-9
 
 
 def _excel_col_name(col_index_1_based: int) -> str:
+    """Convert 1-based column index to Excel letter label.
+
+    Args:
+        col_index_1_based: Column index starting from 1.
+
+    Returns:
+        Excel-style column label such as `A`, `Z`, or `AA`.
+    """
     index = col_index_1_based
     label = ""
     while index > 0:
@@ -1030,6 +1414,19 @@ def _log_marks_anomaly_warnings_from_stats(
     numeric_count_by_col: dict[int, int],
     frequency_by_value_by_col: dict[int, dict[float, int]],
 ) -> None:
+    """Record anomaly warnings from aggregated mark-entry statistics.
+
+    Args:
+        sheet_name: Sheet name for warning context.
+        mark_cols: Mark-entry columns considered.
+        student_count: Number of evaluated students.
+        absent_count_by_col: Absent counts by column.
+        numeric_count_by_col: Numeric entry counts by column.
+        frequency_by_value_by_col: Per-column value frequency mapping.
+
+    Returns:
+        None. Appends warning messages to the shared warning buffer.
+    """
     for col in mark_cols:
         absent_count = int(absent_count_by_col.get(col, 0))
         if student_count > 0 and (absent_count / student_count) >= 0.4:

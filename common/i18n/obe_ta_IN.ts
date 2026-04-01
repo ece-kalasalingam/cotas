@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="ta_IN">
   <context>
     <name>main</name>
@@ -195,172 +195,160 @@
       <translation>கோப்புகளை சேர்க்க இழுத்து-விடவும், அல்லது Ctrl + O அழுத்தவும், அல்லது ஒருமுறை கிளிக் செய்யவும்</translation>
     </message>
     <message>
-      <source>coordinator.calculate</source>
+      <source>co_analysis.calculate</source>
       <translation>CO அடைவை கணக்கிடு</translation>
     </message>
     <message>
-      <source>coordinator.clear_all</source>
+      <source>co_analysis.clear_all</source>
       <translation>அனைத்தையும் நீக்கு</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.description</source>
+      <source>co_analysis.co_attainment.description</source>
       <translation>குறிப்பிட்ட நிலை மற்றும் அதற்கு மேலுள்ள மாணவர்கள் % அடிப்படையில் அடைந்ததாக கருதப்படும்.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.invalid_percent</source>
+      <source>co_analysis.co_attainment.invalid_percent</source>
       <translation>தவறான CO AT%: மதிப்பு 0 முதல் 100 வரை இருக்க வேண்டும்.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.level.label</source>
+      <source>co_analysis.co_attainment.level.label</source>
       <translation>CO AT நிலை:</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.percent.label</source>
+      <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
     <message>
-      <source>coordinator.dialog.title</source>
+      <source>co_analysis.dialog.title</source>
       <translation>Excel கோப்புகளை தேர்வு செய்ய</translation>
     </message>
     <message>
-      <source>coordinator.drop_hint</source>
+      <source>co_analysis.drop_hint</source>
       <translation>மதிப்பெண்கள் பூர்த்தி செய்யப்பட்ட பணிப்புத்தகம்(களை) பதிவேற்றவும்.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.body</source>
+      <source>co_analysis.duplicate.body</source>
       <translation>பட்டியலில் ஏற்கனவே உள்ளதால் {count} நகல் கோப்பு(கள்) தவிர்க்கப்பட்டன.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.title</source>
+      <source>co_analysis.duplicate.title</source>
       <translation>கோப்பு ஏற்கனவே உள்ளது</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_fallback</source>
+      <source>co_analysis.file.remove_fallback</source>
       <translation>நீக்கு</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_tooltip</source>
+      <source>co_analysis.file.remove_tooltip</source>
       <translation>கோப்பை நீக்கு</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.body</source>
+      <source>co_analysis.invalid_final_report.body</source>
       <translation>செல்லுபடியான இறுதி CO report பணிப்புத்தகங்கள் மட்டுமே அனுமதிக்கப்படும்.
 
 {files}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.detail_line</source>
+      <source>co_analysis.invalid_final_report.detail_line</source>
       <translation>{file}: {reason}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.details_prefix</source>
+      <source>co_analysis.invalid_final_report.details_prefix</source>
       <translation>விவரங்கள்:</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.title</source>
+      <source>co_analysis.invalid_final_report.title</source>
       <translation>தவறான இறுதி CO அறிக்கை</translation>
     </message>
     <message>
-      <source>coordinator.join_drop.body</source>
+      <source>co_analysis.join_drop.body</source>
       <translation>சில வரிகள் Direct அல்லது Indirect தாள்களில் மட்டும் இருந்ததால் புறக்கணிக்கப்பட்டன. நீக்கப்பட்ட வரிகள்: {count}. விவரங்களுக்கு செயல் பதிவைப் பார்க்கவும்.</translation>
     </message>
     <message>
-      <source>coordinator.links.downloaded_output</source>
+      <source>co_analysis.links.downloaded_output</source>
       <translation>பதிவிறக்கப்பட்ட வெளியீடு</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.body</source>
+      <source>co_analysis.regno_dedup.body</source>
       <translation>CO அடைவு உருவாக்கும்போது {count} நகல் பதிவு எண் பதிவுகள் நீக்கப்பட்டன.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_body</source>
+      <source>co_analysis.regno_dedup.log_body</source>
       <translation>{count} நகல் பதிவு எண் பதிவுகள் நீக்கப்பட்டன:
 {details}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail</source>
+      <source>co_analysis.regno_dedup.log_detail</source>
       <translation>பதிவு எண்: {reg_no} | பணித்தாள்: {worksheet} | பணிப்புத்தகம்: {workbook}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail_unavailable</source>
+      <source>co_analysis.regno_dedup.log_detail_unavailable</source>
       <translation>நகல் பதிவு விவரங்கள் கிடைக்கவில்லை.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.title</source>
+      <source>co_analysis.regno_dedup.title</source>
       <translation>நகல் பதிவு எண்கள் நீக்கப்பட்டன</translation>
     </message>
     <message>
-      <source>coordinator.status.added</source>
+      <source>co_analysis.status.added</source>
       <translation>{added} கோப்பு(கள்) சேர்க்கப்பட்டது. மொத்தம்: {total}.</translation>
     </message>
     <message>
-      <source>coordinator.status.calculate_completed</source>
+      <source>co_analysis.status.calculate_completed</source>
       <translation>CO அடைவு கணக்கீடு நிறைவடைந்து வெளியீட்டு பணிப்புத்தகம் உருவாக்கப்பட்டது.</translation>
     </message>
     <message>
-      <source>coordinator.status.cleared</source>
+      <source>co_analysis.status.cleared</source>
       <translation>{count} கோப்பு(கள்) அழிக்கப்பட்டன.</translation>
     </message>
     <message>
-      <source>coordinator.status.ignored</source>
+      <source>co_analysis.status.ignored</source>
       <translation>{count} கோப்பு(கள்) புறக்கணிக்கப்பட்டன (ஆதரிக்காத வகை, இல்லை, நகல், அல்லது தவறான final report workbook).</translation>
     </message>
     <message>
-      <source>coordinator.status.operation_cancelled</source>
-      <translation>ஒருங்கிணைப்பாளர் செயலாக்கம் ரத்து செய்யப்பட்டது.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_completed</source>
-      <translation>ஒருங்கிணைப்பாளர் செயலாக்கம் முடிந்தது.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_failed</source>
-      <translation>ஒருங்கிணைப்பாளர் செயலாக்கம் தோல்வியடைந்தது.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_started</source>
+      <source>co_analysis.status.processing_started</source>
       <translation>தேர்ந்தெடுக்கப்பட்ட கோப்புகள் செயலாக்கப்படுகின்றன...</translation>
     </message>
     <message>
-      <source>coordinator.status.queued</source>
+      <source>co_analysis.status.queued</source>
       <translation>நடப்பு செயலாக்கம் நடைபெறுவதால் {count} கோப்பு(கள்) வரிசைப்படுத்தப்பட்டன.</translation>
     </message>
     <message>
-      <source>coordinator.status.removed</source>
+      <source>co_analysis.status.removed</source>
       <translation>{count} கோப்பு(கள்) நீக்கப்பட்டன.</translation>
     </message>
     <message>
-      <source>coordinator.summary</source>
+      <source>co_analysis.summary</source>
       <translation>கோப்புகள்: {count}</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.description</source>
+      <source>co_analysis.thresholds.description</source>
       <translation>- L1 வரம்பு - பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய ஒழுங்கில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.
 - L2 வரம்பு - முதல் தரம்.
 - L3 வரம்பு - சிறப்புத் தரம்.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.invalid_rule</source>
+      <source>co_analysis.thresholds.invalid_rule</source>
       <translation>வரம்பு விதி மீறப்பட்டது: 0 &lt; L1 &lt; L2 &lt; L3 &lt; 100 என்பதைப் பின்பற்றவும்.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l1.label</source>
+      <source>co_analysis.thresholds.l1.label</source>
       <translation>L1 வரம்பு:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l2.label</source>
+      <source>co_analysis.thresholds.l2.label</source>
       <translation>L2 வரம்பு:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l3.label</source>
+      <source>co_analysis.thresholds.l3.label</source>
       <translation>L3 வரம்பு:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.title</source>
+      <source>co_analysis.thresholds.title</source>
       <translation>CO அடைவு வரம்புகள்</translation>
     </message>
     <message>
-      <source>coordinator.title</source>
+      <source>co_analysis.title</source>
       <translation>பாட அடைவு</translation>
     </message>
     <message>
@@ -1032,10 +1020,6 @@
       <translation>CO பகுப்பாய்வு</translation>
     </message>
     <message>
-      <source>module.coordinator_short</source>
-      <translation>ஒருங்கிணைப்பாளர்</translation>
-    </message>
-    <message>
       <source>module.instructor</source>
       <translation>பயிற்றுநர்</translation>
     </message>
@@ -1100,6 +1084,10 @@
     <message>
       <source>status.ready</source>
       <translation>தயார்</translation>
+    </message>
+    <message>
+      <source>status.processing</source>
+      <translation>செயலாக்கம்</translation>
     </message>
     <message>
       <source>toolbar.navigation</source>
@@ -1303,3 +1291,6 @@
     </message>
   </context>
 </TS>
+
+
+

@@ -11,5 +11,17 @@ class BusyWorkflowState:
     active_job_id: str | None = None
 
     def set_busy(self, value: bool, *, job_id: str | None = None) -> None:
+        """Set busy.
+        
+        Args:
+            value: Parameter value (bool).
+            job_id: Parameter value (str | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.busy = value
         self.active_job_id = job_id if value else None

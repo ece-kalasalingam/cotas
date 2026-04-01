@@ -13,6 +13,17 @@ WINDOWS_ACL_COMPAT_ENV = "FOCUS_TEST_ENABLE_WINDOWS_ACL_COMPAT"
 
 
 def _pytest_tmp_env_root() -> Path:
+    """Pytest tmp env root.
+    
+    Args:
+        None.
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     root = Path.cwd() / ".pytest_tmp_env"
     root.mkdir(parents=True, exist_ok=True)
     return root
@@ -57,12 +68,36 @@ def _apply_windows_pytest_tempdir_compat() -> None:
 
     def _patched_make_numbered_dir(root, prefix, mode=0o700):  # type: ignore[no-untyped-def]
         # On this runtime, mode=0o700 can produce inaccessible directories.
+        """Patched make numbered dir.
+        
+        Args:
+            root: Parameter value.
+            prefix: Parameter value.
+            mode: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         return original_make_numbered_dir(root, prefix, mode=0o777)
 
     pytest_pathlib.make_numbered_dir = _patched_make_numbered_dir
 
 
 def _is_pytest_temp_path(path_value: object) -> bool:
+    """Is pytest temp path.
+    
+    Args:
+        path_value: Parameter value (object).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     text = str(path_value).replace("/", "\\").lower()
     return "pytest-of-" in text or "\\.pytest_" in text or "\\pytest-" in text
 
@@ -75,6 +110,19 @@ def _patch_windows_pytest_temp_mkdir_mode() -> None:
     original_mkdir = Path.mkdir
 
     def _patched_mkdir(self, mode=0o777, parents=False, exist_ok=False):  # type: ignore[no-untyped-def]
+        """Patched mkdir.
+        
+        Args:
+            mode: Parameter value.
+            parents: Parameter value.
+            exist_ok: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if mode == 0o700 and _is_pytest_temp_path(self):
             mode = 0o777
         return original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
@@ -88,6 +136,19 @@ def _patch_windows_tempfile_mkdtemp() -> None:
         return
 
     def _patched_mkdtemp(suffix=None, prefix=None, dir=None):  # type: ignore[no-untyped-def]
+        """Patched mkdtemp.
+        
+        Args:
+            suffix: Parameter value.
+            prefix: Parameter value.
+            dir: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         base = Path(dir or tempfile.gettempdir())
         base.mkdir(parents=True, exist_ok=True)
         file_prefix = prefix or "tmp"
@@ -112,6 +173,20 @@ def _patch_windows_pytest_chmod_compat(monkeypatch: pytest.MonkeyPatch) -> None:
     original_chmod = os.chmod
 
     def _patched_chmod(path, mode, *args, **kwargs):  # type: ignore[no-untyped-def]
+        """Patched chmod.
+        
+        Args:
+            path: Parameter value.
+            mode: Parameter value.
+            args: Parameter value.
+            kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         try:
             return original_chmod(path, mode, *args, **kwargs)
         except PermissionError:
@@ -123,6 +198,17 @@ def _patch_windows_pytest_chmod_compat(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    """Pytest configure.
+    
+    Args:
+        config: Parameter value (pytest.Config).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     config.addinivalue_line(
         "markers",
         f"{WINDOWS_ACL_COMPAT_MARK}: enable scoped Windows ACL compatibility patches for tempdir operations.",
@@ -131,6 +217,18 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture(autouse=True)
 def _windows_acl_compat_patches(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows acl compat patches.
+    
+    Args:
+        request: Parameter value (pytest.FixtureRequest).
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if not sys.platform.startswith("win"):
         return
     marker_enabled = request.node.get_closest_marker(WINDOWS_ACL_COMPAT_MARK) is not None

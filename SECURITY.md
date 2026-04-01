@@ -37,13 +37,11 @@ Initial triage target: 7 business days.
   Windows, macOS, and Linux.
 - Module plugin architecture:
   `MainWindow` loads modules through `modules/module_catalog.py` using explicit plugin specs; this reduces ad hoc import surfaces.
-- Coordinator runtime contracts:
-  coordinator step namespaces are validated via `modules/coordinator/contracts.py` before module initialization.
 
 ## Module Security Scope
 
 - `Instructor`: workbook validation/signature checks and controlled output writes.
-- `Coordinator`: signed workbook intake paths and aggregation integrity checks.
+- `CO Analysis`: signed source-workbook intake and routed analysis generation checks.
 - `Help`: local asset/PDF handling and controlled file-save/open behavior.
 - `About`: static metadata presentation (no privileged data flow).
 - `PO Analysis`: placeholder module with no workbook processing or privileged data paths.

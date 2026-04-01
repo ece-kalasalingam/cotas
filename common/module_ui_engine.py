@@ -25,6 +25,18 @@ class ModuleUIEngine:
     """Composes a consistent module shell with top and footer blackbox panes."""
 
     def __init__(self, host: QWidget, *, config: ModuleUIEngineConfig) -> None:
+        """Init.
+        
+        Args:
+            host: Parameter value (QWidget).
+            config: Parameter value (ModuleUIEngineConfig).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if not (config.show_top or config.show_footer):
             raise ConfigurationError("At least one pane must be visible.")
         self._host = host
@@ -49,6 +61,18 @@ class ModuleUIEngine:
         self.footer_widget.setVisible(config.show_footer)
 
     def set_top_widget(self, widget: QWidget, *, stretch: int = 1) -> None:
+        """Set top widget.
+        
+        Args:
+            widget: Parameter value (QWidget).
+            stretch: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.root_layout.replaceWidget(self.top_widget, widget)
         self.top_widget.setParent(None)
         self.top_widget = widget
@@ -59,6 +83,18 @@ class ModuleUIEngine:
         self._apply_root_stretch(top_stretch=stretch)
 
     def set_footer_widget(self, widget: QWidget, *, stretch: int = 0) -> None:
+        """Set footer widget.
+        
+        Args:
+            widget: Parameter value (QWidget).
+            stretch: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.root_layout.replaceWidget(self.footer_widget, widget)
         self.footer_widget.setParent(None)
         self.footer_widget = widget
@@ -69,22 +105,78 @@ class ModuleUIEngine:
         self._apply_root_stretch(footer_stretch=stretch)
 
     def set_top_visible(self, visible: bool) -> None:
+        """Set top visible.
+        
+        Args:
+            visible: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.top_widget.setVisible(visible)
         self._validate_any_pane_visible()
 
     def set_footer_visible(self, visible: bool) -> None:
+        """Set footer visible.
+        
+        Args:
+            visible: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.footer_widget.setVisible(visible)
         self._validate_any_pane_visible()
 
     def _validate_any_pane_visible(self) -> None:
+        """Validate any pane visible.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if (not self.top_widget.isHidden()) or (not self.footer_widget.isHidden()):
             return
         raise ConfigurationError("At least one pane must be visible.")
 
     def _apply_footer_sizing(self, widget: QWidget) -> None:
+        """Apply footer sizing.
+        
+        Args:
+            widget: Parameter value (QWidget).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         widget.setFixedHeight(self._config.footer_height)
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def _apply_root_stretch(self, *, top_stretch: int = 1, footer_stretch: int = 0) -> None:
+        """Apply root stretch.
+        
+        Args:
+            top_stretch: Parameter value (int).
+            footer_stretch: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.root_layout.setStretch(0, top_stretch)
         self.root_layout.setStretch(1, footer_stretch)

@@ -34,23 +34,78 @@ if WORKBOOK_SIGNATURE_VERSION not in {"v1"}:
 
 
 def _default_workbook_password() -> str:
+    """Default workbook password.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return "".join(chr(value ^ _WORKBOOK_SECRET_XOR_KEY) for value in _WORKBOOK_SECRET_OBFUSCATED)
 
 
 def _sanitize_workbook_secret(secret: str) -> str:
     # Excel-adjacent tooling can be sensitive to control characters in passwords.
+    """Sanitize workbook secret.
+    
+    Args:
+        secret: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return "".join(ch for ch in str(secret) if ord(ch) >= 32 and ord(ch) != 127).strip()
 
 
 def _workbook_secret_store_path() -> Path:
+    """Workbook secret store path.
+    
+    Args:
+        None.
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     return app_secrets_dir(APP_NAME) / _WORKBOOK_SECRET_STORE_FILENAME
 
 
 def _is_posix() -> bool:
+    """Is posix.
+    
+    Args:
+        None.
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     return os.name == "posix"
 
 
 def _use_posix_keyring() -> bool:
+    """Use posix keyring.
+    
+    Args:
+        None.
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     if not _is_posix():
         return False
     raw = os.getenv(_WORKBOOK_SECRET_POSIX_USE_KEYRING_ENV_VAR, "1").strip().lower()
@@ -58,6 +113,17 @@ def _use_posix_keyring() -> bool:
 
 
 def _get_keyring_module() -> Any | None:
+    """Get keyring module.
+    
+    Args:
+        None.
+    
+    Returns:
+        Any | None: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import keyring  # type: ignore[import-not-found]
     except Exception:
@@ -66,6 +132,17 @@ def _get_keyring_module() -> Any | None:
 
 
 def _read_workbook_password_from_keyring() -> str:
+    """Read workbook password from keyring.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     if not _use_posix_keyring():
         return ""
     keyring = _get_keyring_module()
@@ -79,6 +156,17 @@ def _read_workbook_password_from_keyring() -> str:
 
 
 def _write_workbook_password_to_keyring(secret: str) -> bool:
+    """Write workbook password to keyring.
+    
+    Args:
+        secret: Parameter value (str).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     if not _use_posix_keyring():
         return False
     keyring = _get_keyring_module()
@@ -89,6 +177,17 @@ def _write_workbook_password_to_keyring(secret: str) -> bool:
 
 
 def _protect_secret_bytes(secret: bytes) -> bytes:
+    """Protect secret bytes.
+    
+    Args:
+        secret: Parameter value (bytes).
+    
+    Returns:
+        bytes: Return value.
+    
+    Raises:
+        None.
+    """
     if os.name != "nt":
         return base64.b64encode(secret)
 
@@ -121,6 +220,17 @@ def _protect_secret_bytes(secret: bytes) -> bytes:
 
 
 def _unprotect_secret_bytes(secret: bytes) -> bytes:
+    """Unprotect secret bytes.
+    
+    Args:
+        secret: Parameter value (bytes).
+    
+    Returns:
+        bytes: Return value.
+    
+    Raises:
+        None.
+    """
     if os.name != "nt":
         return base64.b64decode(secret)
 
@@ -151,6 +261,17 @@ def _unprotect_secret_bytes(secret: bytes) -> bytes:
 
 
 def _read_workbook_password_from_store() -> str:
+    """Read workbook password from store.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     store_path = _workbook_secret_store_path()
     if not store_path.exists():
         return ""
@@ -168,6 +289,17 @@ def _read_workbook_password_from_store() -> str:
 
 
 def _write_workbook_password_to_store(secret: str) -> None:
+    """Write workbook password to store.
+    
+    Args:
+        secret: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     protected = _protect_secret_bytes(secret.encode("utf-8"))
     store_path = _workbook_secret_store_path()
     store_path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,6 +312,17 @@ def _write_workbook_password_to_store(secret: str) -> None:
 
 
 def get_workbook_password() -> str:
+    """Get workbook password.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     global _workbook_password_cache
     if _workbook_password_cache is not None:
         return _workbook_password_cache
@@ -228,5 +371,16 @@ def get_workbook_password() -> str:
 
 
 def ensure_workbook_secret_policy() -> None:
+    """Ensure workbook secret policy.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if not get_workbook_password():
         raise ConfigurationError("Workbook secret is required and must not be empty.")

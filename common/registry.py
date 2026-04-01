@@ -9,6 +9,7 @@ from common.constants import (
 )
 from common.exceptions import ConfigurationError
 from common.sheet_schema import SheetSchema, ValidationRule, WorkbookBlueprint
+from common.utils import ratio_percent_token
 
 # Canonical logical keys for COURSE_SETUP workbook sheets.
 COURSE_SETUP_SHEET_KEY_COURSE_METADATA = "course_metadata"
@@ -77,19 +78,6 @@ COURSE_METADATA_TOTAL_STUDENTS_KEY = "total_students"
 WEIGHT_TOTAL_EXPECTED = 100.0
 WEIGHT_TOTAL_ROUND_DIGITS = 6
 
-SETUP_STYLE_REGISTRY_V1 = {
-    "header": {
-        "bold": True,
-        "bg_color": "#cccccc",
-        "border": 0,
-        "align": "center",
-        "valign": "vcenter",
-    },
-    "body": {
-        "locked": False,
-        "border": 1,
-    },
-}
 SETUP_STYLE_REGISTRY_V2 = {
     "header": {
         "bold": True,
@@ -117,6 +105,20 @@ def _rule(
     last_col: int,
     options: dict[str, object],
 ) -> ValidationRule:
+    """Rule.
+    
+    Args:
+        first_row: Parameter value (int).
+        first_col: Parameter value (int).
+        last_col: Parameter value (int).
+        options: Parameter value (dict[str, object]).
+    
+    Returns:
+        ValidationRule: Return value.
+    
+    Raises:
+        None.
+    """
     from common.constants import ASSESSMENT_VALIDATION_LAST_ROW
 
     return ValidationRule(
@@ -140,6 +142,25 @@ def _sheet(
     header_context: dict[str, object] | None = None,
     sheet_rules: dict[str, object] | None = None,
 ) -> SheetSchema:
+    """Sheet.
+    
+    Args:
+        key: Parameter value (str).
+        name: Parameter value (str).
+        headers: Parameter value (tuple[str, ...]).
+        validations: Parameter value (list[ValidationRule] | None).
+        is_protected: Parameter value (bool).
+        header_kind: Parameter value (str).
+        header_resolver: Parameter value (str | None).
+        header_context: Parameter value (dict[str, object] | None).
+        sheet_rules: Parameter value (dict[str, object] | None).
+    
+    Returns:
+        SheetSchema: Return value.
+    
+    Raises:
+        None.
+    """
     return SheetSchema(
         key=key,
         name=name,
@@ -154,6 +175,17 @@ def _sheet(
 
 
 def _clone_sheet(schema: SheetSchema) -> SheetSchema:
+    """Clone sheet.
+    
+    Args:
+        schema: Parameter value (SheetSchema).
+    
+    Returns:
+        SheetSchema: Return value.
+    
+    Raises:
+        None.
+    """
     return SheetSchema(
         key=schema.key,
         name=schema.name,
@@ -177,6 +209,17 @@ def _clone_sheet(schema: SheetSchema) -> SheetSchema:
 
 
 def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
+    """Course setup sheet catalog.
+    
+    Args:
+        None.
+    
+    Returns:
+        dict[str, SheetSchema]: Return value.
+    
+    Raises:
+        None.
+    """
     return {
         COURSE_SETUP_SHEET_KEY_COURSE_METADATA: _sheet(
             key=COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
@@ -411,6 +454,19 @@ def _build_course_setup_blueprint(
     style_registry: dict[str, dict[str, object]],
     sheet_keys: tuple[str, ...],
 ) -> WorkbookBlueprint:
+    """Build course setup blueprint.
+    
+    Args:
+        template_id: Parameter value (str).
+        style_registry: Parameter value (dict[str, dict[str, object]]).
+        sheet_keys: Parameter value (tuple[str, ...]).
+    
+    Returns:
+        WorkbookBlueprint: Return value.
+    
+    Raises:
+        None.
+    """
     catalog = _course_setup_sheet_catalog()
     missing = [key for key in sheet_keys if key not in catalog]
     if missing:
@@ -465,18 +521,6 @@ def _build_course_setup_blueprint(
     )
 
 
-COURSE_SETUP_V1 = _build_course_setup_blueprint(
-    template_id="COURSE_SETUP_V1",
-    style_registry=SETUP_STYLE_REGISTRY_V1,
-    sheet_keys=(
-        COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
-        COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
-        COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
-        COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
-        COURSE_SETUP_SHEET_KEY_STUDENTS,
-    ),
-)
-
 COURSE_SETUP_V2 = _build_course_setup_blueprint(
     template_id="COURSE_SETUP_V2",
     style_registry=SETUP_STYLE_REGISTRY_V2,
@@ -489,16 +533,38 @@ COURSE_SETUP_V2 = _build_course_setup_blueprint(
 )
 
 BLUEPRINT_REGISTRY = {
-    COURSE_SETUP_V1.type_id: COURSE_SETUP_V1,
     COURSE_SETUP_V2.type_id: COURSE_SETUP_V2,
 }
 
 
 def get_blueprint(template_id: str) -> WorkbookBlueprint | None:
+    """Get blueprint.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        WorkbookBlueprint | None: Return value.
+    
+    Raises:
+        None.
+    """
     return BLUEPRINT_REGISTRY.get(str(template_id).strip())
 
 
 def get_sheet_schema(template_id: str, sheet_name: str) -> SheetSchema | None:
+    """Get sheet schema.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_name: Parameter value (str).
+    
+    Returns:
+        SheetSchema | None: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = get_blueprint(template_id)
     if blueprint is None:
         return None
@@ -510,6 +576,18 @@ def get_sheet_schema(template_id: str, sheet_name: str) -> SheetSchema | None:
 
 
 def get_sheet_schema_by_key(template_id: str, sheet_key: str) -> SheetSchema | None:
+    """Get sheet schema by key.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+    
+    Returns:
+        SheetSchema | None: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = get_blueprint(template_id)
     if blueprint is None:
         return None
@@ -520,7 +598,7 @@ def get_sheet_schema_by_key(template_id: str, sheet_key: str) -> SheetSchema | N
     # COURSE_SETUP_V2 may intentionally omit some optional sheets from its
     # default workbook blueprint while still needing schema access for other
     # workbook kinds (for example, CO description template generation).
-    if str(template_id).strip() in {COURSE_SETUP_V1.type_id, COURSE_SETUP_V2.type_id}:
+    if str(template_id).strip() == COURSE_SETUP_V2.type_id:
         catalog_sheet = _course_setup_sheet_catalog().get(target)
         if catalog_sheet is not None:
             return _clone_sheet(catalog_sheet)
@@ -528,6 +606,18 @@ def get_sheet_schema_by_key(template_id: str, sheet_key: str) -> SheetSchema | N
 
 
 def get_sheet_name_by_key(template_id: str, sheet_key: str) -> str:
+    """Get sheet name by key.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     sheet = get_sheet_schema_by_key(template_id, sheet_key)
     if sheet is None:
         raise ConfigurationError(
@@ -537,6 +627,18 @@ def get_sheet_name_by_key(template_id: str, sheet_key: str) -> str:
 
 
 def get_sheet_headers_by_key(template_id: str, sheet_key: str) -> tuple[str, ...]:
+    """Get sheet headers by key.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     sheet = get_sheet_schema_by_key(template_id, sheet_key)
     if sheet is None:
         raise ConfigurationError(
@@ -550,6 +652,18 @@ def get_sheet_headers_by_key(template_id: str, sheet_key: str) -> tuple[str, ...
 
 
 def get_dynamic_sheet_template(template_id: str, sheet_key: str) -> dict[str, object]:
+    """Get dynamic sheet template.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = get_blueprint(template_id)
     if blueprint is None:
         raise ConfigurationError(f"Unknown template_id: {template_id!r}")
@@ -567,10 +681,18 @@ def get_dynamic_sheet_template(template_id: str, sheet_key: str) -> dict[str, ob
 
 
 def _ratio_percent_token(ratio: float) -> str:
-    percent = ratio * 100.0
-    if abs(percent - round(percent)) <= 1e-9:
-        return f"{int(round(percent))}"
-    return f"{percent:g}"
+    """Ratio percent token.
+    
+    Args:
+        ratio: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    return ratio_percent_token(ratio)
 
 
 def _resolve_course_setup_co_indirect_headers(
@@ -578,6 +700,18 @@ def _resolve_course_setup_co_indirect_headers(
     template_id: str,
     context: dict[str, object],
 ) -> tuple[str, ...]:
+    """Resolve course setup co indirect headers.
+    
+    Args:
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     dynamic_template = get_dynamic_sheet_template(template_id, CO_REPORT_SHEET_KEY_CO_INDIRECT)
     base = dynamic_template.get("header_base", ("#", "Reg. No.", "Student Name"))
     if not isinstance(base, tuple):
@@ -641,6 +775,18 @@ def _resolve_course_setup_co_indirect_headers(
 
 
 def _positive_int_context(value: object, *, field_name: str) -> int:
+    """Positive int context.
+    
+    Args:
+        value: Parameter value (object).
+        field_name: Parameter value (str).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     if isinstance(value, bool):
         raise ConfigurationError(f"Invalid boolean value for '{field_name}'.")
     if isinstance(value, int):
@@ -668,6 +814,18 @@ def _resolve_course_setup_marks_direct_co_wise_headers(
     template_id: str,
     context: dict[str, object],
 ) -> tuple[str, ...]:
+    """Resolve course setup marks direct co wise headers.
+    
+    Args:
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     dynamic_template = get_dynamic_sheet_template(template_id, COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE)
     base = dynamic_template.get("header_base", MARKS_ENTRY_ROW_HEADERS)
     if not isinstance(base, tuple):
@@ -684,6 +842,18 @@ def _resolve_course_setup_marks_direct_non_co_wise_headers(
     template_id: str,
     context: dict[str, object],
 ) -> tuple[str, ...]:
+    """Resolve course setup marks direct non co wise headers.
+    
+    Args:
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     dynamic_template = get_dynamic_sheet_template(
         template_id,
         COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
@@ -710,6 +880,18 @@ def _resolve_course_setup_marks_indirect_headers(
     template_id: str,
     context: dict[str, object],
 ) -> tuple[str, ...]:
+    """Resolve course setup marks indirect headers.
+    
+    Args:
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     dynamic_template = get_dynamic_sheet_template(template_id, COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT)
     base = dynamic_template.get("header_base", MARKS_ENTRY_ROW_HEADERS)
     if not isinstance(base, tuple):
@@ -726,6 +908,19 @@ def resolve_dynamic_sheet_headers(
     sheet_key: str,
     context: dict[str, object] | None = None,
 ) -> tuple[str, ...]:
+    """Resolve dynamic sheet headers.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_key: Parameter value (str).
+        context: Parameter value (dict[str, object] | None).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     dynamic_template = get_dynamic_sheet_template(template_id, sheet_key)
     resolver_name = str(dynamic_template.get("header_resolver", "")).strip()
     resolved_context = dict(context or {})
@@ -761,6 +956,17 @@ def resolve_dynamic_sheet_headers(
 
 
 def get_system_hash_sheet_schema() -> dict[str, object]:
+    """Get system hash sheet schema.
+    
+    Args:
+        None.
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     return {
         "name": SYSTEM_HASH_SHEET_NAME,
         "headers": (

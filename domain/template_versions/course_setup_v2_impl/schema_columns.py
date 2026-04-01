@@ -8,6 +8,17 @@ from common.utils import normalize
 
 
 def column_keys(sheet_schema: SheetSchema) -> tuple[str, ...]:
+    """Column keys.
+    
+    Args:
+        sheet_schema: Parameter value (SheetSchema).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     raw = sheet_schema.sheet_rules.get("column_keys")
     if not isinstance(raw, (list, tuple)):
         return tuple()
@@ -15,6 +26,18 @@ def column_keys(sheet_schema: SheetSchema) -> tuple[str, ...]:
 
 
 def column_index_by_key(sheet_schema: SheetSchema, key: str) -> int | None:
+    """Column index by key.
+    
+    Args:
+        sheet_schema: Parameter value (SheetSchema).
+        key: Parameter value (str).
+    
+    Returns:
+        int | None: Return value.
+    
+    Raises:
+        None.
+    """
     wanted = normalize(key)
     for index, value in enumerate(column_keys(sheet_schema)):
         if value == wanted:
@@ -23,6 +46,18 @@ def column_index_by_key(sheet_schema: SheetSchema, key: str) -> int | None:
 
 
 def required_column_index(sheet_schema: SheetSchema, key: str) -> int:
+    """Required column index.
+    
+    Args:
+        sheet_schema: Parameter value (SheetSchema).
+        key: Parameter value (str).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     index = column_index_by_key(sheet_schema, key)
     if index is not None:
         return index

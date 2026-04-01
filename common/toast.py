@@ -50,6 +50,20 @@ _IS_WINDOWS = platform.system().lower().startswith("win")
 
 class _ToastWidget(QFrame):
     def __init__(self, parent: QWidget | None, title: str, message: str, level: ToastLevel) -> None:
+        """Init.
+        
+        Args:
+            parent: Parameter value (QWidget | None).
+            title: Parameter value (str).
+            message: Parameter value (str).
+            level: Parameter value (ToastLevel).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("toastFrame")
         self._message = message
@@ -105,6 +119,17 @@ class _ToastWidget(QFrame):
             self.setGraphicsEffect(shadow)
 
     def fit_width(self, max_width: int) -> None:
+        """Fit width.
+        
+        Args:
+            max_width: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self._body_label is None:
             return
         horizontal_padding = TOAST_CONTENT_MARGIN_LEFT + TOAST_CONTENT_MARGIN_RIGHT
@@ -125,6 +150,17 @@ class _ToastWidget(QFrame):
 
 
 def _resolve_parent(parent: QWidget | None) -> QWidget | None:
+    """Resolve parent.
+    
+    Args:
+        parent: Parameter value (QWidget | None).
+    
+    Returns:
+        QWidget | None: Return value.
+    
+    Raises:
+        None.
+    """
     if parent is not None:
         return parent.window()
     app = QApplication.instance()
@@ -149,6 +185,21 @@ def show_toast(
     level: ToastLevel = "info",
     duration_ms: int | None = None,
 ) -> None:
+    """Show toast.
+    
+    Args:
+        parent: Parameter value (QWidget | None).
+        message: Parameter value (str).
+        title: Parameter value (str).
+        level: Parameter value (ToastLevel).
+        duration_ms: Parameter value (int | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     host = _resolve_parent(parent)
     if host is not None and (not host.isVisible() or host.isMinimized()):
         return

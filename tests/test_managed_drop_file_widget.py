@@ -11,6 +11,17 @@ from common.drag_drop_file_widget import ManagedDropFileWidget
 
 @pytest.fixture(scope="module")
 def qapp() -> QApplication:
+    """Qapp.
+    
+    Args:
+        None.
+    
+    Returns:
+        QApplication: Return value.
+    
+    Raises:
+        None.
+    """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -18,6 +29,17 @@ def qapp() -> QApplication:
 
 
 def test_managed_drop_widget_add_set_clear_and_files(qapp: QApplication) -> None:
+    """Test managed drop widget add set clear and files.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple")
     changed: list[list[str]] = []
     dropped: list[list[str]] = []
@@ -43,6 +65,17 @@ def test_managed_drop_widget_add_set_clear_and_files(qapp: QApplication) -> None
 
 
 def test_managed_drop_widget_supports_custom_summary_builder(qapp: QApplication) -> None:
+    """Test managed drop widget supports custom summary builder.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple")
     widget.set_summary_text_builder(lambda count: f"Count={count}")
     assert widget.summary_label.text() == "Count=0"
@@ -51,6 +84,17 @@ def test_managed_drop_widget_supports_custom_summary_builder(qapp: QApplication)
 
 
 def test_managed_drop_widget_single_mode_keeps_latest_drop_batch(qapp: QApplication) -> None:
+    """Test managed drop widget single mode keeps latest drop batch.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="single")
     widget.add_files(["C:/first.xlsx", "C:/second.xlsx"])
     assert widget.files() == ["C:/first.xlsx"]
@@ -59,6 +103,17 @@ def test_managed_drop_widget_single_mode_keeps_latest_drop_batch(qapp: QApplicat
 
 
 def test_managed_drop_widget_extension_filter_accepts_only_allowed(qapp: QApplication) -> None:
+    """Test managed drop widget extension filter accepts only allowed.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(allowed_extensions=[".xlsx", "xlsm"])
     rejected: list[list[str]] = []
     widget.files_rejected.connect(lambda values: rejected.append(list(values)))
@@ -70,6 +125,17 @@ def test_managed_drop_widget_extension_filter_accepts_only_allowed(qapp: QApplic
 
 
 def test_managed_drop_widget_filename_filter_accepts_specific_names(qapp: QApplication) -> None:
+    """Test managed drop widget filename filter accepts specific names.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(allowed_filenames=["course_details.xlsx"])
     added = widget.add_files(["C:/course_details.xlsx", "C:/other.xlsx"])
     assert added == ["C:/course_details.xlsx"]
@@ -77,6 +143,17 @@ def test_managed_drop_widget_filename_filter_accepts_specific_names(qapp: QAppli
 
 
 def test_managed_drop_widget_custom_predicate_filter(qapp: QApplication) -> None:
+    """Test managed drop widget custom predicate filter.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(file_filter=lambda path: "final" in path.lower())
     added = widget.add_files(["C:/final_report.xlsx", "C:/draft_report.xlsx"])
     assert added == ["C:/final_report.xlsx"]
@@ -84,6 +161,17 @@ def test_managed_drop_widget_custom_predicate_filter(qapp: QApplication) -> None
 
 
 def test_managed_drop_widget_filter_setters_apply_at_runtime(qapp: QApplication) -> None:
+    """Test managed drop widget filter setters apply at runtime.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget()
     widget.set_allowed_extensions(["xlsx"])
     widget.set_allowed_filenames(["course.xlsx"])
@@ -94,6 +182,17 @@ def test_managed_drop_widget_filter_setters_apply_at_runtime(qapp: QApplication)
 
 
 def test_managed_drop_widget_rejects_duplicates(qapp: QApplication) -> None:
+    """Test managed drop widget rejects duplicates.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple")
     rejected: list[list[str]] = []
     widget.files_rejected.connect(lambda values: rejected.append(list(values)))
@@ -107,6 +206,17 @@ def test_managed_drop_widget_rejects_duplicates(qapp: QApplication) -> None:
 
 
 def test_managed_drop_widget_rejects_non_local_sources_by_default(qapp: QApplication) -> None:
+    """Test managed drop widget rejects non local sources by default.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple")
     rejected: list[list[str]] = []
     widget.files_rejected.connect(lambda values: rejected.append(list(values)))
@@ -117,6 +227,17 @@ def test_managed_drop_widget_rejects_non_local_sources_by_default(qapp: QApplica
 
 
 def test_managed_drop_widget_can_allow_non_local_sources(qapp: QApplication) -> None:
+    """Test managed drop widget can allow non local sources.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple", allow_non_local_sources=True)
     added = widget.add_files(["https://example.com/a.xlsx"])
     assert added == ["https://example.com/a.xlsx"]
@@ -124,6 +245,17 @@ def test_managed_drop_widget_can_allow_non_local_sources(qapp: QApplication) -> 
 
 
 def test_managed_drop_widget_applies_tooltips_to_row_actions(qapp: QApplication) -> None:
+    """Test managed drop widget applies tooltips to row actions.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(
         drop_mode="multiple",
         open_file_tooltip="Open File",
@@ -139,6 +271,17 @@ def test_managed_drop_widget_applies_tooltips_to_row_actions(qapp: QApplication)
 
 
 def test_managed_drop_widget_supports_validation_state_transitions(qapp: QApplication) -> None:
+    """Test managed drop widget supports validation state transitions.
+    
+    Args:
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     widget = ManagedDropFileWidget(drop_mode="multiple")
     assert widget.drop_zone.property("validationState") == "neutral"
     widget.set_validation_state("info")

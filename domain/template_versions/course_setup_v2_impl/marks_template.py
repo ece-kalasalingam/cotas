@@ -41,7 +41,7 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.utils import canonical_path_key, coerce_excel_number, normalize
+from common.utils import canonical_path_key, coerce_excel_number, dedupe_paths_by_canonical_key, normalize
 from common.workbook_integrity import (
     add_system_layout_sheet,
     copy_system_hash_sheet,
@@ -64,6 +64,19 @@ _logger = logging.getLogger(__name__)
 
 
 def _ve(translation_key: str, *, code: str, **context: Any) -> ValidationError:
+    """Ve.
+    
+    Args:
+        translation_key: Parameter value (str).
+        code: Parameter value (str).
+        context: Parameter value (Any).
+    
+    Returns:
+        ValidationError: Return value.
+    
+    Raises:
+        None.
+    """
     return validation_error_from_key(translation_key, code=code, **context)
 
 
@@ -73,6 +86,19 @@ def _prepare_marks_generation_from_workbook(
     source_path: str | Path,
     cancel_token: CancellationToken | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    """Prepare marks generation from workbook.
+    
+    Args:
+        source_workbook: Parameter value (Any).
+        source_path: Parameter value (str | Path).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        tuple[str, dict[str, Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     if cancel_token is not None:
         cancel_token.raise_if_cancelled()
     # Keep generation aligned with the same public validator entrypoint used by upload validation.
@@ -83,8 +109,8 @@ def _prepare_marks_generation_from_workbook(
     valid_paths_raw = validation_result.get("valid_paths", [])
     valid_paths = [str(path) for path in valid_paths_raw] if isinstance(valid_paths_raw, list) else []
     source_key = canonical_path_key(source_path)
-    valid_path_keys = {canonical_path_key(path) for path in valid_paths}
-    if source_key not in valid_path_keys:
+    is_valid_source = any(canonical_path_key(path) == source_key for path in valid_paths)
+    if not is_valid_source:
         rejections_raw = validation_result.get("rejections", [])
         rejection_items = [
             item
@@ -119,6 +145,21 @@ def _render_marks_template_to_output(
     context: dict[str, Any],
     cancel_token: CancellationToken | None = None,
 ) -> Path:
+    """Render marks template to output.
+    
+    Args:
+        source_workbook: Parameter value (Any).
+        output_path: Parameter value (Path).
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, Any]).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
@@ -134,6 +175,17 @@ def _render_marks_template_to_output(
     target_closed = False
 
     def _cleanup_incomplete_output() -> None:
+        """Cleanup incomplete output.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         nonlocal target_closed
         if not target_closed:
             try:
@@ -253,6 +305,17 @@ def generate_marks_template_from_course_details(
 
 
 def _marks_output_base_from_context(context: dict[str, Any]) -> str:
+    """Marks output base from context.
+    
+    Args:
+        context: Parameter value (dict[str, Any]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     metadata_rows = context.get("metadata_rows")
     if not isinstance(metadata_rows, list):
         raise _ve(
@@ -268,6 +331,18 @@ def _marks_output_base_from_context(context: dict[str, Any]) -> str:
 
 
 def _metadata_value_for_key(metadata_rows: Sequence[Sequence[Any]], key: str) -> str:
+    """Metadata value for key.
+    
+    Args:
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+        key: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     wanted = normalize(key)
     for row in metadata_rows:
         if len(row) < 2:
@@ -285,6 +360,21 @@ def generate_marks_templates_from_course_details_batch(
     output_path_overrides: Mapping[str, str | Path] | None = None,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, object]:
+    """Generate marks templates from course details batch.
+    
+    Args:
+        workbook_paths: Parameter value (Sequence[str | Path]).
+        output_dir: Parameter value (str | Path).
+        allow_overwrite: Parameter value (bool).
+        output_path_overrides: Parameter value (Mapping[str, str | Path] | None).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import openpyxl
     except ModuleNotFoundError as exc:
@@ -303,34 +393,34 @@ def generate_marks_templates_from_course_details_batch(
             continue
         normalized_output_overrides[source_key] = Path(output_value)
 
-    seen_source_keys: set[str] = set()
+    unique_source_paths, duplicate_source_paths = dedupe_paths_by_canonical_key(workbook_paths, skip_empty=True)
     seen_output_path_keys: set[str] = set()
     results: dict[str, object] = {}
     generated = 0
     failed = 0
     skipped = 0
+    generated_paths: list[str] = []
 
-    for raw_path in workbook_paths:
+    for duplicate_path in duplicate_source_paths:
+        source_key = canonical_path_key(duplicate_path)
+        results[source_key] = {
+            "status": "skipped",
+            "source_path": duplicate_path,
+            "workbook_path": None,
+            "output": None,
+            "output_path": None,
+            "output_url": None,
+            "reason": "duplicate_source",
+        }
+        skipped += 1
+
+    for raw_path in unique_source_paths:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
 
         source = Path(raw_path)
         source_key = canonical_path_key(source)
         source_value = str(source)
-
-        if source_key in seen_source_keys:
-            results[source_key] = {
-                "status": "skipped",
-                "source_path": source_value,
-                "workbook_path": None,
-                "output": None,
-                "output_path": None,
-                "output_url": None,
-                "reason": "duplicate_source",
-            }
-            skipped += 1
-            continue
-        seen_source_keys.add(source_key)
 
         try:
             if cancel_token is not None:
@@ -406,6 +496,7 @@ def generate_marks_templates_from_course_details_batch(
                 "reason": None,
             }
             generated += 1
+            generated_paths.append(output_value)
         except JobCancelledError:
             raise
         except Exception as exc:
@@ -422,14 +513,8 @@ def generate_marks_templates_from_course_details_batch(
         finally:
             source_workbook.close()
 
-    generated_paths = [
-        str(entry.get("workbook_path"))
-        for entry in results.values()
-        if isinstance(entry, dict) and str(entry.get("status")) == "generated" and entry.get("workbook_path")
-    ]
-
     return {
-        "total": len(seen_source_keys) + skipped,
+        "total": len(unique_source_paths) + skipped,
         "generated": generated,
         "failed": failed,
         "skipped": skipped,
@@ -440,6 +525,18 @@ def generate_marks_templates_from_course_details_batch(
 
 
 def _extract_marks_template_context_by_template(workbook: Any, template_id: str) -> dict[str, Any]:
+    """Extract marks template context by template.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = get_blueprint(template_id)
 
     if blueprint is None:
@@ -504,6 +601,20 @@ def _write_marks_template_workbook_by_template(
     template_id: str,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, Any]:
+    """Write marks template workbook by template.
+    
+    Args:
+        workbook: Parameter value (Any).
+        context: Parameter value (dict[str, Any]).
+        template_id: Parameter value (str).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     return _write_marks_template_workbook(
         workbook,
         context,
@@ -513,6 +624,17 @@ def _write_marks_template_workbook_by_template(
 
 
 def _extract_total_outcomes(metadata_rows: Sequence[Sequence[Any]]) -> int:
+    """Extract total outcomes.
+    
+    Args:
+        metadata_rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     required_key = normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
     for row in metadata_rows:
         if len(row) < 2:
@@ -526,6 +648,17 @@ def _extract_total_outcomes(metadata_rows: Sequence[Sequence[Any]]) -> int:
 
 
 def _extract_students(student_rows: Sequence[Sequence[Any]]) -> list[tuple[str, str]]:
+    """Extract students.
+    
+    Args:
+        student_rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        list[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
     students: list[tuple[str, str]] = []
     for row in student_rows:
         reg_no = str(row[0]).strip() if len(row) > 0 and row[0] is not None else ""
@@ -542,6 +675,18 @@ def _extract_components(
     *,
     assessment_sheet: str,
 ) -> list[dict[str, Any]]:
+    """Extract components.
+    
+    Args:
+        assessment_rows: Parameter value (Sequence[Sequence[Any]]).
+        assessment_sheet: Parameter value (str).
+    
+    Returns:
+        list[dict[str, Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     parsed = parse_assessment_components(
         assessment_rows,
         sheet_name=assessment_sheet,
@@ -567,6 +712,17 @@ def _extract_components(
 
 
 def _extract_questions(question_rows: Sequence[Sequence[Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Extract questions.
+    
+    Args:
+        question_rows: Parameter value (Sequence[Sequence[Any]]).
+    
+    Returns:
+        dict[str, list[dict[str, Any]]]: Return value.
+    
+    Raises:
+        None.
+    """
     questions_by_component: dict[str, list[dict[str, Any]]] = {}
     for row in question_rows:
         if len(row) < 4:
@@ -596,6 +752,20 @@ def _write_marks_template_workbook(
     template_id: str,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, Any]:
+    """Write marks template workbook.
+    
+    Args:
+        workbook: Parameter value (Any).
+        context: Parameter value (dict[str, Any]).
+        template_id: Parameter value (str).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = get_blueprint(template_id)
 
     if blueprint is None:
@@ -737,6 +907,17 @@ def _write_marks_template_workbook(
 
 
 def _assessment_wrapped_columns_from_schema(template_id: str) -> tuple[int, ...]:
+    """Assessment wrapped columns from schema.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        tuple[int, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     schema = get_sheet_schema_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if schema is None:
         return ()
@@ -753,6 +934,18 @@ def _precompute_marks_layout_manifest(
     context: dict[str, Any],
     cancel_token: CancellationToken | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Precompute marks layout manifest.
+    
+    Args:
+        context: Parameter value (dict[str, Any]).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        tuple[list[dict[str, Any]], list[dict[str, Any]]]: Return value.
+    
+    Raises:
+        None.
+    """
     students = context["students"]
     metadata_rows = context["metadata_rows"]
     assessment_rows = context["assessment_rows"]
@@ -867,6 +1060,18 @@ def _precompute_marks_layout_manifest(
 
 
 def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
+    """Iter data rows.
+    
+    Args:
+        worksheet: Parameter value (Any).
+        expected_col_count: Parameter value (int).
+    
+    Returns:
+        list[list[Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     rows: list[list[Any]] = []
     for row in worksheet.iter_rows(min_row=2, max_col=expected_col_count, values_only=True):
         values = list(row)

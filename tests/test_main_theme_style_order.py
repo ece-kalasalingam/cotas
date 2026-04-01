@@ -6,26 +6,92 @@ import pytest
 
 
 def _reloaded_main():
+    """Reloaded main.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     import main as main_mod
 
     return importlib.reload(main_mod)
 
 
 def test_fusion_style_runs_before_theme_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test fusion style runs before theme setup.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     main_mod = _reloaded_main()
     events: list[str] = []
 
     class _FakeApp:
         def setStyle(self, style: str) -> None:  # noqa: N802
+            """Setstyle.
+            
+            Args:
+                style: Parameter value (str).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             events.append(f"style:{style}")
 
         def setOrganizationName(self, _name: str) -> None:  # noqa: N802
+            """Setorganizationname.
+            
+            Args:
+                _name: Parameter value (str).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return None
 
         def setApplicationName(self, _name: str) -> None:  # noqa: N802
+            """Setapplicationname.
+            
+            Args:
+                _name: Parameter value (str).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return None
 
         def setApplicationDisplayName(self, _name: str) -> None:  # noqa: N802
+            """Setapplicationdisplayname.
+            
+            Args:
+                _name: Parameter value (str).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return None
 
     fake_app = _FakeApp()
@@ -33,9 +99,32 @@ def test_fusion_style_runs_before_theme_setup(monkeypatch: pytest.MonkeyPatch) -
     class _FakeQApplication:
         @staticmethod
         def setHighDpiScaleFactorRoundingPolicy(_policy) -> None:  # noqa: N802
+            """Sethighdpiscalefactorroundingpolicy.
+            
+            Args:
+                _policy: Parameter value.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return None
 
         def __new__(cls, *_args, **_kwargs):
+            """New.
+            
+            Args:
+                _args: Parameter value.
+                _kwargs: Parameter value.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return fake_app
 
     monkeypatch.setattr(main_mod, "QApplication", _FakeQApplication)

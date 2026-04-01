@@ -12,6 +12,17 @@ from domain.template_strategy_router import generate_workbook
 
 
 def generate_course_details_template(output_path: Path) -> Path:
+    """Generate course details template.
+    
+    Args:
+        output_path: Parameter value (Path).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     result = generate_workbook(
         template_id=ID_COURSE_SETUP,
         output_path=output_path,
@@ -25,6 +36,17 @@ def generate_course_details_template(output_path: Path) -> Path:
 
 
 def generate_co_description_template(output_path: Path) -> Path:
+    """Generate co description template.
+    
+    Args:
+        output_path: Parameter value (Path).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     result = generate_workbook(
         template_id=ID_COURSE_SETUP,
         output_path=output_path,
@@ -38,6 +60,17 @@ def generate_co_description_template(output_path: Path) -> Path:
 
 
 def test_generated_co_description_template_structure_and_integrity(tmp_path: Path) -> None:
+    """Test generated co description template structure and integrity.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     output = tmp_path / "co_description_template.xlsx"
     generate_co_description_template(output)
 
@@ -74,6 +107,17 @@ def test_generated_co_description_template_structure_and_integrity(tmp_path: Pat
 
 
 def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
+    """Test generated workbook structure and prefill data.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     output = tmp_path / "course_setup.xlsx"
     generate_course_details_template(output)
 
@@ -128,6 +172,17 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
 
 
 def test_generated_workbook_overwrites_existing_file_atomically(tmp_path: Path) -> None:
+    """Test generated workbook overwrites existing file atomically.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     output = tmp_path / "course_setup.xlsx"
     output.write_text("stale", encoding="utf-8")
 

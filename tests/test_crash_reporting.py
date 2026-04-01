@@ -7,6 +7,18 @@ from common import crash_reporting
 
 
 def test_capture_unhandled_exception_writes_json_report(tmp_path: Path, monkeypatch) -> None:
+    """Test capture unhandled exception writes json report.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+        monkeypatch: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     reports_dir = tmp_path / "crash_reports"
     monkeypatch.setattr(crash_reporting, "_crash_reports_dir", lambda: reports_dir)
 
@@ -26,11 +38,33 @@ def test_capture_unhandled_exception_writes_json_report(tmp_path: Path, monkeypa
 
 
 def test_capture_unhandled_exception_returns_none_on_internal_failure(monkeypatch) -> None:
+    """Test capture unhandled exception returns none on internal failure.
+    
+    Args:
+        monkeypatch: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(crash_reporting, "_crash_reports_dir", lambda: (_ for _ in ()).throw(OSError("denied")))
     assert crash_reporting.capture_unhandled_exception(RuntimeError, RuntimeError("x"), None) is None
 
 
 def test_has_remote_crash_endpoint_env_parsing(monkeypatch) -> None:
+    """Test has remote crash endpoint env parsing.
+    
+    Args:
+        monkeypatch: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setenv(crash_reporting.CRASH_REPORT_ENDPOINT_ENV_VAR, "   ")
     assert crash_reporting.has_remote_crash_endpoint() is False
 
@@ -39,6 +73,17 @@ def test_has_remote_crash_endpoint_env_parsing(monkeypatch) -> None:
 
 
 def test_crash_reports_dir_uses_settings_parent(monkeypatch) -> None:
+    """Test crash reports dir uses settings parent.
+    
+    Args:
+        monkeypatch: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(crash_reporting, "app_settings_path", lambda _name: Path("C:/focus/settings.json"))
     out = crash_reporting._crash_reports_dir()
     assert out == Path("C:/focus") / crash_reporting.CRASH_REPORTS_DIR_NAME

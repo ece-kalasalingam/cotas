@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="hi_IN">
   <context>
     <name>main</name>
@@ -195,169 +195,157 @@
       <translation>फ़ाइलें जोड़ने के लिए, उन्हें यहाँ खींचकर छोड़ें या Ctrl + O दबाएँ, या एक बार क्लिक करें।</translation>
     </message>
     <message>
-      <source>coordinator.calculate</source>
+      <source>co_analysis.calculate</source>
       <translation>CO प्राप्ति की गणना करें</translation>
     </message>
     <message>
-      <source>coordinator.clear_all</source>
+      <source>co_analysis.clear_all</source>
       <translation>सभी साफ़ करें</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.description</source>
+      <source>co_analysis.co_attainment.description</source>
       <translation>यदि निम्न % विद्यार्थी तय स्तर और उससे ऊपर हैं, तो प्राप्त माना जाएगा।</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.invalid_percent</source>
+      <source>co_analysis.co_attainment.invalid_percent</source>
       <translation>अमान्य CO AT%: मान 0 से 100 के बीच होना चाहिए।</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.level.label</source>
+      <source>co_analysis.co_attainment.level.label</source>
       <translation>CO AT स्तर:</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.percent.label</source>
+      <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
     <message>
-      <source>coordinator.dialog.title</source>
+      <source>co_analysis.dialog.title</source>
       <translation>Excel फ़ाइलें चुनें</translation>
     </message>
     <message>
-      <source>coordinator.drop_hint</source>
+      <source>co_analysis.drop_hint</source>
       <translation>अंक भरी हुई वर्कबुक अपलोड करें</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.body</source>
+      <source>co_analysis.duplicate.body</source>
       <translation>{count} डुप्लीकेट फ़ाइल(ें) छोड़ दी गईं क्योंकि वे पहले से ही सूची में मौजूद हैं।</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.title</source>
+      <source>co_analysis.duplicate.title</source>
       <translation>फ़ाइल पहले से मौजूद है</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_fallback</source>
+      <source>co_analysis.file.remove_fallback</source>
       <translation>हटाएँ</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_tooltip</source>
+      <source>co_analysis.file.remove_tooltip</source>
       <translation>फ़ाइल हटाएँ</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.body</source>
+      <source>co_analysis.invalid_final_report.body</source>
       <translation>केवल वैध फ़ाइनल CO रिपोर्ट वर्कबुक की अनुमति है।\n\n{files}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.detail_line</source>
+      <source>co_analysis.invalid_final_report.detail_line</source>
       <translation>{file}: {reason}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.details_prefix</source>
+      <source>co_analysis.invalid_final_report.details_prefix</source>
       <translation>विवरण:</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.title</source>
+      <source>co_analysis.invalid_final_report.title</source>
       <translation>अमान्य फ़ाइनल CO रिपोर्ट</translation>
     </message>
     <message>
-      <source>coordinator.join_drop.body</source>
+      <source>co_analysis.join_drop.body</source>
       <translation>कुछ पंक्तियों को नज़रअंदाज़ किया गया क्योंकि वे केवल Direct या केवल Indirect शीट में थीं। हटाई गई पंक्तियाँ: {count}। विवरण के लिए एक्टिविटी लॉग देखें।</translation>
     </message>
     <message>
-      <source>coordinator.links.downloaded_output</source>
+      <source>co_analysis.links.downloaded_output</source>
       <translation>डाउनलोड किया गया आउटपुट</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.body</source>
+      <source>co_analysis.regno_dedup.body</source>
       <translation>CO प्राप्ति बनाते समय {count} डुप्लीकेट रजिस्टर नंबर प्रविष्टियाँ हटाई गईं।</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_body</source>
+      <source>co_analysis.regno_dedup.log_body</source>
       <translation>{count} डुप्लीकेट रजिस्टर नंबर प्रविष्टियाँ हटाई गईं:\n{details}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail</source>
+      <source>co_analysis.regno_dedup.log_detail</source>
       <translation>रजिस्टर नंबर: {reg_no} | वर्कशीट: {worksheet} | वर्कबुक: {workbook}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail_unavailable</source>
+      <source>co_analysis.regno_dedup.log_detail_unavailable</source>
       <translation>डुप्लीकेट प्रविष्टि का विवरण उपलब्ध नहीं है।</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.title</source>
+      <source>co_analysis.regno_dedup.title</source>
       <translation>डुप्लीकेट रजिस्टर नंबर हटाए गए</translation>
     </message>
     <message>
-      <source>coordinator.status.added</source>
+      <source>co_analysis.status.added</source>
       <translation>{added} फ़ाइल(ें) जोड़ी गईं। कुल: {total}।</translation>
     </message>
     <message>
-      <source>coordinator.status.calculate_completed</source>
+      <source>co_analysis.status.calculate_completed</source>
       <translation>CO प्राप्ति की गणना पूरी हो गई और आउटपुट वर्कबुक तैयार हो गई।</translation>
     </message>
     <message>
-      <source>coordinator.status.cleared</source>
+      <source>co_analysis.status.cleared</source>
       <translation>{count} फ़ाइलें साफ़ की गईं।</translation>
     </message>
     <message>
-      <source>coordinator.status.ignored</source>
+      <source>co_analysis.status.ignored</source>
       <translation>{count} फ़ाइल(ें) नज़रअंदाज़ कर दी गईं (असमर्थित प्रकार, गुम, डुप्लीकेट, या अमान्य फ़ाइनल रिपोर्ट वर्कबुक)।</translation>
     </message>
     <message>
-      <source>coordinator.status.operation_cancelled</source>
-      <translation>कोऑर्डिनेटर प्रोसेसिंग रद्द कर दी गई।</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_completed</source>
-      <translation>कोऑर्डिनेटर प्रोसेसिंग पूरी हो गई।</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_failed</source>
-      <translation>कोऑर्डिनेटर प्रोसेसिंग असफल रही।</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_started</source>
+      <source>co_analysis.status.processing_started</source>
       <translation>चुनी गई फ़ाइलों की प्रोसेसिंग हो रही है...</translation>
     </message>
     <message>
-      <source>coordinator.status.queued</source>
+      <source>co_analysis.status.queued</source>
       <translation>जब मौजूदा प्रोसेसिंग चल रही थी, तब {count} फ़ाइलें कतार में लगाई गईं।</translation>
     </message>
     <message>
-      <source>coordinator.status.removed</source>
+      <source>co_analysis.status.removed</source>
       <translation>{count} फ़ाइलें हटाई गईं।</translation>
     </message>
     <message>
-      <source>coordinator.summary</source>
+      <source>co_analysis.summary</source>
       <translation>फ़ाइलें: {count}</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.description</source>
+      <source>co_analysis.thresholds.description</source>
       <translation>- L1 थ्रेशोल्ड - कोर्स का पास मार्क या पिछले रेगुलेशन में ऑफर किए गए 3 बैचों का कोर्स औसत।
 - L2 थ्रेशोल्ड - प्रथम श्रेणी।
 - L3 थ्रेशोल्ड - विशिष्टता वर्ग।</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.invalid_rule</source>
+      <source>co_analysis.thresholds.invalid_rule</source>
       <translation>थ्रेशोल्ड नियम उल्लंघन: 0 &lt; L1 &lt; L2 &lt; L3 &lt; 100 रखें।</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l1.label</source>
+      <source>co_analysis.thresholds.l1.label</source>
       <translation>L1 सीमा:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l2.label</source>
+      <source>co_analysis.thresholds.l2.label</source>
       <translation>L2 सीमा:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l3.label</source>
+      <source>co_analysis.thresholds.l3.label</source>
       <translation>L3 सीमा:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.title</source>
+      <source>co_analysis.thresholds.title</source>
       <translation>CO प्राप्ति थ्रेशोल्ड</translation>
     </message>
     <message>
-      <source>coordinator.title</source>
+      <source>co_analysis.title</source>
       <translation>पाठ्यक्रम प्राप्ति</translation>
     </message>
     <message>
@@ -1029,10 +1017,6 @@
       <translation>CO विश्लेषण</translation>
     </message>
     <message>
-      <source>module.coordinator_short</source>
-      <translation>समन्वयक</translation>
-    </message>
-    <message>
       <source>module.instructor</source>
       <translation>प्रशिक्षक</translation>
     </message>
@@ -1097,6 +1081,10 @@
     <message>
       <source>status.ready</source>
       <translation>तैयार</translation>
+    </message>
+    <message>
+      <source>status.processing</source>
+      <translation>प्रोसेसिंग</translation>
     </message>
     <message>
       <source>toolbar.navigation</source>
@@ -1300,3 +1288,6 @@
     </message>
   </context>
 </TS>
+
+
+

@@ -10,6 +10,17 @@ from common import qt_jobs
 
 
 def test_function_job_run_emits_finished_on_success() -> None:
+    """Test function job run emits finished on success.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     job = qt_jobs.FunctionJob(lambda a, b: a + b, 2, 3)
     got = {"result": None, "error": None}
     job.signals.finished.connect(lambda value: got.__setitem__("result", value))
@@ -22,7 +33,29 @@ def test_function_job_run_emits_finished_on_success() -> None:
 
 
 def test_function_job_run_emits_failed_on_exception() -> None:
+    """Test function job run emits failed on exception.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _boom():
+        """Boom.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         raise RuntimeError("boom")
 
     job = qt_jobs.FunctionJob(_boom)
@@ -37,11 +70,44 @@ def test_function_job_run_emits_failed_on_exception() -> None:
 
 
 def test_run_in_background_wires_callbacks_and_starts_job() -> None:
+    """Test run in background wires callbacks and starts job.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     class _Pool:
         def __init__(self) -> None:
+            """Init.
+            
+            Args:
+                None.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self.started = []
 
         def start(self, job):
+            """Start.
+            
+            Args:
+                job: Parameter value.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self.started.append(job)
 
     pool = _Pool()

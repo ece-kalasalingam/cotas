@@ -15,6 +15,17 @@ from modules import instructor_module as instructor_ui
 
 @pytest.fixture(scope="module")
 def qapp() -> QApplication:
+    """Qapp.
+    
+    Args:
+        None.
+    
+    Returns:
+        QApplication: Return value.
+    
+    Raises:
+        None.
+    """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -22,6 +33,18 @@ def qapp() -> QApplication:
 
 
 def _dispose_widget(widget: object, qapp: QApplication) -> None:
+    """Dispose widget.
+    
+    Args:
+        widget: Parameter value (object).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     close = getattr(widget, "close", None)
     if callable(close):
         close()
@@ -32,6 +55,17 @@ def _dispose_widget(widget: object, qapp: QApplication) -> None:
 
 
 def _build_instructor_module(monkeypatch: pytest.MonkeyPatch) -> instructor_ui.InstructorModule:
+    """Build instructor module.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        instructor_ui.InstructorModule: Return value.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setattr(instructor_ui, "t", lambda key, **kwargs: key)
     monkeypatch.setattr(instructor_ui.InstructorModule, "_setup_ui_logging", lambda self: None)
     return instructor_ui.InstructorModule()
@@ -47,6 +81,23 @@ def _run_async_inline(
     on_failure: Any,
     on_finally: Any = None,
 ) -> None:
+    """Run async inline.
+    
+    Args:
+        module: Parameter value (instructor_ui.InstructorModule).
+        token: Parameter value (object).
+        job_id: Parameter value (str | None).
+        work: Parameter value (Any).
+        on_success: Parameter value (Any).
+        on_failure: Parameter value (Any).
+        on_finally: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     del module, token, job_id
     try:
         result = work()
@@ -61,6 +112,19 @@ def _run_async_inline(
 def test_marks_generation_retries_only_collisions_with_output_overrides(
     monkeypatch: pytest.MonkeyPatch, qapp: QApplication, tmp_path: Path
 ) -> None:
+    """Test marks generation retries only collisions with output overrides.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module = _build_instructor_module(monkeypatch)
     src1 = "C:/src/one.xlsx"
     src2 = "C:/src/two.xlsx"
@@ -87,6 +151,17 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
     calls: list[dict[str, object]] = []
 
     def _fake_generate_workbooks(**kwargs: object) -> dict[str, object]:
+        """Fake generate workbooks.
+        
+        Args:
+            kwargs: Parameter value (object).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         calls.append(dict(kwargs))
         run_sources = list(kwargs.get("workbook_paths", []))
         context = dict(kwargs.get("context", {}))
@@ -149,6 +224,19 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
 def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limit(
     monkeypatch: pytest.MonkeyPatch, qapp: QApplication, tmp_path: Path
 ) -> None:
+    """Test marks generation uses bulk overwrite prompt when collisions exceed limit.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module = _build_instructor_module(monkeypatch)
     source_paths = [f"C:/src/{idx}.xlsx" for idx in range(1, 8)]
     module.course_details_paths = list(source_paths)
@@ -179,6 +267,17 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
     call_index = {"value": 0}
 
     def _fake_generate_workbooks(**kwargs: object) -> dict[str, object]:
+        """Fake generate workbooks.
+        
+        Args:
+            kwargs: Parameter value (object).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         call_index["value"] += 1
         context = dict(kwargs.get("context", {}))
         run_sources = list(kwargs.get("workbook_paths", []))
@@ -239,6 +338,18 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
 def test_course_details_validation_uses_shared_batch_feedback(
     monkeypatch: pytest.MonkeyPatch, qapp: QApplication
 ) -> None:
+    """Test course details validation uses shared batch feedback.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     module = _build_instructor_module(monkeypatch)
     monkeypatch.setattr(
         instructor_ui.InstructorModule,

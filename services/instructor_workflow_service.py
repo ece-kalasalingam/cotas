@@ -13,6 +13,7 @@ from common.constants import (
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
+from common.utils import assert_not_symlink_path
 from domain.template_strategy_router import (
     generate_workbooks,
     read_valid_template_id_from_system_hash_sheet,
@@ -47,6 +48,17 @@ _TELEMETRY = WorkflowTelemetryConfig(
 
 class InstructorWorkflowService(WorkflowServiceBase):
     def __init__(self) -> None:
+        """Init.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(logger=_logger, telemetry=_TELEMETRY)
     def generate_marks_template(
         self,
@@ -56,6 +68,20 @@ class InstructorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
+        """Generate marks template.
+        
+        Args:
+            course_details_path: Parameter value (str | Path).
+            output_path: Parameter value (str | Path).
+            context: Parameter value (JobContext).
+            cancel_token: Parameter value (CancellationToken | None).
+        
+        Returns:
+            Path: Return value.
+        
+        Raises:
+            None.
+        """
         template_id = self._resolve_template_id_from_workbook(course_details_path)
         return self._execute_with_telemetry(
             context=context,
@@ -86,6 +112,20 @@ class InstructorWorkflowService(WorkflowServiceBase):
         context: JobContext,
         cancel_token: CancellationToken | None = None,
     ) -> Path:
+        """Generate final report.
+        
+        Args:
+            filled_marks_path: Parameter value (str | Path).
+            output_path: Parameter value (str | Path).
+            context: Parameter value (JobContext).
+            cancel_token: Parameter value (CancellationToken | None).
+        
+        Returns:
+            Path: Return value.
+        
+        Raises:
+            None.
+        """
         del filled_marks_path
         del output_path
         return self._execute_with_telemetry(
@@ -103,6 +143,20 @@ class InstructorWorkflowService(WorkflowServiceBase):
         operation: str,
         duration_ms: int,
     ) -> bool:
+        """Handle domain exception.
+        
+        Args:
+            exc: Parameter value (Exception).
+            context: Parameter value (JobContext).
+            operation: Parameter value (str).
+            duration_ms: Parameter value (int).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         if not isinstance(exc, ValidationError):
             return False
         self._workflow_metrics.record(operation=operation, outcome="validation_error", duration_ms=duration_ms)
@@ -121,6 +175,17 @@ class InstructorWorkflowService(WorkflowServiceBase):
 
     @staticmethod
     def _resolve_template_id_from_workbook(workbook_path: str | Path) -> str:
+        """Resolve template id from workbook.
+        
+        Args:
+            workbook_path: Parameter value (str | Path).
+        
+        Returns:
+            str: Return value.
+        
+        Raises:
+            None.
+        """
         try:
             import openpyxl
         except ModuleNotFoundError as exc:
@@ -129,6 +194,7 @@ class InstructorWorkflowService(WorkflowServiceBase):
                 code="OPENPYXL_MISSING",
             ) from exc
         source = Path(workbook_path)
+        assert_not_symlink_path(source, context_key="workbook")
         try:
             workbook = openpyxl.load_workbook(source, data_only=False, read_only=True)
         except Exception as exc:
@@ -144,6 +210,18 @@ class InstructorWorkflowService(WorkflowServiceBase):
 
     @staticmethod
     def _result_to_path(result: object, *, fallback: Path) -> Path:
+        """Result to path.
+        
+        Args:
+            result: Parameter value (object).
+            fallback: Parameter value (Path).
+        
+        Returns:
+            Path: Return value.
+        
+        Raises:
+            None.
+        """
         if isinstance(result, Path):
             return result
         output = getattr(result, "output_path", None)
@@ -155,6 +233,18 @@ class InstructorWorkflowService(WorkflowServiceBase):
 
     @staticmethod
     def _extract_single_generated_workbook_path(result: object, *, fallback: Path) -> Path:
+        """Extract single generated workbook path.
+        
+        Args:
+            result: Parameter value (object).
+            fallback: Parameter value (Path).
+        
+        Returns:
+            Path: Return value.
+        
+        Raises:
+            None.
+        """
         if isinstance(result, dict):
             generated_paths = result.get("generated_workbook_paths")
             if isinstance(generated_paths, list) and generated_paths:
@@ -165,6 +255,17 @@ class InstructorWorkflowService(WorkflowServiceBase):
 
 
 def _raise_final_report_generation_removed() -> Path:
+    """Raise final report generation removed.
+    
+    Args:
+        None.
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     raise validation_error_from_key(
         "common.validation_failed_invalid_data",
         code="WORKBOOK_KIND_UNSUPPORTED",

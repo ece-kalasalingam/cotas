@@ -23,14 +23,47 @@ from common.utils import emit_user_status
 
 class _UserLogView(Protocol):
     def appendPlainText(self, text: str) -> None:  # noqa: N802 - Qt-style name
+        """Appendplaintext.
+        
+        Args:
+            text: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         ...
 
     def clear(self) -> None:
+        """Clear.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         ...
 
 
 class _UILogHandlerLogger(Protocol):
     def addHandler(self, handler: object) -> None:  # noqa: N802 - Qt-style name
+        """Addhandler.
+        
+        Args:
+            handler: Parameter value (object).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         ...
 
 
@@ -44,6 +77,18 @@ class _MessageModule(Protocol):
 
 class _FormatLogLine(Protocol):
     def __call__(self, message: str, *, timestamp: datetime | None = ...) -> str | None:
+        """Call.
+        
+        Args:
+            message: Parameter value (str).
+            timestamp: Parameter value (datetime | None).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
 
@@ -59,9 +104,21 @@ class MessagesNamespace(TypedDict):
 
 ToastLevel = Literal["info", "success", "warning", "error"]
 NotificationChannel = Literal["status", "toast", "activity_log"]
+_VALIDATION_ACTIVITY_DETAIL_LIMIT = 60
 
 
 def default_messages_namespace(*, translate: Callable[..., str]) -> MessagesNamespace:
+    """Default messages namespace.
+    
+    Args:
+        translate: Parameter value (Callable[..., str]).
+    
+    Returns:
+        MessagesNamespace: Return value.
+    
+    Raises:
+        None.
+    """
     return {
         "emit_user_status": emit_user_status,
         "t": translate,
@@ -80,12 +137,37 @@ def build_status_message(
     kwargs: Mapping[str, Any] | None = None,
     fallback: str | None = None,
 ) -> str:
+    """Build status message.
+    
+    Args:
+        text_key: Parameter value (str).
+        translate: Parameter value (Callable[..., str]).
+        kwargs: Parameter value (Mapping[str, Any] | None).
+        fallback: Parameter value (str | None).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     payload_kwargs = dict(kwargs or {})
     resolved_fallback = fallback if isinstance(fallback, str) else translate(text_key, **payload_kwargs)
     return build_i18n_log_message(text_key, kwargs=payload_kwargs, fallback=resolved_fallback)
 
 
 def resolve_status_message(message: str) -> str:
+    """Resolve status message.
+    
+    Args:
+        message: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return resolve_i18n_log_message(message)
 
 
@@ -97,6 +179,21 @@ def show_toast_plain(
     level: ToastLevel = "info",
     duration_ms: int | None = None,
 ) -> None:
+    """Show toast plain.
+    
+    Args:
+        widget: Parameter value (object).
+        message: Parameter value (str).
+        title: Parameter value (str).
+        level: Parameter value (ToastLevel).
+        duration_ms: Parameter value (int | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     show_toast(cast(QWidget | None, widget), message, title=title, level=level, duration_ms=duration_ms)
 
 
@@ -111,6 +208,24 @@ def show_toast_key(
     title_kwargs: Mapping[str, Any] | None = None,
     duration_ms: int | None = None,
 ) -> None:
+    """Show toast key.
+    
+    Args:
+        widget: Parameter value (object).
+        text_key: Parameter value (str).
+        title_key: Parameter value (str).
+        translate: Parameter value (Callable[..., str]).
+        level: Parameter value (ToastLevel).
+        text_kwargs: Parameter value (Mapping[str, Any] | None).
+        title_kwargs: Parameter value (Mapping[str, Any] | None).
+        duration_ms: Parameter value (int | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     show_toast(
         cast(QWidget | None, widget),
         translate(text_key, **dict(text_kwargs or {})),
@@ -121,14 +236,52 @@ def show_toast_key(
 
 
 def _emit_user_status(ns: MessagesNamespace, signal: object, message: str, logger: Logger | object) -> None:
+    """Emit user status.
+    
+    Args:
+        ns: Parameter value (MessagesNamespace).
+        signal: Parameter value (object).
+        message: Parameter value (str).
+        logger: Parameter value (Logger | object).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ns["emit_user_status"](signal, message, logger=logger)
 
 
 def _format_log_line(ns: MessagesNamespace, message: str, timestamp: datetime | None) -> str | None:
+    """Format log line.
+    
+    Args:
+        ns: Parameter value (MessagesNamespace).
+        message: Parameter value (str).
+        timestamp: Parameter value (datetime | None).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     return ns["format_log_line_at"](message, timestamp=timestamp)
 
 
 def _context_with_aliases(context: Mapping[str, object]) -> dict[str, object]:
+    """Context with aliases.
+    
+    Args:
+        context: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     payload = dict(context)
     if "sheet_name" not in payload and "sheet" in payload:
         payload["sheet_name"] = payload.get("sheet")
@@ -137,7 +290,137 @@ def _context_with_aliases(context: Mapping[str, object]) -> dict[str, object]:
     return payload
 
 
+def _excel_column_label(column: object) -> str:
+    """Excel column label.
+    
+    Args:
+        column: Parameter value (object).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    if isinstance(column, int):
+        index = int(column)
+    else:
+        text = str(column or "").strip()
+        if not text:
+            return ""
+        if text.isdigit():
+            index = int(text)
+        else:
+            return text.upper()
+    if index <= 0:
+        return ""
+    labels: list[str] = []
+    while index > 0:
+        index, rem = divmod(index - 1, 26)
+        labels.append(chr(ord("A") + rem))
+    return "".join(reversed(labels))
+
+
+def _build_validation_location_suffix(*, path_text: str, context: Mapping[str, object]) -> str:
+    """Build validation location suffix.
+    
+    Args:
+        path_text: Parameter value (str).
+        context: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    payload = _context_with_aliases(context)
+    workbook_raw = str(payload.get("workbook", "") or "").strip() or path_text
+    workbook_name = Path(workbook_raw).name if workbook_raw else ""
+    sheet_name = str(payload.get("sheet_name", "") or "").strip()
+    cell_ref = str(payload.get("cell", "") or payload.get("cell_ref", "") or "").strip()
+    row_value = payload.get("row")
+    row_text = str(row_value).strip() if row_value is not None else ""
+    col_value = payload.get("column", payload.get("col"))
+    col_label = _excel_column_label(col_value)
+
+    if not cell_ref and row_text and col_label:
+        cell_ref = f"{col_label}{row_text}"
+
+    segments: list[str] = []
+    if workbook_name:
+        segments.append(f"workbook={workbook_name}")
+    if sheet_name:
+        segments.append(f"sheet={sheet_name}")
+    if cell_ref:
+        segments.append(f"cell={cell_ref}")
+    if row_text:
+        segments.append(f"row={row_text}")
+    if col_label:
+        segments.append(f"column={col_label}")
+    if not segments:
+        return ""
+    return " | " + ", ".join(segments)
+
+
+def _flatten_issue_payloads(issue_payload: Mapping[str, object], *, max_depth: int = 8) -> list[Mapping[str, object]]:
+    """Flatten issue payloads.
+    
+    Args:
+        issue_payload: Parameter value (Mapping[str, object]).
+        max_depth: Parameter value (int).
+    
+    Returns:
+        list[Mapping[str, object]]: Return value.
+    
+    Raises:
+        None.
+    """
+    flattened: list[Mapping[str, object]] = []
+
+    def _visit(payload: Mapping[str, object], depth: int) -> None:
+        """Visit.
+        
+        Args:
+            payload: Parameter value (Mapping[str, object]).
+            depth: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        if depth >= max_depth:
+            flattened.append(payload)
+            return
+        context_raw = payload.get("context")
+        context = dict(context_raw) if isinstance(context_raw, Mapping) else {}
+        nested_raw = context.get("issues")
+        nested_items = [item for item in nested_raw if isinstance(item, Mapping)] if isinstance(nested_raw, list) else []
+        if not nested_items:
+            flattened.append(payload)
+            return
+        for nested in nested_items:
+            _visit(cast(Mapping[str, object], nested), depth + 1)
+
+    _visit(issue_payload, 0)
+    return flattened
+
+
 def _format_reason_fallback(template: str, context: Mapping[str, object]) -> str:
+    """Format reason fallback.
+    
+    Args:
+        template: Parameter value (str).
+        context: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     text = str(template or "").strip()
     if not text:
         return text
@@ -153,6 +436,18 @@ def _normalize_channels(
     *,
     default: tuple[NotificationChannel, ...],
 ) -> set[NotificationChannel]:
+    """Normalize channels.
+    
+    Args:
+        channels: Parameter value (Iterable[NotificationChannel] | None).
+        default: Parameter value (tuple[NotificationChannel, ...]).
+    
+    Returns:
+        set[NotificationChannel]: Return value.
+    
+    Raises:
+        None.
+    """
     default_set: set[NotificationChannel] = {channel for channel in default}
     if channels is None:
         return set(default_set)
@@ -165,6 +460,19 @@ def _normalize_channels(
 
 
 def _safe_translate(ns: MessagesNamespace, key: str, **kwargs: object) -> str:
+    """Safe translate.
+    
+    Args:
+        ns: Parameter value (MessagesNamespace).
+        key: Parameter value (str).
+        kwargs: Parameter value (object).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         text = ns["t"](key, **kwargs)
     except Exception:
@@ -173,6 +481,19 @@ def _safe_translate(ns: MessagesNamespace, key: str, **kwargs: object) -> str:
 
 
 def _ensure_i18n_for_log_channels(*, message: str, ns: MessagesNamespace, channels: set[NotificationChannel]) -> None:
+    """Ensure i18n for log channels.
+    
+    Args:
+        message: Parameter value (str).
+        ns: Parameter value (MessagesNamespace).
+        channels: Parameter value (set[NotificationChannel]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if "status" not in channels and "activity_log" not in channels:
         return
     parsed = ns["parse_i18n_log_message"](message)
@@ -194,6 +515,23 @@ def notify_message(
     toast_level: ToastLevel = "info",
     toast_duration_ms: int | None = None,
 ) -> None:
+    """Notify message.
+    
+    Args:
+        module: Parameter value (object).
+        message: Parameter value (str).
+        ns: Parameter value (Mapping[str, object]).
+        channels: Parameter value (Iterable[NotificationChannel] | None).
+        toast_title: Parameter value (str).
+        toast_level: Parameter value (ToastLevel).
+        toast_duration_ms: Parameter value (int | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
     targets = _normalize_channels(channels, default=("status", "activity_log"))
@@ -226,6 +564,27 @@ def notify_message_key(
     toast_level: ToastLevel = "info",
     toast_duration_ms: int | None = None,
 ) -> None:
+    """Notify message key.
+    
+    Args:
+        module: Parameter value (object).
+        text_key: Parameter value (str).
+        ns: Parameter value (Mapping[str, object]).
+        channels: Parameter value (Iterable[NotificationChannel] | None).
+        kwargs: Parameter value (Mapping[str, Any] | None).
+        fallback: Parameter value (str | None).
+        toast_title: Parameter value (str).
+        toast_title_key: Parameter value (str | None).
+        toast_title_kwargs: Parameter value (Mapping[str, Any] | None).
+        toast_level: Parameter value (ToastLevel).
+        toast_duration_ms: Parameter value (int | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_ns = cast(MessagesNamespace, ns)
     payload_kwargs = dict(kwargs or {})
     localized = typed_ns["t"](text_key, **payload_kwargs)
@@ -256,6 +615,21 @@ def notify_validation_issue(
     file_path: str | None = None,
     channels: Iterable[NotificationChannel] | None = ("activity_log",),
 ) -> None:
+    """Notify validation issue.
+    
+    Args:
+        module: Parameter value (object).
+        ns: Parameter value (Mapping[str, object]).
+        issue: Parameter value (Mapping[str, object]).
+        file_path: Parameter value (str | None).
+        channels: Parameter value (Iterable[NotificationChannel] | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_ns = cast(MessagesNamespace, ns)
     translation_key = str(issue.get("translation_key", "") or "").strip()
     code = str(issue.get("code", "") or "").strip()
@@ -350,6 +724,22 @@ def emit_validation_batch_feedback(
     issue_channels: Iterable[NotificationChannel] | None = ("status", "activity_log"),
     summary_channels: Iterable[NotificationChannel] | None = ("toast",),
 ) -> None:
+    """Emit validation batch feedback.
+    
+    Args:
+        module: Parameter value (object).
+        ns: Parameter value (Mapping[str, object]).
+        rejections: Parameter value (Iterable[Mapping[str, object]]).
+        valid_count: Parameter value (int).
+        issue_channels: Parameter value (Iterable[NotificationChannel] | None).
+        summary_channels: Parameter value (Iterable[NotificationChannel] | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_ns = cast(MessagesNamespace, ns)
     rejection_items = [
         item
@@ -378,47 +768,69 @@ def emit_validation_batch_feedback(
 
     detail_entries_text: list[str] = []
     detail_entries_marker: list[object] = []
+    detail_entries_kwargs: list[dict[str, object]] = []
     for item in rejection_items:
         issue_payload = cast(Mapping[str, object], item.get("issue"))
         raw_path = item.get("path")
         path_text = str(raw_path).strip() if isinstance(raw_path, str) else ""
         file_label = Path(path_text).name if path_text else ""
-        code = str(issue_payload.get("code", "VALIDATION_ERROR")).strip() or "VALIDATION_ERROR"
-        translation_key = str(issue_payload.get("translation_key", "")).strip()
-        fallback_reason = str(issue_payload.get("message", "")).strip()
         issue_context_raw = issue_payload.get("context")
         issue_context = dict(issue_context_raw) if isinstance(issue_context_raw, Mapping) else {}
-        generic_reason = _safe_translate(typed_ns, "common.validation_failed_invalid_data")
-        reason_text = _format_reason_fallback(fallback_reason, issue_context)
-        reason_marker: object = reason_text
-        reason_context = _context_with_aliases(issue_context)
-        if translation_key:
-            try:
-                translated = typed_ns["t"](translation_key, **reason_context)
-                if isinstance(translated, str) and translated.strip() and translated != translation_key:
-                    reason_text = translated
-                else:
+        candidate_issues = _flatten_issue_payloads(issue_payload)
+        for candidate in candidate_issues:
+            display_issue = cast(Mapping[str, object], candidate)
+            code = str(display_issue.get("code", "VALIDATION_ERROR")).strip() or "VALIDATION_ERROR"
+            translation_key = str(display_issue.get("translation_key", "")).strip()
+            fallback_reason = str(display_issue.get("message", "")).strip()
+            display_context_raw = display_issue.get("context")
+            display_context = dict(issue_context)
+            if isinstance(display_context_raw, Mapping):
+                display_context.update(dict(display_context_raw))
+            generic_reason = _safe_translate(typed_ns, "common.validation_failed_invalid_data")
+            reason_text = _format_reason_fallback(fallback_reason, display_context)
+            reason_marker: object = reason_text
+            reason_context = _context_with_aliases(display_context)
+            if translation_key:
+                try:
+                    translated = typed_ns["t"](translation_key, **reason_context)
+                    if isinstance(translated, str) and translated.strip() and translated != translation_key:
+                        reason_text = translated
+                    else:
+                        reason_text = generic_reason
+                except Exception:
                     reason_text = generic_reason
-            except Exception:
-                reason_text = generic_reason
-            reason_marker = {
-                "__t_key__": translation_key,
-                "kwargs": reason_context,
-                "fallback": reason_text or generic_reason,
-            }
-        elif not reason_text:
-            reason_text = code
-            reason_marker = reason_text
-        file_text = file_label or path_text or "-"
-        entry = f"{file_text}: [{code}] {reason_text}"
-        detail_entries_text.append(entry)
-        detail_entries_marker.append(
-            {
-                "__t_key__": "validation.batch.detail_entry",
-                "kwargs": {"file": file_text, "code": code, "reason": reason_marker},
-                "fallback": entry,
-            }
-        )
+                reason_marker = {
+                    "__t_key__": translation_key,
+                    "kwargs": reason_context,
+                    "fallback": reason_text or generic_reason,
+                }
+            elif not reason_text:
+                reason_text = code
+                reason_marker = reason_text
+            location_suffix = _build_validation_location_suffix(path_text=path_text, context=display_context)
+            reason_text = f"{reason_text}{location_suffix}" if location_suffix else reason_text
+            if isinstance(reason_marker, Mapping):
+                marker_key = str(reason_marker.get("__t_key__", "")).strip()
+                marker_kwargs = reason_marker.get("kwargs")
+                marker_kwargs_dict = dict(marker_kwargs) if isinstance(marker_kwargs, Mapping) else {}
+                reason_marker = {
+                    "__t_key__": marker_key,
+                    "kwargs": marker_kwargs_dict,
+                    "fallback": reason_text,
+                }
+            else:
+                reason_marker = reason_text
+            file_text = file_label or path_text or "-"
+            entry = f"{file_text}: [{code}] {reason_text}"
+            detail_entries_text.append(entry)
+            detail_entries_marker.append(
+                {
+                    "__t_key__": "validation.batch.detail_entry",
+                    "kwargs": {"file": file_text, "code": code, "reason": reason_marker},
+                    "fallback": entry,
+                }
+            )
+            detail_entries_kwargs.append({"file": file_text, "code": code, "reason": reason_marker})
 
     details_preview_marker: object = ""
     details_text = ""
@@ -538,6 +950,35 @@ def emit_validation_batch_feedback(
             channels=issue_channels,
         )
 
+    max_detail_lines = max(0, int(_VALIDATION_ACTIVITY_DETAIL_LIMIT))
+    displayed_detail_count = 0
+    for marker_kwargs, text in zip(detail_entries_kwargs, detail_entries_text):
+        if displayed_detail_count >= max_detail_lines:
+            break
+        entry_payload = typed_ns["build_i18n_log_message"](
+            "validation.batch.detail_entry",
+            kwargs=marker_kwargs,
+            fallback=text,
+        )
+        notify_message(
+            module,
+            entry_payload,
+            ns=typed_ns,
+            channels=("activity_log",),
+        )
+        displayed_detail_count += 1
+
+    remaining_detail_count = len(detail_entries_text) - displayed_detail_count
+    if remaining_detail_count > 0:
+        notify_message_key(
+            module,
+            "validation.batch.more_suffix",
+            ns=typed_ns,
+            channels=("activity_log",),
+            kwargs={"count": remaining_detail_count},
+            fallback=f"+{remaining_detail_count} more",
+        )
+
 
 def emit_workbook_generation_feedback(
     module: object,
@@ -547,6 +988,21 @@ def emit_workbook_generation_feedback(
     failed_count: int,
     channels: Iterable[NotificationChannel] | None = ("status", "activity_log", "toast"),
 ) -> None:
+    """Emit workbook generation feedback.
+    
+    Args:
+        module: Parameter value (object).
+        ns: Parameter value (Mapping[str, object]).
+        success_count: Parameter value (int).
+        failed_count: Parameter value (int).
+        channels: Parameter value (Iterable[NotificationChannel] | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_ns = cast(MessagesNamespace, ns)
     success = max(0, int(success_count))
     failed = max(0, int(failed_count))
@@ -569,6 +1025,19 @@ def emit_workbook_generation_feedback(
 
 
 def publish_status(module: object, message: str, *, ns: Mapping[str, object]) -> None:
+    """Publish status.
+    
+    Args:
+        module: Parameter value (object).
+        message: Parameter value (str).
+        ns: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     del module, message, ns
     raise ConfigurationError(
         "publish_status(message) is disallowed. Use publish_status_key(...) or notify_message_key(...)."
@@ -582,10 +1051,36 @@ def publish_status_key(
     ns: Mapping[str, object],
     **kwargs: object,
 ) -> None:
+    """Publish status key.
+    
+    Args:
+        module: Parameter value (object).
+        text_key: Parameter value (str).
+        ns: Parameter value (Mapping[str, object]).
+        kwargs: Parameter value (object).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     notify_message_key(module, text_key, ns=ns, channels=("status", "activity_log"), kwargs=kwargs)
 
 
 def setup_ui_logging(module: object, *, ns: Mapping[str, object]) -> None:
+    """Setup ui logging.
+    
+    Args:
+        module: Parameter value (object).
+        ns: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
     if typed_module._ui_log_handler is not None:
@@ -605,6 +1100,19 @@ def setup_ui_logging(module: object, *, ns: Mapping[str, object]) -> None:
 
 
 def append_user_log(module: object, message: str, *, ns: Mapping[str, object]) -> None:
+    """Append user log.
+    
+    Args:
+        module: Parameter value (object).
+        message: Parameter value (str).
+        ns: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
     _ensure_i18n_for_log_channels(
@@ -642,6 +1150,18 @@ def append_user_log(module: object, message: str, *, ns: Mapping[str, object]) -
 
 
 def rerender_user_log(module: object, *, ns: Mapping[str, object]) -> None:
+    """Rerender user log.
+    
+    Args:
+        module: Parameter value (object).
+        ns: Parameter value (Mapping[str, object]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     typed_module = cast(_MessageModule, module)
     typed_ns = cast(MessagesNamespace, ns)
     typed_module.user_log_view.clear()

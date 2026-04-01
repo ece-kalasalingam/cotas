@@ -45,10 +45,32 @@ def capture_unhandled_exception(
 
 
 def has_remote_crash_endpoint() -> bool:
+    """Has remote crash endpoint.
+    
+    Args:
+        None.
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     return bool(os.getenv(CRASH_REPORT_ENDPOINT_ENV_VAR, "").strip())
 
 
 def _crash_reports_dir() -> Path:
+    """Crash reports dir.
+    
+    Args:
+        None.
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     settings_path = app_settings_path(APP_NAME)
     return settings_path.parent / CRASH_REPORTS_DIR_NAME
 

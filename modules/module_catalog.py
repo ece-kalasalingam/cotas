@@ -6,18 +6,23 @@ from common.module_plugins import ModulePluginSpec, lazy_module_class
 
 
 def build_module_catalog() -> tuple[ModulePluginSpec, ...]:
+    """Build module catalog.
+    
+    Args:
+        None.
+    
+    Returns:
+        tuple[ModulePluginSpec, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     return (
         ModulePluginSpec(
             key="instructor",
             title_key="module.instructor",
             icon_path="assets/co_section.svg",
             class_loader=lazy_module_class("modules.instructor_module", "InstructorModule"),
-        ),
-        ModulePluginSpec(
-            key="coordinator",
-            title_key="module.coordinator_short",
-            icon_path="assets/co_course.svg",
-            class_loader=lazy_module_class("modules.coordinator_module", "CoordinatorModule"),
         ),
         ModulePluginSpec(
             key="po_analysis",

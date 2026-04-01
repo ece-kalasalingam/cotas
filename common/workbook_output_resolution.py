@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from common.utils import canonical_path_key
+from common.utils import canonical_path_key, dedupe_paths_by_canonical_key
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +23,17 @@ class OverwriteResolution:
 def extract_overwrite_conflicts_from_generation_result(
     result: Mapping[str, object] | None,
 ) -> list[OverwriteConflict]:
+    """Extract overwrite conflicts from generation result.
+    
+    Args:
+        result: Parameter value (Mapping[str, object] | None).
+    
+    Returns:
+        list[OverwriteConflict]: Return value.
+    
+    Raises:
+        None.
+    """
     if not isinstance(result, Mapping):
         return []
     raw_results = result.get("results", {})
@@ -56,17 +67,35 @@ def resolve_overwrite_conflicts(
     ask_overwrite_all: Callable[[list[str]], bool],
     ask_output_path: Callable[[str], str | None],
 ) -> OverwriteResolution:
+    """Resolve overwrite conflicts.
+    
+    Args:
+        conflicts: Parameter value (Sequence[OverwriteConflict]).
+        per_file_native_limit: Parameter value (int).
+        ask_overwrite_all: Parameter value (Callable[[list[str]], bool]).
+        ask_output_path: Parameter value (Callable[[str], str | None]).
+    
+    Returns:
+        OverwriteResolution: Return value.
+    
+    Raises:
+        None.
+    """
     unique_conflicts: list[OverwriteConflict] = []
-    seen_sources: set[str] = set()
+    source_paths = [str(item.source_path or "").strip() for item in conflicts]
+    unique_sources, _duplicates = dedupe_paths_by_canonical_key(source_paths, skip_empty=True)
+    output_by_source_key: dict[str, str] = {}
     for item in conflicts:
         source_path = str(item.source_path or "").strip()
         output_path = str(item.output_path or "").strip()
         if not source_path or not output_path:
             continue
+        output_by_source_key.setdefault(canonical_path_key(source_path), output_path)
+    for source_path in unique_sources:
         source_key = canonical_path_key(source_path)
-        if source_key in seen_sources:
+        output_path = output_by_source_key.get(source_key, "").strip()
+        if not output_path:
             continue
-        seen_sources.add(source_key)
         unique_conflicts.append(OverwriteConflict(source_path=source_path, output_path=output_path))
     if not unique_conflicts:
         return OverwriteResolution(retry_sources=[], output_path_overrides={})

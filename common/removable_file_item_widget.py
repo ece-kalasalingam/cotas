@@ -17,12 +17,12 @@ from PySide6.QtWidgets import (
 )
 
 from common.constants import (
-    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
-    COORDINATOR_REMOVE_BUTTON_SIZE,
+    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
+    FILE_ITEM_REMOVE_BUTTON_SIZE,
 )
 from common.ui_stylings import (
-    COORDINATOR_FILE_ITEM_LAYOUT_MARGINS,
-    COORDINATOR_FILE_ITEM_LAYOUT_SPACING,
+    FILE_ITEM_LAYOUT_MARGINS,
+    FILE_ITEM_LAYOUT_SPACING,
 )
 
 
@@ -30,6 +30,18 @@ class ElidedFileNameLabel(QLabel):
     """Filename label that middle-elides text when width is constrained."""
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        """Init.
+        
+        Args:
+            text: Parameter value (str).
+            parent: Parameter value (QWidget | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(parent)
         self._full_text = text
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -37,10 +49,32 @@ class ElidedFileNameLabel(QLabel):
         self._apply_elided_text()
 
     def resizeEvent(self, event) -> None:
+        """Resizeevent.
+        
+        Args:
+            event: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().resizeEvent(event)
         self._apply_elided_text()
 
     def _apply_elided_text(self) -> None:
+        """Apply elided text.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         width = self.contentsRect().width()
         if width <= 0:
             return
@@ -70,13 +104,31 @@ class RemovableFileItemWidget(QWidget):
         remove_tooltip: str = "Remove File",
         parent: QWidget | None = None,
     ) -> None:
+        """Init.
+        
+        Args:
+            file_path: Parameter value (str).
+            remove_fallback_text: Parameter value (str).
+            open_file_fallback_text: Parameter value (str).
+            open_folder_fallback_text: Parameter value (str).
+            open_file_tooltip: Parameter value (str).
+            open_folder_tooltip: Parameter value (str).
+            remove_tooltip: Parameter value (str).
+            parent: Parameter value (QWidget | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(parent)
         self.file_path = file_path
         self._local_path = self._normalize_local_path(file_path)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(*COORDINATOR_FILE_ITEM_LAYOUT_MARGINS)
-        layout.setSpacing(COORDINATOR_FILE_ITEM_LAYOUT_SPACING)
+        layout.setContentsMargins(*FILE_ITEM_LAYOUT_MARGINS)
+        layout.setSpacing(FILE_ITEM_LAYOUT_SPACING)
 
         file_name = Path(file_path).name
         name_label = ElidedFileNameLabel(file_name)
@@ -86,8 +138,8 @@ class RemovableFileItemWidget(QWidget):
         self.open_file_btn = QPushButton()
         self.open_file_btn.setObjectName("coordinatorFileOpenButton")
         self.open_file_btn.setFixedSize(
-            COORDINATOR_REMOVE_BUTTON_SIZE,
-            COORDINATOR_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
         )
         self.open_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         file_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
@@ -95,8 +147,8 @@ class RemovableFileItemWidget(QWidget):
             self.open_file_btn.setIcon(file_icon)
             self.open_file_btn.setIconSize(
                 QSize(
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
                 )
             )
         else:
@@ -109,8 +161,8 @@ class RemovableFileItemWidget(QWidget):
         self.open_folder_btn = QPushButton()
         self.open_folder_btn.setObjectName("coordinatorFolderOpenButton")
         self.open_folder_btn.setFixedSize(
-            COORDINATOR_REMOVE_BUTTON_SIZE,
-            COORDINATOR_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
         )
         self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         folder_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
@@ -118,8 +170,8 @@ class RemovableFileItemWidget(QWidget):
             self.open_folder_btn.setIcon(folder_icon)
             self.open_folder_btn.setIconSize(
                 QSize(
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
                 )
             )
         else:
@@ -132,8 +184,8 @@ class RemovableFileItemWidget(QWidget):
         self.remove_btn = QPushButton()
         self.remove_btn.setObjectName("coordinatorFileRemoveButton")
         self.remove_btn.setFixedSize(
-            COORDINATOR_REMOVE_BUTTON_SIZE,
-            COORDINATOR_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
+            FILE_ITEM_REMOVE_BUTTON_SIZE,
         )
         self.remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -141,8 +193,8 @@ class RemovableFileItemWidget(QWidget):
             self.remove_btn.setIcon(icon)
             self.remove_btn.setIconSize(
                 QSize(
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
-                    COORDINATOR_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
+                    FILE_ITEM_REMOVE_BUTTON_ICON_SIZE,
                 )
             )
         else:
@@ -153,6 +205,17 @@ class RemovableFileItemWidget(QWidget):
 
     @staticmethod
     def _normalize_local_path(file_path: str) -> str | None:
+        """Normalize local path.
+        
+        Args:
+            file_path: Parameter value (str).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         value = file_path.strip()
         if not value:
             return None
@@ -167,12 +230,35 @@ class RemovableFileItemWidget(QWidget):
         return None
 
     def _open_file(self) -> None:
+        """Open file.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self._local_path is None:
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(self._local_path))
 
     def _open_folder(self) -> None:
+        """Open folder.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self._local_path is None:
             return
         parent = Path(self._local_path).parent
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(parent)))
+

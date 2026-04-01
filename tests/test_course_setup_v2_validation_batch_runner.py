@@ -15,6 +15,19 @@ from domain.template_versions.course_setup_v2_impl.validation_batch_runner impor
 
 
 def _issue_builder(code: str, context: dict[str, object], fallback_message: str) -> dict[str, object]:
+    """Issue builder.
+    
+    Args:
+        code: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+        fallback_message: Parameter value (str).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     return {
         "code": code,
         "category": "validation",
@@ -31,6 +44,18 @@ class _ValidationPayload:
 
 
 def _runner(*, duplicate_code: str = "DUP", unexpected_code: str = "UNEXPECTED") -> BatchValidationRunner[_ValidationPayload]:
+    """Runner.
+    
+    Args:
+        duplicate_code: Parameter value (str).
+        unexpected_code: Parameter value (str).
+    
+    Returns:
+        BatchValidationRunner[_ValidationPayload]: Return value.
+    
+    Raises:
+        None.
+    """
     return BatchValidationRunner[_ValidationPayload](
         issue_builder=_issue_builder,
         duplicate_path_issue_code=duplicate_code,
@@ -39,10 +64,34 @@ def _runner(*, duplicate_code: str = "DUP", unexpected_code: str = "UNEXPECTED")
 
 
 def _on_validated(acc: BatchValidationAccumulator, path: str, payload: _ValidationPayload) -> None:
+    """On validated.
+    
+    Args:
+        acc: Parameter value (BatchValidationAccumulator).
+        path: Parameter value (str).
+        payload: Parameter value (_ValidationPayload).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     acc.add_valid(path=path, template_id=payload.template_id)
 
 
 def test_runner_handles_duplicate_paths_and_shape() -> None:
+    """Test runner handles duplicate paths and shape.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     result = cast(
         dict[str, Any],
         _runner().run(
@@ -69,6 +118,17 @@ def test_runner_handles_duplicate_paths_and_shape() -> None:
 
 
 def test_runner_propagates_cancellation() -> None:
+    """Test runner propagates cancellation.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     token = CancellationToken()
     token.cancel()
     with pytest.raises(JobCancelledError):
@@ -81,7 +141,29 @@ def test_runner_propagates_cancellation() -> None:
 
 
 def test_runner_maps_validation_and_unexpected_rejections() -> None:
+    """Test runner maps validation and unexpected rejections.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _validate(path: str) -> _ValidationPayload:
+        """Validate.
+        
+        Args:
+            path: Parameter value (str).
+        
+        Returns:
+            _ValidationPayload: Return value.
+        
+        Raises:
+            None.
+        """
         if path == "bad.xlsx":
             raise ValidationError("Bad workbook", code="BAD_CODE", context={"workbook": path})
         if path == "boom.xlsx":

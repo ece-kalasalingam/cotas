@@ -16,7 +16,7 @@ from typing import Any, Generic, Protocol, TypeVar
 
 from common.exceptions import JobCancelledError, ValidationError
 from common.jobs import CancellationToken
-from common.utils import canonical_path_key
+from common.utils import canonical_path_key, dedupe_paths_by_canonical_key
 
 T = TypeVar("T")
 
@@ -29,6 +29,19 @@ class IssueBuilder(Protocol):
         context: dict[str, Any],
         fallback_message: str,
     ) -> dict[str, object]:
+        """Call.
+        
+        Args:
+            code: Parameter value (str).
+            context: Parameter value (dict[str, Any]).
+            fallback_message: Parameter value (str).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
 
@@ -42,6 +55,17 @@ class ValidationRejectionDecision:
 
 class BatchValidationAccumulator:
     def __init__(self) -> None:
+        """Init.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.valid_paths: list[str] = []
         self.invalid_paths: list[str] = []
         self.mismatched_paths: list[str] = []
@@ -51,10 +75,34 @@ class BatchValidationAccumulator:
         self.rejections: list[dict[str, object]] = []
 
     def add_valid(self, *, path: str, template_id: str) -> None:
+        """Add valid.
+        
+        Args:
+            path: Parameter value (str).
+            template_id: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.valid_paths.append(path)
         self.template_ids[canonical_path_key(path)] = template_id
 
     def add_duplicate_path_rejection(self, *, path: str, issue: dict[str, object]) -> None:
+        """Add duplicate path rejection.
+        
+        Args:
+            path: Parameter value (str).
+            issue: Parameter value (dict[str, object]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.duplicate_paths.append(path)
         self.rejections.append(
             {
@@ -71,6 +119,19 @@ class BatchValidationAccumulator:
         issue: dict[str, object],
         decision: ValidationRejectionDecision,
     ) -> None:
+        """Add rejection.
+        
+        Args:
+            path: Parameter value (str).
+            issue: Parameter value (dict[str, object]).
+            decision: Parameter value (ValidationRejectionDecision).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if decision.mark_invalid:
             self.invalid_paths.append(path)
         if decision.mark_mismatched:
@@ -86,6 +147,17 @@ class BatchValidationAccumulator:
         )
 
     def to_payload(self) -> dict[str, object]:
+        """To payload.
+        
+        Args:
+            None.
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         return {
             "valid_paths": list(self.valid_paths),
             "invalid_paths": list(self.invalid_paths),
@@ -98,20 +170,18 @@ class BatchValidationAccumulator:
 
 
 def _dedupe_paths(workbook_paths: Sequence[str | Path]) -> tuple[list[str], list[str]]:
-    unique_paths: list[str] = []
-    duplicate_paths: list[str] = []
-    seen_path_keys: set[str] = set()
-    for raw in workbook_paths:
-        path = str(raw).strip()
-        if not path:
-            continue
-        key = canonical_path_key(path)
-        if key in seen_path_keys:
-            duplicate_paths.append(path)
-            continue
-        seen_path_keys.add(key)
-        unique_paths.append(path)
-    return unique_paths, duplicate_paths
+    """Dedupe paths.
+    
+    Args:
+        workbook_paths: Parameter value (Sequence[str | Path]).
+    
+    Returns:
+        tuple[list[str], list[str]]: Return value.
+    
+    Raises:
+        None.
+    """
+    return dedupe_paths_by_canonical_key(workbook_paths, skip_empty=True)
 
 
 class BatchValidationRunner(Generic[T]):
@@ -122,6 +192,19 @@ class BatchValidationRunner(Generic[T]):
         duplicate_path_issue_code: str,
         unexpected_issue_code: str,
     ) -> None:
+        """Init.
+        
+        Args:
+            issue_builder: Parameter value (IssueBuilder).
+            duplicate_path_issue_code: Parameter value (str).
+            unexpected_issue_code: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._issue_builder = issue_builder
         self._duplicate_path_issue_code = duplicate_path_issue_code
         self._unexpected_issue_code = unexpected_issue_code
@@ -138,6 +221,21 @@ class BatchValidationRunner(Generic[T]):
         ]
         | None = None,
     ) -> dict[str, object]:
+        """Run.
+        
+        Args:
+            workbook_paths: Parameter value (Sequence[str | Path]).
+            validate_path: Parameter value (Callable[[str], T]).
+            on_validated: Parameter value (Callable[[BatchValidationAccumulator, str, T], None]).
+            cancel_token: Parameter value (CancellationToken | None).
+            classify_validation_error: Parameter value (Callable[[str, ValidationError, dict[str, object]], ValidationRejectionDecision] | None).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         unique_paths, duplicate_paths = _dedupe_paths(workbook_paths)
         result = BatchValidationAccumulator()
 

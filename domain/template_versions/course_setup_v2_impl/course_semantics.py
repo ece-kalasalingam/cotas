@@ -6,11 +6,33 @@ from common.utils import sanitize_filename_token
 
 
 def _filename_token(value: object) -> str:
+    """Filename token.
+    
+    Args:
+        value: Parameter value (object).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     token = sanitize_filename_token(str(value or "").strip())
     return token if token else "NA"
 
 
 def build_course_template_filename_base() -> str:
+    """Build course template filename base.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return "Course_Details_Template"
 
 
@@ -21,6 +43,20 @@ def build_marks_template_filename_base_from_identity(
     semester: object,
     section: object,
 ) -> str:
+    """Build marks template filename base from identity.
+    
+    Args:
+        academic_year: Parameter value (object).
+        course_code: Parameter value (object).
+        semester: Parameter value (object).
+        section: Parameter value (object).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     ay_token = _filename_token(academic_year)
     course_token = _filename_token(course_code)
     semester_token = _filename_token(semester)

@@ -31,6 +31,21 @@ def render_output_panel_html(
     output_link_mode_folder: str,
     output_link_separator: str,
 ) -> str:
+    """Render output panel html.
+    
+    Args:
+        data: Parameter value (OutputPanelData).
+        translate: Parameter value (Callable[..., str]).
+        output_link_mode_file: Parameter value (str).
+        output_link_mode_folder: Parameter value (str).
+        output_link_separator: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     if not data.items:
         return escape(translate(data.empty_message_key))
     rows: list[str] = []
@@ -59,6 +74,20 @@ def open_output_link(
     output_link_separator: str,
     open_path: Callable[[Path], bool],
 ) -> bool:
+    """Open output link.
+    
+    Args:
+        href: Parameter value (str).
+        output_link_mode_folder: Parameter value (str).
+        output_link_separator: Parameter value (str).
+        open_path: Parameter value (Callable[[Path], bool]).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     mode, _, raw_path = href.partition(output_link_separator)
     path = raw_path.strip()
     if not path:

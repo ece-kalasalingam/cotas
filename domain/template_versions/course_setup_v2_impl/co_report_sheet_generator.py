@@ -43,6 +43,17 @@ _EXCEL_COL_FIRST_MARK = 4
 
 
 def _course_metadata_headers(template_id: str) -> tuple[str, ...]:
+    """Course metadata headers.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     return get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
 
 
@@ -60,10 +71,32 @@ class _IndirectComponentComputedLike(Protocol):
 
 
 def co_direct_sheet_name(co_index: int) -> str:
+    """Co direct sheet name.
+    
+    Args:
+        co_index: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return f"CO{co_index}{CO_REPORT_DIRECT_SHEET_SUFFIX}"
 
 
 def co_indirect_sheet_name(co_index: int) -> str:
+    """Co indirect sheet name.
+    
+    Args:
+        co_index: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return f"CO{co_index}{CO_REPORT_INDIRECT_SHEET_SUFFIX}"
 
 
@@ -78,6 +111,24 @@ def write_co_outcome_sheets(
     indirect_components: list[_IndirectComponentComputedLike],
     formats: dict[str, Any],
 ) -> tuple[str, str]:
+    """Write co outcome sheets.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        students: Parameter value (list[tuple[str, str]]).
+        direct_components: Parameter value (list[_DirectComponentComputedLike]).
+        indirect_components: Parameter value (list[_IndirectComponentComputedLike]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        tuple[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     direct_name = co_direct_sheet_name(co_index)
     indirect_name = co_indirect_sheet_name(co_index)
     _write_direct_sheet(
@@ -113,6 +164,23 @@ def write_co_direct_sheet(
     components: list[_DirectComponentComputedLike],
     formats: dict[str, Any],
 ) -> str:
+    """Write co direct sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        students: Parameter value (list[tuple[str, str]]).
+        components: Parameter value (list[_DirectComponentComputedLike]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     direct_name = co_direct_sheet_name(co_index)
     _write_direct_sheet(
         workbook,
@@ -137,6 +205,23 @@ def write_co_indirect_sheet(
     components: list[_IndirectComponentComputedLike],
     formats: dict[str, Any],
 ) -> str:
+    """Write co indirect sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        students: Parameter value (list[tuple[str, str]]).
+        components: Parameter value (list[_IndirectComponentComputedLike]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     indirect_name = co_indirect_sheet_name(co_index)
     _write_indirect_sheet(
         workbook,
@@ -158,6 +243,20 @@ def _write_report_metadata(
     metadata_rows: list[tuple[str, Any]],
     formats: dict[str, Any],
 ) -> int:
+    """Write report metadata.
+    
+    Args:
+        ws: Parameter value (Any).
+        template_id: Parameter value (str).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     metadata_headers = _course_metadata_headers(template_id)
     ws.write(0, 1, metadata_headers[0], formats["header"])
     ws.write(0, 2, metadata_headers[1], formats["header"])
@@ -173,6 +272,19 @@ def _set_report_metadata_column_widths(
     template_id: str,
     metadata_rows: list[tuple[str, Any]],
 ) -> None:
+    """Set report metadata column widths.
+    
+    Args:
+        ws: Parameter value (Any).
+        template_id: Parameter value (str).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     metadata_headers = _course_metadata_headers(template_id)
     set_two_column_metadata_widths(
         ws,
@@ -185,6 +297,20 @@ def _set_report_metadata_column_widths(
 
 
 def _apply_layout(ws: Any, *, header_row_index: int, paper_size: int, landscape: bool) -> None:
+    """Apply layout.
+    
+    Args:
+        ws: Parameter value (Any).
+        header_row_index: Parameter value (int).
+        paper_size: Parameter value (int).
+        landscape: Parameter value (bool).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     apply_xlsxwriter_layout(
         ws,
         header_row_index=header_row_index,
@@ -199,6 +325,19 @@ def _report_metadata_rows(
     co_index: int,
     outcome_value_template: str,
 ) -> list[tuple[str, Any]]:
+    """Report metadata rows.
+    
+    Args:
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        co_index: Parameter value (int).
+        outcome_value_template: Parameter value (str).
+    
+    Returns:
+        list[tuple[str, Any]]: Return value.
+    
+    Raises:
+        None.
+    """
     filtered: list[tuple[str, Any]] = []
     drop_keys = {
         normalize(COURSE_METADATA_FACULTY_NAME_KEY),
@@ -223,6 +362,24 @@ def _write_direct_sheet(
     components: list[_DirectComponentComputedLike],
     formats: dict[str, Any],
 ) -> None:
+    """Write direct sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        sheet_name: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        students: Parameter value (list[tuple[str, str]]).
+        components: Parameter value (list[_DirectComponentComputedLike]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(sheet_name)
     report_metadata_rows = _report_metadata_rows(
         metadata_rows,
@@ -306,6 +463,24 @@ def _write_indirect_sheet(
     components: list[_IndirectComponentComputedLike],
     formats: dict[str, Any],
 ) -> None:
+    """Write indirect sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        sheet_name: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata_rows: Parameter value (list[tuple[str, Any]]).
+        students: Parameter value (list[tuple[str, str]]).
+        components: Parameter value (list[_IndirectComponentComputedLike]).
+        formats: Parameter value (dict[str, Any]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ws = workbook.add_worksheet(sheet_name)
     report_metadata_rows = _report_metadata_rows(
         metadata_rows,
@@ -399,6 +574,17 @@ def _write_indirect_sheet(
 
 
 def _ratio_total_header(ratio: float) -> str:
+    """Ratio total header.
+    
+    Args:
+        ratio: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     percent = ratio * 100.0
     if abs(percent - round(percent)) <= 1e-9:
         token = f"{int(round(percent))}"
@@ -408,12 +594,45 @@ def _ratio_total_header(ratio: float) -> str:
 
 
 def ratio_total_header(ratio: float) -> str:
+    """Ratio total header.
+    
+    Args:
+        ratio: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return _ratio_total_header(ratio)
 
 
 def _round2(value: float) -> float:
+    """Round2.
+    
+    Args:
+        value: Parameter value (float).
+    
+    Returns:
+        float: Return value.
+    
+    Raises:
+        None.
+    """
     return round(float(value), CO_REPORT_MAX_DECIMAL_PLACES)
 
 
 def _is_absent(value: Any) -> bool:
+    """Is absent.
+    
+    Args:
+        value: Parameter value (Any).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     return normalize(value) == normalize(CO_REPORT_ABSENT_TOKEN)

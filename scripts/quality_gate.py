@@ -9,11 +9,34 @@ from pathlib import Path
 
 
 def _run(command: list[str], *, repo_root: Path) -> int:
+    """Run.
+    
+    Args:
+        command: Parameter value (list[str]).
+        repo_root: Parameter value (Path).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     process = subprocess.run(command, cwd=repo_root, check=False)  # nosec B603
     return process.returncode
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse args.
+    
+    Args:
+        None.
+    
+    Returns:
+        argparse.Namespace: Return value.
+    
+    Raises:
+        None.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--mode",
@@ -25,6 +48,17 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     args = _parse_args()
     repo_root = Path(__file__).resolve().parents[1]
     pip_audit_cache = repo_root / ".pip_audit_cache"

@@ -13,6 +13,17 @@ from domain.template_strategy_router import generate_workbook
 
 @pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows-only permission integration check")
 def test_generate_course_template_reports_permission_failure_on_locked_destination(tmp_path: Path) -> None:
+    """Test generate course template reports permission failure on locked destination.
+    
+    Args:
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     pytest.importorskip("xlsxwriter")
     import msvcrt
     msvcrt_api = msvcrt if sys.platform.startswith("win") else None

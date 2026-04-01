@@ -3,7 +3,7 @@
 ## About
 FOCUS (Framework for Outcome Computation and Unification System) is a desktop tool for Outcome-Based Education (OBE) workflows.
 
-It helps faculty and coordinators generate, validate, and process structured Excel workbooks for:
+It helps faculty generate, validate, and process structured Excel workbooks for:
 - course setup
 - marks entry
 - final CO report generation
@@ -12,14 +12,14 @@ Developed at Kalasalingam Academy of Research and Education (KARE).
 
 ## Modules
 - `Instructor`: single-flow course workflow (course template generation, course-details validation, marks-template generation).
-- `Coordinator`: bulk final-report intake and attainment consolidation.
+- `CO Analysis`: multi-source CO analysis workbook generation.
 - `PO Analysis`: placeholder module wired via plugin catalog.
 - `Help`: packaged PDF guidance, export/open actions.
 - `About`: version/build metadata and app identity panel.
 
 ## Shared Core
-- `common/async_operation_runner.py`: shared async workflow lifecycle core used by both Instructor and Coordinator modules.
-- `common/module_messages.py`: shared status publishing and i18n log-rendering core used by both modules.
+- `common/async_operation_runner.py`: shared async workflow lifecycle core used by active modules.
+- `common/module_messages.py`: shared status publishing and i18n log-rendering core used by active modules.
 - `common/module_runtime.py`: shared module runtime facade for status/log/async orchestration.
 - `common/module_plugins.py`: plugin contract for module discovery/loading.
 - `modules/module_catalog.py`: canonical module plugin registry used by `MainWindow`.
@@ -71,4 +71,3 @@ conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache
 - Runtime signing/protection paths enforce workbook secret policy.
 - Legacy signature compatibility paths were removed; current version expects active versioned signatures.
 - Module loading is plugin-catalog driven (no hardcoded module imports in `MainWindow`).
-- Coordinator orchestration uses explicit namespace contracts (no `globals()` coupling).

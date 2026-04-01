@@ -10,6 +10,18 @@ _CO_TOKEN_PATTERN = r"(?:co)?\s*(\d+)"
 
 
 def parse_co_tokens(value: Any, *, dedupe: bool = False) -> list[int]:
+    """Parse co tokens.
+    
+    Args:
+        value: Parameter value (Any).
+        dedupe: Parameter value (bool).
+    
+    Returns:
+        list[int]: Return value.
+    
+    Raises:
+        None.
+    """
     if value is None:
         return []
     if isinstance(value, bool):

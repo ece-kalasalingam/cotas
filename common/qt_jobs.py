@@ -14,6 +14,19 @@ class JobSignals(QObject):
 
 class FunctionJob(QRunnable):
     def __init__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+        """Init.
+        
+        Args:
+            fn: Parameter value (Callable[..., Any]).
+            args: Parameter value (Any).
+            kwargs: Parameter value (Any).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__()
         self._fn = fn
         self._args = args
@@ -22,6 +35,17 @@ class FunctionJob(QRunnable):
 
     @Slot()
     def run(self) -> None:
+        """Run.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         try:
             result = self._fn(*self._args, **self._kwargs)
         except Exception as exc:
@@ -38,6 +62,22 @@ def run_in_background(
     thread_pool: QThreadPool | None = None,
     **kwargs: Any,
 ) -> FunctionJob:
+    """Run in background.
+    
+    Args:
+        fn: Parameter value (Callable[..., Any]).
+        args: Parameter value (Any).
+        on_finished: Parameter value (Callable[[Any], None] | None).
+        on_failed: Parameter value (Callable[[Exception], None] | None).
+        thread_pool: Parameter value (QThreadPool | None).
+        kwargs: Parameter value (Any).
+    
+    Returns:
+        FunctionJob: Return value.
+    
+    Raises:
+        None.
+    """
     pool = thread_pool or QThreadPool.globalInstance()
     job = FunctionJob(fn, *args, **kwargs)
     if on_finished is not None:

@@ -14,6 +14,17 @@ from pathlib import Path
 
 
 def _repo_root() -> Path:
+    """Repo root.
+    
+    Args:
+        None.
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     return Path(__file__).resolve().parents[1]
 
 
@@ -40,6 +51,18 @@ def _github_api_json(path: str) -> object | None:
 
 
 def _from_stats(owner: str, repo: str) -> set[str]:
+    """From stats.
+    
+    Args:
+        owner: Parameter value (str).
+        repo: Parameter value (str).
+    
+    Returns:
+        set[str]: Return value.
+    
+    Raises:
+        None.
+    """
     path = f"repos/{owner}/{repo}/stats/contributors"
     data = _github_api_json(path)
     if not isinstance(data, list):
@@ -61,6 +84,18 @@ def _from_stats(owner: str, repo: str) -> set[str]:
 
 
 def _from_contributors(owner: str, repo: str) -> set[str]:
+    """From contributors.
+    
+    Args:
+        owner: Parameter value (str).
+        repo: Parameter value (str).
+    
+    Returns:
+        set[str]: Return value.
+    
+    Raises:
+        None.
+    """
     path = f"repos/{owner}/{repo}/contributors?per_page=100"
     data = _github_api_json(path)
     if not isinstance(data, list):
@@ -76,6 +111,18 @@ def _from_contributors(owner: str, repo: str) -> set[str]:
 
 
 def _write_lines(path: Path, values: list[str]) -> None:
+    """Write lines.
+    
+    Args:
+        path: Parameter value (Path).
+        values: Parameter value (list[str]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "\n".join(values)
     if text:
@@ -84,6 +131,17 @@ def _write_lines(path: Path, values: list[str]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse args.
+    
+    Args:
+        None.
+    
+    Returns:
+        argparse.Namespace: Return value.
+    
+    Raises:
+        None.
+    """
     root = _repo_root()
     parser = argparse.ArgumentParser(description="Fetch and persist GitHub contributors.")
     parser.add_argument("--owner", default="ece-kalasalingam")
@@ -102,6 +160,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     args = parse_args()
     owner = str(args.owner).strip()
     repo = str(args.repo).strip()

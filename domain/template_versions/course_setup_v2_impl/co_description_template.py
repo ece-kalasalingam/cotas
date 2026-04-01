@@ -39,6 +39,18 @@ def generate_co_description_template(
     *,
     cancel_token: CancellationToken | None = None,
 ) -> Path:
+    """Generate co description template.
+    
+    Args:
+        output_path: Parameter value (str | Path).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import xlsxwriter
     except ModuleNotFoundError as exc:
@@ -70,6 +82,17 @@ def generate_co_description_template(
     workbook_closed = False
 
     def _cleanup_incomplete_output() -> None:
+        """Cleanup incomplete output.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         nonlocal workbook_closed
         if not workbook_closed:
             try:

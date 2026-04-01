@@ -18,13 +18,13 @@ QPushButton {
 }
 """.strip() % GLOBAL_QPUSHBUTTON_MIN_WIDTH
 
-COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS = (16, 16, -16, -16)
-COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS = (16, 16, -16, -8)
-COORDINATOR_DROP_LIST_ITEM_SPACING = 2
-COORDINATOR_FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
-COORDINATOR_FILE_ITEM_LAYOUT_SPACING = 12
-COORDINATOR_DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
-COORDINATOR_DROP_ZONE_LAYOUT_SPACING = 0
+DROP_LIST_PLACEHOLDER_TEXT_MARGINS = (16, 16, -16, -16)
+DROP_LIST_PLACEHOLDER_BOTTOM_MARGINS = (16, 16, -16, -8)
+DROP_LIST_ITEM_SPACING = 2
+FILE_ITEM_LAYOUT_MARGINS = (12, 4, 12, 4)
+FILE_ITEM_LAYOUT_SPACING = 12
+DROP_ZONE_LAYOUT_MARGINS = (14, 14, 14, 14)
+DROP_ZONE_LAYOUT_SPACING = 0
 
 _MANAGED_BLOCK_TEMPLATE = "/* COTAS:{id}:BEGIN */\n{body}\n/* COTAS:{id}:END */"
 
@@ -138,7 +138,7 @@ QPushButton#clearAllLink:enabled {
 }
 """.strip()
 
-COORDINATOR_FILE_ACTION_BUTTONS_STYLESHEET = """
+FILE_ACTION_BUTTONS_STYLESHEET = """
 QPushButton#coordinatorFileOpenButton,
 QPushButton#coordinatorFolderOpenButton,
 QPushButton#coordinatorFileRemoveButton {
@@ -177,6 +177,19 @@ QLabel#aboutLeftVersion {
 
 
 def _upsert_managed_block(stylesheet: str, block_id: str, body: str) -> str:
+    """Upsert managed block.
+    
+    Args:
+        stylesheet: Parameter value (str).
+        block_id: Parameter value (str).
+        body: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     pattern = re.compile(
         rf"/\* COTAS:{re.escape(block_id)}:BEGIN \*/.*?/\* COTAS:{re.escape(block_id)}:END \*/",
         re.DOTALL,
@@ -231,7 +244,7 @@ def apply_global_ui_styles(app: QApplication) -> None:
     merged_stylesheet = _upsert_managed_block(
         merged_stylesheet,
         "coordinator-file-action-buttons",
-        COORDINATOR_FILE_ACTION_BUTTONS_STYLESHEET,
+        FILE_ACTION_BUTTONS_STYLESHEET,
     )
     merged_stylesheet = _upsert_managed_block(
         merged_stylesheet,
@@ -241,3 +254,4 @@ def apply_global_ui_styles(app: QApplication) -> None:
     if merged_stylesheet == current_stylesheet:
         return
     set_stylesheet(merged_stylesheet)
+

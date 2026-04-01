@@ -11,7 +11,7 @@ from typing import Any, Callable, Mapping, Protocol
 
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
-from common.utils import normalize
+from common.utils import assert_not_symlink_path, normalize
 from common.workbook_integrity import (
     SystemWorkbookPayload,
     read_template_id_from_system_hash_sheet_if_valid as _read_template_id_from_system_hash_sheet_if_valid_integrity,
@@ -33,9 +33,31 @@ class WorkbookGenerationResult:
 class _TemplateStrategy(Protocol):
     @property
     def template_id(self) -> str:
+        """Template id.
+        
+        Args:
+            None.
+        
+        Returns:
+            str: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
     def supports_operation(self, operation: str) -> bool:
+        """Supports operation.
+        
+        Args:
+            operation: Parameter value (str).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
     def generate_workbook(
@@ -48,6 +70,22 @@ class _TemplateStrategy(Protocol):
         cancel_token: CancellationToken | None,
         context: Mapping[str, Any] | None,
     ) -> object:
+        """Generate workbook.
+        
+        Args:
+            template_id: Parameter value (str).
+            workbook_kind: Parameter value (str).
+            output_path: Parameter value (str | Path).
+            workbook_name: Parameter value (str | None).
+            cancel_token: Parameter value (CancellationToken | None).
+            context: Parameter value (Mapping[str, Any] | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
     def validate_workbooks(
@@ -59,6 +97,21 @@ class _TemplateStrategy(Protocol):
         cancel_token: CancellationToken | None,
         context: Mapping[str, Any] | None,
     ) -> dict[str, object]:
+        """Validate workbooks.
+        
+        Args:
+            template_id: Parameter value (str).
+            workbook_kind: Parameter value (str).
+            workbook_paths: Parameter value (Sequence[str | Path]).
+            cancel_token: Parameter value (CancellationToken | None).
+            context: Parameter value (Mapping[str, Any] | None).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
     def generate_workbooks(
@@ -71,6 +124,56 @@ class _TemplateStrategy(Protocol):
         cancel_token: CancellationToken | None,
         context: Mapping[str, Any] | None,
     ) -> dict[str, object]:
+        """Generate workbooks.
+        
+        Args:
+            template_id: Parameter value (str).
+            workbook_kind: Parameter value (str).
+            workbook_paths: Parameter value (Sequence[str | Path]).
+            output_dir: Parameter value (str | Path).
+            cancel_token: Parameter value (CancellationToken | None).
+            context: Parameter value (Mapping[str, Any] | None).
+        
+        Returns:
+            dict[str, object]: Return value.
+        
+        Raises:
+            None.
+        """
+        ...
+
+    def extract_course_metadata_and_students(
+        self,
+        workbook_path: str | Path,
+        *,
+        template_id: str,
+    ) -> tuple[set[str], dict[str, str]]:
+        """Extract course metadata and students.
+        
+        Args:
+            workbook_path: Parameter value (str | Path).
+            template_id: Parameter value (str).
+        
+        Returns:
+            tuple[set[str], dict[str, str]]: Return value.
+        
+        Raises:
+            None.
+        """
+        ...
+
+    def consume_last_marks_anomaly_warnings(self) -> list[str]:
+        """Consume last marks anomaly warnings.
+        
+        Args:
+            None.
+        
+        Returns:
+            list[str]: Return value.
+        
+        Raises:
+            None.
+        """
         ...
 
 _VERIFY_SIGNATURE = Callable[[str, str], bool]
@@ -83,10 +186,32 @@ _BATCH_VALIDATION_KINDS = frozenset({"course_details", "marks_template"})
 
 
 def _tokenize_template_id(template_id: str) -> list[str]:
+    """Tokenize template id.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
     return [token for token in _TOKEN_RE.findall(str(template_id or "").strip()) if token]
 
 
 def _strategy_names_from_template_id(template_id: str) -> tuple[str, str]:
+    """Strategy names from template id.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        tuple[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     tokens = _tokenize_template_id(template_id)
     if not tokens:
         return "", ""
@@ -96,6 +221,17 @@ def _strategy_names_from_template_id(template_id: str) -> tuple[str, str]:
 
 
 def available_template_ids() -> tuple[str, ...]:
+    """Available template ids.
+    
+    Args:
+        None.
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     discovered: list[str] = []
     for template_id in _ACTIVE_TEMPLATE_IDS:
         module_name, class_name = _strategy_names_from_template_id(template_id)
@@ -121,6 +257,19 @@ def assert_template_id_matches(
     expected_template_id: str,
     available: str | None = None,
 ) -> None:
+    """Assert template id matches.
+    
+    Args:
+        actual_template_id: Parameter value (str).
+        expected_template_id: Parameter value (str).
+        available: Parameter value (str | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if normalize(actual_template_id) == normalize(expected_template_id):
         return
     context: dict[str, Any] = {"template_id": actual_template_id}
@@ -135,6 +284,17 @@ def assert_template_id_matches(
 
 
 def get_template_strategy(template_id: str) -> _TemplateStrategy:
+    """Get template strategy.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        _TemplateStrategy: Return value.
+    
+    Raises:
+        None.
+    """
     if normalize(template_id) not in _ACTIVE_TEMPLATE_IDS_NORMALIZED:
         raise validation_error_from_key(
             "validation.template.unknown",
@@ -179,6 +339,22 @@ def generate_workbook(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> object:
+    """Generate workbook.
+    
+    Args:
+        template_id: Parameter value (str).
+        output_path: Parameter value (str | Path).
+        workbook_name: Parameter value (str | None).
+        workbook_kind: Parameter value (str).
+        cancel_token: Parameter value (CancellationToken | None).
+        context: Parameter value (Mapping[str, Any] | None).
+    
+    Returns:
+        object: Return value.
+    
+    Raises:
+        None.
+    """
     _assert_workbook_kind_supported(
         workbook_kind=workbook_kind,
         expected_kinds=_SINGLE_GENERATION_KINDS,
@@ -204,6 +380,21 @@ def validate_workbooks(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
+    """Validate workbooks.
+    
+    Args:
+        template_id: Parameter value (str).
+        workbook_paths: Parameter value (Sequence[str | Path]).
+        workbook_kind: Parameter value (str).
+        cancel_token: Parameter value (CancellationToken | None).
+        context: Parameter value (Mapping[str, Any] | None).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     _assert_workbook_kind_supported(
         workbook_kind=workbook_kind,
         expected_kinds=_BATCH_VALIDATION_KINDS,
@@ -228,6 +419,22 @@ def generate_workbooks(
     cancel_token: CancellationToken | None = None,
     context: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
+    """Generate workbooks.
+    
+    Args:
+        template_id: Parameter value (str).
+        workbook_paths: Parameter value (Sequence[str | Path]).
+        output_dir: Parameter value (str | Path).
+        workbook_kind: Parameter value (str).
+        cancel_token: Parameter value (CancellationToken | None).
+        context: Parameter value (Mapping[str, Any] | None).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     _assert_workbook_kind_supported(
         workbook_kind=workbook_kind,
         expected_kinds=(_BATCH_GENERATION_KIND,),
@@ -246,6 +453,17 @@ def generate_workbooks(
 
 
 def _extract_output_path_from_result(raw: object) -> str | None:
+    """Extract output path from result.
+    
+    Args:
+        raw: Parameter value (object).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     if isinstance(raw, Path):
         return str(raw)
     if isinstance(raw, str) and raw.strip():
@@ -269,6 +487,19 @@ def _assert_workbook_kind_supported(
     expected_kinds: Iterable[str],
     template_id: str,
 ) -> None:
+    """Assert workbook kind supported.
+    
+    Args:
+        workbook_kind: Parameter value (str).
+        expected_kinds: Parameter value (Iterable[str]).
+        template_id: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     normalized_kind = normalize(workbook_kind)
     normalized_expected = {normalize(item) for item in expected_kinds}
     if normalized_kind in normalized_expected:
@@ -284,6 +515,18 @@ def _assert_workbook_kind_supported(
 
 
 def _to_int_with_default(value: object, *, default: int = 0) -> int:
+    """To int with default.
+    
+    Args:
+        value: Parameter value (object).
+        default: Parameter value (int).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     candidate = value or default
     if isinstance(candidate, bool):
         return default
@@ -307,6 +550,18 @@ def _normalize_generate_workbook_result(
     raw: object,
     fallback_output: Path,
 ) -> WorkbookGenerationResult:
+    """Normalize generate workbook result.
+    
+    Args:
+        raw: Parameter value (object).
+        fallback_output: Parameter value (Path).
+    
+    Returns:
+        WorkbookGenerationResult: Return value.
+    
+    Raises:
+        None.
+    """
     output_value = _extract_output_path_from_result(raw) or str(fallback_output)
     status = str(getattr(raw, "status", "generated")).strip() or "generated"
     reason_attr = getattr(raw, "reason", None)
@@ -321,6 +576,17 @@ def _normalize_generate_workbook_result(
 
 
 def _normalize_generate_workbooks_result(raw: dict[str, object]) -> dict[str, object]:
+    """Normalize generate workbooks result.
+    
+    Args:
+        raw: Parameter value (dict[str, object]).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     if not isinstance(raw, dict):
         return {
             "total": 0,
@@ -369,6 +635,17 @@ def _normalize_generate_workbooks_result(raw: dict[str, object]) -> dict[str, ob
 
 
 def resolve_template_id_from_workbook_path(workbook_path: str | Path) -> str:
+    """Resolve template id from workbook path.
+    
+    Args:
+        workbook_path: Parameter value (str | Path).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import openpyxl
     except ModuleNotFoundError as exc:
@@ -377,6 +654,7 @@ def resolve_template_id_from_workbook_path(workbook_path: str | Path) -> str:
             code="OPENPYXL_MISSING",
         ) from exc
     source = Path(workbook_path)
+    assert_not_symlink_path(source, context_key="workbook")
     try:
         workbook = openpyxl.load_workbook(source, data_only=False, read_only=True)
     except Exception as exc:
@@ -391,11 +669,70 @@ def resolve_template_id_from_workbook_path(workbook_path: str | Path) -> str:
         workbook.close()
 
 
+def extract_course_metadata_and_students_from_workbook_path(
+    workbook_path: str | Path,
+) -> tuple[set[str], dict[str, str]]:
+    """Extract course metadata and students from workbook path.
+    
+    Args:
+        workbook_path: Parameter value (str | Path).
+    
+    Returns:
+        tuple[set[str], dict[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
+    template_id = resolve_template_id_from_workbook_path(workbook_path)
+    strategy = get_template_strategy(template_id)
+    extractor = getattr(strategy, "extract_course_metadata_and_students", None)
+    if not callable(extractor):
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="WORKBOOK_KIND_UNSUPPORTED",
+            workbook_kind="co_attainment",
+            template_id=template_id,
+        )
+    students, metadata_map = extractor(workbook_path, template_id=template_id)
+    return set(students), dict(metadata_map)
+
+
+def consume_marks_anomaly_warnings(template_id: str) -> list[str]:
+    """Consume marks anomaly warnings.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
+    strategy = get_template_strategy(template_id)
+    consumer = getattr(strategy, "consume_last_marks_anomaly_warnings", None)
+    if not callable(consumer):
+        return []
+    return [str(item) for item in consumer() if str(item).strip()]
+
+
 def read_template_id_from_system_hash_sheet_if_valid(
     workbook: Any,
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> str | None:
+    """Read template id from system hash sheet if valid.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     return _read_template_id_from_system_hash_sheet_if_valid_integrity(
         workbook,
         verify_signature=verify_signature,
@@ -403,6 +740,17 @@ def read_template_id_from_system_hash_sheet_if_valid(
 
 
 def read_valid_template_id_from_system_hash_sheet(workbook: Any) -> str:
+    """Read valid template id from system hash sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     template_id = _read_valid_template_id_from_system_hash_sheet_integrity(workbook)
     get_template_strategy(template_id)
     return template_id
@@ -413,6 +761,18 @@ def read_valid_system_workbook_payload(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> SystemWorkbookPayload:
+    """Read valid system workbook payload.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        SystemWorkbookPayload: Return value.
+    
+    Raises:
+        None.
+    """
     payload = _read_valid_system_workbook_payload_integrity(
         workbook,
         verify_signature=verify_signature,
@@ -434,4 +794,6 @@ __all__ = [
     "resolve_template_id_from_workbook_path",
     "read_valid_system_workbook_payload",
     "read_valid_template_id_from_system_hash_sheet",
+    "extract_course_metadata_and_students_from_workbook_path",
+    "consume_marks_anomaly_warnings",
 ]

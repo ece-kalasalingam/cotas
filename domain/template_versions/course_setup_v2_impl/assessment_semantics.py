@@ -47,6 +47,17 @@ class AssessmentComponent:
 
 
 def _assessment_schema():
+    """Assessment schema.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if schema is None:
         raise ConfigurationError(
@@ -57,6 +68,17 @@ def _assessment_schema():
 
 
 def _headers_from_registry() -> tuple[str, ...]:
+    """Headers from registry.
+    
+    Args:
+        None.
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     _assessment_schema()
     headers = get_sheet_headers_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if not headers:
@@ -67,6 +89,20 @@ def _headers_from_registry() -> tuple[str, ...]:
 
 
 def _parse_yes_no(value: Any, *, sheet_name: str, row_number: int, field_name: str) -> bool:
+    """Parse yes no.
+    
+    Args:
+        value: Parameter value (Any).
+        sheet_name: Parameter value (str).
+        row_number: Parameter value (int).
+        field_name: Parameter value (str).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     token = normalize(value)
     if token not in {"yes", "no"}:
         raise validation_error_from_key(
@@ -87,6 +123,22 @@ def _parse_allowed_option(
     allowed_tokens: set[str],
     allowed_display: Sequence[str],
 ) -> str:
+    """Parse allowed option.
+    
+    Args:
+        value: Parameter value (Any).
+        sheet_name: Parameter value (str).
+        row_number: Parameter value (int).
+        field_name: Parameter value (str).
+        allowed_tokens: Parameter value (set[str]).
+        allowed_display: Parameter value (Sequence[str]).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     token = normalize(value)
     if token not in allowed_tokens:
         raise validation_error_from_key(
@@ -118,6 +170,32 @@ def parse_assessment_components(
     participation_allowed_tokens: set[str] | None = None,
     participation_allowed_display: Sequence[str] | None = None,
 ) -> list[AssessmentComponent]:
+    """Parse assessment components.
+    
+    Args:
+        rows: Parameter value (Iterable[Sequence[Any]]).
+        sheet_name: Parameter value (str).
+        row_start: Parameter value (int).
+        row_numbers: Parameter value (Sequence[int] | None).
+        on_blank_component: Parameter value (Literal['error', 'break', 'skip']).
+        duplicate_policy: Parameter value (Literal['error', 'keep_first', 'keep_all']).
+        require_non_empty: Parameter value (bool).
+        validate_allowed_options: Parameter value (bool).
+        assessment_type_allowed_tokens: Parameter value (set[str] | None).
+        assessment_type_allowed_display: Parameter value (Sequence[str] | None).
+        assessment_format_allowed_tokens: Parameter value (set[str] | None).
+        assessment_format_allowed_display: Parameter value (Sequence[str] | None).
+        mode_allowed_tokens: Parameter value (set[str] | None).
+        mode_allowed_display: Parameter value (Sequence[str] | None).
+        participation_allowed_tokens: Parameter value (set[str] | None).
+        participation_allowed_display: Parameter value (Sequence[str] | None).
+    
+    Returns:
+        list[AssessmentComponent]: Return value.
+    
+    Raises:
+        None.
+    """
     expected_sheet_name = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if normalize(sheet_name) != normalize(expected_sheet_name):
         raise ConfigurationError(

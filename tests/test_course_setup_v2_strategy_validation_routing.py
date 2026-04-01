@@ -7,14 +7,25 @@ from domain.template_versions.course_setup_v2 import CourseSetupV2Strategy
 
 
 def test_strategy_validate_workbooks_routes_course_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test strategy validate workbooks routes course details.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     strategy = CourseSetupV2Strategy()
 
     monkeypatch.setattr(
-        "domain.template_versions.course_setup_v2._course_template_batch_validator",
+        "domain.template_versions.course_setup_v2_impl.strategy_bindings.course_template_batch_validator",
         lambda: (lambda *, workbook_paths, cancel_token=None: {"valid_paths": list(workbook_paths)}),
     )
     monkeypatch.setattr(
-        "domain.template_versions.course_setup_v2._marks_template_batch_validator",
+        "domain.template_versions.course_setup_v2_impl.strategy_bindings.marks_template_batch_validator",
         lambda: (lambda *, workbook_paths, template_id, cancel_token=None: {"valid_paths": [], "template_id": template_id}),
     )
 
@@ -28,14 +39,25 @@ def test_strategy_validate_workbooks_routes_course_details(monkeypatch: pytest.M
 
 
 def test_strategy_validate_workbooks_routes_marks_template(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test strategy validate workbooks routes marks template.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     strategy = CourseSetupV2Strategy()
 
     monkeypatch.setattr(
-        "domain.template_versions.course_setup_v2._course_template_batch_validator",
+        "domain.template_versions.course_setup_v2_impl.strategy_bindings.course_template_batch_validator",
         lambda: (lambda *, workbook_paths, cancel_token=None: {"valid_paths": list(workbook_paths)}),
     )
     monkeypatch.setattr(
-        "domain.template_versions.course_setup_v2._marks_template_batch_validator",
+        "domain.template_versions.course_setup_v2_impl.strategy_bindings.marks_template_batch_validator",
         lambda: (lambda *, workbook_paths, template_id, cancel_token=None: {"valid_paths": list(workbook_paths), "template_id": template_id}),
     )
 
@@ -50,6 +72,17 @@ def test_strategy_validate_workbooks_routes_marks_template(monkeypatch: pytest.M
 
 
 def test_strategy_validate_workbooks_rejects_unknown_kind() -> None:
+    """Test strategy validate workbooks rejects unknown kind.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     strategy = CourseSetupV2Strategy()
     with pytest.raises(ValidationError) as excinfo:
         strategy.validate_workbooks(

@@ -19,6 +19,18 @@ def _baseline_marks_batch(
     *,
     template_id: str,
 ) -> dict[str, object]:
+    """Baseline marks batch.
+    
+    Args:
+        workbook_paths: Parameter value (list[str]).
+        template_id: Parameter value (str).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     unique_paths: list[str] = []
     duplicate_paths: list[str] = []
     seen: set[str] = set()
@@ -91,13 +103,26 @@ def _baseline_marks_batch(
 
 
 def _timed_runs(fn, *, runs: int = 7) -> tuple[float, float]:
+    """Timed runs.
+    
+    Args:
+        fn: Parameter value.
+        runs: Parameter value (int).
+    
+    Returns:
+        tuple[float, float]: Return value.
+    
+    Raises:
+        None.
+    """
     samples: list[float] = []
     for _ in range(runs):
         start = time.perf_counter()
         fn()
         samples.append(time.perf_counter() - start)
+    ordered = sorted(samples)
     median = statistics.median(samples)
-    p95 = samples[min(len(samples) - 1, max(0, int(round((len(samples) - 1) * 0.95))))]
+    p95 = ordered[min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * 0.95))))]
     return median, p95
 
 
@@ -106,7 +131,31 @@ def _timed_runs(fn, *, runs: int = 7) -> tuple[float, float]:
     reason="Non-blocking perf suite. Set RUN_PERF_TESTS=1 to execute.",
 )
 def test_v2_marks_batch_perf_baseline_vs_refactor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test v2 marks batch perf baseline vs refactor.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token=None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value.
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del expected_template_id
         del cancel_token
         idx = int(Path(workbook_path).stem.replace("wb", ""))
@@ -144,7 +193,15 @@ def test_v2_marks_batch_perf_baseline_vs_refactor(monkeypatch: pytest.MonkeyPatc
     assert refactor_median > 0
     assert refactor_p95 > 0
     assert peak > 0
-    assert refactor_median <= baseline_median * 1.5, (
+    # The synthetic baseline is intentionally lightweight and can be sub-millisecond.
+    # Use an execution-floor-aware guard to avoid false regressions on shared CI runners.
+    median_limit = max(baseline_median * 1.5, 0.200)
+    p95_limit = max(baseline_p95 * 1.5, 0.300)
+    assert refactor_median <= median_limit, (
         f"Median regression too high: baseline={baseline_median:.6f}s, "
-        f"refactor={refactor_median:.6f}s"
+        f"refactor={refactor_median:.6f}s, limit={median_limit:.6f}s"
+    )
+    assert refactor_p95 <= p95_limit, (
+        f"P95 regression too high: baseline={baseline_p95:.6f}s, "
+        f"refactor={refactor_p95:.6f}s, limit={p95_limit:.6f}s"
     )

@@ -8,6 +8,17 @@ from common.jobs import CancellationToken, JobContext
 
 
 def test_validation_error_supports_code_and_context() -> None:
+    """Test validation error supports code and context.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     err = ValidationError("bad input", code="BAD_INPUT", context={"field": "course_code"})
     assert str(err) == "bad input"
     assert err.code == "BAD_INPUT"
@@ -15,6 +26,17 @@ def test_validation_error_supports_code_and_context() -> None:
 
 
 def test_job_context_snapshots_language_and_operation() -> None:
+    """Test job context snapshots language and operation.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ctx = JobContext.create(step_id="instructor.generate_report", payload={"path": "sample.xlsx"})
     assert ctx.job_id
     assert ctx.step_id == "instructor.generate_report"
@@ -23,6 +45,17 @@ def test_job_context_snapshots_language_and_operation() -> None:
 
 
 def test_cancellation_token_raises_when_cancelled() -> None:
+    """Test cancellation token raises when cancelled.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     token = CancellationToken()
     token.cancel()
     with pytest.raises(JobCancelledError):
@@ -30,4 +63,15 @@ def test_cancellation_token_raises_when_cancelled() -> None:
 
 
 def test_blueprint_registry_contracts_are_valid() -> None:
+    """Test blueprint registry contracts are valid.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     validate_blueprint_registry_contracts()

@@ -65,8 +65,8 @@ WIN32_SHOW_WINDOW_RESTORE = 9
 ABOUT_ICON_SIZE = 72
 ABOUT_CONTRIBUTORS_FILE = "about_contributors.txt"
 APP_REPOSITORY_URL = "https://github.com/ece-kalasalingam/cotas"
-COORDINATOR_REMOVE_BUTTON_SIZE = 24
-COORDINATOR_REMOVE_BUTTON_ICON_SIZE = 16
+FILE_ITEM_REMOVE_BUTTON_SIZE = 24
+FILE_ITEM_REMOVE_BUTTON_ICON_SIZE = 16
 
 # ==========================================================
 # ATTAINMENT POLICY
@@ -134,14 +134,7 @@ WORKFLOW_OPERATION_GENERATE_COURSE_DETAILS_TEMPLATE = "generate_course_details_t
 WORKFLOW_OPERATION_VALIDATE_COURSE_DETAILS_WORKBOOK = "validate_course_details_workbook"
 WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE = "generate_marks_template"
 WORKFLOW_OPERATION_GENERATE_FINAL_REPORT = "generate_final_report"
-COORDINATOR_WORKFLOW_OPERATION_COLLECT_FILES = "collecting coordinator files"
-COORDINATOR_WORKFLOW_OPERATION_CALCULATE_ATTAINMENT = "calculating coordinator co attainment"
-COORDINATOR_WORKFLOW_STEP_ID_COLLECT_FILES = "coordinator_collect_files"
-COORDINATOR_WORKFLOW_STEP_ID_CALCULATE_ATTAINMENT = "coordinator_calculate_attainment"
-CO_ANALYSIS_WORKFLOW_OPERATION_COLLECT_FILES = "collecting co analysis files"
 CO_ANALYSIS_WORKFLOW_OPERATION_GENERATE_WORKBOOK = "generating co analysis workbook"
-CO_ANALYSIS_WORKFLOW_STEP_ID_COLLECT_FILES = "co_analysis_collect_files"
-CO_ANALYSIS_WORKFLOW_STEP_ID_GENERATE_WORKBOOK = "co_analysis_generate_workbook"
 WORKFLOW_PAYLOAD_KEY_TEMPLATE_ID = "template_id"
 WORKFLOW_PAYLOAD_KEY_OUTPUT = "output"
 WORKFLOW_PAYLOAD_KEY_SOURCE = "source"
@@ -226,3 +219,4 @@ TOAST_MAX_WIDTH = 460
 # ==========================================================
 # END OF CONSTANTS
 # ==========================================================
+

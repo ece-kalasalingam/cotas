@@ -18,6 +18,17 @@ from common.constants import (
 
 
 def _parse_version(version: str) -> tuple[int, int, int, int]:
+    """Parse version.
+    
+    Args:
+        version: Parameter value (str).
+    
+    Returns:
+        tuple[int, int, int, int]: Return value.
+    
+    Raises:
+        None.
+    """
     parts = [p.strip() for p in version.split(".") if p.strip()]
     if not parts:
         raise ValueError("SYSTEM_VERSION is empty.")
@@ -36,6 +47,17 @@ def _parse_version(version: str) -> tuple[int, int, int, int]:
 
 
 def build_version_text() -> str:
+    """Build version text.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     v1, v2, v3, v4 = _parse_version(SYSTEM_VERSION)
     version_str = f"{v1}.{v2}.{v3}.{v4}"
 
@@ -76,6 +98,17 @@ VSVersionInfo(
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     output_file = REPO_ROOT / "version.txt"
     output_file.write_text(build_version_text(), encoding="utf-8", newline="\n")
     print(f"Wrote {output_file}")

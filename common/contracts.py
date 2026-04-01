@@ -26,6 +26,19 @@ from common.registry import BLUEPRINT_REGISTRY
 
 
 def require_keys(namespace: Mapping[str, object], *, keys: tuple[str, ...], context: str) -> None:
+    """Require keys.
+    
+    Args:
+        namespace: Parameter value (Mapping[str, object]).
+        keys: Parameter value (tuple[str, ...]).
+        context: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     missing = [key for key in keys if key not in namespace]
     if missing:
         ordered = ", ".join(sorted(missing))
@@ -33,6 +46,17 @@ def require_keys(namespace: Mapping[str, object], *, keys: tuple[str, ...], cont
 
 
 def validate_blueprint_registry_contracts() -> None:
+    """Validate blueprint registry contracts.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     _validate_attainment_policy_contracts()
     _validate_attainment_threshold_contracts()
     _validate_indirect_tool_policy_contracts()
@@ -102,11 +126,33 @@ def validate_blueprint_registry_contracts() -> None:
 
 
 def _validate_attainment_policy_contracts() -> None:
+    """Validate attainment policy contracts.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if round(DIRECT_RATIO + INDIRECT_RATIO, 5) != 1.0:
         raise ConfigurationError("DIRECT_RATIO + INDIRECT_RATIO must equal 1.0")
 
 
 def _validate_attainment_threshold_contracts() -> None:
+    """Validate attainment threshold contracts.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     thresholds = (LEVEL_1_THRESHOLD, LEVEL_2_THRESHOLD, LEVEL_3_THRESHOLD)
     if not thresholds_all_numeric(*thresholds):
         raise ConfigurationError("Level thresholds must be numeric.")
@@ -135,5 +181,16 @@ def _validate_attainment_threshold_contracts() -> None:
 
 
 def _validate_indirect_tool_policy_contracts() -> None:
+    """Validate indirect tool policy contracts.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if LIKERT_MIN >= LIKERT_MAX:
         raise ConfigurationError("LIKERT_MIN must be less than LIKERT_MAX")

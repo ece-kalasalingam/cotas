@@ -23,6 +23,17 @@ _VERIFY_SIGNATURE = Callable[[str, str], bool]
 
 
 def _normalize_text(value: Any) -> str:
+    """Normalize text.
+    
+    Args:
+        value: Parameter value (Any).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     text = str(value or "").strip()
     return " ".join(text.lower().split())
 
@@ -32,6 +43,18 @@ def read_template_id_from_system_hash_sheet_if_valid(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> str | None:
+    """Read template id from system hash sheet if valid.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
         return None
     sheet = workbook[SYSTEM_HASH_SHEET_NAME]
@@ -55,6 +78,18 @@ def read_valid_template_id_from_system_hash_sheet(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> str:
+    """Read valid template id from system hash sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     if SYSTEM_HASH_SHEET_NAME not in getattr(workbook, "sheetnames", []):
         raise validation_error_from_key(
             "validation.system.sheet_missing",
@@ -95,6 +130,18 @@ def read_layout_manifest_sheet_payload(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> dict[str, Any]:
+    """Read layout manifest sheet payload.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     if SYSTEM_LAYOUT_SHEET not in getattr(workbook, "sheetnames", []):
         raise validation_error_from_key(
             "validation.layout.sheet_missing",
@@ -152,6 +199,18 @@ def read_valid_system_workbook_payload(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> SystemWorkbookPayload:
+    """Read valid system workbook payload.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        SystemWorkbookPayload: Return value.
+    
+    Raises:
+        None.
+    """
     template_id = read_valid_template_id_from_system_hash_sheet(
         workbook,
         verify_signature=verify_signature,

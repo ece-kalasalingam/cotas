@@ -308,10 +308,32 @@ _VALIDATION_ISSUE_CATALOG: Mapping[str, ValidationIssueSpec] = {
 
 
 def _normalize_error_code(value: str) -> str:
+    """Normalize error code.
+    
+    Args:
+        value: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return str(value or "").strip().upper()
 
 
 def code_from_translation_key(translation_key: str) -> str:
+    """Code from translation key.
+    
+    Args:
+        translation_key: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     key = str(translation_key or "").strip().lower()
     if not key:
         return _DEFAULT_SPEC.code
@@ -319,6 +341,17 @@ def code_from_translation_key(translation_key: str) -> str:
 
 
 def infer_validation_category_from_key(translation_key: str) -> str:
+    """Infer validation category from key.
+    
+    Args:
+        translation_key: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     key = str(translation_key or "").strip().lower()
     if key.startswith("validation.dependency."):
         return "dependency"
@@ -345,6 +378,22 @@ def validation_error_from_key(
     context: Mapping[str, Any] | None = None,
     **context_kwargs: Any,
 ) -> ValidationError:
+    """Validation error from key.
+    
+    Args:
+        translation_key: Parameter value (str).
+        code: Parameter value (str | None).
+        category: Parameter value (str | None).
+        severity: Parameter value (ValidationSeverity).
+        context: Parameter value (Mapping[str, Any] | None).
+        context_kwargs: Parameter value (Any).
+    
+    Returns:
+        ValidationError: Return value.
+    
+    Raises:
+        None.
+    """
     payload = dict(context or {})
     payload.update(context_kwargs)
     payload[_CTX_TRANSLATION_KEY] = translation_key
@@ -363,6 +412,19 @@ def _resolve_translated_message(
     context: Mapping[str, Any],
     fallback_message: str,
 ) -> str:
+    """Resolve translated message.
+    
+    Args:
+        key: Parameter value (str).
+        context: Parameter value (Mapping[str, Any]).
+        fallback_message: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         rendered = t(key, **dict(context))
         if isinstance(rendered, str) and rendered.strip():
@@ -378,6 +440,19 @@ def resolve_validation_issue(
     *,
     fallback_message: str = "",
 ) -> ResolvedValidationIssue:
+    """Resolve validation issue.
+    
+    Args:
+        code: Parameter value (str).
+        context: Parameter value (Mapping[str, Any] | None).
+        fallback_message: Parameter value (str).
+    
+    Returns:
+        ResolvedValidationIssue: Return value.
+    
+    Raises:
+        None.
+    """
     normalized_code = _normalize_error_code(code) or _DEFAULT_SPEC.code
     context_payload = dict(context or {})
     translation_key = str(context_payload.get(_CTX_TRANSLATION_KEY, "") or "").strip()

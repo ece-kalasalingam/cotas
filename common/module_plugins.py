@@ -22,7 +22,30 @@ class ModulePluginSpec:
 
 
 def lazy_module_class(module_path: str, class_name: str) -> ModuleClassLoader:
+    """Lazy module class.
+    
+    Args:
+        module_path: Parameter value (str).
+        class_name: Parameter value (str).
+    
+    Returns:
+        ModuleClassLoader: Return value.
+    
+    Raises:
+        None.
+    """
     def _load() -> ModuleClass:
+        """Load.
+        
+        Args:
+            None.
+        
+        Returns:
+            ModuleClass: Return value.
+        
+        Raises:
+            None.
+        """
         module = importlib.import_module(module_path)
         loaded = getattr(module, class_name)
         return loaded

@@ -7,6 +7,8 @@ from typing import Any, cast
 
 import pytest
 
+from common.constants import LAYOUT_SHEET_KIND_DIRECT_CO_WISE
+from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from domain import template_strategy_router
 from domain.template_versions.course_setup_v2_impl import (
@@ -23,6 +25,22 @@ def _identity(
     outcomes: int = 3,
     reg_numbers: frozenset[str] | None = None,
 ) -> object:
+    """Identity.
+    
+    Args:
+        section: Parameter value (str).
+        course_code: Parameter value (str).
+        semester: Parameter value (str).
+        year: Parameter value (str).
+        outcomes: Parameter value (int).
+        reg_numbers: Parameter value (frozenset[str] | None).
+    
+    Returns:
+        object: Return value.
+    
+    Raises:
+        None.
+    """
     resolved_reg_numbers = reg_numbers if reg_numbers is not None else frozenset({f"reg_{section.lower()}"})
     return v2_validator._MarksWorkbookIdentity(
         template_id="COURSE_SETUP_V2",
@@ -36,6 +54,17 @@ def _identity(
 
 
 def test_v2_marks_validator_warning_buffer_consume_clears_state() -> None:
+    """Test v2 marks validator warning buffer consume clears state.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     v2_validator._reset_marks_anomaly_warnings()
     v2_validator._log_marks_anomaly_warnings_from_stats(
         sheet_name="Sheet1",
@@ -54,6 +83,17 @@ def test_v2_marks_validator_warning_buffer_consume_clears_state() -> None:
 
 
 def test_v2_marks_validator_resets_warning_buffer_per_run() -> None:
+    """Test v2 marks validator resets warning buffer per run.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     v2_validator._last_marks_anomaly_warnings[:] = ["stale warning"]
 
     class _Workbook:
@@ -69,7 +109,31 @@ def test_v2_marks_validator_resets_warning_buffer_per_run() -> None:
 
 
 def test_v2_marks_batch_validator_returns_course_like_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test v2 marks batch validator returns course like shape.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del expected_template_id
         del cancel_token
         if "invalid" in workbook_path:
@@ -92,11 +156,35 @@ def test_v2_marks_batch_validator_returns_course_like_shape(monkeypatch: pytest.
 
 
 def test_v2_marks_batch_validator_tracks_template_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test v2 marks batch validator tracks template mismatch.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del workbook_path
         del expected_template_id
         del cancel_token
-        raise ValidationError("template mismatch", code="UNKNOWN_TEMPLATE", context={"template_id": "COURSE_SETUP_V1"})
+        raise ValidationError("template mismatch", code="UNKNOWN_TEMPLATE", context={"template_id": "COURSE_SETUP_X"})
 
     monkeypatch.setattr(v2_validator, "_validate_filled_marks_workbook_impl", _fake_validate)
     result = cast(
@@ -124,6 +212,18 @@ def test_marks_impl_two_stage_trust_flow_uses_read_only_then_full_workbook(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    """Test marks impl two stage trust flow uses read only then full workbook.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_path = tmp_path / "marks.xlsx"
     workbook_path.write_text("x")
 
@@ -132,14 +232,48 @@ def test_marks_impl_two_stage_trust_flow_uses_read_only_then_full_workbook(
 
     class _Workbook:
         def __init__(self, mode: str) -> None:
+            """Init.
+            
+            Args:
+                mode: Parameter value (str).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self.mode = mode
             self.closed = False
             self.sheetnames = ["Sheet1"]
 
         def close(self) -> None:
+            """Close.
+            
+            Args:
+                None.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self.closed = True
 
     def _load_workbook(_path, **kwargs):
+        """Load workbook.
+        
+        Args:
+            _path: Parameter value.
+            kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         calls.append(dict(kwargs))
         mode = "read_only" if kwargs.get("read_only", False) else "full"
         workbook = _Workbook(mode=mode)
@@ -190,6 +324,18 @@ def test_marks_impl_manifest_validation_error_is_preserved(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    """Test marks impl manifest validation error is preserved.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_path = tmp_path / "marks.xlsx"
     workbook_path.write_text("x")
 
@@ -197,6 +343,17 @@ def test_marks_impl_manifest_validation_error_is_preserved(
         sheetnames = ["Sheet1"]
 
         def close(self) -> None:
+            """Close.
+            
+            Args:
+                None.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             return None
 
     monkeypatch.setitem(
@@ -230,8 +387,200 @@ def test_marks_impl_manifest_validation_error_is_preserved(
     assert excinfo.value.code == "COA_MARK_ENTRY_EMPTY"
 
 
+def test_marks_impl_raises_open_failed_when_read_only_open_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Test marks impl raises open failed when read only open fails.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
+    workbook_path = tmp_path / "corrupt_marks.xlsx"
+    workbook_path.write_text("not-an-xlsx", encoding="utf-8")
+
+    def _raise_open(*_args, **_kwargs):
+        """Raise open.
+        
+        Args:
+            _args: Parameter value.
+            _kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        raise OSError("broken workbook zip")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openpyxl",
+        SimpleNamespace(load_workbook=_raise_open),
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        v2_validator._validate_filled_marks_workbook_impl(
+            workbook_path=workbook_path,
+            expected_template_id="COURSE_SETUP_V2",
+        )
+
+    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
+    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+
+
+def test_marks_impl_raises_open_failed_when_full_open_fails_after_payload_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Test marks impl raises open failed when full open fails after payload read.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
+    workbook_path = tmp_path / "corrupt_marks_second_pass.xlsx"
+    workbook_path.write_text("not-an-xlsx", encoding="utf-8")
+
+    class _Workbook:
+        sheetnames = ["Sheet1"]
+
+        def close(self) -> None:
+            """Close.
+            
+            Args:
+                None.
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
+            return None
+
+    read_only_workbook = _Workbook()
+    load_calls: list[dict[str, object]] = []
+
+    def _load_workbook(_path, **kwargs):
+        """Load workbook.
+        
+        Args:
+            _path: Parameter value.
+            kwargs: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
+        load_calls.append(dict(kwargs))
+        if kwargs.get("read_only", False):
+            return read_only_workbook
+        raise OSError("full-open failed for corrupt workbook")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openpyxl",
+        SimpleNamespace(load_workbook=_load_workbook),
+    )
+    monkeypatch.setattr(
+        template_strategy_router,
+        "read_valid_system_workbook_payload",
+        lambda _workbook: _Payload(template_id="COURSE_SETUP_V2", manifest={"sheet_order": [], "sheets": []}),
+    )
+    monkeypatch.setattr(
+        template_strategy_router,
+        "assert_template_id_matches",
+        lambda *, actual_template_id, expected_template_id: None,
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        v2_validator._validate_filled_marks_workbook_impl(
+            workbook_path=workbook_path,
+            expected_template_id="COURSE_SETUP_V2",
+        )
+
+    assert load_calls[0].get("read_only") is True
+    assert load_calls[1].get("read_only", False) is False
+    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
+    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+
+
+def test_marks_impl_rejects_symlink_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    workbook_path = tmp_path / "linked_marks.xlsx"
+    workbook_path.write_text("x", encoding="utf-8")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openpyxl",
+        SimpleNamespace(load_workbook=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected"))),
+    )
+    monkeypatch.setattr(
+        v2_validator,
+        "assert_not_symlink_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="WORKBOOK_SYMLINK_NOT_ALLOWED",
+                workbook=str(workbook_path),
+            )
+        ),
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        v2_validator._validate_filled_marks_workbook_impl(
+            workbook_path=workbook_path,
+            expected_template_id="COURSE_SETUP_V2",
+        )
+
+    assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"
+
+
 def test_v2_marks_batch_validator_tracks_cohort_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test v2 marks batch validator tracks cohort mismatch.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del expected_template_id
         del cancel_token
         if workbook_path == "ok.xlsx":
@@ -260,7 +609,31 @@ def test_v2_marks_batch_validator_tracks_cohort_mismatch(monkeypatch: pytest.Mon
 
 
 def test_v2_marks_batch_validator_tracks_duplicate_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test v2 marks batch validator tracks duplicate section.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del expected_template_id
         del cancel_token
         if workbook_path == "first.xlsx":
@@ -291,7 +664,31 @@ def test_v2_marks_batch_validator_tracks_duplicate_section(monkeypatch: pytest.M
 def test_v2_marks_batch_validator_rejects_cross_workbook_duplicate_reg_no(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test v2 marks batch validator rejects cross workbook duplicate reg no.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     def _fake_validate(*, workbook_path: str, expected_template_id: str, cancel_token: object | None = None) -> object:
+        """Fake validate.
+        
+        Args:
+            workbook_path: Parameter value (str).
+            expected_template_id: Parameter value (str).
+            cancel_token: Parameter value (object | None).
+        
+        Returns:
+            object: Return value.
+        
+        Raises:
+            None.
+        """
         del expected_template_id
         del cancel_token
         if workbook_path == "first.xlsx":
@@ -316,3 +713,179 @@ def test_v2_marks_batch_validator_rejects_cross_workbook_duplicate_reg_no(
     )
     assert rejection["reason_kind"] == "duplicate_reg_no"
     assert rejection["issue"]["code"] == "MARKS_TEMPLATE_STUDENT_REG_DUPLICATE"
+
+
+def test_non_empty_marks_entries_collects_multiple_row_failures() -> None:
+    """Test non empty marks entries collects multiple row failures.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
+    class _Cell:
+        def __init__(self, row: int, column: int, value: object) -> None:
+            """Init.
+            
+            Args:
+                row: Parameter value (int).
+                column: Parameter value (int).
+                value: Parameter value (object).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
+            self.row = row
+            self.column = column
+            self.value = value
+            self.coordinate = f"{v2_validator._excel_col_name(column)}{row}"
+
+    class _Worksheet:
+        def __init__(self, values: dict[tuple[int, int], object]) -> None:
+            """Init.
+            
+            Args:
+                values: Parameter value (dict[tuple[int, int], object]).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
+            self._values = values
+
+        def cell(self, row: int, column: int) -> _Cell:
+            """Cell.
+            
+            Args:
+                row: Parameter value (int).
+                column: Parameter value (int).
+            
+            Returns:
+                _Cell: Return value.
+            
+            Raises:
+                None.
+            """
+            return _Cell(row, column, self._values.get((row, column)))
+
+    ws = _Worksheet(
+        {
+            (3, 4): 10,
+            (3, 5): 10,
+            (3, 6): 10,
+            (3, 7): 10,
+            (4, 2): "REG001",
+            (4, 3): "Student One",
+            (4, 4): "A",
+            (4, 5): 5,
+            (4, 6): 3,
+            (4, 7): 2,
+            (4, 8): 123,
+        }
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        v2_validator._validate_non_empty_marks_entries(
+            worksheet=ws,
+            sheet_name="S1",
+            sheet_kind=LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
+            header_count=8,
+            header_row=1,
+        )
+
+    assert excinfo.value.code == "MARKS_TEMPLATE_VALIDATION_FAILED"
+    issues = cast(list[dict[str, object]], excinfo.value.context.get("issues", []))
+    assert any(str(item.get("code", "")).strip() == "COA_ABSENCE_POLICY_VIOLATION" for item in issues)
+    assert any(
+        str(item.get("code", "")).strip() == "INSTRUCTOR_VALIDATION_STEP2_TOTAL_FORMULA_MISMATCH"
+        for item in issues
+    )
+
+
+def test_row_total_consistency_accepts_absence_aware_total_formula() -> None:
+    """Test row total consistency accepts absence aware total formula.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
+    class _Cell:
+        def __init__(self, row: int, column: int, value: object) -> None:
+            """Init.
+            
+            Args:
+                row: Parameter value (int).
+                column: Parameter value (int).
+                value: Parameter value (object).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
+            self.row = row
+            self.column = column
+            self.value = value
+            self.coordinate = f"{v2_validator._excel_col_name(column)}{row}"
+
+    class _Worksheet:
+        def __init__(self, values: dict[tuple[int, int], object]) -> None:
+            """Init.
+            
+            Args:
+                values: Parameter value (dict[tuple[int, int], object]).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
+            self._values = values
+
+        def cell(self, row: int, column: int) -> _Cell:
+            """Cell.
+            
+            Args:
+                row: Parameter value (int).
+                column: Parameter value (int).
+            
+            Returns:
+                _Cell: Return value.
+            
+            Raises:
+                None.
+            """
+            return _Cell(row, column, self._values.get((row, column)))
+
+    values: dict[tuple[int, int], object] = {}
+    for row in (12, 13, 14):
+        values[(row, 8)] = (
+            f'=IF(COUNTIF(D{row}:G{row},"A")+COUNTIF(D{row}:G{row},"a")>0,'
+            f'"A",SUM(D{row}:G{row}))'
+        )
+    ws = _Worksheet(values)
+
+    v2_validator._validate_row_total_consistency(
+        worksheet=ws,
+        sheet_name="S1",
+        sheet_kind=LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
+        header_count=8,
+        header_row=9,
+        student_count=3,
+    )

@@ -14,6 +14,17 @@ TARGET_MODULES = tuple(
 
 
 def _literal_channels(node: ast.Call) -> set[str] | None:
+    """Literal channels.
+    
+    Args:
+        node: Parameter value (ast.Call).
+    
+    Returns:
+        set[str] | None: Return value.
+    
+    Raises:
+        None.
+    """
     for kw in node.keywords:
         if kw.arg != "channels":
             continue
@@ -28,6 +39,17 @@ def _literal_channels(node: ast.Call) -> set[str] | None:
 
 
 def _violations_for_file(path: Path) -> list[str]:
+    """Violations for file.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        list[str]: Return value.
+    
+    Raises:
+        None.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
     violations: list[str] = []
 
@@ -64,6 +86,17 @@ def _violations_for_file(path: Path) -> list[str]:
 
 
 def test_all_modules_activity_log_messages_are_key_based() -> None:
+    """Test all modules activity log messages are key based.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     violations: list[str] = []
     for path in TARGET_MODULES:
         violations.extend(_violations_for_file(path))

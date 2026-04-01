@@ -1,4 +1,4 @@
-"""Processing helpers for the coordinator module."""
+"""Shared CO attainment generation/signature helpers for template strategy routing."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -31,6 +31,9 @@ from common.constants import (
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
     LAYOUT_MANIFEST_KEY_SHEETS,
+    LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
+    LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE,
+    LAYOUT_SHEET_KIND_INDIRECT,
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
@@ -48,6 +51,7 @@ from common.registry import (
     COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
+    COURSE_SETUP_SHEET_KEY_STUDENTS,
     SYSTEM_HASH_HEADER_TEMPLATE_HASH as SYSTEM_HASH_TEMPLATE_HASH_HEADER,
     SYSTEM_HASH_HEADER_TEMPLATE_ID as SYSTEM_HASH_TEMPLATE_ID_HEADER,
     SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
@@ -68,12 +72,14 @@ from common.utils import (
     coerce_excel_number,
     create_app_runtime_sqlite_file,
     normalize,
+    ratio_percent_token,
 )
 from common.workbook_integrity.workbook_signing import sign_payload, verify_payload_signature
-from domain.co_report_sheet_generator import co_direct_sheet_name, co_indirect_sheet_name
+from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
+    co_direct_sheet_name,
+    co_indirect_sheet_name,
+)
 from domain.template_strategy_router import (
-    generate_workbook,
-    get_template_strategy,
     read_template_id_from_system_hash_sheet_if_valid,
     read_valid_system_workbook_payload,
 )
@@ -87,7 +93,7 @@ _CO_REPORT_NAME_TOKEN_RE = re.compile(r"(?:[_\-\s]*co[_\-\s]*report)+$", re.IGNO
 _SEMESTER_PREFIX_TOKEN_RE = re.compile(r"^sem(?:ester)?[\s\-_]*([0-9]{1,2}|[ivxlcdm]+)$", re.IGNORECASE)
 _SEMESTER_VALUE_TOKEN_RE = re.compile(r"^(?:[0-9]{1,2}|[ivxlcdm]+)$", re.IGNORECASE)
 _HEADER_SCAN_MAX_ROWS = 200
-_COORDINATOR_STUDENTS_PER_SHEET = 150
+_AGGREGATION_STUDENTS_PER_SHEET = 150
 _DEDUP_SQLITE_THRESHOLD_ENTRIES = 10_000
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
@@ -109,6 +115,17 @@ COURSE_METADATA_SHEET = get_sheet_name_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEE
 
 
 def _course_metadata_headers(template_id: str) -> tuple[str, ...]:
+    """Course metadata headers.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        tuple[str, ...]: Return value.
+    
+    Raises:
+        None.
+    """
     return get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
 
 
@@ -155,6 +172,18 @@ class _CoAttainmentWorkbookResult:
 
 class _RegisterDedupStore:
     def __init__(self, *, total_outcomes: int, use_sqlite: bool) -> None:
+        """Init.
+        
+        Args:
+            total_outcomes: Parameter value (int).
+            use_sqlite: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._total_outcomes = total_outcomes
         self._use_sqlite = use_sqlite
         self._memory_sets: dict[int, set[int]] = {}
@@ -187,6 +216,18 @@ class _RegisterDedupStore:
             self._memory_sets = {co: set() for co in range(1, total_outcomes + 1)}
 
     def add_if_absent(self, *, co_index: int, reg_hash: int) -> bool:
+        """Add if absent.
+        
+        Args:
+            co_index: Parameter value (int).
+            reg_hash: Parameter value (int).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         if self._use_sqlite and self._conn is not None:
             cursor = self._conn.execute(
                 "INSERT OR IGNORE INTO dedup (co_index, reg_hash) VALUES (?, ?)",
@@ -200,6 +241,17 @@ class _RegisterDedupStore:
         return True
 
     def close(self) -> None:
+        """Close.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self._conn is not None:
             try:
                 # Explicitly wipe the sqlite table before close in normal paths.
@@ -218,11 +270,34 @@ class _RegisterDedupStore:
 
 
 def _should_use_sqlite_dedup(*, source_count: int, total_outcomes: int) -> bool:
-    estimated_entries = source_count * total_outcomes * _COORDINATOR_STUDENTS_PER_SHEET
+    """Should use sqlite dedup.
+    
+    Args:
+        source_count: Parameter value (int).
+        total_outcomes: Parameter value (int).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
+    estimated_entries = source_count * total_outcomes * _AGGREGATION_STUDENTS_PER_SHEET
     return estimated_entries >= _DEDUP_SQLITE_THRESHOLD_ENTRIES
 
 
 def _cleanup_stale_dedup_sqlite_files() -> None:
+    """Cleanup stale dedup sqlite files.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     temp_root = Path(tempfile.gettempdir())
     storage_sqlite_root = app_runtime_storage_dir(APP_NAME) / "sqlite"
     roots: tuple[Path, ...] = (temp_root, storage_sqlite_root)
@@ -243,6 +318,18 @@ def _cleanup_stale_dedup_sqlite_files() -> None:
 
 
 def _build_co_attainment_default_name(source_path: Path, *, section: str = "") -> str:
+    """Build co attainment default name.
+    
+    Args:
+        source_path: Parameter value (Path).
+        section: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     stem = source_path.stem.strip()
     cleaned = _CO_REPORT_NAME_TOKEN_RE.sub("", stem).rstrip("_- ").strip()
     section_token = section.strip()
@@ -272,10 +359,32 @@ def _build_co_attainment_default_name(source_path: Path, *, section: str = "") -
 
 
 def _is_supported_excel_file(path: Path) -> bool:
+    """Is supported excel file.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     return path.is_file() and path.suffix.lower() in EXCEL_SUFFIXES
 
 
 def _filter_excel_paths(paths: Iterable[str]) -> list[Path]:
+    """Filter excel paths.
+    
+    Args:
+        paths: Parameter value (Iterable[str]).
+    
+    Returns:
+        list[Path]: Return value.
+    
+    Raises:
+        None.
+    """
     collected: list[Path] = []
     seen: set[str] = set()
     for value in paths:
@@ -294,6 +403,17 @@ _VERIFY_SIGNATURE = Callable[[str, str], bool]
 
 
 def _count_co_sheets_from_manifest(manifest: dict[str, Any]) -> tuple[int, int] | None:
+    """Count co sheets from manifest.
+    
+    Args:
+        manifest: Parameter value (dict[str, Any]).
+    
+    Returns:
+        tuple[int, int] | None: Return value.
+    
+    Raises:
+        None.
+    """
     sheets = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS, [])
     if not isinstance(sheets, list):
         return None
@@ -319,6 +439,18 @@ def read_layout_manifest_co_sheet_counts(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> tuple[int, int] | None:
+    """Read layout manifest co sheet counts.
+    
+    Args:
+        workbook: Parameter value (Any).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        tuple[int, int] | None: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         payload = read_valid_system_workbook_payload(workbook, verify_signature=verify_signature)
     except Exception:
@@ -333,26 +465,27 @@ def read_course_metadata_signature(
     total_outcomes_key: str,
     section_key: str,
 ) -> tuple[str, int, str] | None:
+    """Read course metadata signature.
+    
+    Args:
+        workbook: Parameter value (Any).
+        course_code_key: Parameter value (str).
+        total_outcomes_key: Parameter value (str).
+        section_key: Parameter value (str).
+    
+    Returns:
+        tuple[str, int, str] | None: Return value.
+    
+    Raises:
+        None.
+    """
     template_id = read_template_id_from_system_hash_sheet_if_valid(workbook)
     if not template_id:
         return None
     metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     if metadata_sheet_name not in getattr(workbook, "sheetnames", []):
         return None
-    sheet = workbook[metadata_sheet_name]
-
-    metadata: dict[str, str] = {}
-    row = 2
-    while True:
-        key_raw = sheet.cell(row=row, column=1).value
-        value_raw = sheet.cell(row=row, column=2).value
-        if normalize(key_raw) == "" and normalize(value_raw) == "":
-            break
-        key = normalize(key_raw)
-        if key:
-            value = coerce_excel_number(value_raw)
-            metadata[key] = str(value).strip() if value is not None else ""
-        row += 1
+    metadata = _extract_course_metadata_fields(workbook[metadata_sheet_name])
 
     course_code = metadata.get(normalize(course_code_key), "").strip()
     section = metadata.get(normalize(section_key), "").strip()
@@ -373,6 +506,18 @@ def extract_final_report_signature_from_path(
     *,
     verify_signature: _VERIFY_SIGNATURE = verify_payload_signature,
 ) -> FinalReportWorkbookSignature | None:
+    """Extract final report signature from path.
+    
+    Args:
+        path: Parameter value (Path).
+        verify_signature: Parameter value (_VERIFY_SIGNATURE).
+    
+    Returns:
+        FinalReportWorkbookSignature | None: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import openpyxl
     except Exception:
@@ -393,9 +538,9 @@ def extract_final_report_signature_from_path(
             return None
         metadata = read_course_metadata_signature(
             workbook,
-            course_code_key="Course_Code",
-            total_outcomes_key="Total_Outcomes",
-            section_key="Section",
+            course_code_key=COURSE_METADATA_COURSE_CODE_KEY,
+            total_outcomes_key=COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+            section_key=COURSE_METADATA_SECTION_KEY,
         )
         if metadata is None:
             return None
@@ -413,11 +558,64 @@ def extract_final_report_signature_from_path(
         workbook.close()
 
 
+def _layout_sheet_specs_by_name(workbook: Any) -> dict[str, dict[str, Any]]:
+    """Layout sheet specs by name.
+    
+    Args:
+        workbook: Parameter value (Any).
+    
+    Returns:
+        dict[str, dict[str, Any]]: Return value.
+    
+    Raises:
+        None.
+    """
+    try:
+        payload = read_valid_system_workbook_payload(workbook, verify_signature=verify_payload_signature)
+    except Exception:
+        return {}
+    manifest = payload.manifest if isinstance(payload.manifest, dict) else {}
+    raw_sheets = manifest.get(LAYOUT_MANIFEST_KEY_SHEETS, [])
+    if not isinstance(raw_sheets, list):
+        return {}
+    by_name: dict[str, dict[str, Any]] = {}
+    for entry in raw_sheets:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        by_name[name] = entry
+    return by_name
+
+
 def _has_valid_final_co_report(path: Path) -> bool:
+    """Has valid final co report.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     return _extract_final_report_signature(path) is not None
 
 
 def _read_template_id_from_hash_sheet(workbook: Any) -> str | None:
+    """Read template id from hash sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     return read_template_id_from_system_hash_sheet_if_valid(
         workbook,
         verify_signature=verify_payload_signature,
@@ -425,6 +623,17 @@ def _read_template_id_from_hash_sheet(workbook: Any) -> str | None:
 
 
 def _read_report_sheet_counts(workbook: Any) -> tuple[int, int] | None:
+    """Read report sheet counts.
+    
+    Args:
+        workbook: Parameter value (Any).
+    
+    Returns:
+        tuple[int, int] | None: Return value.
+    
+    Raises:
+        None.
+    """
     return read_layout_manifest_co_sheet_counts(
         workbook,
         verify_signature=verify_payload_signature,
@@ -432,6 +641,17 @@ def _read_report_sheet_counts(workbook: Any) -> tuple[int, int] | None:
 
 
 def _read_signature_metadata(workbook: Any) -> tuple[str, int, str] | None:
+    """Read signature metadata.
+    
+    Args:
+        workbook: Parameter value (Any).
+    
+    Returns:
+        tuple[str, int, str] | None: Return value.
+    
+    Raises:
+        None.
+    """
     return read_course_metadata_signature(
         workbook,
         course_code_key=COURSE_METADATA_COURSE_CODE_KEY,
@@ -441,6 +661,17 @@ def _read_signature_metadata(workbook: Any) -> tuple[str, int, str] | None:
 
 
 def _extract_final_report_signature(path: Path) -> _FinalReportSignature | None:
+    """Extract final report signature.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        _FinalReportSignature | None: Return value.
+    
+    Raises:
+        None.
+    """
     return extract_final_report_signature_from_path(
         path,
         verify_signature=verify_payload_signature,
@@ -454,6 +685,20 @@ def _analyze_dropped_files(
     existing_paths: list[str],
     token: CancellationToken,
 ) -> dict[str, object]:
+    """Analyze dropped files.
+    
+    Args:
+        dropped_files: Parameter value (list[str]).
+        existing_keys: Parameter value (set[str]).
+        existing_paths: Parameter value (list[str]).
+        token: Parameter value (CancellationToken).
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     accepted = _filter_excel_paths(dropped_files)
     seen = set(existing_keys)
     added: list[str] = []
@@ -466,12 +711,14 @@ def _analyze_dropped_files(
     signature_cache: dict[str, _FinalReportSignature | None] = {}
 
     unique_paths: list[Path] = []
+    path_key_by_path: dict[Path, str] = {}
     seen_signature_keys: set[str] = set()
     for path in [*existing_resolved, *accepted]:
         key = canonical_path_key(path)
         if key in seen_signature_keys:
             continue
         seen_signature_keys.add(key)
+        path_key_by_path[path] = key
         unique_paths.append(path)
 
     max_workers = min(
@@ -480,13 +727,28 @@ def _analyze_dropped_files(
         len(unique_paths) or 1,
     )
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_pairs = [(path, executor.submit(_extract_final_report_signature, path)) for path in unique_paths]
-        for path, future in future_pairs:
+        future_to_path = {
+            executor.submit(_extract_final_report_signature, path): path
+            for path in unique_paths
+        }
+        for future in as_completed(future_to_path):
             token.raise_if_cancelled()
-            signature_cache[canonical_path_key(path)] = future.result()
+            path = future_to_path[future]
+            signature_cache[path_key_by_path[path]] = future.result()
 
     def _cached_signature(path: Path) -> _FinalReportSignature | None:
-        return signature_cache.get(canonical_path_key(path))
+        """Cached signature.
+        
+        Args:
+            path: Parameter value (Path).
+        
+        Returns:
+            _FinalReportSignature | None: Return value.
+        
+        Raises:
+            None.
+        """
+        return signature_cache.get(path_key_by_path.get(path, canonical_path_key(path)))
 
     for path in existing_resolved:
         token.raise_if_cancelled()
@@ -556,17 +818,47 @@ def _analyze_dropped_files(
 
 
 def _ratio_percent_token(ratio: float) -> str:
-    percent = ratio * 100.0
-    if abs(percent - round(percent)) <= 1e-9:
-        return f"{int(round(percent))}"
-    return f"{percent:g}"
+    """Ratio percent token.
+    
+    Args:
+        ratio: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    return ratio_percent_token(ratio)
 
 
 def _ratio_total_header(ratio: float) -> str:
+    """Ratio total header.
+    
+    Args:
+        ratio: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE.format(ratio=_ratio_percent_token(ratio))
 
 
 def _coerce_numeric_score(value: Any) -> float | str | None:
+    """Coerce numeric score.
+    
+    Args:
+        value: Parameter value (Any).
+    
+    Returns:
+        float | str | None: Return value.
+    
+    Raises:
+        None.
+    """
     if normalize(value) == normalize(CO_REPORT_NOT_APPLICABLE_TOKEN):
         return CO_REPORT_ABSENT_TOKEN
     parsed = coerce_excel_number(value)
@@ -578,6 +870,18 @@ def _coerce_numeric_score(value: Any) -> float | str | None:
 
 
 def _metadata_rows_for_output(metadata: dict[str, str], co_index: int) -> list[tuple[str, str]]:
+    """Metadata rows for output.
+    
+    Args:
+        metadata: Parameter value (dict[str, str]).
+        co_index: Parameter value (int).
+    
+    Returns:
+        list[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
     return [
         ("Course Code", metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")),
         ("Course Name", metadata.get(normalize(_COURSE_METADATA_COURSE_NAME_KEY), "")),
@@ -592,6 +896,18 @@ def _metadata_rows_for_summary_graph(
     *,
     total_outcomes: int,
 ) -> list[tuple[str, str]]:
+    """Metadata rows for summary graph.
+    
+    Args:
+        metadata: Parameter value (dict[str, str]).
+        total_outcomes: Parameter value (int).
+    
+    Returns:
+        list[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
     total_outcomes_value = metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "").strip()
     if not total_outcomes_value:
         total_outcomes_value = str(total_outcomes)
@@ -610,6 +926,20 @@ def _threshold_rows_for_output(
     co_attainment_level: int,
     include: bool,
 ) -> list[tuple[str, str]]:
+    """Threshold rows for output.
+    
+    Args:
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+        include: Parameter value (bool).
+    
+    Returns:
+        list[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
     if not include or thresholds is None:
         return []
     l1, l2, l3 = thresholds
@@ -623,6 +953,17 @@ def _threshold_rows_for_output(
 
 
 def _extract_course_metadata_fields(sheet: Any) -> dict[str, str]:
+    """Extract course metadata fields.
+    
+    Args:
+        sheet: Parameter value (Any).
+    
+    Returns:
+        dict[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     metadata: dict[str, str] = {}
     row = 2
     while True:
@@ -638,12 +979,155 @@ def _extract_course_metadata_fields(sheet: Any) -> dict[str, str]:
     return metadata
 
 
+def _students_sheet_header_row(
+    *,
+    sheet_specs_by_name: dict[str, dict[str, Any]],
+    sheet_name: str,
+) -> int:
+    """Students sheet header row.
+    
+    Args:
+        sheet_specs_by_name: Parameter value (dict[str, dict[str, Any]]).
+        sheet_name: Parameter value (str).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
+    students_spec = sheet_specs_by_name.get(sheet_name, {})
+    header_row = 1
+    header_row_value = students_spec.get("header_row")
+    if isinstance(header_row_value, int) and header_row_value > 0:
+        header_row = header_row_value
+    return header_row
+
+
+def _header_map_for_row(sheet: Any, *, header_row: int) -> dict[str, int]:
+    """Header map for row.
+    
+    Args:
+        sheet: Parameter value (Any).
+        header_row: Parameter value (int).
+    
+    Returns:
+        dict[str, int]: Return value.
+    
+    Raises:
+        None.
+    """
+    header_map: dict[str, int] = {}
+    max_col = int(sheet.max_column or 0)
+    for col_index in range(1, max_col + 1):
+        header_token = normalize(sheet.cell(row=header_row, column=col_index).value)
+        if header_token and header_token not in header_map:
+            header_map[header_token] = col_index
+    return header_map
+
+
+def _resolve_students_reg_col(
+    *,
+    header_map: dict[str, int],
+    students_headers: tuple[str, ...],
+) -> int | None:
+    """Resolve students reg col.
+    
+    Args:
+        header_map: Parameter value (dict[str, int]).
+        students_headers: Parameter value (tuple[str, ...]).
+    
+    Returns:
+        int | None: Return value.
+    
+    Raises:
+        None.
+    """
+    return header_map.get(normalize(students_headers[0])) or header_map.get(normalize(CO_REPORT_HEADER_REG_NO))
+
+
+def _resolve_students_name_col(
+    *,
+    header_map: dict[str, int],
+    students_headers: tuple[str, ...],
+) -> int | None:
+    """Resolve students name col.
+    
+    Args:
+        header_map: Parameter value (dict[str, int]).
+        students_headers: Parameter value (tuple[str, ...]).
+    
+    Returns:
+        int | None: Return value.
+    
+    Raises:
+        None.
+    """
+    return header_map.get(normalize(students_headers[1])) or header_map.get(normalize(CO_REPORT_HEADER_STUDENT_NAME))
+
+
+def _iter_students_sheet_rows(
+    *,
+    students_sheet: Any,
+    header_row: int,
+    reg_col: int,
+    name_col: int,
+) -> Iterable[tuple[str, str]]:
+    """Iter students sheet rows.
+    
+    Args:
+        students_sheet: Parameter value (Any).
+        header_row: Parameter value (int).
+        reg_col: Parameter value (int).
+        name_col: Parameter value (int).
+    
+    Returns:
+        Iterable[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
+    max_row = int(students_sheet.max_row or 0)
+    for row_index in range(header_row + 1, max_row + 1):
+        reg_value = students_sheet.cell(row=row_index, column=reg_col).value
+        name_value = students_sheet.cell(row=row_index, column=name_col).value
+        reg_no = str(coerce_excel_number(reg_value) or "").strip()
+        student_name = str(name_value or "").strip()
+        if not reg_no and not student_name:
+            break
+        if reg_no:
+            yield reg_no, student_name
+
+
 def _stable_reg_hash(reg_key: str) -> int:
     # Use a compact, stable 48-bit ID to reduce sqlite footprint while keeping collision risk very low.
+    """Stable reg hash.
+    
+    Args:
+        reg_key: Parameter value (str).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     return int.from_bytes(hashlib.blake2b(reg_key.encode("utf-8"), digest_size=6).digest(), byteorder="big")
 
 
 def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
+    """Iter score rows.
+    
+    Args:
+        sheet: Parameter value (Any).
+        ratio: Parameter value (float).
+    
+    Returns:
+        Iterable[_ParsedScoreRow]: Return value.
+    
+    Raises:
+        None.
+    """
     required_headers = {
         normalize(CO_REPORT_HEADER_SERIAL),
         normalize(CO_REPORT_HEADER_REG_NO),
@@ -657,6 +1141,18 @@ def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
     header_scan_limit = min(max_row, _HEADER_SCAN_MAX_ROWS)
 
     def _find_header_row(start_row: int, end_row: int) -> tuple[int, dict[str, int]]:
+        """Find header row.
+        
+        Args:
+            start_row: Parameter value (int).
+            end_row: Parameter value (int).
+        
+        Returns:
+            tuple[int, dict[str, int]]: Return value.
+        
+        Raises:
+            None.
+        """
         for row_offset, values in enumerate(
             sheet.iter_rows(
                 min_row=start_row,
@@ -730,7 +1226,26 @@ def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
         )
 
 
-def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: str) -> Iterable[_CoAttainmentRow]:
+def _iter_co_rows_from_workbook(
+    workbook: Any,
+    *,
+    co_index: int,
+    workbook_name: str,
+) -> tuple[list[_CoAttainmentRow], int, int, int]:
+    """Collect joined CO rows and join/drop counts from one workbook.
+    
+    Args:
+        workbook: Parameter value (Any).
+        co_index: Parameter value (int).
+        workbook_name: Parameter value (str).
+    
+    Returns:
+        tuple[list[_CoAttainmentRow], int, int, int]: Matched rows, direct row
+        count, indirect row count, and unmatched drop count.
+    
+    Raises:
+        None.
+    """
     direct_name = co_direct_sheet_name(co_index)
     indirect_name = co_indirect_sheet_name(co_index)
     if direct_name not in workbook.sheetnames or indirect_name not in workbook.sheetnames:
@@ -748,12 +1263,28 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
     for item in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO):
         indirect_lookup.setdefault((item.reg_hash, item.reg_key), item)
 
-    direct_only = [row.reg_no for key, row in direct_lookup.items() if key not in indirect_lookup]
-    indirect_only = [row.reg_no for key, row in indirect_lookup.items() if key not in direct_lookup]
-    if direct_only or indirect_only:
-        dropped_count = len(direct_only) + len(indirect_only)
-        direct_preview = ", ".join(direct_only[:5]) if direct_only else "-"
-        indirect_preview = ", ".join(indirect_only[:5]) if indirect_only else "-"
+    direct_only_count = 0
+    direct_preview_rows: list[str] = []
+    for key, row in direct_lookup.items():
+        if key in indirect_lookup:
+            continue
+        direct_only_count += 1
+        if len(direct_preview_rows) < 5:
+            direct_preview_rows.append(row.reg_no)
+
+    indirect_only_count = 0
+    indirect_preview_rows: list[str] = []
+    for key, row in indirect_lookup.items():
+        if key in direct_lookup:
+            continue
+        indirect_only_count += 1
+        if len(indirect_preview_rows) < 5:
+            indirect_preview_rows.append(row.reg_no)
+
+    dropped_count = direct_only_count + indirect_only_count
+    if dropped_count:
+        direct_preview = ", ".join(direct_preview_rows) if direct_preview_rows else "-"
+        indirect_preview = ", ".join(indirect_preview_rows) if indirect_preview_rows else "-"
         _logger.warning(
             "CO join dropped unmatched students. workbook=%s, co_index=%s, dropped=%s, direct_only=%s, indirect_only=%s",
             workbook_name,
@@ -763,23 +1294,39 @@ def _iter_co_rows_from_workbook(workbook: Any, *, co_index: int, workbook_name: 
             indirect_preview,
         )
 
+    matched_rows: list[_CoAttainmentRow] = []
     for key, direct_row in direct_lookup.items():
         match = indirect_lookup.get(key)
         if match is None:
             continue
         student_name = direct_row.student_name or match.student_name
-        yield _CoAttainmentRow(
-            reg_hash=direct_row.reg_hash,
-            reg_no=direct_row.reg_no,
-            student_name=student_name,
-            direct_score=direct_row.score,
-            indirect_score=match.score,
-            worksheet_name=direct_name,
-            workbook_name=workbook_name,
+        matched_rows.append(
+            _CoAttainmentRow(
+                reg_hash=direct_row.reg_hash,
+                reg_no=direct_row.reg_no,
+                student_name=student_name,
+                direct_score=direct_row.score,
+                indirect_score=match.score,
+                worksheet_name=direct_name,
+                workbook_name=workbook_name,
+            )
         )
+    return matched_rows, len(direct_lookup), len(indirect_lookup), dropped_count
 
 
 def _xlsxwriter_formats(workbook: Any, *, template_id: str) -> dict[str, Any]:
+    """Xlsxwriter formats.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     return _build_template_xlsxwriter_formats(
         workbook,
         template_id=template_id,
@@ -799,6 +1346,23 @@ def _create_co_attainment_sheet(
     co_attainment_percent: float,
     co_attainment_level: int,
 ) -> _CoOutputSheetState:
+    """Create co attainment sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        co_index: Parameter value (int).
+        metadata: Parameter value (dict[str, str]).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+    
+    Returns:
+        _CoOutputSheetState: Return value.
+    
+    Raises:
+        None.
+    """
     sheet = workbook.add_worksheet(f"CO{co_index}")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
     metadata_headers = _course_metadata_headers(template_id)
@@ -862,6 +1426,19 @@ def _append_co_attainment_row(
     *,
     thresholds: tuple[float, float, float],
 ) -> None:
+    """Append co attainment row.
+    
+    Args:
+        state: Parameter value (_CoOutputSheetState).
+        row: Parameter value (_CoAttainmentRow).
+        thresholds: Parameter value (tuple[float, float, float]).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if isinstance(row.direct_score, (int, float)) and isinstance(row.indirect_score, (int, float)):
         total: float | str = round(row.direct_score + row.indirect_score, CO_REPORT_MAX_DECIMAL_PLACES)
     else:
@@ -883,6 +1460,17 @@ def _append_co_attainment_row(
 
 def _append_co_attainment_summary(state: _CoOutputSheetState) -> None:
     # Keep one visual spacer row after data and then write label/value summary rows.
+    """Append co attainment summary.
+    
+    Args:
+        state: Parameter value (_CoOutputSheetState).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     state.next_row_index += 1
     summary_rows: list[tuple[str, int]] = [
         ("On Roll:", state.on_roll),
@@ -904,6 +1492,19 @@ def _co_percentage(
     attended: int,
     co_attainment_level: int,
 ) -> float | str:
+    """Co percentage.
+    
+    Args:
+        level_counts: Parameter value (dict[int, int]).
+        attended: Parameter value (int).
+        co_attainment_level: Parameter value (int).
+    
+    Returns:
+        float | str: Return value.
+    
+    Raises:
+        None.
+    """
     if attended <= 0:
         return CO_REPORT_NOT_APPLICABLE_TOKEN
     attained_count = sum(
@@ -925,6 +1526,24 @@ def _create_summary_sheet(
     output_states: dict[int, _CoOutputSheetState],
     total_outcomes: int,
 ) -> tuple[int, int]:
+    """Create summary sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        metadata: Parameter value (dict[str, str]).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+        output_states: Parameter value (dict[int, _CoOutputSheetState]).
+        total_outcomes: Parameter value (int).
+    
+    Returns:
+        tuple[int, int]: Return value.
+    
+    Raises:
+        None.
+    """
     sheet = workbook.add_worksheet("Summary")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
     metadata_headers = _course_metadata_headers(template_id)
@@ -1016,6 +1635,25 @@ def _create_graph_sheet(
     summary_first_data_row: int,
     summary_last_data_row: int,
 ) -> None:
+    """Create graph sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        metadata: Parameter value (dict[str, str]).
+        total_outcomes: Parameter value (int).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+        summary_first_data_row: Parameter value (int).
+        summary_last_data_row: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     graph_sheet = workbook.add_worksheet("Graph")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
     metadata_headers = _course_metadata_headers(template_id)
@@ -1080,6 +1718,18 @@ def _create_graph_sheet(
 
 
 def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
+    """Add system hash sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     template_hash = sign_payload(template_id)
     hash_ws = workbook.add_worksheet(SYSTEM_HASH_SHEET)
     hash_ws.write(0, 0, SYSTEM_HASH_TEMPLATE_ID_HEADER)
@@ -1090,6 +1740,19 @@ def _add_system_hash_sheet(workbook: Any, template_id: str) -> None:
 
 
 def _add_system_layout_sheet(workbook: Any, manifest_text: str, manifest_hash: str) -> None:
+    """Add system layout sheet.
+    
+    Args:
+        workbook: Parameter value (Any).
+        manifest_text: Parameter value (str).
+        manifest_hash: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     layout_ws = workbook.add_worksheet(SYSTEM_LAYOUT_SHEET)
     layout_ws.write(0, 0, SYSTEM_LAYOUT_MANIFEST_HEADER)
     layout_ws.write(0, 1, SYSTEM_LAYOUT_MANIFEST_HASH_HEADER)
@@ -1103,6 +1766,18 @@ def _build_system_layout_manifest(
     template_id: str,
     sheet_order: list[str],
 ) -> tuple[str, str]:
+    """Build system layout manifest.
+    
+    Args:
+        template_id: Parameter value (str).
+        sheet_order: Parameter value (list[str]).
+    
+    Returns:
+        tuple[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     template_hash = sign_payload(template_id)
     signed_sheet_order = [*sheet_order, SYSTEM_HASH_SHEET]
     manifest = {
@@ -1120,6 +1795,17 @@ def _build_system_layout_manifest(
 def _attainment_thresholds(
     thresholds: tuple[float, float, float] | None = None,
 ) -> tuple[float, float, float]:
+    """Attainment thresholds.
+    
+    Args:
+        thresholds: Parameter value (tuple[float, float, float] | None).
+    
+    Returns:
+        tuple[float, float, float]: Return value.
+    
+    Raises:
+        None.
+    """
     if thresholds is None:
         return (float(LEVEL_1_THRESHOLD), float(LEVEL_2_THRESHOLD), float(LEVEL_3_THRESHOLD))
     l1, l2, l3 = thresholds
@@ -1132,6 +1818,19 @@ def _co_attainment_target(
     co_attainment_level: int | None,
     threshold_count: int,
 ) -> tuple[float, int]:
+    """Co attainment target.
+    
+    Args:
+        co_attainment_percent: Parameter value (float | None).
+        co_attainment_level: Parameter value (int | None).
+        threshold_count: Parameter value (int).
+    
+    Returns:
+        tuple[float, int]: Return value.
+    
+    Raises:
+        None.
+    """
     percent = float(CO_ATTAINMENT_PERCENT_DEFAULT if co_attainment_percent is None else co_attainment_percent)
     level = int(CO_ATTAINMENT_LEVEL_DEFAULT if co_attainment_level is None else co_attainment_level)
     percent = max(0.0, min(100.0, percent))
@@ -1144,6 +1843,18 @@ def _score_to_attainment_level(
     *,
     thresholds: tuple[float, float, float],
 ) -> int | str:
+    """Score to attainment level.
+    
+    Args:
+        score: Parameter value (float | str).
+        thresholds: Parameter value (tuple[float, float, float]).
+    
+    Returns:
+        int | str: Return value.
+    
+    Raises:
+        None.
+    """
     if not isinstance(score, (int, float)) or isinstance(score, bool):
         return CO_REPORT_NOT_APPLICABLE_TOKEN
 
@@ -1167,6 +1878,17 @@ def _score_to_attainment_level(
 
 
 def _reg_no_sort_key(reg_no: str) -> tuple[tuple[int, int | str], ...]:
+    """Reg no sort key.
+    
+    Args:
+        reg_no: Parameter value (str).
+    
+    Returns:
+        tuple[tuple[int, int | str], ...]: Return value.
+    
+    Raises:
+        None.
+    """
     tokens = re.split(r"(\d+)", reg_no.strip())
     key_parts: list[tuple[int, int | str]] = []
     for token in tokens:
@@ -1179,52 +1901,7 @@ def _reg_no_sort_key(reg_no: str) -> tuple[tuple[int, int | str], ...]:
     return tuple(key_parts)
 
 
-def _generate_co_attainment_workbook(
-    source_paths: list[Path],
-    output_path: Path,
-    *,
-    token: CancellationToken,
-    thresholds: tuple[float, float, float] | None = None,
-    co_attainment_percent: float | None = None,
-    co_attainment_level: int | None = None,
-) -> _CoAttainmentWorkbookResult:
-    if not source_paths:
-        raise validation_error_from_key(
-            "common.validation_failed_invalid_data",
-            code="COA_SOURCE_WORKBOOK_REQUIRED",
-        )
-
-    first_signature = _extract_final_report_signature(source_paths[0])
-    if first_signature is None:
-        raise validation_error_from_key(
-            "validation.workbook.open_failed",
-            code="WORKBOOK_OPEN_FAILED",
-            workbook=str(source_paths[0]),
-        )
-    try:
-        get_template_strategy(first_signature.template_id)
-    except ValidationError as exc:
-        raise validation_error_from_key(
-            "validation.template.unknown",
-            code="UNKNOWN_TEMPLATE",
-            template_id=first_signature.template_id,
-        ) from exc
-    return generate_workbook(
-        template_id=first_signature.template_id,
-        output_path=output_path,
-        workbook_name=output_path.name,
-        workbook_kind="co_attainment",
-        cancel_token=token,
-        context={
-            "source_paths": [str(path) for path in source_paths],
-            "thresholds": tuple(thresholds) if thresholds is not None else None,
-            "co_attainment_percent": co_attainment_percent,
-            "co_attainment_level": co_attainment_level,
-        },
-    )
-
-
-def _generate_co_attainment_workbook_course_setup_v1(
+def _generate_co_attainment_workbook_course_setup_v2(
     source_paths: list[Path],
     output_path: Path,
     *,
@@ -1235,6 +1912,24 @@ def _generate_co_attainment_workbook_course_setup_v1(
     co_attainment_percent: float | None = None,
     co_attainment_level: int | None = None,
 ) -> _CoAttainmentWorkbookResult:
+    """Generate co attainment workbook course setup v2.
+    
+    Args:
+        source_paths: Parameter value (list[Path]).
+        output_path: Parameter value (Path).
+        token: Parameter value (CancellationToken).
+        total_outcomes: Parameter value (int | None).
+        template_id: Parameter value (str).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float | None).
+        co_attainment_level: Parameter value (int | None).
+    
+    Returns:
+        _CoAttainmentWorkbookResult: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         import xlsxwriter
         from openpyxl import load_workbook
@@ -1309,12 +2004,11 @@ def _generate_co_attainment_workbook_course_setup_v1(
                         pending_rows[co_index] = []
                 for co_index in range(1, resolved_total_outcomes + 1):
                     row_bucket = pending_rows.setdefault(co_index, [])
-                    rows = list(_iter_co_rows_from_workbook(workbook, co_index=co_index, workbook_name=source.name))
-                    direct_name = co_direct_sheet_name(co_index)
-                    indirect_name = co_indirect_sheet_name(co_index)
-                    direct_total = sum(1 for _ in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO))
-                    indirect_total = sum(1 for _ in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO))
-                    dropped_for_sheet = max(0, (direct_total + indirect_total) - (2 * len(rows)))
+                    rows, direct_total, indirect_total, dropped_for_sheet = _iter_co_rows_from_workbook(
+                        workbook,
+                        co_index=co_index,
+                        workbook_name=source.name,
+                    )
                     if dropped_for_sheet:
                         inner_join_drop_count += dropped_for_sheet
                         inner_join_drop_details.append(
@@ -1381,3 +2075,407 @@ def _generate_co_attainment_workbook_course_setup_v1(
         inner_join_drop_details=tuple(inner_join_drop_details),
     )
 
+
+def generate_co_attainment_workbook(
+    source_paths: list[Path],
+    output_path: Path,
+    *,
+    token: CancellationToken,
+    total_outcomes: int | None = None,
+    template_id: str = ID_COURSE_SETUP,
+    thresholds: tuple[float, float, float] | None = None,
+    co_attainment_percent: float | None = None,
+    co_attainment_level: int | None = None,
+) -> _CoAttainmentWorkbookResult:
+    """Generate co attainment workbook.
+    
+    Args:
+        source_paths: Parameter value (list[Path]).
+        output_path: Parameter value (Path).
+        token: Parameter value (CancellationToken).
+        total_outcomes: Parameter value (int | None).
+        template_id: Parameter value (str).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float | None).
+        co_attainment_level: Parameter value (int | None).
+    
+    Returns:
+        _CoAttainmentWorkbookResult: Return value.
+    
+    Raises:
+        None.
+    """
+    if not source_paths:
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COA_SOURCE_WORKBOOK_REQUIRED",
+        )
+    prepared_source_paths: list[Path] = list(source_paths)
+    temp_root_ctx: tempfile.TemporaryDirectory[str] | None = None
+    source_is_final_report: list[bool] = []
+    generated_source_paths: list[Path] = []
+    try:
+        for path in source_paths:
+            token.raise_if_cancelled()
+            is_final_report = extract_final_report_signature_from_path(path) is not None
+            source_is_final_report.append(is_final_report)
+            if is_final_report:
+                continue
+            if temp_root_ctx is None:
+                temp_root_ctx = tempfile.TemporaryDirectory(prefix="focus_co_attainment_src_")
+            output_name = f"co_attainment_source_{len(generated_source_paths) + 1}.xlsx"
+            generated_path = Path(temp_root_ctx.name) / output_name
+            generate_final_report_workbook(
+                filled_marks_path=path,
+                output_path=generated_path,
+                cancel_token=token,
+            )
+            generated_source_paths.append(generated_path)
+        if temp_root_ctx is not None:
+            resolved_paths: list[Path] = []
+            generated_index = 0
+            for original, is_final_report in zip(source_paths, source_is_final_report, strict=True):
+                if is_final_report:
+                    resolved_paths.append(original)
+                else:
+                    resolved_paths.append(generated_source_paths[generated_index])
+                    generated_index += 1
+            prepared_source_paths = resolved_paths
+
+        normalized_template_id = normalize(template_id)
+        if normalized_template_id == normalize("COURSE_SETUP_V2"):
+            return _generate_co_attainment_workbook_course_setup_v2(
+                source_paths=prepared_source_paths,
+                output_path=output_path,
+                token=token,
+                total_outcomes=total_outcomes,
+                template_id="COURSE_SETUP_V2",
+                thresholds=thresholds,
+                co_attainment_percent=co_attainment_percent,
+                co_attainment_level=co_attainment_level,
+            )
+        raise validation_error_from_key(
+            "validation.template.unknown",
+            code="UNKNOWN_TEMPLATE",
+            template_id=template_id,
+        )
+    finally:
+        if temp_root_ctx is not None:
+            temp_root_ctx.cleanup()
+
+
+def generate_final_report_workbook(
+    *,
+    filled_marks_path: Path,
+    output_path: Path,
+    cancel_token: CancellationToken | None = None,
+) -> Path:
+    """Generate final report workbook.
+    
+    Args:
+        filled_marks_path: Parameter value (Path).
+        output_path: Parameter value (Path).
+        cancel_token: Parameter value (CancellationToken | None).
+    
+    Returns:
+        Path: Return value.
+    
+    Raises:
+        None.
+    """
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    if not filled_marks_path.exists():
+        raise validation_error_from_key(
+            "validation.workbook.not_found",
+            code="WORKBOOK_NOT_FOUND",
+            workbook=str(filled_marks_path),
+        )
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise validation_error_from_key(
+            "validation.dependency.openpyxl_missing",
+            code="OPENPYXL_MISSING",
+        ) from exc
+
+    source_wb = openpyxl.load_workbook(filled_marks_path, data_only=False)
+    try:
+        from domain.template_strategy_router import read_template_id_from_system_hash_sheet_if_valid
+
+        template_id = read_template_id_from_system_hash_sheet_if_valid(source_wb) or ID_COURSE_SETUP
+        metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        sheet_specs_by_name = _layout_sheet_specs_by_name(source_wb)
+        total_outcomes = extract_total_outcomes_from_workbook_path(filled_marks_path)
+        if total_outcomes is None:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="COA_TOTAL_OUTCOMES_MISSING",
+            )
+        students_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
+        students_headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
+        students: list[tuple[str, str]] = []
+        if students_sheet_name in source_wb.sheetnames:
+            students_sheet = source_wb[students_sheet_name]
+            header_row = _students_sheet_header_row(
+                sheet_specs_by_name=sheet_specs_by_name,
+                sheet_name=students_sheet_name,
+            )
+            header_map = _header_map_for_row(students_sheet, header_row=header_row)
+            reg_col = _resolve_students_reg_col(header_map=header_map, students_headers=students_headers)
+            name_col = _resolve_students_name_col(header_map=header_map, students_headers=students_headers)
+            if reg_col is not None and name_col is not None:
+                students.extend(
+                    _iter_students_sheet_rows(
+                        students_sheet=students_sheet,
+                        header_row=header_row,
+                        reg_col=reg_col,
+                        name_col=name_col,
+                    )
+                )
+        if not students:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="SHEET_DATA_REQUIRED",
+                sheet_name=students_sheet_name,
+            )
+
+        output_wb = openpyxl.Workbook()
+        default_sheet = output_wb.active
+        if default_sheet is not None and default_sheet.title == "Sheet":
+            output_wb.remove(default_sheet)
+
+        sheet_order: list[str] = []
+        if metadata_sheet_name in source_wb.sheetnames:
+            src_meta = source_wb[metadata_sheet_name]
+            dst_meta = output_wb.create_sheet(metadata_sheet_name)
+            for row in src_meta.iter_rows(min_row=1, max_row=src_meta.max_row, min_col=1, max_col=src_meta.max_column):
+                for cell in row:
+                    dst_meta.cell(row=cell.row, column=cell.column, value=cell.value)
+            sheet_order.append(metadata_sheet_name)
+        direct_total_header = _ratio_total_header(DIRECT_RATIO)
+        indirect_total_header = _ratio_total_header(INDIRECT_RATIO)
+        for co_index in range(1, int(total_outcomes) + 1):
+            direct_target_name = co_direct_sheet_name(co_index)
+            indirect_target_name = co_indirect_sheet_name(co_index)
+            dst_direct = output_wb.create_sheet(direct_target_name)
+            dst_indirect = output_wb.create_sheet(indirect_target_name)
+            dst_direct.cell(row=1, column=1, value=CO_REPORT_HEADER_SERIAL)
+            dst_direct.cell(row=1, column=2, value=CO_REPORT_HEADER_REG_NO)
+            dst_direct.cell(row=1, column=3, value=CO_REPORT_HEADER_STUDENT_NAME)
+            dst_direct.cell(row=1, column=4, value=direct_total_header)
+            dst_indirect.cell(row=1, column=1, value=CO_REPORT_HEADER_SERIAL)
+            dst_indirect.cell(row=1, column=2, value=CO_REPORT_HEADER_REG_NO)
+            dst_indirect.cell(row=1, column=3, value=CO_REPORT_HEADER_STUDENT_NAME)
+            dst_indirect.cell(row=1, column=4, value=indirect_total_header)
+            for row_offset, (reg_no, student_name) in enumerate(students, start=2):
+                serial_value = row_offset - 1
+                dst_direct.cell(row=row_offset, column=1, value=serial_value)
+                dst_direct.cell(row=row_offset, column=2, value=reg_no)
+                dst_direct.cell(row=row_offset, column=3, value=student_name)
+                dst_direct.cell(row=row_offset, column=4, value=0.0)
+                dst_indirect.cell(row=row_offset, column=1, value=serial_value)
+                dst_indirect.cell(row=row_offset, column=2, value=reg_no)
+                dst_indirect.cell(row=row_offset, column=3, value=student_name)
+                dst_indirect.cell(row=row_offset, column=4, value=0.0)
+            sheet_order.extend([direct_target_name, indirect_target_name])
+
+        hash_sheet = output_wb.create_sheet(SYSTEM_HASH_SHEET)
+        template_hash = sign_payload(template_id)
+        hash_sheet.cell(row=1, column=1, value=SYSTEM_HASH_TEMPLATE_ID_HEADER)
+        hash_sheet.cell(row=1, column=2, value=SYSTEM_HASH_TEMPLATE_HASH_HEADER)
+        hash_sheet.cell(row=2, column=1, value=template_id)
+        hash_sheet.cell(row=2, column=2, value=template_hash)
+        hash_sheet.sheet_state = "hidden"
+
+        manifest_sheet_order = list(sheet_order) + [SYSTEM_HASH_SHEET]
+        manifest = {
+            "schema_version": WORKBOOK_INTEGRITY_SCHEMA_VERSION,
+            "template_id": template_id,
+            "template_hash": template_hash,
+            "sheet_order": manifest_sheet_order,
+            "sheets": [{"name": name, "hash": sign_payload(name)} for name in manifest_sheet_order],
+        }
+        manifest_text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        manifest_hash = sign_payload(manifest_text)
+        layout_sheet = output_wb.create_sheet(SYSTEM_LAYOUT_SHEET)
+        layout_sheet.cell(row=1, column=1, value=SYSTEM_LAYOUT_MANIFEST_HEADER)
+        layout_sheet.cell(row=1, column=2, value=SYSTEM_LAYOUT_MANIFEST_HASH_HEADER)
+        layout_sheet.cell(row=2, column=1, value=manifest_text)
+        layout_sheet.cell(row=2, column=2, value=manifest_hash)
+        layout_sheet.sheet_state = "hidden"
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_wb.save(output_path)
+        output_wb.close()
+        return output_path
+    finally:
+        source_wb.close()
+
+
+def extract_total_outcomes_from_workbook_path(path: Path) -> int | None:
+    """Extract total outcomes from workbook path.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        int | None: Return value.
+    
+    Raises:
+        None.
+    """
+    try:
+        import openpyxl
+    except Exception:
+        return None
+    try:
+        workbook = openpyxl.load_workbook(path, data_only=False, read_only=True)
+    except Exception:
+        return None
+    try:
+        try:
+            from domain.template_strategy_router import read_template_id_from_system_hash_sheet_if_valid
+
+            template_id = read_template_id_from_system_hash_sheet_if_valid(workbook) or ID_COURSE_SETUP
+        except Exception:
+            template_id = ID_COURSE_SETUP
+        metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        if metadata_sheet_name not in workbook.sheetnames:
+            return None
+        metadata = _extract_course_metadata_fields(workbook[metadata_sheet_name])
+        parsed = coerce_excel_number(metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), ""))
+        if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+            value = int(parsed)
+            return value if value > 0 else None
+    finally:
+        workbook.close()
+    return None
+
+
+def _extract_students_from_report_sheets_for_template(workbook: Any, *, template_id: str) -> set[str]:
+    """Extract students from report sheets for template.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+    
+    Returns:
+        set[str]: Return value.
+    
+    Raises:
+        None.
+    """
+    unique_students: set[str] = set()
+    students_headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
+    accepted_reg_headers = {
+        normalize(CO_REPORT_HEADER_REG_NO),
+        normalize(students_headers[0]),
+    }
+    try:
+        sheets = getattr(workbook, "worksheets", [])
+    except Exception:
+        return unique_students
+    for sheet in sheets:
+        if sheet is None:
+            continue
+        title = str(getattr(sheet, "title", "") or "")
+        if title in {SYSTEM_HASH_SHEET, SYSTEM_LAYOUT_SHEET, COURSE_METADATA_SHEET}:
+            continue
+        max_row = int(getattr(sheet, "max_row", 0) or 0)
+        max_col = int(getattr(sheet, "max_column", 0) or 0)
+        if max_row <= 0 or max_col <= 0:
+            continue
+        scan_rows = min(max_row, 30)
+        scan_cols = min(max_col, 80)
+        reg_col: int | None = None
+        header_row = 0
+        for row in range(1, scan_rows + 1):
+            for col in range(1, scan_cols + 1):
+                key = normalize(sheet.cell(row=row, column=col).value)
+                if key in accepted_reg_headers:
+                    reg_col = col
+                    header_row = row
+                    break
+            if reg_col is not None:
+                break
+        if reg_col is None:
+            continue
+        for row in range(header_row + 1, max_row + 1):
+            reg_raw = sheet.cell(row=row, column=reg_col).value
+            coerced = coerce_excel_number(reg_raw)
+            reg_text = str(coerced).strip() if coerced is not None else ""
+            if reg_text:
+                unique_students.add(normalize(reg_text))
+    return unique_students
+
+
+def extract_course_metadata_and_students_from_workbook_path(path: Path) -> tuple[set[str], dict[str, str]]:
+    """Extract course metadata and students from workbook path.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        tuple[set[str], dict[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
+    try:
+        import openpyxl
+    except Exception:
+        return set(), {}
+    try:
+        workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    except Exception:
+        return set(), {}
+    unique_students: set[str] = set()
+    metadata_map: dict[str, str] = {}
+    try:
+        template_id = ID_COURSE_SETUP
+        try:
+            template_id = read_valid_template_id_from_system_hash_sheet(workbook)
+        except Exception:
+            fallback_id = read_template_id_from_system_hash_sheet_if_valid(workbook)
+            if isinstance(fallback_id, str) and fallback_id.strip():
+                template_id = fallback_id
+        metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+        students_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
+        students_headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_STUDENTS)
+
+        if metadata_sheet_name in workbook.sheetnames:
+            metadata_map = _extract_course_metadata_fields(workbook[metadata_sheet_name])
+
+        if students_sheet_name in workbook.sheetnames:
+            students_sheet = workbook[students_sheet_name]
+            sheet_specs_by_name = _layout_sheet_specs_by_name(workbook)
+            header_row = _students_sheet_header_row(
+                sheet_specs_by_name=sheet_specs_by_name,
+                sheet_name=students_sheet_name,
+            )
+            header_map = _header_map_for_row(students_sheet, header_row=header_row)
+            reg_col = _resolve_students_reg_col(header_map=header_map, students_headers=students_headers)
+            if reg_col is not None:
+                for reg_no, _student_name in _iter_students_sheet_rows(
+                    students_sheet=students_sheet,
+                    header_row=header_row,
+                    reg_col=reg_col,
+                    name_col=3,
+                ):
+                    unique_students.add(normalize(reg_no))
+        if not unique_students:
+            unique_students = _extract_students_from_report_sheets_for_template(workbook, template_id=template_id)
+    finally:
+        workbook.close()
+    return unique_students, metadata_map
+
+
+__all__ = [
+    "FinalReportWorkbookSignature",
+    "extract_course_metadata_and_students_from_workbook_path",
+    "extract_final_report_signature_from_path",
+    "extract_total_outcomes_from_workbook_path",
+    "generate_final_report_workbook",
+    "generate_co_attainment_workbook",
+]

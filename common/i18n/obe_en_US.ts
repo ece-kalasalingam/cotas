@@ -206,172 +206,160 @@ Cohort Mismatch: {cohort_mismatch}</translation>
       <translation>Drag and drop, or press Ctrl + O, or single-click to add files</translation>
     </message>
     <message>
-      <source>coordinator.calculate</source>
+      <source>co_analysis.calculate</source>
       <translation>Calculate CO Attainment</translation>
     </message>
     <message>
-      <source>coordinator.clear_all</source>
+      <source>co_analysis.clear_all</source>
       <translation>Clear All</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.description</source>
+      <source>co_analysis.co_attainment.description</source>
       <translation>Attained if the following % of students are at level fixed and above.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.invalid_percent</source>
+      <source>co_analysis.co_attainment.invalid_percent</source>
       <translation>Invalid CO AT%: value must be between 0 and 100.</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.level.label</source>
+      <source>co_analysis.co_attainment.level.label</source>
       <translation>CO AT Level:</translation>
     </message>
     <message>
-      <source>coordinator.co_attainment.percent.label</source>
+      <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
     <message>
-      <source>coordinator.dialog.title</source>
+      <source>co_analysis.dialog.title</source>
       <translation>Select Excel Files</translation>
     </message>
     <message>
-      <source>coordinator.drop_hint</source>
+      <source>co_analysis.drop_hint</source>
       <translation>Upload the Marks Filled workbooks.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.body</source>
+      <source>co_analysis.duplicate.body</source>
       <translation>{count} duplicate file(s) were skipped because they already exist in the list.</translation>
     </message>
     <message>
-      <source>coordinator.duplicate.title</source>
+      <source>co_analysis.duplicate.title</source>
       <translation>File Already Exists</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_fallback</source>
+      <source>co_analysis.file.remove_fallback</source>
       <translation>Remove</translation>
     </message>
     <message>
-      <source>coordinator.file.remove_tooltip</source>
+      <source>co_analysis.file.remove_tooltip</source>
       <translation>Remove File</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.body</source>
+      <source>co_analysis.invalid_final_report.body</source>
       <translation>Only Final CO report workbooks generated from Instructor Step 2 are allowed.
 
 {files}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.detail_line</source>
+      <source>co_analysis.invalid_final_report.detail_line</source>
       <translation>{file}: {reason}</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.details_prefix</source>
+      <source>co_analysis.invalid_final_report.details_prefix</source>
       <translation>Details:</translation>
     </message>
     <message>
-      <source>coordinator.invalid_final_report.title</source>
+      <source>co_analysis.invalid_final_report.title</source>
       <translation>Invalid Final CO Report</translation>
     </message>
     <message>
-      <source>coordinator.join_drop.body</source>
+      <source>co_analysis.join_drop.body</source>
       <translation>Some rows were ignored because they existed only in Direct or only in Indirect sheets. Dropped rows: {count}. See activity log for details.</translation>
     </message>
     <message>
-      <source>coordinator.links.downloaded_output</source>
+      <source>co_analysis.links.downloaded_output</source>
       <translation>Downloaded Output</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.body</source>
+      <source>co_analysis.regno_dedup.body</source>
       <translation>{count} duplicate register number entr(ies) were removed while generating CO attainment.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_body</source>
+      <source>co_analysis.regno_dedup.log_body</source>
       <translation>{count} duplicate register number entr(ies) were removed:
 {details}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail</source>
+      <source>co_analysis.regno_dedup.log_detail</source>
       <translation>Reg No: {reg_no} | Worksheet: {worksheet} | Workbook: {workbook}</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.log_detail_unavailable</source>
+      <source>co_analysis.regno_dedup.log_detail_unavailable</source>
       <translation>Duplicate entry details are unavailable.</translation>
     </message>
     <message>
-      <source>coordinator.regno_dedup.title</source>
+      <source>co_analysis.regno_dedup.title</source>
       <translation>Duplicate Register Numbers Removed</translation>
     </message>
     <message>
-      <source>coordinator.status.added</source>
+      <source>co_analysis.status.added</source>
       <translation>{added} file(s) added. Total: {total}.</translation>
     </message>
     <message>
-      <source>coordinator.status.calculate_completed</source>
+      <source>co_analysis.status.calculate_completed</source>
       <translation>CO attainment calculation completed and output workbook generated.</translation>
     </message>
     <message>
-      <source>coordinator.status.cleared</source>
+      <source>co_analysis.status.cleared</source>
       <translation>{count} file(s) cleared.</translation>
     </message>
     <message>
-      <source>coordinator.status.ignored</source>
+      <source>co_analysis.status.ignored</source>
       <translation>{count} file(s) were ignored (unsupported type, missing, duplicate, or invalid final report workbook).</translation>
     </message>
     <message>
-      <source>coordinator.status.operation_cancelled</source>
-      <translation>Coordinator processing cancelled.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_completed</source>
-      <translation>Coordinator processing completed.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_failed</source>
-      <translation>Coordinator processing failed.</translation>
-    </message>
-    <message>
-      <source>coordinator.status.processing_started</source>
+      <source>co_analysis.status.processing_started</source>
       <translation>Processing selected files...</translation>
     </message>
     <message>
-      <source>coordinator.status.queued</source>
+      <source>co_analysis.status.queued</source>
       <translation>{count} file(s) queued while current processing is running.</translation>
     </message>
     <message>
-      <source>coordinator.status.removed</source>
+      <source>co_analysis.status.removed</source>
       <translation>{count} file(s) removed.</translation>
     </message>
     <message>
-      <source>coordinator.summary</source>
+      <source>co_analysis.summary</source>
       <translation>Files: {count}</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.description</source>
+      <source>co_analysis.thresholds.description</source>
       <translation>- L1 Threshold - pass mark of the course or course average for the 3 batches offered in the previous regulation.
 - L2 Threshold - First Class.
 - L3 Threshold - Distinction Class.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.invalid_rule</source>
+      <source>co_analysis.thresholds.invalid_rule</source>
       <translation>Invalid thresholds: 0 &lt; L1 &lt; L2 &lt; L3 &lt; 100 is required.</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l1.label</source>
+      <source>co_analysis.thresholds.l1.label</source>
       <translation>L1 Threshold:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l2.label</source>
+      <source>co_analysis.thresholds.l2.label</source>
       <translation>L2 Threshold:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.l3.label</source>
+      <source>co_analysis.thresholds.l3.label</source>
       <translation>L3 Threshold:</translation>
     </message>
     <message>
-      <source>coordinator.thresholds.title</source>
+      <source>co_analysis.thresholds.title</source>
       <translation>CO Attainment Thresholds</translation>
     </message>
     <message>
-      <source>coordinator.title</source>
+      <source>co_analysis.title</source>
       <translation>Course Attainment</translation>
     </message>
     <message>
@@ -1044,10 +1032,6 @@ Cohort Mismatch: {cohort_mismatch}</translation>
       <translation>CO Analysis</translation>
     </message>
     <message>
-      <source>module.coordinator_short</source>
-      <translation>Coordinator</translation>
-    </message>
-    <message>
       <source>module.instructor</source>
       <translation>Instructor</translation>
     </message>
@@ -1112,6 +1096,10 @@ Details: {error}</translation>
     <message>
       <source>status.ready</source>
       <translation>Ready</translation>
+    </message>
+    <message>
+      <source>status.processing</source>
+      <translation>Processing</translation>
     </message>
     <message>
       <source>toolbar.navigation</source>
@@ -1315,4 +1303,7 @@ Details: {error}</translation>
     </message>
   </context>
 </TS>
+
+
+
 

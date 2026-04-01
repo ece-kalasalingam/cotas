@@ -16,6 +16,17 @@ from common.registry import (
 )
 
 def _sheet_name_or_none(sheet_key: str) -> str | None:
+    """Sheet name or none.
+    
+    Args:
+        sheet_key: Parameter value (str).
+    
+    Returns:
+        str | None: Return value.
+    
+    Raises:
+        None.
+    """
     sheet = get_sheet_schema_by_key(ID_COURSE_SETUP, sheet_key)
     if sheet is None:
         return None

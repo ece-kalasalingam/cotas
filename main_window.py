@@ -8,9 +8,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -210,6 +212,43 @@ class MainWindow(QMainWindow):
         # ----------------------------
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(t("status.ready"))
+        self._global_processing_depth = 0
+        self._global_processing_tick = 0
+        self._global_processing_pulse_colors = ("#2F6FEB", "#3B82F6", "#60A5FA", "#3B82F6")
+        self._global_processing_indicator = QLabel(self)
+        self._global_processing_indicator.setObjectName("globalProcessingIndicator")
+        self._global_processing_indicator.setVisible(False)
+        self._global_processing_indicator.setMinimumWidth(150)
+        self.statusBar().addPermanentWidget(self._global_processing_indicator)
+        self._global_processing_status_bar = QProgressBar(self)
+        self._global_processing_status_bar.setObjectName("globalProcessingStatusBar")
+        self._global_processing_status_bar.setRange(0, 0)
+        self._global_processing_status_bar.setTextVisible(False)
+        self._global_processing_status_bar.setFixedWidth(96)
+        self._global_processing_status_bar.setVisible(False)
+        self.statusBar().addPermanentWidget(self._global_processing_status_bar)
+        self._global_processing_overlay_bar = QProgressBar(self)
+        self._global_processing_overlay_bar.setObjectName("globalProcessingOverlayBar")
+        self._global_processing_overlay_bar.setRange(0, 0)
+        self._global_processing_overlay_bar.setTextVisible(False)
+        self._global_processing_overlay_bar.setFixedWidth(96)
+        self._global_processing_overlay_bar.setFixedHeight(8)
+        self._global_processing_overlay_bar.setVisible(False)
+        self._global_processing_overlay_bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._global_processing_overlay_bar.setStyleSheet(
+            "QProgressBar#globalProcessingOverlayBar {"
+            " border: 1px solid rgba(120, 170, 255, 180);"
+            " border-radius: 4px;"
+            " background: rgba(20, 30, 48, 120);"
+            "}"
+            "QProgressBar#globalProcessingOverlayBar::chunk {"
+            " background-color: #60A5FA;"
+            " border-radius: 3px;"
+            "}"
+        )
+        self._global_processing_timer = QTimer(self)
+        self._global_processing_timer.setInterval(220)
+        self._global_processing_timer.timeout.connect(self._on_global_processing_timer)
         self.language_status_button = QPushButton(self)
         self.language_status_button.setFlat(True)
         self.language_status_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -270,7 +309,7 @@ class MainWindow(QMainWindow):
         if callable(set_shared_mode):
             set_shared_mode(shared_enabled)
         self._refresh_shared_outputs_html()
-        self.statusBar().showMessage(t("status.ready"))
+        self._restore_status_message()
 
     def _load_module_by_key(self, key: str) -> None:
         spec = self._module_specs_by_key.get(key)
@@ -294,8 +333,17 @@ class MainWindow(QMainWindow):
         self.load_module(module_class)
     
     def flash_status(self, message: str, timeout: int = STATUS_FLASH_TIMEOUT_MS):
+        if self._global_processing_depth > 0:
+            self._update_global_processing_indicator_text()
+            return
         self.statusBar().showMessage(message)
-        QTimer.singleShot(timeout, lambda: self.statusBar().showMessage(t("status.ready")))
+        QTimer.singleShot(timeout, self._restore_status_message)
+
+    def _restore_status_message(self) -> None:
+        if self._global_processing_depth > 0:
+            self._update_global_processing_indicator_text()
+            return
+        self.statusBar().showMessage(t("status.ready"))
 
     def _refresh_language_switcher(self) -> None:
         preferred = get_ui_language_preference(APP_NAME)
@@ -357,13 +405,16 @@ class MainWindow(QMainWindow):
                 refresh()
 
         self._refresh_shared_outputs_html()
-        self.statusBar().showMessage(t("status.ready"))
+        self._update_global_processing_indicator_text()
+        self._restore_status_message()
 
     def _refresh_shared_activity_texts(self) -> None:
         self.shared_info_tabs.setTabText(0, t("activity.log.title"))
         self.shared_info_tabs.setTabText(1, t("outputs.title"))
 
     def _on_module_status_changed(self, message: str) -> None:
+        if self._global_processing_depth > 0:
+            self._global_processing_tick += 1
         self.flash_status(resolve_status_message(message))
         self._append_shared_activity_log(message)
         self._refresh_shared_outputs_html()
@@ -419,6 +470,63 @@ class MainWindow(QMainWindow):
     def set_language_switch_enabled(self, enabled: bool) -> None:
         self.language_status_button.setEnabled(enabled)
         self.language_menu.setEnabled(enabled)
+
+    def set_global_processing_active(self, active: bool) -> None:
+        if active:
+            self._global_processing_depth += 1
+        else:
+            self._global_processing_depth = max(0, self._global_processing_depth - 1)
+
+        is_processing = self._global_processing_depth > 0
+        self._global_processing_indicator.setVisible(is_processing)
+        self._global_processing_status_bar.setVisible(is_processing)
+        self._global_processing_overlay_bar.setVisible(is_processing)
+        if is_processing:
+            if not self._global_processing_timer.isActive():
+                self._global_processing_tick = 0
+                self._global_processing_timer.start()
+            self._update_global_processing_indicator_text()
+            self._position_global_processing_overlay()
+            return
+
+        self._global_processing_timer.stop()
+        self._global_processing_tick = 0
+        self._global_processing_indicator.clear()
+        self._global_processing_overlay_bar.setValue(0)
+        self._global_processing_indicator.setStyleSheet("")
+        self._restore_status_message()
+
+    def _on_global_processing_timer(self) -> None:
+        self._global_processing_tick += 1
+        self._update_global_processing_indicator_text()
+
+    def _update_global_processing_indicator_text(self) -> None:
+        if self._global_processing_depth <= 0:
+            return
+        color = self._global_processing_pulse_colors[
+            self._global_processing_tick % len(self._global_processing_pulse_colors)
+        ]
+        dots = "." * ((self._global_processing_tick % 3) + 1)
+        self._global_processing_indicator.setStyleSheet(
+            f"QLabel#globalProcessingIndicator {{ color: {color}; font-weight: 600; }}"
+        )
+        text = f"{t('status.processing')}{dots}"
+        self._global_processing_indicator.setText(text)
+        self.statusBar().showMessage(text)
+        self._position_global_processing_overlay()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._position_global_processing_overlay()
+
+    def _position_global_processing_overlay(self) -> None:
+        if not self._global_processing_overlay_bar.isVisible():
+            return
+        margin = 14
+        bar_x = max(margin, self.width() - self._global_processing_overlay_bar.width() - margin)
+        bar_y = margin
+        self._global_processing_overlay_bar.move(bar_x, bar_y)
+        self._global_processing_overlay_bar.raise_()
 
 
 

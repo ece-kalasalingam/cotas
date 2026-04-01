@@ -41,8 +41,8 @@ _XLSXWRITER_PROTECT_OPTIONS = {
     "select_unlocked_cells": ALLOW_SELECT_UNLOCKED,
 }
 
-def _course_setup_v1_style_provider() -> _STYLE_PROVIDER_TEMPLATE:
-    """Fallback style provider for COURSE_SETUP_V1 when blueprint lookup is unavailable."""
+def _course_setup_v2_style_provider() -> _STYLE_PROVIDER_TEMPLATE:
+    """Fallback style provider for COURSE_SETUP_V2 when blueprint lookup is unavailable."""
     return (
         {
             "bold": True,
@@ -59,11 +59,22 @@ def _course_setup_v1_style_provider() -> _STYLE_PROVIDER_TEMPLATE:
 
 
 _TEMPLATE_STYLE_PROVIDERS: dict[str, _STYLE_PROVIDER_FN] = {
-    ID_COURSE_SETUP: _course_setup_v1_style_provider,
+    ID_COURSE_SETUP: _course_setup_v2_style_provider,
 }
 
 
 def _resolve_effective_template_id(template_id: str | None) -> str:
+    """Resolve effective template id.
+    
+    Args:
+        template_id: Parameter value (str | None).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     effective = (template_id or ID_COURSE_SETUP).strip()
     if not effective:
         raise ConfigurationError("Template id is required for style resolution.")
@@ -71,6 +82,17 @@ def _resolve_effective_template_id(template_id: str | None) -> str:
 
 
 def _style_registry_from_blueprint(template_id: str) -> _STYLE_PROVIDER_TEMPLATE | None:
+    """Style registry from blueprint.
+    
+    Args:
+        template_id: Parameter value (str).
+    
+    Returns:
+        _STYLE_PROVIDER_TEMPLATE | None: Return value.
+    
+    Raises:
+        None.
+    """
     blueprint = BLUEPRINT_REGISTRY.get(template_id)
     if blueprint is None:
         return None
@@ -85,6 +107,17 @@ def _style_registry_from_blueprint(template_id: str) -> _STYLE_PROVIDER_TEMPLATE
 
 
 def style_registry_for_template(template_id: str | None = None) -> _STYLE_PROVIDER_TEMPLATE:
+    """Style registry for template.
+    
+    Args:
+        template_id: Parameter value (str | None).
+    
+    Returns:
+        _STYLE_PROVIDER_TEMPLATE: Return value.
+    
+    Raises:
+        None.
+    """
     effective_template_id = _resolve_effective_template_id(template_id)
     from_blueprint = _style_registry_from_blueprint(effective_template_id)
     if from_blueprint is not None:
@@ -97,6 +130,17 @@ def style_registry_for_template(template_id: str | None = None) -> _STYLE_PROVID
 
 
 def thin_border() -> Any:
+    """Thin border.
+    
+    Args:
+        None.
+    
+    Returns:
+        Any: Return value.
+    
+    Raises:
+        None.
+    """
     from openpyxl.styles import Border, Side
 
     thin = Side(style=_BORDER_THIN, color=_BORDER_COLOR_BLACK)
@@ -104,10 +148,32 @@ def thin_border() -> Any:
 
 
 def color_without_hash(color: str) -> str:
+    """Color without hash.
+    
+    Args:
+        color: Parameter value (str).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     return color[1:] if color.startswith("#") else color
 
 
 def excel_col_name(col_index_1_based: int) -> str:
+    """Excel col name.
+    
+    Args:
+        col_index_1_based: Parameter value (int).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     index = col_index_1_based
     label = ""
     while index > 0:
@@ -117,6 +183,18 @@ def excel_col_name(col_index_1_based: int) -> str:
 
 
 def autosize_columns(ws: Any, max_col: int) -> None:
+    """Autosize columns.
+    
+    Args:
+        ws: Parameter value (Any).
+        max_col: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     sampled_max_row = min(int(ws.max_row), _AUTOSIZE_SAMPLE_ROWS)
     if sampled_max_row <= 0:
         for col in range(1, max_col + 1):
@@ -152,6 +230,21 @@ def compute_sampled_column_widths(
     max_width: int = _COLUMN_MAX_WIDTH,
     padding: int = _COLUMN_WIDTH_PADDING,
 ) -> dict[int, int]:
+    """Compute sampled column widths.
+    
+    Args:
+        sample_rows: Parameter value (Sequence[Sequence[Any]]).
+        last_col: Parameter value (int).
+        min_width: Parameter value (int).
+        max_width: Parameter value (int).
+        padding: Parameter value (int).
+    
+    Returns:
+        dict[int, int]: Return value.
+    
+    Raises:
+        None.
+    """
     widths: dict[int, int] = {}
     for col_index in range(last_col + 1):
         max_len = 0
@@ -170,6 +263,18 @@ def compute_sampled_column_widths(
 
 
 def set_header_selected_cell(ws: Any, header_row: int) -> None:
+    """Set header selected cell.
+    
+    Args:
+        ws: Parameter value (Any).
+        header_row: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     active = f"{_HEADER_ACTIVE_COLUMN}{header_row}"
     ws.sheet_view.selection[0].activeCell = active
     ws.sheet_view.selection[0].sqref = active
@@ -183,6 +288,21 @@ def apply_sheet_layout_and_protection(
     paper_size: Any,
     orientation: Any,
 ) -> None:
+    """Apply sheet layout and protection.
+    
+    Args:
+        ws: Parameter value (Any).
+        header_row: Parameter value (int).
+        header_count: Parameter value (int).
+        paper_size: Parameter value (Any).
+        orientation: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     from openpyxl.worksheet.properties import PageSetupProperties
 
     ws.freeze_panes = ws.cell(row=header_row + 1, column=4)
@@ -197,6 +317,18 @@ def apply_sheet_layout_and_protection(
 
 
 def build_xlsxwriter_header_format(workbook: Any, header_style: dict[str, Any]) -> Any:
+    """Build xlsxwriter header format.
+    
+    Args:
+        workbook: Parameter value (Any).
+        header_style: Parameter value (dict[str, Any]).
+    
+    Returns:
+        Any: Return value.
+    
+    Raises:
+        None.
+    """
     return workbook.add_format(
         {
             "bold": bool(header_style.get("bold", True)),
@@ -209,6 +341,18 @@ def build_xlsxwriter_header_format(workbook: Any, header_style: dict[str, Any]) 
 
 
 def build_xlsxwriter_body_format(workbook: Any, body_style: dict[str, Any]) -> Any:
+    """Build xlsxwriter body format.
+    
+    Args:
+        workbook: Parameter value (Any).
+        body_style: Parameter value (dict[str, Any]).
+    
+    Returns:
+        Any: Return value.
+    
+    Raises:
+        None.
+    """
     return workbook.add_format(
         {
             "locked": bool(body_style.get("locked", False)),
@@ -225,6 +369,21 @@ def build_template_xlsxwriter_formats(
     include_column_wrap: bool = False,
     normalize_header_valign_to_center: bool = False,
 ) -> dict[str, Any]:
+    """Build template xlsxwriter formats.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str | None).
+        cache_attr: Parameter value (str | None).
+        include_column_wrap: Parameter value (bool).
+        normalize_header_valign_to_center: Parameter value (bool).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     if cache_attr:
         cached = getattr(workbook, cache_attr, None)
         if isinstance(cached, dict):
@@ -298,6 +457,21 @@ def build_marks_template_xlsxwriter_formats(
     include_column_wrap: bool = False,
     normalize_header_valign_to_center: bool = False,
 ) -> dict[str, Any]:
+    """Build marks template xlsxwriter formats.
+    
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str | None).
+        cache_attr: Parameter value (str | None).
+        include_column_wrap: Parameter value (bool).
+        normalize_header_valign_to_center: Parameter value (bool).
+    
+    Returns:
+        dict[str, Any]: Return value.
+    
+    Raises:
+        None.
+    """
     if cache_attr:
         cached = getattr(workbook, cache_attr, None)
         if isinstance(cached, dict):
@@ -365,6 +539,21 @@ def apply_xlsxwriter_layout(
     landscape: bool,
     selection_col: int = 0,
 ) -> None:
+    """Apply xlsxwriter layout.
+    
+    Args:
+        ws: Parameter value (Any).
+        header_row_index: Parameter value (int).
+        paper_size: Parameter value (int).
+        landscape: Parameter value (bool).
+        selection_col: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     apply_xlsxwriter_page_setup(
         ws,
         paper_size=paper_size,
@@ -385,6 +574,22 @@ def apply_xlsxwriter_page_setup(
     fit_height: int = 0,
     margins: tuple[float, float, float, float] | None = None,
 ) -> None:
+    """Apply xlsxwriter page setup.
+    
+    Args:
+        ws: Parameter value (Any).
+        paper_size: Parameter value (int).
+        landscape: Parameter value (bool).
+        fit_width: Parameter value (int).
+        fit_height: Parameter value (int).
+        margins: Parameter value (tuple[float, float, float, float] | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if landscape:
         ws.set_landscape()
     else:
@@ -404,6 +609,21 @@ def apply_xlsxwriter_column_widths(
     wrap_columns: Sequence[int] = (),
     wrap_format: Any | None = None,
 ) -> None:
+    """Apply xlsxwriter column widths.
+    
+    Args:
+        ws: Parameter value (Any).
+        widths: Parameter value (dict[int, int]).
+        default_width: Parameter value (int).
+        wrap_columns: Parameter value (Sequence[int]).
+        wrap_format: Parameter value (Any | None).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     max_col = max(widths.keys(), default=-1)
     wrap_set = set(wrap_columns)
     for col in range(0, max_col + 1):
@@ -427,6 +647,26 @@ def apply_xlsxwriter_sheet_frame(
     margins: tuple[float, float, float, float] | None = None,
     protect: bool = True,
 ) -> None:
+    """Apply xlsxwriter sheet frame.
+    
+    Args:
+        ws: Parameter value (Any).
+        repeat_last_row: Parameter value (int).
+        freeze_row: Parameter value (int).
+        freeze_col: Parameter value (int).
+        select_row: Parameter value (int).
+        select_col: Parameter value (int).
+        paper_size: Parameter value (int).
+        landscape: Parameter value (bool).
+        margins: Parameter value (tuple[float, float, float, float] | None).
+        protect: Parameter value (bool).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     apply_xlsxwriter_viewport(
         ws,
         repeat_last_row=repeat_last_row,
@@ -456,6 +696,22 @@ def apply_xlsxwriter_viewport(
     select_row: int | None = None,
     select_col: int = 0,
 ) -> None:
+    """Apply xlsxwriter viewport.
+    
+    Args:
+        ws: Parameter value (Any).
+        repeat_last_row: Parameter value (int | None).
+        freeze_row: Parameter value (int | None).
+        freeze_col: Parameter value (int).
+        select_row: Parameter value (int | None).
+        select_col: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if isinstance(repeat_last_row, int):
         ws.repeat_rows(0, repeat_last_row)
     if isinstance(freeze_row, int):
@@ -474,6 +730,23 @@ def set_two_column_metadata_widths(
     col2_index: int,
     default_width: int = 8,
 ) -> None:
+    """Set two column metadata widths.
+    
+    Args:
+        ws: Parameter value (Any).
+        col1_title: Parameter value (str).
+        col2_title: Parameter value (str).
+        rows: Parameter value (Sequence[tuple[Any, Any]]).
+        col1_index: Parameter value (int).
+        col2_index: Parameter value (int).
+        default_width: Parameter value (int).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     sample_rows: list[list[Any]] = [["", col1_title, col2_title]]
     sample_rows.extend(["", field, value] for field, value in rows)
     widths = compute_sampled_column_widths(sample_rows, 2)
@@ -482,6 +755,17 @@ def set_two_column_metadata_widths(
 
 
 def protect_openpyxl_sheet(ws: Any) -> None:
+    """Protect openpyxl sheet.
+    
+    Args:
+        ws: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ensure_workbook_secret_policy()
     ws.protection.sheet = True
     ws.protection.password = get_workbook_password()
@@ -492,11 +776,34 @@ def protect_openpyxl_sheet(ws: Any) -> None:
 
 
 def protect_xlsxwriter_sheet(ws: Any) -> None:
+    """Protect xlsxwriter sheet.
+    
+    Args:
+        ws: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     ensure_workbook_secret_policy()
     ws.protect(get_workbook_password(), dict(_XLSXWRITER_PROTECT_OPTIONS))
 
 
 def copy_openpyxl_sheet(source_sheet: Any, target_sheet: Any) -> None:
+    """Copy openpyxl sheet.
+    
+    Args:
+        source_sheet: Parameter value (Any).
+        target_sheet: Parameter value (Any).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     source = source_sheet
     target = target_sheet
     for row in source.iter_rows(min_row=1, max_row=source.max_row, min_col=1, max_col=source.max_column):
@@ -525,6 +832,19 @@ def copy_openpyxl_cell_style(
     *,
     include_extended_style: bool = False,
 ) -> None:
+    """Copy openpyxl cell style.
+    
+    Args:
+        source_cell: Parameter value (Any).
+        target_cell: Parameter value (Any).
+        include_extended_style: Parameter value (bool).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if source_cell.has_style:
         target_cell._style = copy(source_cell._style)
     if source_cell.number_format:
@@ -550,6 +870,20 @@ def find_header_row_by_value(
     header_col: int = 1,
     max_scan_rows: int = 300,
 ) -> int:
+    """Find header row by value.
+    
+    Args:
+        sheet: Parameter value (Any).
+        header_value: Parameter value (str).
+        header_col: Parameter value (int).
+        max_scan_rows: Parameter value (int).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     upper = min(max_scan_rows, int(sheet.max_row))
     wanted = normalize(header_value)
     for row in range(1, upper + 1):

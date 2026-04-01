@@ -28,11 +28,11 @@ from PySide6.QtWidgets import (
 
 from common.removable_file_item_widget import RemovableFileItemWidget
 from common.ui_stylings import (
-    COORDINATOR_DROP_LIST_ITEM_SPACING,
-    COORDINATOR_DROP_ZONE_LAYOUT_MARGINS,
-    COORDINATOR_DROP_ZONE_LAYOUT_SPACING,
-    COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
-    COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
+    DROP_LIST_ITEM_SPACING,
+    DROP_ZONE_LAYOUT_MARGINS,
+    DROP_ZONE_LAYOUT_SPACING,
+    DROP_LIST_PLACEHOLDER_BOTTOM_MARGINS,
+    DROP_LIST_PLACEHOLDER_TEXT_MARGINS,
 )
 
 
@@ -51,6 +51,20 @@ class DragDropFileList(QListWidget):
         item_spacing: int = 0,
         drop_mode: Literal["single", "multiple"] = "multiple",
     ) -> None:
+        """Init.
+        
+        Args:
+            placeholder_margins: Parameter value (tuple[int, int, int, int]).
+            placeholder_bottom_margins: Parameter value (tuple[int, int, int, int] | None).
+            item_spacing: Parameter value (int).
+            drop_mode: Parameter value (Literal['single', 'multiple']).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__()
         self._placeholder_text = self.DEFAULT_PLACEHOLDER_TEXT
         self._placeholder_margins = placeholder_margins
@@ -83,10 +97,32 @@ class DragDropFileList(QListWidget):
         viewport.setAutoFillBackground(True)
 
     def set_placeholder_text(self, text: str) -> None:
+        """Set placeholder text.
+        
+        Args:
+            text: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._placeholder_text = text
         self.viewport().update()
 
     def paintEvent(self, event) -> None:
+        """Paintevent.
+        
+        Args:
+            event: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().paintEvent(event)
         if not self._placeholder_text:
             return
@@ -102,6 +138,17 @@ class DragDropFileList(QListWidget):
         painter.end()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Dragenterevent.
+        
+        Args:
+            event: Parameter value (QDragEnterEvent).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         event_source = getattr(event, "source", None)
         source = event_source() if callable(event_source) else None
         if self._drop_mode == "multiple" and source is self:
@@ -114,6 +161,17 @@ class DragDropFileList(QListWidget):
         event.ignore()
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        """Dragmoveevent.
+        
+        Args:
+            event: Parameter value (QDragMoveEvent).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         event_source = getattr(event, "source", None)
         source = event_source() if callable(event_source) else None
         if self._drop_mode == "multiple" and source is self:
@@ -125,10 +183,32 @@ class DragDropFileList(QListWidget):
         event.ignore()
 
     def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        """Dragleaveevent.
+        
+        Args:
+            event: Parameter value (QDragLeaveEvent).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.drag_state_changed.emit(False)
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event: QDropEvent) -> None:
+        """Dropevent.
+        
+        Args:
+            event: Parameter value (QDropEvent).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         event_source = getattr(event, "source", None)
         source = event_source() if callable(event_source) else None
         if self._drop_mode == "multiple" and source is self:
@@ -148,6 +228,17 @@ class DragDropFileList(QListWidget):
         event.ignore()
 
     def _ordered_item_paths(self) -> list[str]:
+        """Ordered item paths.
+        
+        Args:
+            None.
+        
+        Returns:
+            list[str]: Return value.
+        
+        Raises:
+            None.
+        """
         ordered: list[str] = []
         for row in range(self.count()):
             item = self.item(row)
@@ -159,6 +250,17 @@ class DragDropFileList(QListWidget):
         return ordered
 
     def mousePressEvent(self, event) -> None:
+        """Mousepressevent.
+        
+        Args:
+            event: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
             self.browse_requested.emit()
             event.accept()
@@ -168,9 +270,31 @@ class DragDropFileList(QListWidget):
 
 class DragDropZoneFrame(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
+        """Init.
+        
+        Args:
+            parent: Parameter value (QWidget | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(parent)
 
     def set_drag_active(self, active: bool) -> None:
+        """Set drag active.
+        
+        Args:
+            active: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.setProperty("dragActive", active)
         self.update()
 
@@ -198,6 +322,26 @@ class ManagedDropFileWidget(QWidget):
         file_filter: Callable[[str], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
+        """Init.
+        
+        Args:
+            drop_mode: Parameter value (Literal['single', 'multiple']).
+            remove_fallback_text: Parameter value (str).
+            open_file_tooltip: Parameter value (str).
+            open_folder_tooltip: Parameter value (str).
+            remove_tooltip: Parameter value (str).
+            allow_non_local_sources: Parameter value (bool).
+            allowed_extensions: Parameter value (Iterable[str] | None).
+            allowed_filenames: Parameter value (Iterable[str] | None).
+            file_filter: Parameter value (Callable[[str], bool] | None).
+            parent: Parameter value (QWidget | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__(parent)
         self._drop_mode: Literal["single", "multiple"] = drop_mode
         self._remove_fallback_text = remove_fallback_text
@@ -228,12 +372,12 @@ class ManagedDropFileWidget(QWidget):
         self.drop_zone.installEventFilter(self)
 
         zone_layout = QVBoxLayout(self.drop_zone)
-        zone_layout.setContentsMargins(*COORDINATOR_DROP_ZONE_LAYOUT_MARGINS)
-        zone_layout.setSpacing(COORDINATOR_DROP_ZONE_LAYOUT_SPACING)
+        zone_layout.setContentsMargins(*DROP_ZONE_LAYOUT_MARGINS)
+        zone_layout.setSpacing(DROP_ZONE_LAYOUT_SPACING)
         self.drop_list = DragDropFileList(
-            placeholder_margins=COORDINATOR_LIST_PLACEHOLDER_TEXT_MARGINS,
-            placeholder_bottom_margins=COORDINATOR_LIST_PLACEHOLDER_BOTTOM_MARGINS,
-            item_spacing=COORDINATOR_DROP_LIST_ITEM_SPACING,
+            placeholder_margins=DROP_LIST_PLACEHOLDER_TEXT_MARGINS,
+            placeholder_bottom_margins=DROP_LIST_PLACEHOLDER_BOTTOM_MARGINS,
+            item_spacing=DROP_LIST_ITEM_SPACING,
             drop_mode=drop_mode,
         )
         self.drop_list.drag_state_changed.connect(self.drop_zone.set_drag_active)
@@ -271,6 +415,18 @@ class ManagedDropFileWidget(QWidget):
         self._update_submit_button_state()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Eventfilter.
+        
+        Args:
+            watched: Parameter value (QObject).
+            event: Parameter value (QEvent).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         drop_zone = getattr(self, "drop_zone", None)
         if drop_zone is None:
             return super().eventFilter(watched, event)
@@ -285,35 +441,145 @@ class ManagedDropFileWidget(QWidget):
         return super().eventFilter(watched, event)
 
     def files(self) -> list[str]:
+        """Files.
+        
+        Args:
+            None.
+        
+        Returns:
+            list[str]: Return value.
+        
+        Raises:
+            None.
+        """
         return list(self._files)
 
     def set_summary_text_builder(self, builder: Callable[[int], str]) -> None:
+        """Set summary text builder.
+        
+        Args:
+            builder: Parameter value (Callable[[int], str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._summary_text_builder = builder
         self._update_summary_label()
 
     def set_clear_button_text(self, text: str) -> None:
+        """Set clear button text.
+        
+        Args:
+            text: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.clear_button.setText(text)
 
     def set_submit_button_text(self, text: str) -> None:
+        """Set submit button text.
+        
+        Args:
+            text: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.submit_button.setText(text)
 
     def set_submit_allowed(self, allowed: bool) -> None:
+        """Set submit allowed.
+        
+        Args:
+            allowed: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._submit_allowed = bool(allowed)
         self._update_submit_button_state()
 
     def set_allowed_extensions(self, extensions: Iterable[str] | None) -> None:
+        """Set allowed extensions.
+        
+        Args:
+            extensions: Parameter value (Iterable[str] | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._allowed_extensions = self._normalize_extensions(extensions)
 
     def set_allowed_filenames(self, names: Iterable[str] | None) -> None:
+        """Set allowed filenames.
+        
+        Args:
+            names: Parameter value (Iterable[str] | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._allowed_filenames = self._normalize_filenames(names)
 
     def set_file_filter(self, predicate: Callable[[str], bool] | None) -> None:
+        """Set file filter.
+        
+        Args:
+            predicate: Parameter value (Callable[[str], bool] | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._file_filter = predicate
 
     def set_allow_non_local_sources(self, value: bool) -> None:
+        """Set allow non local sources.
+        
+        Args:
+            value: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._allow_non_local_sources = bool(value)
 
     def clear_files(self) -> None:
+        """Clear files.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if not self._files and self.drop_list.count() == 0:
             self.set_validation_state("neutral")
             return
@@ -326,6 +592,17 @@ class ManagedDropFileWidget(QWidget):
         self.set_validation_state("neutral")
 
     def set_files(self, paths: list[str]) -> None:
+        """Set files.
+        
+        Args:
+            paths: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._files.clear()
         self.drop_list.clear()
         added = self.add_files(paths, emit_drop=False)
@@ -339,6 +616,17 @@ class ManagedDropFileWidget(QWidget):
         self,
         state: Literal["neutral", "info", "success", "warning", "error"],
     ) -> None:
+        """Set validation state.
+        
+        Args:
+            state: Parameter value (Literal['neutral', 'info', 'success', 'warning', 'error']).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if state == self._validation_state:
             return
         self._validation_state = state
@@ -350,6 +638,18 @@ class ManagedDropFileWidget(QWidget):
         self.drop_zone.update()
 
     def add_files(self, paths: list[str], *, emit_drop: bool = True) -> list[str]:
+        """Add files.
+        
+        Args:
+            paths: Parameter value (list[str]).
+            emit_drop: Parameter value (bool).
+        
+        Returns:
+            list[str]: Return value.
+        
+        Raises:
+            None.
+        """
         normalized = [path for path in paths if path]
         if not normalized:
             return []
@@ -397,6 +697,17 @@ class ManagedDropFileWidget(QWidget):
         return added
 
     def _append_row(self, file_path: str) -> None:
+        """Append row.
+        
+        Args:
+            file_path: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         item = QListWidgetItem()
         item.setToolTip(file_path)
         item.setData(Qt.ItemDataRole.UserRole, file_path)
@@ -414,6 +725,17 @@ class ManagedDropFileWidget(QWidget):
         self.drop_list.setItemWidget(item, row_widget)
 
     def _remove_path(self, file_path: str) -> None:
+        """Remove path.
+        
+        Args:
+            file_path: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if file_path not in self._files:
             return
         self._files = [value for value in self._files if value != file_path]
@@ -430,13 +752,46 @@ class ManagedDropFileWidget(QWidget):
         self.files_changed.emit(self.files())
 
     def setEnabled(self, enabled: bool) -> None:
+        """Setenabled.
+        
+        Args:
+            enabled: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().setEnabled(enabled)
         self._update_submit_button_state()
 
     def _on_files_dropped(self, paths: list[str]) -> None:
+        """On files dropped.
+        
+        Args:
+            paths: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.add_files(paths, emit_drop=True)
 
     def _on_items_reordered(self, ordered_paths: list[str]) -> None:
+        """On items reordered.
+        
+        Args:
+            ordered_paths: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self._drop_mode != "multiple":
             return
         if self._files:
@@ -448,6 +803,17 @@ class ManagedDropFileWidget(QWidget):
 
     @staticmethod
     def _normalize_extensions(values: Iterable[str] | None) -> set[str] | None:
+        """Normalize extensions.
+        
+        Args:
+            values: Parameter value (Iterable[str] | None).
+        
+        Returns:
+            set[str] | None: Return value.
+        
+        Raises:
+            None.
+        """
         if values is None:
             return None
         normalized: set[str] = set()
@@ -462,12 +828,34 @@ class ManagedDropFileWidget(QWidget):
 
     @staticmethod
     def _normalize_filenames(values: Iterable[str] | None) -> set[str] | None:
+        """Normalize filenames.
+        
+        Args:
+            values: Parameter value (Iterable[str] | None).
+        
+        Returns:
+            set[str] | None: Return value.
+        
+        Raises:
+            None.
+        """
         if values is None:
             return None
         normalized = {value.strip().lower() for value in values if value.strip()}
         return normalized or None
 
     def _accepts_path(self, file_path: str) -> bool:
+        """Accepts path.
+        
+        Args:
+            file_path: Parameter value (str).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         if not self._allow_non_local_sources and RemovableFileItemWidget._normalize_local_path(file_path) is None:
             return False
         path = Path(file_path)
@@ -480,14 +868,48 @@ class ManagedDropFileWidget(QWidget):
         return True
 
     def _update_summary_label(self) -> None:
+        """Update summary label.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         count = len(self._files)
         self.summary_label.setText(self._summary_text_builder(count))
         self.summary_label.setEnabled(count > 0)
 
     def _update_clear_button_state(self) -> None:
+        """Update clear button state.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.clear_button.setEnabled(bool(self._files))
 
     def _update_submit_button_state(self) -> None:
+        """Update submit button state.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.submit_button.setEnabled(
             bool(self._files) and self._submit_allowed and self.isEnabled()
         )
+

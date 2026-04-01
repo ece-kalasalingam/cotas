@@ -33,6 +33,7 @@ from common.registry import (
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import SheetSchema, ValidationRule
 from common.utils import (
+    assert_not_symlink_path,
     coerce_excel_number,
     normalize,
 )
@@ -77,6 +78,16 @@ class _CourseIdentity:
         total_outcomes: int,
         section: str,
     ) -> None:
+        """Initialize normalized course identity fields.
+
+        Args:
+            template_id: Template id for the workbook.
+            course_code: Course code value.
+            semester: Semester value.
+            academic_year: Academic year value.
+            total_outcomes: Total configured outcomes.
+            section: Section identifier.
+        """
         self.template_id = template_id
         self.course_code = course_code
         self.semester = semester
@@ -85,6 +96,11 @@ class _CourseIdentity:
         self.section = section
 
     def cohort_key(self) -> tuple[str, str, str, int]:
+        """Build normalized cohort key tuple for cross-workbook comparison.
+
+        Returns:
+            Tuple of normalized cohort identity fields.
+        """
         return (
             normalize(self.course_code),
             normalize(self.semester),
@@ -94,6 +110,16 @@ class _CourseIdentity:
 
 
 def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) -> dict[str, object]:
+    """Build a normalized issue payload from validation issue metadata.
+
+    Args:
+        code: Validation issue code.
+        context: Structured issue context payload.
+        fallback_message: Default message when catalog resolution is unavailable.
+
+    Returns:
+        Normalized issue dictionary used by batch validation outputs.
+    """
     resolved = resolve_validation_issue(code, context, fallback_message=fallback_message)
     return {
         "code": resolved.code,
@@ -107,9 +133,15 @@ def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) ->
 
 class _ValidationCollector:
     def __init__(self) -> None:
+        """Initialize collector for accumulating structured validation issues."""
         self._issues: list[dict[str, object]] = []
 
     def add(self, exc: ValidationError) -> None:
+        """Capture one validation exception as a normalized issue payload.
+
+        Args:
+            exc: Validation exception to record.
+        """
         self._issues.append(
             _issue_dict(
                 code=str(getattr(exc, "code", "VALIDATION_ERROR")),
@@ -119,6 +151,16 @@ class _ValidationCollector:
         )
 
     def capture(self, fn, *args, **kwargs) -> Any | None:
+        """Run callable and capture validation exceptions as issues.
+
+        Args:
+            fn: Callable to execute.
+            *args: Positional arguments for callable.
+            **kwargs: Keyword arguments for callable.
+
+        Returns:
+            Callable result, or `None` when a validation exception is captured.
+        """
         try:
             return fn(*args, **kwargs)
         except ValidationError as exc:
@@ -126,6 +168,11 @@ class _ValidationCollector:
             return None
 
     def raise_if_any(self) -> None:
+        """Raise aggregated validation error when any issues were collected.
+
+        Raises:
+            ValidationError: If one or more issues were recorded.
+        """
         if not self._issues:
             return
         raise validation_error_from_key(
@@ -137,6 +184,21 @@ class _ValidationCollector:
 
 
 def validate_course_details_rules(workbook: Any) -> None:
+    """Validate COURSE_SETUP_V2 course-details workbook structure and content.
+
+    This validates template identity, sheet order, headers, formula restrictions,
+    schema-driven rules, percentage columns, and domain rules for course metadata,
+    assessment config, question map, and students.
+
+    Args:
+        workbook: Open workbook object (typically openpyxl workbook) to validate.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If any structural or business-rule validation fails.
+    """
     blueprint = get_blueprint(_TEMPLATE_ID)
     if blueprint is None:
         raise validation_error_from_key(
@@ -185,13 +247,40 @@ def validate_course_details_workbooks(
     *,
     cancel_token: CancellationToken | None = None,
 ) -> dict[str, object]:
+    """Validate a batch of COURSE_SETUP_V2 course-detail workbooks.
+
+    Args:
+        workbook_paths: Source workbook paths to validate.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        Batch validation summary with accepted/rejected paths and issue payloads.
+
+    Raises:
+        JobCancelledError: If cancellation is requested during batch processing.
+    """
     def _validate_path(path: str) -> _CourseIdentity:
+        """Validate one workbook path and return extracted identity.
+
+        Args:
+            path: Workbook path text.
+
+        Returns:
+            Parsed course identity.
+        """
         return _validate_course_details_workbook_impl(
             workbook_path=path,
             cancel_token=cancel_token,
         )
 
     def _on_validated(acc: BatchValidationAccumulator, path: str, identity: _CourseIdentity) -> None:
+        """Record successful validation result into batch accumulator.
+
+        Args:
+            acc: Batch validation accumulator.
+            path: Workbook path text.
+            identity: Parsed course identity from validation.
+        """
         acc.add_valid(path=path, template_id=identity.template_id)
 
     runner = BatchValidationRunner[_CourseIdentity](
@@ -212,6 +301,20 @@ def _validate_course_details_workbook_impl(
     workbook_path: str | Path,
     cancel_token: CancellationToken | None = None,
 ) -> _CourseIdentity:
+    """Validate one course-details workbook and return normalized cohort identity.
+
+    Args:
+        workbook_path: Path to the workbook file.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        Parsed course identity used for downstream cohort consistency checks.
+
+    Raises:
+        ValidationError: If dependency, file access, template, schema, or
+            business-rule validation fails.
+        JobCancelledError: If cancellation is requested while validating.
+    """
     try:
         import openpyxl
     except ModuleNotFoundError as exc:
@@ -227,6 +330,7 @@ def _validate_course_details_workbook_impl(
             code="WORKBOOK_NOT_FOUND",
             workbook=str(workbook_file),
         )
+    assert_not_symlink_path(workbook_file, context_key="workbook")
 
     try:
         workbook = openpyxl.load_workbook(workbook_file, data_only=False, read_only=False)
@@ -266,6 +370,18 @@ def _validate_course_details_workbook_impl(
 
 
 def _validate_sheet_order(workbook: Any, sheet_schemas: Sequence[SheetSchema]) -> None:
+    """Ensure workbook sheets match expected schema order plus system hash sheet.
+
+    Args:
+        workbook: Open workbook object to inspect.
+        sheet_schemas: Ordered sheet schemas for the template.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If actual sheet order differs from expected order.
+    """
     expected = [sheet.name for sheet in sheet_schemas] + ["__SYSTEM_HASH__"]
     actual = list(workbook.sheetnames)
     if actual != expected:
@@ -283,6 +399,20 @@ def _validate_sheet_headers(
     *,
     cancel_token: CancellationToken | None = None,
 ) -> None:
+    """Validate fixed header rows for all configured template sheets.
+
+    Args:
+        workbook: Open workbook object to inspect.
+        sheet_schemas: Sheet schemas declaring expected headers.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If header row shape or values are invalid.
+        JobCancelledError: If cancellation is requested during iteration.
+    """
     for sheet_schema in sheet_schemas:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
@@ -309,6 +439,20 @@ def _reject_any_formula_cells(
     *,
     cancel_token: CancellationToken | None = None,
 ) -> None:
+    """Reject formula cells in template input sheets.
+
+    Args:
+        workbook: Open workbook object to inspect.
+        sheet_schemas: Sheet schemas to scan.
+        cancel_token: Optional cancellation token for cooperative cancellation.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If any cell contains a formula expression.
+        JobCancelledError: If cancellation is requested during iteration.
+    """
     for sheet_schema in sheet_schemas:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
@@ -334,6 +478,18 @@ def _validated_non_empty_data_rows(
     worksheet: Any,
     sheet_schema: SheetSchema,
 ) -> list[tuple[int, list[Any]]]:
+    """Read non-empty data rows and enforce no blank cells within active rows.
+
+    Args:
+        worksheet: Worksheet to read.
+        sheet_schema: Schema for expected header width and sheet identity.
+
+    Returns:
+        List of tuples containing row number and row values.
+
+    Raises:
+        ValidationError: If any active row has blank cells or sheet has no data.
+    """
     header_count = len(sheet_schema.header_matrix[0])
     rows: list[tuple[int, list[Any]]] = []
     for row_number in range(2, int(worksheet.max_row) + 1):
@@ -363,6 +519,18 @@ def _validate_sheet_rules_from_schema(
     sheet_schema: SheetSchema,
     rows: list[tuple[int, list[Any]]],
 ) -> None:
+    """Apply schema-declared validation rules to data rows.
+
+    Args:
+        sheet_schema: Sheet schema containing validation rule declarations.
+        rows: Parsed row-number/value tuples for the sheet.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If any rule check fails.
+    """
     headers = list(sheet_schema.header_matrix[0])
     for rule in sheet_schema.validations:
         _apply_schema_rule(sheet_schema.name, headers, rows, rule)
@@ -374,6 +542,20 @@ def _apply_schema_rule(
     rows: list[tuple[int, list[Any]]],
     rule: ValidationRule,
 ) -> None:
+    """Apply one schema validation rule across relevant row/column cells.
+
+    Args:
+        sheet_name: Display name of the sheet under validation.
+        headers: Header labels for field-name mapping.
+        rows: Parsed row-number/value tuples.
+        rule: Validation rule to enforce.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If any cell violates the configured rule.
+    """
     options = dict(rule.options)
     validation_type = normalize(options.get("validate"))
     if not validation_type:
@@ -445,6 +627,18 @@ def _validate_percentage_columns(
     sheet_schema: SheetSchema,
     rows: list[tuple[int, list[Any]]],
 ) -> None:
+    """Validate percentage-like columns for numeric type and 0-100 range.
+
+    Args:
+        sheet_schema: Sheet schema with optional percentage key hints.
+        rows: Parsed row-number/value tuples.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If percentage cells are non-numeric or out of range.
+    """
     headers = list(sheet_schema.header_matrix[0])
     configured_percent_keys = sheet_schema.sheet_rules.get("percentage_column_keys")
     percent_columns: list[int] = []
@@ -488,6 +682,18 @@ def _required_sheet_rows(
     *,
     sheet_name: str,
 ) -> list[tuple[int, list[Any]]]:
+    """Return required sheet rows or raise when sheet data is unavailable.
+
+    Args:
+        row_data_by_sheet: Parsed rows keyed by sheet name.
+        sheet_name: Required sheet name.
+
+    Returns:
+        Row tuples for the required sheet.
+
+    Raises:
+        ValidationError: If the required sheet has no parsed data rows.
+    """
     rows = row_data_by_sheet.get(sheet_name)
     if isinstance(rows, list):
         return rows
@@ -499,6 +705,17 @@ def _required_sheet_rows(
 
 
 def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]]) -> _CourseIdentity:
+    """Validate course metadata sheet rows and derive canonical cohort identity.
+
+    Args:
+        row_data_by_sheet: Parsed sheet rows keyed by sheet name.
+
+    Returns:
+        Canonical course identity extracted from validated metadata fields.
+
+    Raises:
+        ValidationError: If metadata fields are missing, duplicated, or invalid.
+    """
     metadata_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     metadata_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     if metadata_schema is None:
@@ -602,6 +819,17 @@ def _validate_course_metadata_rules(row_data_by_sheet: dict[str, list[tuple[int,
 def _validate_assessment_config_rules(
     row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]],
 ) -> dict[str, dict[str, Any]]:
+    """Validate assessment configuration and build component configuration map.
+
+    Args:
+        row_data_by_sheet: Parsed sheet rows keyed by sheet name.
+
+    Returns:
+        Mapping of normalized component keys to parsed component attributes.
+
+    Raises:
+        ValidationError: If component rows, constraints, or totals are invalid.
+    """
     assessment_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     assessment_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
     if assessment_schema is None:
@@ -700,6 +928,19 @@ def _validate_question_map_rules(
     component_config: dict[str, dict[str, Any]],
     total_outcomes: int,
 ) -> None:
+    """Validate question-map rows against component config and CO constraints.
+
+    Args:
+        row_data_by_sheet: Parsed sheet rows keyed by sheet name.
+        component_config: Parsed assessment component configuration.
+        total_outcomes: Maximum allowed CO index from metadata.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If question map rows violate business constraints.
+    """
     question_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_QUESTION_MAP)
     question_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_QUESTION_MAP)
     if question_schema is None:
@@ -795,6 +1036,17 @@ def _validate_question_map_rules(
 
 
 def _validate_students_rules(row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]]) -> None:
+    """Validate student rows for required identity fields and uniqueness.
+
+    Args:
+        row_data_by_sheet: Parsed sheet rows keyed by sheet name.
+
+    Returns:
+        None. Validation succeeds silently.
+
+    Raises:
+        ValidationError: If student identity fields are missing or duplicated.
+    """
     students_sheet = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_STUDENTS)
     students_schema = get_sheet_schema_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_STUDENTS)
     if students_schema is None:

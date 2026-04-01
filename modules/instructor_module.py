@@ -1,4 +1,4 @@
-﻿"""Instructor CO module UI (single workflow: course template + marks template)."""
+"""Instructor CO module UI (single workflow: course template + marks template)."""
 
 from __future__ import annotations
 
@@ -55,9 +55,31 @@ _DOWNLOAD_COURSE_TEMPLATE_HREF = "download-course-template"
 
 class _LogSink:
     def appendPlainText(self, _text: str) -> None:  # noqa: N802 - Qt-style name
+        """Appendplaintext.
+        
+        Args:
+            _text: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         return
 
     def clear(self) -> None:
+        """Clear.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         return
 
 
@@ -72,6 +94,17 @@ class InstructorModule(QWidget):
     )
 
     def __init__(self):
+        """Init.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__()
 
         self.course_template_path: str | None = None
@@ -110,6 +143,17 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _build_ui(self) -> None:
+        """Build ui.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._ui_engine = ModuleUIEngine(
             self,
             config=ModuleUIEngineConfig(
@@ -155,10 +199,10 @@ class InstructorModule(QWidget):
 
         self.course_details_drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
-            remove_fallback_text=t("coordinator.file.remove_fallback"),
+            remove_fallback_text=t("co_analysis.file.remove_fallback"),
             open_file_tooltip=t("outputs.open_file"),
             open_folder_tooltip=t("outputs.open_folder"),
-            remove_tooltip=t("coordinator.file.remove_tooltip"),
+            remove_tooltip=t("co_analysis.file.remove_tooltip"),
         )
         self.course_details_drop_widget.files_dropped.connect(self._on_course_details_files_dropped)
         self.course_details_drop_widget.files_rejected.connect(self._on_course_details_files_rejected)
@@ -186,10 +230,21 @@ class InstructorModule(QWidget):
         self.shortcut_save_output.activated.connect(self._on_save_shortcut_activated)
 
     def _refresh_ui(self) -> None:
+        """Refresh ui.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.workflow_title.setText(t("instructor.workflow_title"))
         self._set_download_course_template_link_enabled(not self.state.busy)
         self.course_details_drop_widget.set_submit_button_text(t("instructor.action.generate_marks_template"))
-        self.course_details_drop_widget.set_clear_button_text(t("coordinator.clear_all"))
+        self.course_details_drop_widget.set_clear_button_text(t("co_analysis.clear_all"))
         self.course_details_drop_widget.set_summary_text_builder(
             lambda count: t("instructor.drop.summary", count=count)
         )
@@ -202,10 +257,32 @@ class InstructorModule(QWidget):
         )
 
     def retranslate_ui(self) -> None:
+        """Retranslate ui.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.course_details_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
         self._refresh_ui()
 
     def _output_items(self) -> tuple[OutputItem, ...]:
+        """Output items.
+        
+        Args:
+            None.
+        
+        Returns:
+            tuple[OutputItem, ...]: Return value.
+        
+        Raises:
+            None.
+        """
         rows: list[OutputItem] = []
         for label_key, attr in self.OUTPUT_LINKS:
             if attr == "marks_template_path":
@@ -219,12 +296,45 @@ class InstructorModule(QWidget):
         return tuple(rows)
 
     def get_shared_outputs_data(self) -> OutputPanelData:
+        """Get shared outputs data.
+        
+        Args:
+            None.
+        
+        Returns:
+            OutputPanelData: Return value.
+        
+        Raises:
+            None.
+        """
         return OutputPanelData(items=self._output_items())
 
     def set_shared_activity_log_mode(self, enabled: bool) -> None:
+        """Set shared activity log mode.
+        
+        Args:
+            enabled: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._ui_engine.set_footer_visible(False)
 
     def _set_download_course_template_link_enabled(self, enabled: bool) -> None:
+        """Set download course template link enabled.
+        
+        Args:
+            enabled: Parameter value (bool).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         text = t("instructor.action.download_course_template")
         if enabled:
             self.download_course_template_link.setText(
@@ -239,24 +349,79 @@ class InstructorModule(QWidget):
         self.download_course_template_link.setEnabled(enabled)
 
     def _on_download_course_template_link_activated(self, _href: str) -> None:
+        """On download course template link activated.
+        
+        Args:
+            _href: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         self._download_course_template_async()
 
     def _on_open_shortcut_activated(self) -> None:
+        """On open shortcut activated.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         self._upload_course_details_async()
 
     def _on_save_shortcut_activated(self) -> None:
+        """On save shortcut activated.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         self._prepare_marks_template_async()
 
     def _on_course_details_browse_requested(self) -> None:
+        """On course details browse requested.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._publish_status_key("instructor.status.course_details_drop_browse_requested")
 
     def _on_course_details_files_dropped(self, dropped_files: list[str]) -> None:
+        """On course details files dropped.
+        
+        Args:
+            dropped_files: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         dropped_count = len([path for path in dropped_files if path])
         self._publish_status_key("instructor.status.course_details_drop_files_dropped", count=dropped_count)
         if self.state.busy:
@@ -268,6 +433,17 @@ class InstructorModule(QWidget):
         self._upload_course_details_from_paths_async(selected_paths)
 
     def _on_course_details_files_rejected(self, files: list[str]) -> None:
+        """On course details files rejected.
+        
+        Args:
+            files: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         rejected_count = len([path for path in files if path])
         if rejected_count <= 0:
             return
@@ -275,12 +451,34 @@ class InstructorModule(QWidget):
         self.course_details_drop_widget.set_validation_state("warning")
 
     def _on_clear_course_details_clicked(self) -> None:
+        """On clear course details clicked.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         self.course_details_drop_widget.clear_files()
         self.course_details_drop_widget.set_validation_state("neutral")
 
     def _on_course_details_files_changed(self, files: list[str]) -> None:
+        """On course details files changed.
+        
+        Args:
+            files: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         if self._syncing_drop_widget_files:
@@ -316,6 +514,17 @@ class InstructorModule(QWidget):
         self._refresh_ui()
 
     def _download_course_template_async(self) -> None:
+        """Download course template async.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
 
@@ -338,6 +547,17 @@ class InstructorModule(QWidget):
         token = CancellationToken()
 
         def _work() -> object:
+            """Work.
+            
+            Args:
+                None.
+            
+            Returns:
+                object: Return value.
+            
+            Raises:
+                None.
+            """
             token.raise_if_cancelled()
             return generate_workbook(
                 template_id=ID_COURSE_SETUP,
@@ -348,6 +568,17 @@ class InstructorModule(QWidget):
             )
 
         def _on_success(result: object) -> None:
+            """On success.
+            
+            Args:
+                result: Parameter value (object).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             output_value = str(
                 getattr(result, "workbook_path", None)
                 or getattr(result, "output_path", None)
@@ -378,6 +609,17 @@ class InstructorModule(QWidget):
             )
 
         def _on_failure(exc: Exception) -> None:
+            """On failure.
+            
+            Args:
+                exc: Parameter value (Exception).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
 
         self._start_async_operation(
@@ -389,6 +631,17 @@ class InstructorModule(QWidget):
         )
 
     def _upload_course_details_async(self) -> None:
+        """Upload course details async.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         open_paths, _ = QFileDialog.getOpenFileNames(
@@ -402,6 +655,17 @@ class InstructorModule(QWidget):
         self._upload_course_details_from_paths_async(open_paths)
 
     def _upload_course_details_from_paths_async(self, open_paths: list[str]) -> None:
+        """Upload course details from paths async.
+        
+        Args:
+            open_paths: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         selected_paths = [path for path in open_paths if path]
@@ -425,6 +689,17 @@ class InstructorModule(QWidget):
         token = CancellationToken()
 
         def _work() -> dict[str, object]:
+            """Work.
+            
+            Args:
+                None.
+            
+            Returns:
+                dict[str, object]: Return value.
+            
+            Raises:
+                None.
+            """
             result = validate_workbooks(
                 template_id=ID_COURSE_SETUP,
                 workbook_paths=staged_uploaded_paths,
@@ -436,6 +711,17 @@ class InstructorModule(QWidget):
             return result
 
         def _on_success(result: object) -> None:
+            """On success.
+            
+            Args:
+                result: Parameter value (object).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             data = result if isinstance(result, dict) else {}
             valid_paths = [p for p in data.get("valid_paths", []) if isinstance(p, str) and p]
             invalid_paths = [p for p in data.get("invalid_paths", []) if isinstance(p, str) and p]
@@ -488,11 +774,33 @@ class InstructorModule(QWidget):
                 self.course_details_drop_widget.set_validation_state("neutral")
 
         def _on_failure(exc: Exception) -> None:
+            """On failure.
+            
+            Args:
+                exc: Parameter value (Exception).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
 
         self._start_async_operation(token=token, job_id=None, work=_work, on_success=_on_success, on_failure=_on_failure)
 
     def _prepare_marks_template_async(self) -> None:
+        """Prepare marks template async.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if self.state.busy:
             return
         source_paths = [path for path in self.course_details_paths if path]
@@ -528,9 +836,33 @@ class InstructorModule(QWidget):
             overwrite_existing: bool,
             output_path_overrides: dict[str, str] | None = None,
         ) -> None:
+            """Start generation.
+            
+            Args:
+                run_sources: Parameter value (list[str]).
+                overwrite_existing: Parameter value (bool).
+                output_path_overrides: Parameter value (dict[str, str] | None).
+            
+            Returns:
+                None.
+            
+            Raises:
+                None.
+            """
             token = CancellationToken()
 
             def _work() -> dict[str, object]:
+                """Work.
+                
+                Args:
+                    None.
+                
+                Returns:
+                    dict[str, object]: Return value.
+                
+                Raises:
+                    None.
+                """
                 token.raise_if_cancelled()
                 generation_context: dict[str, object] = {"overwrite_existing": overwrite_existing}
                 if output_path_overrides:
@@ -545,6 +877,17 @@ class InstructorModule(QWidget):
                 )
 
             def _on_success(result: object) -> None:
+                """On success.
+                
+                Args:
+                    result: Parameter value (object).
+                
+                Returns:
+                    None.
+                
+                Raises:
+                    None.
+                """
                 data = result if isinstance(result, dict) else {}
                 generated = [
                     str(path)
@@ -615,6 +958,17 @@ class InstructorModule(QWidget):
                 )
 
             def _on_failure(exc: Exception) -> None:
+                """On failure.
+                
+                Args:
+                    exc: Parameter value (Exception).
+                
+                Returns:
+                    None.
+                
+                Raises:
+                    None.
+                """
                 self._handle_async_failure(exc, process_name=process_name, user_error_message=user_error_message)
 
             self._start_async_operation(
@@ -628,9 +982,31 @@ class InstructorModule(QWidget):
         _start_generation(source_paths, overwrite_existing=False)
 
     def _remember_dialog_dir_safe(self, selected_path: str) -> None:
+        """Remember dialog dir safe.
+        
+        Args:
+            selected_path: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._runtime.remember_dialog_dir_safe(selected_path)
 
     def _merge_uploaded_paths(self, selected_paths: list[str]) -> list[str]:
+        """Merge uploaded paths.
+        
+        Args:
+            selected_paths: Parameter value (list[str]).
+        
+        Returns:
+            list[str]: Return value.
+        
+        Raises:
+            None.
+        """
         merged: list[str] = []
         seen: set[str] = set()
         for path in [*self._uploaded_course_details_paths, *selected_paths]:
@@ -642,6 +1018,17 @@ class InstructorModule(QWidget):
         return merged
 
     def _set_course_details_widget_files(self, paths: list[str]) -> None:
+        """Set course details widget files.
+        
+        Args:
+            paths: Parameter value (list[str]).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._syncing_drop_widget_files = True
         try:
             self.course_details_drop_widget.set_files(paths)
@@ -649,16 +1036,62 @@ class InstructorModule(QWidget):
             self._syncing_drop_widget_files = False
 
     def _setup_ui_logging(self) -> None:
+        """Setup ui logging.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._runtime.setup_ui_logging()
 
     def _publish_status_key(self, text_key: str, **kwargs: object) -> None:
+        """Publish status key.
+        
+        Args:
+            text_key: Parameter value (str).
+            kwargs: Parameter value (object).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
 
 
     def _rerender_user_log(self) -> None:
+        """Rerender user log.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         _rerender_user_log_impl(self, ns=_messages_namespace())
 
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
+        """Set busy.
+        
+        Args:
+            busy: Parameter value (bool).
+            job_id: Parameter value (str | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.state.set_busy(busy, job_id=job_id)
         host_window = self.window()
         set_switch = getattr(host_window, "set_language_switch_enabled", None)
@@ -676,6 +1109,22 @@ class InstructorModule(QWidget):
         on_failure,
         on_finally=None,
     ) -> None:
+        """Start async operation.
+        
+        Args:
+            token: Parameter value (CancellationToken).
+            job_id: Parameter value (str | None).
+            work: Parameter value.
+            on_success: Parameter value.
+            on_failure: Parameter value.
+            on_finally: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._runtime.set_async_runner(self._async_runner)
         self._runtime.start_async_operation(
             token=token,
@@ -687,6 +1136,17 @@ class InstructorModule(QWidget):
         )
 
     def _prompt_overwrite_all_conflicts(self, output_paths: list[str]) -> bool:
+        """Prompt overwrite all conflicts.
+        
+        Args:
+            output_paths: Parameter value (list[str]).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         preview = "\n".join(output_paths[:5])
         extra_count = len(output_paths) - 5
         extra_suffix = f"\n... (+{extra_count} more)" if extra_count > 0 else ""
@@ -704,6 +1164,17 @@ class InstructorModule(QWidget):
         return choice == QMessageBox.StandardButton.Yes
 
     def _prompt_output_path_for_collision(self, suggested_output: str) -> str | None:
+        """Prompt output path for collision.
+        
+        Args:
+            suggested_output: Parameter value (str).
+        
+        Returns:
+            str | None: Return value.
+        
+        Raises:
+            None.
+        """
         selected_output, _ = QFileDialog.getSaveFileName(
             self,
             t("instructor.dialog.marks_template.save_title"),
@@ -717,6 +1188,19 @@ class InstructorModule(QWidget):
         return chosen_output
 
     def _handle_async_failure(self, exc: Exception, *, process_name: str, user_error_message: str) -> None:
+        """Handle async failure.
+        
+        Args:
+            exc: Parameter value (Exception).
+            process_name: Parameter value (str).
+            user_error_message: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self.course_details_drop_widget.set_validation_state("error")
         if isinstance(exc, JobCancelledError):
             return
@@ -763,6 +1247,17 @@ class InstructorModule(QWidget):
         )
 
     def closeEvent(self, event) -> None:
+        """Closeevent.
+        
+        Args:
+            event: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._is_closing = True
         if self._cancel_token is not None:
             self._cancel_token.cancel()
@@ -775,10 +1270,32 @@ class InstructorModule(QWidget):
 
 
 def _messages_namespace() -> dict[str, object]:
+    """Messages namespace.
+    
+    Args:
+        None.
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     return dict(_default_messages_namespace(translate=t))
 
 
 def _localized_log_messages(process_key: str) -> tuple[str, str]:
+    """Localized log messages.
+    
+    Args:
+        process_key: Parameter value (str).
+    
+    Returns:
+        tuple[str, str]: Return value.
+    
+    Raises:
+        None.
+    """
     return (
         _build_status_message(
             "instructor.log.completed_process",
@@ -796,4 +1313,5 @@ def _localized_log_messages(process_key: str) -> tuple[str, str]:
 
 
 __all__ = ["InstructorModule"]
+
 

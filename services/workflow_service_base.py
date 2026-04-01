@@ -48,14 +48,49 @@ class WorkflowMetrics:
     """In-memory workflow metrics snapshot for service observability."""
 
     def __init__(self) -> None:
+        """Init.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._counts: Counter[str] = Counter()
         self._durations_ms: dict[str, list[int]] = defaultdict(list)
 
     def record(self, *, operation: str, outcome: str, duration_ms: int) -> None:
+        """Record.
+        
+        Args:
+            operation: Parameter value (str).
+            outcome: Parameter value (str).
+            duration_ms: Parameter value (int).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._counts[f"{operation}.{outcome}"] += 1
         self._durations_ms[operation].append(duration_ms)
 
     def snapshot(self) -> dict[str, Any]:
+        """Snapshot.
+        
+        Args:
+            None.
+        
+        Returns:
+            dict[str, Any]: Return value.
+        
+        Raises:
+            None.
+        """
         return {
             "counts": dict(self._counts),
             "durations_ms": {key: list(values) for key, values in self._durations_ms.items()},
@@ -64,15 +99,50 @@ class WorkflowMetrics:
 
 class WorkflowServiceBase:
     def __init__(self, *, logger, telemetry: WorkflowTelemetryConfig) -> None:
+        """Init.
+        
+        Args:
+            logger: Parameter value.
+            telemetry: Parameter value (WorkflowTelemetryConfig).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._logger = logger
         self._telemetry = telemetry
         self._workflow_metrics = WorkflowMetrics()
 
     def create_job_context(self, *, step_id: str, payload: Mapping[str, Any] | None = None) -> JobContext:
+        """Create job context.
+        
+        Args:
+            step_id: Parameter value (str).
+            payload: Parameter value (Mapping[str, Any] | None).
+        
+        Returns:
+            JobContext: Return value.
+        
+        Raises:
+            None.
+        """
         return JobContext.create(step_id=step_id, payload=payload)
 
     @staticmethod
     def _raise_if_cancelled(cancel_token: CancellationToken | None) -> None:
+        """Raise if cancelled.
+        
+        Args:
+            cancel_token: Parameter value (CancellationToken | None).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
 
@@ -84,6 +154,20 @@ class WorkflowServiceBase:
         cancel_token: CancellationToken | None,
         work: Callable[[CancellationToken], _T],
     ) -> _T:
+        """Execute with telemetry.
+        
+        Args:
+            context: Parameter value (JobContext).
+            operation: Parameter value (str).
+            cancel_token: Parameter value (CancellationToken | None).
+            work: Parameter value (Callable[[CancellationToken], _T]).
+        
+        Returns:
+            _T: Return value.
+        
+        Raises:
+            None.
+        """
         effective_cancel_token = cancel_token or CancellationToken()
         started_at = time.perf_counter()
         timeout_seconds = self._resolve_timeout_seconds()
@@ -181,6 +265,20 @@ class WorkflowServiceBase:
         operation: str,
         duration_ms: int,
     ) -> bool:
+        """Handle domain exception.
+        
+        Args:
+            exc: Parameter value (Exception).
+            context: Parameter value (JobContext).
+            operation: Parameter value (str).
+            duration_ms: Parameter value (int).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         return False
 
     def _record_and_log(
@@ -196,6 +294,25 @@ class WorkflowServiceBase:
         message: str,
         user_message_suffix: str,
     ) -> None:
+        """Record and log.
+        
+        Args:
+            context: Parameter value (JobContext).
+            operation: Parameter value (str).
+            outcome: Parameter value (str).
+            duration_ms: Parameter value (int).
+            event: Parameter value (str).
+            error_code: Parameter value (str).
+            level: Parameter value (str).
+            message: Parameter value (str).
+            user_message_suffix: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         self._workflow_metrics.record(operation=operation, outcome=outcome, duration_ms=duration_ms)
         log_method = getattr(self._logger, level)
         log_method(
@@ -220,6 +337,22 @@ class WorkflowServiceBase:
         error_code: str,
         user_message_suffix: str,
     ) -> dict[str, Any]:
+        """Build log extra.
+        
+        Args:
+            context: Parameter value (JobContext).
+            operation: Parameter value (str).
+            duration_ms: Parameter value (int).
+            event: Parameter value (str).
+            error_code: Parameter value (str).
+            user_message_suffix: Parameter value (str).
+        
+        Returns:
+            dict[str, Any]: Return value.
+        
+        Raises:
+            None.
+        """
         return {
             LOG_EXTRA_KEY_USER_MESSAGE: f"{operation}{user_message_suffix.format(duration_ms=duration_ms)}",
             "event": event,
@@ -233,6 +366,17 @@ class WorkflowServiceBase:
 
     @staticmethod
     def _resolve_timeout_seconds() -> int:
+        """Resolve timeout seconds.
+        
+        Args:
+            None.
+        
+        Returns:
+            int: Return value.
+        
+        Raises:
+            None.
+        """
         raw = os.getenv(WORKFLOW_STEP_TIMEOUT_ENV_VAR, "").strip()
         if not raw:
             return DEFAULT_WORKFLOW_STEP_TIMEOUT_SECONDS
@@ -250,6 +394,20 @@ class WorkflowServiceBase:
         timeout_seconds: int,
         cancel_token: CancellationToken | None,
     ) -> _T:
+        """Run with timeout.
+        
+        Args:
+            operation: Parameter value (str).
+            work: Parameter value (Callable[[], _T]).
+            timeout_seconds: Parameter value (int).
+            cancel_token: Parameter value (CancellationToken | None).
+        
+        Returns:
+            _T: Return value.
+        
+        Raises:
+            None.
+        """
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(work)
         timed_out = False

@@ -58,6 +58,17 @@ _theme_refresh_pending = False
 
 
 def _build_splash_pixmap() -> QPixmap:
+    """Build splash pixmap.
+    
+    Args:
+        None.
+    
+    Returns:
+        QPixmap: Return value.
+    
+    Raises:
+        None.
+    """
     pixmap = QPixmap(520, 240)
     pixmap.fill(QColor("#2957A4"))
 
@@ -74,6 +85,17 @@ def _build_splash_pixmap() -> QPixmap:
 
 def _acquire_exe_single_instance_lock() -> QLockFile | None:
     # Allow multiple instances in dev/python mode.
+    """Acquire exe single instance lock.
+    
+    Args:
+        None.
+    
+    Returns:
+        QLockFile | None: Return value.
+    
+    Raises:
+        None.
+    """
     if not getattr(sys, "frozen", False):
         return None
 
@@ -91,12 +113,34 @@ def _acquire_exe_single_instance_lock() -> QLockFile | None:
 
 
 def _activation_server_name() -> str:
+    """Activation server name.
+    
+    Args:
+        None.
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     raw_name = f"{APP_ORGANIZATION}_{APP_NAME}_single_instance"
     # Keep the server name OS-safe and deterministic.
     return re.sub(r"[^A-Za-z0-9_.-]", "_", raw_name)
 
 
 def _signal_existing_instance_to_activate() -> bool:
+    """Signal existing instance to activate.
+    
+    Args:
+        None.
+    
+    Returns:
+        bool: Return value.
+    
+    Raises:
+        None.
+    """
     socket = QLocalSocket()
     socket.connectToServer(_activation_server_name())
     connected = socket.waitForConnected(SINGLE_INSTANCE_CLIENT_CONNECT_TIMEOUT_MS)
@@ -116,6 +160,17 @@ def _signal_existing_instance_to_activate() -> bool:
 
 
 def _raise_and_activate_window(window: MainWindow) -> None:
+    """Raise and activate window.
+    
+    Args:
+        window: Parameter value (MainWindow).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     if window.isMinimized():
         window.showNormal()
     else:
@@ -139,6 +194,17 @@ def _raise_and_activate_window(window: MainWindow) -> None:
 
 
 def _install_activation_server(window: MainWindow) -> QLocalServer:
+    """Install activation server.
+    
+    Args:
+        window: Parameter value (MainWindow).
+    
+    Returns:
+        QLocalServer: Return value.
+    
+    Raises:
+        None.
+    """
     server = QLocalServer()
     server_name = _activation_server_name()
     QLocalServer.removeServer(server_name)
@@ -147,6 +213,17 @@ def _install_activation_server(window: MainWindow) -> QLocalServer:
         return server
 
     def _on_new_connection() -> None:
+        """On new connection.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         while server.hasPendingConnections():
             socket = server.nextPendingConnection()
             if socket is not None:
@@ -198,6 +275,17 @@ def _schedule_system_theme_refresh(app: QApplication) -> None:
     _logger.debug("Theme refresh scheduled (debounced).")
 
     def _run() -> None:
+        """Run.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         global _theme_refresh_pending
         _theme_refresh_pending = False
         # Hybrid path: refresh qdarktheme (OS-aware) and then reapply our managed app styles.
@@ -211,10 +299,33 @@ def _schedule_system_theme_refresh(app: QApplication) -> None:
 class _UiStyleRefreshFilter(QObject):
     """Event bridge that keeps managed styles in sync with runtime UI changes."""
     def __init__(self, app: QApplication) -> None:
+        """Init.
+        
+        Args:
+            app: Parameter value (QApplication).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         super().__init__()
         self._app = app
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Eventfilter.
+        
+        Args:
+            watched: Parameter value (QObject).
+            event: Parameter value (QEvent).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         event_type = event.type()
         if event_type == QEvent.Type.ThemeChange:
             # Keep runtime updates lightweight: only react to concrete theme changes.
@@ -233,9 +344,33 @@ def _wire_global_style_refresh(app: QApplication) -> None:
 
 
 def _install_excepthook() -> None:
+    """Install excepthook.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     previous_hook = sys.excepthook
 
     def _hook(exc_type, exc_value, exc_traceback):
+        """Hook.
+        
+        Args:
+            exc_type: Parameter value.
+            exc_value: Parameter value.
+            exc_traceback: Parameter value.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         _logger.exception(
             "Unhandled exception in application.",
             exc_info=(exc_type, exc_value, exc_traceback),
@@ -268,16 +403,53 @@ def _install_excepthook() -> None:
 
 
 def _notify_and_wait(app: QApplication, *, title: str, message: str, level: ToastLevel) -> int:
+    """Notify and wait.
+    
+    Args:
+        app: Parameter value (QApplication).
+        title: Parameter value (str).
+        message: Parameter value (str).
+        level: Parameter value (ToastLevel).
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     show_toast(None, message, title=title, level=level, duration_ms=STARTUP_TOAST_DURATION_MS)
     QTimer.singleShot(STARTUP_TOAST_QUIT_DELAY_MS, app.quit)
     return app.exec()
 
 
 def _show_startup_error_dialog(*, title: str, message: str) -> None:
+    """Show startup error dialog.
+    
+    Args:
+        title: Parameter value (str).
+        message: Parameter value (str).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     QMessageBox.critical(None, title, message)
 
 
 def _validate_startup_workbook_password(app: QApplication) -> int | None:
+    """Validate startup workbook password.
+    
+    Args:
+        app: Parameter value (QApplication).
+    
+    Returns:
+        int | None: Return value.
+    
+    Raises:
+        None.
+    """
     try:
         ensure_workbook_secret_policy()
         return None
@@ -298,6 +470,17 @@ def _validate_startup_workbook_password(app: QApplication) -> int | None:
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     os.environ["QT_ADAPTIVE_STRUCTURE_SENSITIVITY"] = QT_ADAPTIVE_STRUCTURE_SENSITIVITY
     validate_blueprint_registry_contracts()
     configure_app_logging(APP_NAME)
@@ -355,6 +538,17 @@ def main() -> int:
     app.processEvents()
 
     def _apply_language_selection(language_code: str) -> bool:
+        """Apply language selection.
+        
+        Args:
+            language_code: Parameter value (str).
+        
+        Returns:
+            bool: Return value.
+        
+        Raises:
+            None.
+        """
         previous = get_language()
         if language_code.lower() in UI_LANGUAGE_AUTO_ALIASES:
             set_language(UI_LANGUAGE)
@@ -363,6 +557,17 @@ def main() -> int:
         return get_language() != previous
 
     def _on_language_applied(language_code: str) -> None:
+        """On language applied.
+        
+        Args:
+            language_code: Parameter value (str).
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         set_ui_language_preference(APP_NAME, ui_language=language_code)
         if _apply_language_selection(language_code):
             window.apply_language_change()
@@ -371,6 +576,17 @@ def main() -> int:
     activation_server = _install_activation_server(window)
 
     def _finish_startup() -> None:
+        """Finish startup.
+        
+        Args:
+            None.
+        
+        Returns:
+            None.
+        
+        Raises:
+            None.
+        """
         _ = activation_server
         window.show()
         splash.finish(window)

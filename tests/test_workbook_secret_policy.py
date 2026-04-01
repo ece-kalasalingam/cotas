@@ -9,18 +9,52 @@ from common.exceptions import ConfigurationError
 
 
 def _reloaded_workbook_secret():
+    """Reloaded workbook secret.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     import common.workbook_integrity.workbook_secret as workbook_secret_mod
 
     return importlib.reload(workbook_secret_mod)
 
 
 def _reloaded_main():
+    """Reloaded main.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     import main as main_mod
 
     return importlib.reload(main_mod)
 
 
 def test_secret_policy_auto_provisions_secret(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test secret policy auto provisions secret.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     store_path = tmp_path / "wb_secret.bin"
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
@@ -35,6 +69,18 @@ def test_secret_policy_auto_provisions_secret(monkeypatch: pytest.MonkeyPatch, t
 
 
 def test_startup_validation_accepts_auto_secret(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test startup validation accepts auto secret.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     store_path = tmp_path / "auto_startup_secret.bin"
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
@@ -45,6 +91,18 @@ def test_startup_validation_accepts_auto_secret(monkeypatch: pytest.MonkeyPatch,
 
 
 def test_secret_policy_recovers_from_unreadable_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test secret policy recovers from unreadable store.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     store_path = tmp_path / "broken_secret.bin"
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
@@ -59,6 +117,18 @@ def test_secret_policy_recovers_from_unreadable_store(monkeypatch: pytest.Monkey
 def test_secret_policy_sanitizes_control_chars_in_stored_secret(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test secret policy sanitizes control chars in stored secret.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     store_path = tmp_path / "legacy_secret.bin"
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
@@ -70,12 +140,34 @@ def test_secret_policy_sanitizes_control_chars_in_stored_secret(
 
 
 def test_signature_version_env_validation_on_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test signature version env validation on import.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     monkeypatch.setenv("FOCUS_WORKBOOK_SIGNATURE_VERSION", "v2")
     with pytest.raises(ConfigurationError):
         _reloaded_workbook_secret()
 
 
 def test_protect_unprotect_non_windows_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test protect unprotect non windows paths.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod.os, "name", "posix", raising=False)
     protected = workbook_secret_mod._protect_secret_bytes(b"secret")
@@ -84,17 +176,52 @@ def test_protect_unprotect_non_windows_paths(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_protect_windows_failure_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test protect windows failure branch.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod.os, "name", "nt", raising=False)
 
     class _Crypt32:
         @staticmethod
         def CryptProtectData(*_args, **_kwargs) -> int:
+            """Cryptprotectdata.
+            
+            Args:
+                _args: Parameter value.
+                _kwargs: Parameter value.
+            
+            Returns:
+                int: Return value.
+            
+            Raises:
+                None.
+            """
             return 0
 
     class _Kernel32:
         @staticmethod
         def LocalFree(*_args, **_kwargs) -> int:
+            """Localfree.
+            
+            Args:
+                _args: Parameter value.
+                _kwargs: Parameter value.
+            
+            Returns:
+                int: Return value.
+            
+            Raises:
+                None.
+            """
             return 0
 
     class _Windll:
@@ -107,6 +234,18 @@ def test_protect_windows_failure_branch(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_read_store_empty_and_decode_error_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test read store empty and decode error paths.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        tmp_path: Parameter value (Path).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     store_path = tmp_path / "store.bin"
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
@@ -121,6 +260,17 @@ def test_read_store_empty_and_decode_error_paths(monkeypatch: pytest.MonkeyPatch
 
 
 def test_get_password_fallback_and_empty_secret_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get password fallback and empty secret branches.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "")
@@ -142,6 +292,17 @@ def test_get_password_fallback_and_empty_secret_branches(monkeypatch: pytest.Mon
 
 
 def test_get_password_uses_posix_keyring_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get password uses posix keyring when available.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "from-keyring")
@@ -151,6 +312,17 @@ def test_get_password_uses_posix_keyring_when_available(monkeypatch: pytest.Monk
 
 
 def test_get_password_bootstrap_writes_to_keyring_and_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get password bootstrap writes to keyring and store.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "")
@@ -174,6 +346,17 @@ def test_get_password_bootstrap_writes_to_keyring_and_store(monkeypatch: pytest.
 
 
 def test_ensure_workbook_secret_policy_raises_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test ensure workbook secret policy raises when empty.
+    
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod, "get_workbook_password", lambda: "")
     with pytest.raises(ConfigurationError):

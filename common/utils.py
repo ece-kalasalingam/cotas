@@ -11,7 +11,7 @@ import tempfile
 from decimal import Decimal, InvalidOperation
 from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Iterable, Literal
 
 from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, ValidationError
@@ -480,6 +480,82 @@ def sanitize_filename_token(value: object) -> str:
 def canonical_path_key(path: str | Path) -> str:
     """Return a stable, case-insensitive key for filesystem identity checks."""
     return str(Path(path).resolve()).casefold()
+
+
+def path_uses_symlink(path: str | Path) -> bool:
+    """Detect whether a path or any existing parent resolves through a symlink.
+
+    Args:
+        path: Filesystem path to inspect.
+
+    Returns:
+        True when the path itself or any existing parent is a symlink.
+    """
+    candidate = Path(path)
+    absolute_candidate = candidate if candidate.is_absolute() else (Path.cwd() / candidate)
+    for part in (absolute_candidate, *absolute_candidate.parents):
+        try:
+            if part.exists() and part.is_symlink():
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def assert_not_symlink_path(
+    path: str | Path,
+    *,
+    context_key: str = "workbook",
+    code: str = "WORKBOOK_SYMLINK_NOT_ALLOWED",
+) -> None:
+    """Fail fast when path resolution includes symlink components.
+
+    Args:
+        path: Filesystem path to validate.
+        context_key: Context field name to store offending path.
+        code: Validation code used in raised error payload.
+
+    Returns:
+        None.
+
+    Raises:
+        ValidationError: If path or parent components include symlinks.
+    """
+    if not path_uses_symlink(path):
+        return
+    raise validation_error_from_key(
+        "common.validation_failed_invalid_data",
+        code=code,
+        **{context_key: str(path)},
+    )
+
+
+def ratio_percent_token(ratio: float) -> str:
+    percent = ratio * 100.0
+    if abs(percent - round(percent)) <= 1e-9:
+        return f"{int(round(percent))}"
+    return f"{percent:g}"
+
+
+def dedupe_paths_by_canonical_key(
+    paths: Iterable[str | Path],
+    *,
+    skip_empty: bool = True,
+) -> tuple[list[str], list[str]]:
+    unique_paths: list[str] = []
+    duplicate_paths: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        path = str(raw).strip()
+        if skip_empty and not path:
+            continue
+        key = canonical_path_key(path)
+        if key in seen:
+            duplicate_paths.append(path)
+            continue
+        seen.add(key)
+        unique_paths.append(path)
+    return unique_paths, duplicate_paths
 
 
 def atomic_copy_file(source_path: str | Path, output_path: str | Path, *, logger: object | None = None) -> Path:

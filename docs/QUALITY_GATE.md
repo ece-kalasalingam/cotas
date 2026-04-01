@@ -32,6 +32,15 @@ Keep high-level policy in `AGENTS.md`; keep executable gate commands here.
 2. Cancellation coverage:
    - `conda run -n obe python -m pytest -q tests/test_instructor_module_cancellation.py tests/test_course_details_template_generator_validation.py tests/test_marks_template_generator.py`
 
+## Performance CI Policy (Phased)
+
+- CI runs `tests/perf` with `RUN_PERF_TESTS=1` in a separate non-blocking job (PR + nightly + manual).
+- Keep perf non-blocking while thresholds are tuned and runner variance is observed.
+- Promote to blocking only after stable signal:
+  - no persistent false failures across at least 2 consecutive weeks
+  - threshold breaches reproduce locally and correspond to real regressions
+  - perf job runtime remains acceptable for CI cadence
+
 ## Release Metadata
 
 1. Generate artifact checksum manifest:

@@ -9,6 +9,17 @@ from pathlib import Path
 
 
 def _sha256(path: Path) -> str:
+    """Sha256.
+    
+    Args:
+        path: Parameter value (Path).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -17,6 +28,17 @@ def _sha256(path: Path) -> str:
 
 
 def main() -> int:
+    """Main.
+    
+    Args:
+        None.
+    
+    Returns:
+        int: Return value.
+    
+    Raises:
+        None.
+    """
     parser = argparse.ArgumentParser(description="Generate artifact manifest (SHA256).")
     parser.add_argument("artifacts", nargs="+", help="Artifact file paths.")
     parser.add_argument("--out", default="artifact-manifest.json", help="Output manifest file.")

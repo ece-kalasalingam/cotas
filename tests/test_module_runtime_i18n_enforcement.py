@@ -13,6 +13,17 @@ class _Module:
 
 
 def _ns() -> dict[str, object]:
+    """Ns.
+    
+    Args:
+        None.
+    
+    Returns:
+        dict[str, object]: Return value.
+    
+    Raises:
+        None.
+    """
     return {
         "emit_user_status": lambda *_a, **_k: None,
         "t": lambda key, **kwargs: key,
@@ -25,6 +36,17 @@ def _ns() -> dict[str, object]:
 
 
 def test_module_runtime_plain_status_and_append_are_disallowed() -> None:
+    """Test module runtime plain status and append are disallowed.
+    
+    Args:
+        None.
+    
+    Returns:
+        None.
+    
+    Raises:
+        None.
+    """
     runtime = ModuleRuntime(
         module=_Module(),
         app_name="APP",
