@@ -224,7 +224,8 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>COs attainment प्राप्त करने के लिए पाठ्यक्रम की भरी हुई marks template workbook(s) अपलोड करें। course coordinator report के लिए, पाठ्यक्रम की भरी हुई CO description template workbook अपलोड करें।</translation>
+      <translation>COs attainment प्राप्त करने के लिए पाठ्यक्रम की भरी हुई marks template workbook(s) अपलोड करें।
+course coordinator report के लिए, पाठ्यक्रम की भरी हुई CO description template workbook अपलोड करें।</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -346,7 +347,7 @@
     </message>
     <message>
       <source>co_analysis.title</source>
-      <translation>पाठ्यक्रम प्राप्ति</translation>
+      <translation>CO प्राप्ति</translation>
     </message>
     <message>
       <source>help.doc_error_body</source>

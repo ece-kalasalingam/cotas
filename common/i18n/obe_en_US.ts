@@ -235,7 +235,8 @@ Cohort Mismatch: {cohort_mismatch}</translation>
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>Upload the filled marks template workbook(s) of the course to get the COs attainment. For course coordinator report, upload the filled CO description template workbook of the course.</translation>
+      <translation>Upload the filled marks template workbook(s) of the course to get the COs attainment.
+For course coordinator report, upload the filled CO description template workbook of the course.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -360,7 +361,7 @@ Cohort Mismatch: {cohort_mismatch}</translation>
     </message>
     <message>
       <source>co_analysis.title</source>
-      <translation>Course Attainment</translation>
+      <translation>CO Attainment</translation>
     </message>
     <message>
       <source>help.doc_error_body</source>

@@ -224,7 +224,8 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>COs attainment పొందడానికి కోర్సు యొక్క నింపిన marks template workbook(s) ను అప్లోడ్ చేయండి. course coordinator report కోసం, కోర్సు యొక్క నింపిన CO description template workbook ను అప్లోడ్ చేయండి.</translation>
+      <translation>COs attainment పొందడానికి కోర్సు యొక్క నింపిన marks template workbook(s) ను అప్లోడ్ చేయండి.
+course coordinator report కోసం, కోర్సు యొక్క నింపిన CO description template workbook ను అప్లోడ్ చేయండి.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -347,7 +348,7 @@
     </message>
     <message>
       <source>co_analysis.title</source>
-      <translation>కోర్సు సాధన</translation>
+      <translation>CO సాధన</translation>
     </message>
     <message>
       <source>help.doc_error_body</source>

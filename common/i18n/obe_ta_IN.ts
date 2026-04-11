@@ -224,7 +224,8 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>COs attainment பெற, பாடநெறியின் நிரப்பப்பட்ட marks template workbook(s) ஐ பதிவேற்றவும். course coordinator report க்காக, பாடநெறியின் நிரப்பப்பட்ட CO description template workbook ஐ பதிவேற்றவும்.</translation>
+      <translation>COs attainment பெற, பாடநெறியின் நிரப்பப்பட்ட marks template workbook(s) ஐ பதிவேற்றவும்.
+course coordinator report க்காக, பாடநெறியின் நிரப்பப்பட்ட CO description template workbook ஐ பதிவேற்றவும்.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -349,7 +350,7 @@
     </message>
     <message>
       <source>co_analysis.title</source>
-      <translation>பாட அடைவு</translation>
+      <translation>CO அடைவு</translation>
     </message>
     <message>
       <source>help.doc_error_body</source>
