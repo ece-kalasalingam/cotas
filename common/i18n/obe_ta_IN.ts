@@ -224,7 +224,7 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>மதிப்பெண்கள் பூர்த்தி செய்யப்பட்ட பணிப்புத்தகம்(களை) பதிவேற்றவும்.</translation>
+      <translation>COs attainment பெற, பாடநெறியின் நிரப்பப்பட்ட marks template workbook(s) ஐ பதிவேற்றவும். course coordinator report க்காக, பாடநெறியின் நிரப்பப்பட்ட CO description template workbook ஐ பதிவேற்றவும்.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -1006,6 +1006,10 @@
     <message>
       <source>instructor.workflow_title</source>
       <translation>CO பணிச்சுற்று</translation>
+    </message>
+    <message>
+      <source>instructor.workflow_hint</source>
+      <translation>marks template workbook(s) பெற, ஒற்றை / பல பாடநெறி(கள்) க்கான நிரப்பப்பட்ட course template workbook(s) ஐ பதிவேற்றவும்</translation>
     </message>
     <message>
       <source>language.switcher.applied_status</source>

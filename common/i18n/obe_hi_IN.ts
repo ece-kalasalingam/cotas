@@ -224,7 +224,7 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>अंक भरी हुई वर्कबुक अपलोड करें</translation>
+      <translation>COs attainment प्राप्त करने के लिए पाठ्यक्रम की भरी हुई marks template workbook(s) अपलोड करें। course coordinator report के लिए, पाठ्यक्रम की भरी हुई CO description template workbook अपलोड करें।</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -1003,6 +1003,10 @@
     <message>
       <source>instructor.workflow_title</source>
       <translation>CO कार्यप्रवाह</translation>
+    </message>
+    <message>
+      <source>instructor.workflow_hint</source>
+      <translation>marks template workbook(s) पाने के लिए एकल / बहु पाठ्यक्रम के भरे हुए course template workbook(s) अपलोड करें</translation>
     </message>
     <message>
       <source>language.switcher.applied_status</source>

@@ -224,7 +224,7 @@
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>మార్కులు నమోదు చేసిన వర్క్‌బుక్(ల)ను అప్‌లోడ్ చేయండి.</translation>
+      <translation>COs attainment పొందడానికి కోర్సు యొక్క నింపిన marks template workbook(s) ను అప్లోడ్ చేయండి. course coordinator report కోసం, కోర్సు యొక్క నింపిన CO description template workbook ను అప్లోడ్ చేయండి.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -1004,6 +1004,10 @@
     <message>
       <source>instructor.workflow_title</source>
       <translation>CO వర్క్\u200cఫ్లో</translation>
+    </message>
+    <message>
+      <source>instructor.workflow_hint</source>
+      <translation>marks template workbook(s) పొందడానికి ఒంటరి / బహుళ కోర్సు(లు) కి సంబంధించిన నింపిన course template workbook(s) ను అప్లోడ్ చేయండి</translation>
     </message>
     <message>
       <source>language.switcher.applied_status</source>

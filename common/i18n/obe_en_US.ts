@@ -235,7 +235,7 @@ Cohort Mismatch: {cohort_mismatch}</translation>
     </message>
     <message>
       <source>co_analysis.drop_hint</source>
-      <translation>Upload the Marks Filled workbooks.</translation>
+      <translation>Upload the filled marks template workbook(s) of the course to get the COs attainment. For course coordinator report, upload the filled CO description template workbook of the course.</translation>
     </message>
     <message>
       <source>co_analysis.duplicate.body</source>
@@ -1018,6 +1018,10 @@ Cohort Mismatch: {cohort_mismatch}</translation>
     <message>
       <source>instructor.workflow_title</source>
       <translation>CO Workflow</translation>
+    </message>
+    <message>
+      <source>instructor.workflow_hint</source>
+      <translation>Upload the filled course template workbook(s) of single/multiple course(s) to get marks template workbook(s)</translation>
     </message>
     <message>
       <source>language.switcher.applied_status</source>

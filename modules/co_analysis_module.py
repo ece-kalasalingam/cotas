@@ -250,14 +250,11 @@ class COAnalysisModule(QWidget):
         self.title_label = QLabel()
         self.title_label.setObjectName("coordinatorTitle")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        left_layout.addWidget(self.title_label)
 
         self.hint_label = QLabel()
         self.hint_label.setObjectName("coordinatorHint")
         self.hint_label.setWordWrap(True)
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        self.hint_label.setMaximumWidth(_LEFT_PANE_WIDTH - _LEFT_PANE_TEXT_RIGHT_SAFE_GAP)
-        left_layout.addWidget(self.hint_label)
 
         thresholds_layout = QVBoxLayout()
         thresholds_layout.setContentsMargins(0, 0, 0, 0)
@@ -391,7 +388,6 @@ class COAnalysisModule(QWidget):
         self.download_co_description_template_link.linkActivated.connect(
             self._on_download_co_description_template_link_activated
         )
-        thresholds_layout.addWidget(self.download_co_description_template_link)
 
         self.drop_widget = ManagedDropFileWidget(
             drop_mode="multiple",
@@ -414,6 +410,9 @@ class COAnalysisModule(QWidget):
         right_pane = QWidget()
         right_pane.setObjectName("coordinatorActiveCard")
         right_layout = QVBoxLayout(right_pane)
+        right_layout.addWidget(self.title_label)
+        right_layout.addWidget(self.hint_label)
+        right_layout.addWidget(self.download_co_description_template_link)
         right_layout.addWidget(self.drop_widget, 1)
         right_scroll = QScrollArea()
         right_scroll.setObjectName("coordinatorRightScroll")

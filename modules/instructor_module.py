@@ -187,6 +187,12 @@ class InstructorModule(QWidget):
         self.workflow_title.setObjectName("instructorRailTitle")
         right_layout.addWidget(self.workflow_title, 0)
 
+        self.workflow_hint = QLabel(t("instructor.workflow_hint"))
+        self.workflow_hint.setObjectName("instructorHint")
+        self.workflow_hint.setWordWrap(True)
+        self.workflow_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        right_layout.addWidget(self.workflow_hint, 0)
+
         self.download_course_template_link = QLabel()
         self.download_course_template_link.setTextFormat(Qt.TextFormat.RichText)
         self.download_course_template_link.setTextInteractionFlags(
@@ -242,6 +248,7 @@ class InstructorModule(QWidget):
             None.
         """
         self.workflow_title.setText(t("instructor.workflow_title"))
+        self.workflow_hint.setText(t("instructor.workflow_hint"))
         self._set_download_course_template_link_enabled(not self.state.busy)
         self.course_details_drop_widget.set_submit_button_text(t("instructor.action.generate_marks_template"))
         self.course_details_drop_widget.set_clear_button_text(t("co_analysis.clear_all"))

@@ -25,16 +25,16 @@ def build_module_catalog() -> tuple[ModulePluginSpec, ...]:
             class_loader=lazy_module_class("modules.instructor_module", "InstructorModule"),
         ),
         ModulePluginSpec(
-            key="po_analysis",
-            title_key="module.po_analysis",
-            icon_path="assets/po.svg",
-            class_loader=lazy_module_class("modules.po_analysis_module", "POAnalysisModule"),
-        ),
-        ModulePluginSpec(
             key="co_analysis",
             title_key="module.co_analysis",
             icon_path="assets/co_course.svg",
             class_loader=lazy_module_class("modules.co_analysis_module", "COAnalysisModule"),
+        ),
+        ModulePluginSpec(
+            key="po_analysis",
+            title_key="module.po_analysis",
+            icon_path="assets/po.svg",
+            class_loader=lazy_module_class("modules.po_analysis_module", "POAnalysisModule"),
         ),
         ModulePluginSpec(
             key="help",

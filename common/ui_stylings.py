@@ -69,7 +69,6 @@ QWidget#instructorRightScrollViewport {
     border: none;
     background: transparent;
 }
-
 QPushButton#primaryAction:enabled {
     background-color: palette(highlight);
     color: palette(highlighted-text);

@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Literal
 
-from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal
 from PySide6.QtGui import (
     QDragEnterEvent,
     QDragLeaveEvent,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -127,14 +128,28 @@ class DragDropFileList(QListWidget):
         if not self._placeholder_text:
             return
         painter = QPainter(self.viewport())
+        font = painter.font()
+        font.setBold(True)
+        painter.setFont(font)
         painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
         if self.count() == 0 or self._placeholder_bottom_margins is None:
-            draw_rect = self.viewport().rect().adjusted(*self._placeholder_margins)
-            draw_flags = Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap
+            icon_size = 48
+            viewport_rect = self.viewport().rect().adjusted(*self._placeholder_margins)
+            total_height = icon_size + 8 + painter.fontMetrics().height()
+            icon_x = viewport_rect.center().x() - icon_size // 2
+            icon_y = viewport_rect.center().y() - total_height // 2
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogStart)
+            icon.paint(painter, QRect(icon_x, icon_y, icon_size, icon_size))
+            text_rect = QRect(
+                viewport_rect.left(),
+                icon_y + icon_size + 8,
+                viewport_rect.width(),
+                viewport_rect.bottom() - (icon_y + icon_size + 8),
+            )
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, self._placeholder_text)
         else:
             draw_rect = self.viewport().rect().adjusted(*self._placeholder_bottom_margins)
-            draw_flags = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom | Qt.TextFlag.TextWordWrap
-        painter.drawText(draw_rect, draw_flags, self._placeholder_text)
+            painter.drawText(draw_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom | Qt.TextFlag.TextWordWrap, self._placeholder_text)
         painter.end()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -282,6 +297,17 @@ class DragDropZoneFrame(QFrame):
             None.
         """
         super().__init__(parent)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        pen = painter.pen()
+        pen.setColor(self.palette().color(QPalette.ColorRole.WindowText))
+        pen.setWidth(0)
+        pen.setStyle(Qt.PenStyle.CustomDashLine)
+        pen.setDashPattern([4, 12])
+        painter.setPen(pen)
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+        painter.end()
 
     def set_drag_active(self, active: bool) -> None:
         """Set drag active.
