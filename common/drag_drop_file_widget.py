@@ -480,6 +480,39 @@ class ManagedDropFileWidget(QWidget):
         """
         return list(self._files)
 
+    def retranslate_tooltips(
+        self,
+        open_file_tooltip: str,
+        open_folder_tooltip: str,
+        remove_tooltip: str,
+    ) -> None:
+        """Update stored tooltip strings and refresh all existing file row widgets.
+
+        Call this from the host module's retranslate_ui() so tooltips stay
+        current after a language switch.
+
+        Args:
+            open_file_tooltip: Translated tooltip for the open-file button.
+            open_folder_tooltip: Translated tooltip for the open-folder button.
+            remove_tooltip: Translated tooltip for the remove button.
+
+        Returns:
+            None.
+
+        Raises:
+            None.
+        """
+        self._open_file_tooltip = open_file_tooltip
+        self._open_folder_tooltip = open_folder_tooltip
+        self._remove_tooltip = remove_tooltip
+        for row in range(self.drop_list.count()):
+            item = self.drop_list.item(row)
+            if item is None:
+                continue
+            widget = self.drop_list.itemWidget(item)
+            if isinstance(widget, RemovableFileItemWidget):
+                widget.set_tooltips(open_file_tooltip, open_folder_tooltip, remove_tooltip)
+
     def set_summary_text_builder(self, builder: Callable[[int], str]) -> None:
         """Set summary text builder.
         

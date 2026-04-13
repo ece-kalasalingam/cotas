@@ -203,6 +203,29 @@ class RemovableFileItemWidget(QWidget):
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self.file_path))
         layout.addWidget(self.remove_btn, 0)
 
+    def set_tooltips(
+        self,
+        open_file_tooltip: str,
+        open_folder_tooltip: str,
+        remove_tooltip: str,
+    ) -> None:
+        """Update tooltip text on all three action buttons.
+
+        Args:
+            open_file_tooltip: Tooltip for the open-file button.
+            open_folder_tooltip: Tooltip for the open-folder button.
+            remove_tooltip: Tooltip for the remove button.
+
+        Returns:
+            None.
+
+        Raises:
+            None.
+        """
+        self.open_file_btn.setToolTip(open_file_tooltip)
+        self.open_folder_btn.setToolTip(open_folder_tooltip)
+        self.remove_btn.setToolTip(remove_tooltip)
+
     @staticmethod
     def _normalize_local_path(file_path: str) -> str | None:
         """Normalize local path.

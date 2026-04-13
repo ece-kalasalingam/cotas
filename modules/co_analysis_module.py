@@ -455,6 +455,11 @@ class COAnalysisModule(QWidget):
         self.title_label.setText(t("co_analysis.title"))
         self.hint_label.setText(t("co_analysis.drop_hint"))
         self.drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
+        self.drop_widget.retranslate_tooltips(
+            t("outputs.open_file"),
+            t("outputs.open_folder"),
+            t("co_analysis.file.remove_tooltip"),
+        )
         self.drop_widget.set_clear_button_text(t("co_analysis.clear_all"))
         self.drop_widget.set_summary_text_builder(lambda _count: t("co_analysis.summary", count=len(self._files)))
         self.drop_widget.set_submit_button_text(t("co_analysis.calculate"))

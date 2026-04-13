@@ -276,6 +276,11 @@ class InstructorModule(QWidget):
             None.
         """
         self.course_details_drop_widget.drop_list.set_placeholder_text(t("common.dropzone.placeholder"))
+        self.course_details_drop_widget.retranslate_tooltips(
+            t("outputs.open_file"),
+            t("outputs.open_folder"),
+            t("co_analysis.file.remove_tooltip"),
+        )
         self._refresh_ui()
 
     def _output_items(self) -> tuple[OutputItem, ...]:
