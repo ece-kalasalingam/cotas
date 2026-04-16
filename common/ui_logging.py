@@ -1,4 +1,4 @@
-﻿"""Shared UI logging helpers for module activity panels."""
+"""Shared UI logging helpers for module activity panels."""
 
 from __future__ import annotations
 
@@ -28,11 +28,6 @@ class UILogHandler(logging.Handler):
             self._sink(message)
         except Exception:
             self.handleError(record)
-
-
-def format_log_line(message: str) -> str | None:
-    """Return a trimmed log line with HH:MM:SS prefix unless already timestamped."""
-    return format_log_line_at(message)
 
 
 def format_log_line_at(message: str, *, timestamp: datetime | None = None) -> str | None:

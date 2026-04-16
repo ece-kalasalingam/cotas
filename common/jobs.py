@@ -1,4 +1,4 @@
-﻿"""Job context and cancellation primitives."""
+"""Job context and cancellation primitives."""
 
 from __future__ import annotations
 
@@ -49,4 +49,5 @@ class CancellationToken:
     def raise_if_cancelled(self, *, message: str = "Job was cancelled.") -> None:
         if self.cancelled:
             raise JobCancelledError(message)
+
 

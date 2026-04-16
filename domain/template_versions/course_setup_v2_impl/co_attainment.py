@@ -7,8 +7,10 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import tempfile
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +25,7 @@ from common.constants import (
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
+    CO_REPORT_HEADER_TOTAL_100,
     CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE,
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
@@ -37,6 +40,8 @@ from common.constants import (
     LEVEL_1_THRESHOLD,
     LEVEL_2_THRESHOLD,
     LEVEL_3_THRESHOLD,
+    LIKERT_MAX,
+    LIKERT_MIN,
     WORKBOOK_INTEGRITY_SCHEMA_VERSION,
 )
 from common.workbook_integrity.constants import (
@@ -50,6 +55,7 @@ from common.registry import (
     COURSE_METADATA_SECTION_KEY,
     COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+    COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
     SYSTEM_HASH_HEADER_TEMPLATE_HASH as SYSTEM_HASH_TEMPLATE_HASH_HEADER,
@@ -78,6 +84,7 @@ from common.workbook_integrity.workbook_signing import sign_payload, verify_payl
 from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
     co_direct_sheet_name,
     co_indirect_sheet_name,
+    write_co_outcome_sheets,
 )
 from domain.template_strategy_router import (
     read_template_id_from_system_hash_sheet_if_valid,
@@ -138,6 +145,7 @@ class _CoAttainmentRow:
     indirect_score: float | str
     worksheet_name: str
     workbook_name: str
+    direct_component_scores: tuple[float | str, ...] = ()
 
 
 @dataclass(slots=True, frozen=True)
@@ -147,6 +155,22 @@ class _ParsedScoreRow:
     reg_no: str
     student_name: str
     score: float | str
+
+
+@dataclass(slots=True, frozen=True)
+class _DirectComponentColumn:
+    name: str
+    max_marks: float
+    weight: float
+    score_column: int
+
+
+@dataclass(slots=True)
+class _CoReportComponent:
+    name: str
+    weight: float
+    max_by_co: dict[int, float]
+    marks_by_co: dict[int, list[Any]]
 
 
 @dataclass(slots=True)
@@ -952,6 +976,45 @@ def _threshold_rows_for_output(
     ]
 
 
+def _metadata_rows_for_co_analysis_outcome_sheets(
+    *,
+    metadata: dict[str, str],
+    co_index: int,
+    thresholds: tuple[float, float, float] | None,
+    co_attainment_percent: float,
+    co_attainment_level: int,
+) -> list[tuple[str, str]]:
+    """Metadata rows for co analysis outcome sheets.
+    
+    Args:
+        metadata: Parameter value (dict[str, str]).
+        co_index: Parameter value (int).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+    
+    Returns:
+        list[tuple[str, str]]: Return value.
+    
+    Raises:
+        None.
+    """
+    metadata_rows = [
+        (field, value)
+        for field, value in _metadata_rows_for_output(metadata, co_index)
+        if normalize(field) != normalize("CO Number")
+    ]
+    metadata_rows.extend(
+        _threshold_rows_for_output(
+            thresholds,
+            co_attainment_percent=co_attainment_percent,
+            co_attainment_level=co_attainment_level,
+            include=bool(metadata),
+        )
+    )
+    return metadata_rows
+
+
 def _extract_course_metadata_fields(sheet: Any) -> dict[str, str]:
     """Extract course metadata fields.
     
@@ -1099,6 +1162,116 @@ def _iter_students_sheet_rows(
             yield reg_no, student_name
 
 
+def _iter_data_rows(worksheet: Any, expected_col_count: int, *, header_row: int = 1) -> list[list[Any]]:
+    """Iter data rows.
+
+    Args:
+        worksheet: Parameter value (Any).
+        expected_col_count: Parameter value (int).
+
+    Returns:
+        list[list[Any]]: Return value.
+
+    Raises:
+        None.
+    """
+    rows: list[list[Any]] = []
+    for row in worksheet.iter_rows(min_row=max(1, int(header_row) + 1), max_col=expected_col_count, values_only=True):
+        values = list(row)
+        if any(normalize(value) != "" for value in values):
+            rows.append(values)
+    return rows
+
+
+def _extract_component_name_from_marks_sheet(sheet: Any, *, header_row: int) -> str:
+    """Extract component name from marks sheet.
+
+    Args:
+        sheet: Parameter value (Any).
+        header_row: Parameter value (int).
+
+    Returns:
+        str: Return value.
+
+    Raises:
+        None.
+    """
+    scan_to = max(1, min(header_row, int(getattr(sheet, "max_row", 0) or 0)))
+    for row_index in range(1, scan_to + 1):
+        label = normalize(sheet.cell(row=row_index, column=2).value)
+        if label == normalize("Component Name"):
+            return str(sheet.cell(row=row_index, column=3).value or "").strip()
+    return ""
+
+
+def _co_index_from_label(value: Any) -> int | None:
+    """Co index from label.
+
+    Args:
+        value: Parameter value (Any).
+
+    Returns:
+        int | None: Return value.
+
+    Raises:
+        None.
+    """
+    token = str(value or "").strip()
+    match = re.fullmatch(r"CO\s*([0-9]+)", token, re.IGNORECASE)
+    if match is None:
+        return None
+    try:
+        parsed = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_direct_sheet_max_by_co(
+    sheet: Any,
+    *,
+    header_row: int,
+    kind: str,
+) -> dict[int, float]:
+    """Extract direct sheet max by co.
+
+    Args:
+        sheet: Parameter value (Any).
+        header_row: Parameter value (int).
+        kind: Parameter value (str).
+
+    Returns:
+        dict[int, float]: Return value.
+
+    Raises:
+        None.
+    """
+    result: dict[int, float] = {}
+    co_row = header_row + 1
+    max_row = header_row + 2
+    max_col = int(getattr(sheet, "max_column", 0) or 0)
+    if normalize(kind) == normalize(LAYOUT_SHEET_KIND_DIRECT_CO_WISE):
+        for col_index in range(4, max_col + 1):
+            co_index = _co_index_from_label(sheet.cell(row=co_row, column=col_index).value)
+            if co_index is None:
+                continue
+            max_value = coerce_excel_number(sheet.cell(row=max_row, column=col_index).value)
+            if isinstance(max_value, bool) or not isinstance(max_value, (int, float)):
+                continue
+            result[co_index] = round(result.get(co_index, 0.0) + float(max_value), CO_REPORT_MAX_DECIMAL_PLACES)
+        return result
+    if normalize(kind) == normalize(LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE):
+        for col_index in range(5, max_col + 1):
+            co_index = _co_index_from_label(sheet.cell(row=co_row, column=col_index).value)
+            if co_index is None:
+                continue
+            max_value = coerce_excel_number(sheet.cell(row=max_row, column=col_index).value)
+            if isinstance(max_value, bool) or not isinstance(max_value, (int, float)):
+                continue
+            result[co_index] = round(float(max_value), CO_REPORT_MAX_DECIMAL_PLACES)
+    return result
+
+
 def _stable_reg_hash(reg_key: str) -> int:
     # Use a compact, stable 48-bit ID to reduce sqlite footprint while keeping collision risk very low.
     """Stable reg hash.
@@ -1226,12 +1399,118 @@ def _iter_score_rows(sheet: Any, *, ratio: float) -> Iterable[_ParsedScoreRow]:
         )
 
 
+def _parse_direct_component_header(
+    value: Any,
+) -> tuple[str, float, bool] | None:
+    """Parse direct component header.
+
+    Args:
+        value: Parameter value (Any).
+
+    Returns:
+        tuple[str, float, bool] | None: Return value.
+
+    Raises:
+        None.
+    """
+    token = str(value or "").strip()
+    match = re.fullmatch(r"(.+)\(([^()]*)\)", token)
+    if match is None:
+        return None
+    name = str(match.group(1) or "").strip()
+    suffix = str(match.group(2) or "").strip()
+    if not name or not suffix:
+        return None
+    is_percent = suffix.endswith("%")
+    numeric_token = suffix[:-1].strip() if is_percent else suffix
+    parsed = coerce_excel_number(numeric_token)
+    if isinstance(parsed, bool) or not isinstance(parsed, (int, float)):
+        return None
+    return name, float(parsed), is_percent
+
+
+def _direct_component_columns(
+    *,
+    sheet: Any,
+    header_row: int,
+    max_col: int,
+) -> tuple[list[_DirectComponentColumn], dict[tuple[int, str], tuple[float | str, ...]]]:
+    """Direct component columns.
+
+    Args:
+        sheet: Parameter value (Any).
+        header_row: Parameter value (int).
+        max_col: Parameter value (int).
+
+    Returns:
+        tuple[list[_DirectComponentColumn], dict[tuple[int, str], tuple[float | str, ...]]]:
+        Return value.
+
+    Raises:
+        None.
+    """
+    component_columns: list[_DirectComponentColumn] = []
+    column = 4
+    while column + 1 <= max_col:
+        first = _parse_direct_component_header(sheet.cell(row=header_row, column=column).value)
+        second = _parse_direct_component_header(sheet.cell(row=header_row, column=column + 1).value)
+        if first is None or second is None:
+            break
+        first_name, max_marks, first_is_percent = first
+        second_name, weight, second_is_percent = second
+        if first_is_percent or not second_is_percent or normalize(first_name) != normalize(second_name):
+            break
+        component_columns.append(
+            _DirectComponentColumn(
+                name=first_name,
+                max_marks=round(float(max_marks), CO_REPORT_MAX_DECIMAL_PLACES),
+                weight=round(float(weight), CO_REPORT_MAX_DECIMAL_PLACES),
+                score_column=column,
+            )
+        )
+        column += 2
+
+    marks_lookup: dict[tuple[int, str], tuple[float | str, ...]] = {}
+    if not component_columns:
+        return component_columns, marks_lookup
+
+    for values in sheet.iter_rows(
+        min_row=header_row + 1,
+        max_row=int(sheet.max_row or 0),
+        min_col=1,
+        max_col=max_col,
+        values_only=True,
+    ):
+        if len(values) < 2:
+            continue
+        reg_raw = values[1]
+        reg_value = coerce_excel_number(reg_raw)
+        reg_no = str(reg_value).strip() if reg_value is not None else ""
+        if not reg_no:
+            continue
+        reg_key = normalize(reg_no)
+        reg_hash = _stable_reg_hash(reg_key)
+        component_scores: list[float | str] = []
+        for item in component_columns:
+            raw = values[item.score_column - 1] if len(values) >= item.score_column else None
+            if normalize(raw) == normalize(CO_REPORT_ABSENT_TOKEN):
+                component_scores.append(CO_REPORT_ABSENT_TOKEN)
+                continue
+            numeric = coerce_excel_number(raw)
+            if isinstance(numeric, bool) or not isinstance(numeric, (int, float)):
+                component_scores.append(0.0)
+                continue
+            component_scores.append(round(float(numeric), CO_REPORT_MAX_DECIMAL_PLACES))
+        marks_lookup[(reg_hash, reg_key)] = tuple(component_scores)
+    return component_columns, marks_lookup
+
+
 def _iter_co_rows_from_workbook(
     workbook: Any,
     *,
     co_index: int,
     workbook_name: str,
-) -> tuple[list[_CoAttainmentRow], int, int, int]:
+) -> tuple[list[_CoAttainmentRow], int, int, int, list[_DirectComponentColumn]]:
     """Collect joined CO rows and join/drop counts from one workbook.
     
     Args:
@@ -1240,8 +1519,9 @@ def _iter_co_rows_from_workbook(
         workbook_name: Parameter value (str).
     
     Returns:
-        tuple[list[_CoAttainmentRow], int, int, int]: Matched rows, direct row
-        count, indirect row count, and unmatched drop count.
+        tuple[list[_CoAttainmentRow], int, int, int, list[_DirectComponentColumn]]:
+        Matched rows, direct row count, indirect row count, unmatched drop count,
+        and parsed direct component columns.
     
     Raises:
         None.
@@ -1255,9 +1535,25 @@ def _iter_co_rows_from_workbook(
             sheet_name=f"CO{co_index}",
         )
 
+    direct_sheet = workbook[direct_name]
     direct_lookup: dict[tuple[int, str], _ParsedScoreRow] = {}
-    for item in _iter_score_rows(workbook[direct_name], ratio=DIRECT_RATIO):
+    for item in _iter_score_rows(direct_sheet, ratio=DIRECT_RATIO):
         direct_lookup.setdefault((item.reg_hash, item.reg_key), item)
+    direct_component_columns: list[_DirectComponentColumn] = []
+    direct_component_lookup: dict[tuple[int, str], tuple[float | str, ...]] = {}
+    if hasattr(direct_sheet, "cell") and hasattr(direct_sheet, "iter_rows"):
+        direct_header_row = 0
+        max_row_value = int(getattr(direct_sheet, "max_row", 0) or 0)
+        for row_index in range(1, min(max_row_value, _HEADER_SCAN_MAX_ROWS) + 1):
+            if normalize(direct_sheet.cell(row=row_index, column=1).value) == normalize(CO_REPORT_HEADER_SERIAL):
+                direct_header_row = row_index
+                break
+        if direct_header_row > 0:
+            direct_component_columns, direct_component_lookup = _direct_component_columns(
+                sheet=direct_sheet,
+                header_row=direct_header_row,
+                max_col=int(getattr(direct_sheet, "max_column", 0) or 0),
+            )
 
     indirect_lookup: dict[tuple[int, str], _ParsedScoreRow] = {}
     for item in _iter_score_rows(workbook[indirect_name], ratio=INDIRECT_RATIO):
@@ -1309,9 +1605,10 @@ def _iter_co_rows_from_workbook(
                 indirect_score=match.score,
                 worksheet_name=direct_name,
                 workbook_name=workbook_name,
+                direct_component_scores=direct_component_lookup.get(key, ()),
             )
         )
-    return matched_rows, len(direct_lookup), len(indirect_lookup), dropped_count
+    return matched_rows, len(direct_lookup), len(indirect_lookup), dropped_count, direct_component_columns
 
 
 def _xlsxwriter_formats(workbook: Any, *, template_id: str) -> dict[str, Any]:
@@ -1954,6 +2251,8 @@ def _generate_co_attainment_workbook_course_setup_v2(
     workbook_closed = False
     output_states: dict[int, _CoOutputSheetState] = {}
     pending_rows: dict[int, list[_CoAttainmentRow]] = {}
+    pending_direct_columns: dict[int, list[_DirectComponentColumn]] = {}
+    pending_direct_scores: dict[int, dict[int, dict[str, float | str]]] = {}
     duplicate_reg_count = 0
     duplicate_entries: list[tuple[str, str, str]] = []
     inner_join_drop_count = 0
@@ -1979,36 +2278,30 @@ def _generate_co_attainment_workbook_course_setup_v2(
             try:
                 if not metadata and COURSE_METADATA_SHEET in workbook.sheetnames:
                     metadata = _extract_course_metadata_fields(workbook[COURSE_METADATA_SHEET])
-                    for co_index in range(1, resolved_total_outcomes + 1):
-                        output_states[co_index] = _create_co_attainment_sheet(
-                            output_workbook,
-                            template_id=template_id,
-                            co_index=co_index,
-                            metadata=metadata,
-                            thresholds=level_thresholds,
-                            co_attainment_percent=target_percent,
-                            co_attainment_level=target_level,
-                        )
-                        pending_rows[co_index] = []
-                if not output_states:
-                    for co_index in range(1, resolved_total_outcomes + 1):
-                        output_states[co_index] = _create_co_attainment_sheet(
-                            output_workbook,
-                            template_id=template_id,
-                            co_index=co_index,
-                            metadata=metadata,
-                            thresholds=level_thresholds,
-                            co_attainment_percent=target_percent,
-                            co_attainment_level=target_level,
-                        )
-                        pending_rows[co_index] = []
                 for co_index in range(1, resolved_total_outcomes + 1):
                     row_bucket = pending_rows.setdefault(co_index, [])
-                    rows, direct_total, indirect_total, dropped_for_sheet = _iter_co_rows_from_workbook(
+                    rows, direct_total, indirect_total, dropped_for_sheet, direct_columns = _iter_co_rows_from_workbook(
                         workbook,
                         co_index=co_index,
                         workbook_name=source.name,
                     )
+                    if direct_columns:
+                        merged_columns = pending_direct_columns.setdefault(co_index, [])
+                        merged_index = {normalize(item.name): idx for idx, item in enumerate(merged_columns)}
+                        for item in direct_columns:
+                            key = normalize(item.name)
+                            existing_idx = merged_index.get(key)
+                            if existing_idx is None:
+                                merged_columns.append(item)
+                                merged_index[key] = len(merged_columns) - 1
+                                continue
+                            existing = merged_columns[existing_idx]
+                            merged_columns[existing_idx] = _DirectComponentColumn(
+                                name=existing.name,
+                                max_marks=max(existing.max_marks, item.max_marks),
+                                weight=max(existing.weight, item.weight),
+                                score_column=existing.score_column,
+                            )
                     if dropped_for_sheet:
                         inner_join_drop_count += dropped_for_sheet
                         inner_join_drop_details.append(
@@ -2019,14 +2312,87 @@ def _generate_co_attainment_workbook_course_setup_v2(
                             duplicate_reg_count += 1
                             duplicate_entries.append((row.reg_no, row.worksheet_name, row.workbook_name))
                             continue
+                        if direct_columns and row.direct_component_scores:
+                            score_map = pending_direct_scores.setdefault(co_index, {}).setdefault(row.reg_hash, {})
+                            for idx, component in enumerate(direct_columns):
+                                if idx >= len(row.direct_component_scores):
+                                    break
+                                score_map[normalize(component.name)] = row.direct_component_scores[idx]
                         row_bucket.append(row)
             finally:
                 workbook.close()
-        for co_index, state in output_states.items():
-            for row in sorted(
+        shared_formats = _xlsxwriter_formats(output_workbook, template_id=template_id)
+        for co_index in range(1, resolved_total_outcomes + 1):
+            sorted_rows = sorted(
                 pending_rows.get(co_index, []),
                 key=lambda item: (_reg_no_sort_key(item.reg_no), item.reg_hash),
-            ):
+            )
+            direct_columns = pending_direct_columns.get(co_index, [])
+            direct_components: list[_CoReportComponent] = []
+            if direct_columns:
+                for item in direct_columns:
+                    component_marks: list[Any] = []
+                    for row in sorted_rows:
+                        component_value = (
+                            pending_direct_scores.get(co_index, {})
+                            .get(row.reg_hash, {})
+                            .get(normalize(item.name), CO_REPORT_NOT_APPLICABLE_TOKEN)
+                        )
+                        component_marks.append(component_value)
+                    direct_components.append(
+                        _CoReportComponent(
+                            name=item.name,
+                            weight=item.weight,
+                            max_by_co={co_index: item.max_marks},
+                            marks_by_co={co_index: component_marks},
+                        )
+                    )
+            else:
+                synthetic_marks: list[Any] = []
+                for row in sorted_rows:
+                    if isinstance(row.direct_score, (int, float)):
+                        synthetic_marks.append(
+                            round(float(row.direct_score) / DIRECT_RATIO, CO_REPORT_MAX_DECIMAL_PLACES)
+                            if DIRECT_RATIO > 0
+                            else 0.0
+                        )
+                    else:
+                        synthetic_marks.append(CO_REPORT_ABSENT_TOKEN)
+                direct_components.append(
+                    _CoReportComponent(
+                        name="Direct",
+                        weight=100.0,
+                        max_by_co={co_index: 100.0},
+                        marks_by_co={co_index: synthetic_marks},
+                    )
+                )
+            write_co_outcome_sheets(
+                output_workbook,
+                template_id=template_id,
+                co_index=co_index,
+                metadata_rows=_metadata_rows_for_co_analysis_outcome_sheets(
+                    metadata=metadata,
+                    co_index=co_index,
+                    thresholds=level_thresholds,
+                    co_attainment_percent=target_percent,
+                    co_attainment_level=target_level,
+                ),
+                rows=sorted_rows,
+                direct_components=direct_components,
+                indirect_components=[],
+                formats=shared_formats,
+            )
+            state = _create_co_attainment_sheet(
+                output_workbook,
+                template_id=template_id,
+                co_index=co_index,
+                metadata=metadata,
+                thresholds=level_thresholds,
+                co_attainment_percent=target_percent,
+                co_attainment_level=target_level,
+            )
+            output_states[co_index] = state
+            for row in sorted_rows:
                 _append_co_attainment_row(state, row, thresholds=level_thresholds)
             _append_co_attainment_summary(state)
         summary_first_data_row, summary_last_data_row = _create_summary_sheet(
@@ -2050,7 +2416,15 @@ def _generate_co_attainment_workbook_course_setup_v2(
             summary_first_data_row=summary_first_data_row,
             summary_last_data_row=summary_last_data_row,
         )
-        sheet_order = [f"CO{co_index}" for co_index in range(1, resolved_total_outcomes + 1)]
+        sheet_order: list[str] = []
+        for co_index in range(1, resolved_total_outcomes + 1):
+            sheet_order.extend(
+                [
+                    co_direct_sheet_name(co_index),
+                    co_indirect_sheet_name(co_index),
+                    f"CO{co_index}",
+                ]
+            )
         sheet_order.extend(["Summary", "Graph"])
         _add_system_hash_sheet(output_workbook, template_id)
         manifest_text, manifest_hash = _build_system_layout_manifest(
@@ -2111,7 +2485,7 @@ def generate_co_attainment_workbook(
             code="COA_SOURCE_WORKBOOK_REQUIRED",
         )
     prepared_source_paths: list[Path] = list(source_paths)
-    temp_root_ctx: tempfile.TemporaryDirectory[str] | None = None
+    temp_root_dir: Path | None = None
     source_is_final_report: list[bool] = []
     generated_source_paths: list[Path] = []
     try:
@@ -2121,17 +2495,20 @@ def generate_co_attainment_workbook(
             source_is_final_report.append(is_final_report)
             if is_final_report:
                 continue
-            if temp_root_ctx is None:
-                temp_root_ctx = tempfile.TemporaryDirectory(prefix="focus_co_attainment_src_")
+            if temp_root_dir is None:
+                temp_root_base = app_runtime_storage_dir(APP_NAME) / ".co_attainment_tmp"
+                temp_root_base.mkdir(parents=True, exist_ok=True)
+                temp_root_dir = temp_root_base / f"focus_co_attainment_src_{uuid.uuid4().hex}"
+                temp_root_dir.mkdir(parents=True, exist_ok=True)
             output_name = f"co_attainment_source_{len(generated_source_paths) + 1}.xlsx"
-            generated_path = Path(temp_root_ctx.name) / output_name
+            generated_path = temp_root_dir / output_name
             generate_final_report_workbook(
                 filled_marks_path=path,
                 output_path=generated_path,
                 cancel_token=token,
             )
             generated_source_paths.append(generated_path)
-        if temp_root_ctx is not None:
+        if temp_root_dir is not None:
             resolved_paths: list[Path] = []
             generated_index = 0
             for original, is_final_report in zip(source_paths, source_is_final_report, strict=True):
@@ -2160,8 +2537,8 @@ def generate_co_attainment_workbook(
             template_id=template_id,
         )
     finally:
-        if temp_root_ctx is not None:
-            temp_root_ctx.cleanup()
+        if temp_root_dir is not None:
+            shutil.rmtree(temp_root_dir, ignore_errors=True)
 
 
 def generate_final_report_workbook(
@@ -2239,6 +2616,201 @@ def generate_final_report_workbook(
                 code="SHEET_DATA_REQUIRED",
                 sheet_name=students_sheet_name,
             )
+        direct_component_order: list[str] = []
+        direct_component_weights: dict[str, float] = {}
+        indirect_component_order: list[str] = []
+        indirect_component_weights: dict[str, float] = {}
+        assessment_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+        if assessment_sheet_name in source_wb.sheetnames:
+            from domain.template_versions.course_setup_v2_impl.assessment_semantics import parse_assessment_components
+
+            assessment_headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
+            assessment_header_row = int(sheet_specs_by_name.get(assessment_sheet_name, {}).get("header_row") or 1)
+            assessment_rows = _iter_data_rows(
+                source_wb[assessment_sheet_name],
+                len(assessment_headers),
+                header_row=assessment_header_row,
+            )
+            parsed_components = parse_assessment_components(
+                assessment_rows,
+                sheet_name=assessment_sheet_name,
+                row_start=assessment_header_row + 1,
+                on_blank_component="skip",
+                duplicate_policy="keep_first",
+                require_non_empty=False,
+                validate_allowed_options=False,
+            )
+            for component in parsed_components:
+                name = str(component.component_name or "").strip()
+                if not name:
+                    continue
+                key = normalize(name)
+                if component.is_direct:
+                    if key in direct_component_weights:
+                        continue
+                    direct_component_order.append(name)
+                    direct_component_weights[key] = round(float(component.weight), CO_REPORT_MAX_DECIMAL_PLACES)
+                else:
+                    if key in indirect_component_weights:
+                        continue
+                    indirect_component_order.append(name)
+                    indirect_component_weights[key] = round(float(component.weight), CO_REPORT_MAX_DECIMAL_PLACES)
+
+        direct_components_by_co: dict[int, list[tuple[str, float, float]]] = {}
+        seen_by_co: dict[int, set[str]] = {}
+        direct_scores_by_co: dict[int, dict[str, dict[str, float | str]]] = {}
+        indirect_components_by_co: dict[int, list[tuple[str, float]]] = {}
+        indirect_seen_by_co: dict[int, set[str]] = {}
+        indirect_scores_by_co: dict[int, dict[str, dict[str, float | str]]] = {}
+        valid_student_keys = {normalize(reg_no): reg_no for reg_no, _name in students}
+
+        def _score_cell(value: Any) -> float | str:
+            token = normalize(value)
+            if token == normalize(CO_REPORT_ABSENT_TOKEN):
+                return CO_REPORT_ABSENT_TOKEN
+            parsed = coerce_excel_number(value)
+            if isinstance(parsed, bool) or not isinstance(parsed, (int, float)):
+                return 0.0
+            return round(float(parsed), CO_REPORT_MAX_DECIMAL_PLACES)
+
+        for sheet_name, spec in sheet_specs_by_name.items():
+            kind = normalize(spec.get("kind"))
+            if sheet_name not in source_wb.sheetnames:
+                continue
+            ws = source_wb[sheet_name]
+            header_row = int(spec.get("header_row") or 1)
+            component_name = _extract_component_name_from_marks_sheet(ws, header_row=header_row)
+            if not component_name:
+                continue
+            component_key = normalize(component_name)
+            if kind in {normalize(LAYOUT_SHEET_KIND_DIRECT_CO_WISE), normalize(LAYOUT_SHEET_KIND_DIRECT_NON_CO_WISE)}:
+                component_weight = direct_component_weights.get(component_key)
+                if component_weight is None:
+                    continue
+                max_by_co = _extract_direct_sheet_max_by_co(ws, header_row=header_row, kind=kind)
+                for co_value, max_marks in max_by_co.items():
+                    if max_marks <= 0:
+                        continue
+                    items = direct_components_by_co.setdefault(co_value, [])
+                    seen = seen_by_co.setdefault(co_value, set())
+                    if component_key in seen:
+                        continue
+                    seen.add(component_key)
+                    items.append(
+                        (
+                            component_name,
+                            round(float(max_marks), CO_REPORT_MAX_DECIMAL_PLACES),
+                            round(float(component_weight), CO_REPORT_MAX_DECIMAL_PLACES),
+                        )
+                    )
+                max_col = int(ws.max_column or 0)
+                if kind == normalize(LAYOUT_SHEET_KIND_DIRECT_CO_WISE):
+                    co_by_col: dict[int, int] = {}
+                    for col_index in range(4, max_col + 1):
+                        co_index = _co_index_from_label(ws.cell(row=header_row + 1, column=col_index).value)
+                        if co_index is None:
+                            continue
+                        co_by_col[col_index] = co_index
+                    for row_index in range(header_row + 3, int(ws.max_row or 0) + 1):
+                        reg_no_raw = ws.cell(row=row_index, column=2).value
+                        name_raw = ws.cell(row=row_index, column=3).value
+                        if reg_no_raw is None and name_raw is None:
+                            break
+                        reg_key = normalize(coerce_excel_number(reg_no_raw))
+                        if reg_key not in valid_student_keys:
+                            continue
+                        per_co_numeric: dict[int, float] = {}
+                        per_co_absent: set[int] = set()
+                        for col_index, co_index in co_by_col.items():
+                            value = _score_cell(ws.cell(row=row_index, column=col_index).value)
+                            if isinstance(value, str):
+                                per_co_absent.add(co_index)
+                                continue
+                            per_co_numeric[co_index] = round(
+                                per_co_numeric.get(co_index, 0.0) + float(value),
+                                CO_REPORT_MAX_DECIMAL_PLACES,
+                            )
+                        for co_index in set(per_co_numeric) | set(per_co_absent):
+                            co_map = direct_scores_by_co.setdefault(co_index, {})
+                            comp_map = co_map.setdefault(component_key, {})
+                            comp_map[reg_key] = (
+                                CO_REPORT_ABSENT_TOKEN if co_index in per_co_absent else per_co_numeric.get(co_index, 0.0)
+                            )
+                else:
+                    co_columns: list[tuple[int, int]] = []
+                    for col_index in range(5, max_col + 1):
+                        co_index = _co_index_from_label(ws.cell(row=header_row + 1, column=col_index).value)
+                        if co_index is None:
+                            continue
+                        co_columns.append((col_index, co_index))
+                    divisor = len(co_columns)
+                    for row_index in range(header_row + 3, int(ws.max_row or 0) + 1):
+                        reg_no_raw = ws.cell(row=row_index, column=2).value
+                        name_raw = ws.cell(row=row_index, column=3).value
+                        if reg_no_raw is None and name_raw is None:
+                            break
+                        reg_key = normalize(coerce_excel_number(reg_no_raw))
+                        if reg_key not in valid_student_keys:
+                            continue
+                        total_value = _score_cell(ws.cell(row=row_index, column=4).value)
+                        if isinstance(total_value, str):
+                            for _col, co_index in co_columns:
+                                co_map = direct_scores_by_co.setdefault(co_index, {})
+                                comp_map = co_map.setdefault(component_key, {})
+                                comp_map[reg_key] = CO_REPORT_ABSENT_TOKEN
+                            continue
+                        total_numeric = float(total_value)
+                        if divisor <= 0:
+                            continue
+                        base = round(total_numeric / float(divisor), CO_REPORT_MAX_DECIMAL_PLACES)
+                        running = 0.0
+                        for idx, (_col, co_index) in enumerate(co_columns):
+                            if idx == divisor - 1:
+                                split_value = round(total_numeric - running, CO_REPORT_MAX_DECIMAL_PLACES)
+                            else:
+                                split_value = base
+                                running = round(running + split_value, CO_REPORT_MAX_DECIMAL_PLACES)
+                            co_map = direct_scores_by_co.setdefault(co_index, {})
+                            comp_map = co_map.setdefault(component_key, {})
+                            comp_map[reg_key] = split_value
+            elif kind == normalize(LAYOUT_SHEET_KIND_INDIRECT):
+                component_weight = indirect_component_weights.get(component_key)
+                if component_weight is None:
+                    continue
+                max_col = int(ws.max_column or 0)
+                co_columns: list[tuple[int, int]] = []
+                for col_index in range(4, max_col + 1):
+                    co_index = _co_index_from_label(ws.cell(row=header_row, column=col_index).value)
+                    if co_index is None:
+                        continue
+                    co_columns.append((col_index, co_index))
+                    items = indirect_components_by_co.setdefault(co_index, [])
+                    seen = indirect_seen_by_co.setdefault(co_index, set())
+                    if component_key in seen:
+                        continue
+                    seen.add(component_key)
+                    items.append((component_name, round(float(component_weight), CO_REPORT_MAX_DECIMAL_PLACES)))
+                for row_index in range(header_row + 1, int(ws.max_row or 0) + 1):
+                    reg_no_raw = ws.cell(row=row_index, column=2).value
+                    name_raw = ws.cell(row=row_index, column=3).value
+                    if reg_no_raw is None and name_raw is None:
+                        break
+                    reg_key = normalize(coerce_excel_number(reg_no_raw))
+                    if reg_key not in valid_student_keys:
+                        continue
+                    for col_index, co_index in co_columns:
+                        score = _score_cell(ws.cell(row=row_index, column=col_index).value)
+                        co_map = indirect_scores_by_co.setdefault(co_index, {})
+                        comp_map = co_map.setdefault(component_key, {})
+                        comp_map[reg_key] = score
+        if direct_component_order:
+            for co_value, items in direct_components_by_co.items():
+                order_map = {normalize(name): idx for idx, name in enumerate(direct_component_order)}
+                items.sort(key=lambda item: (order_map.get(normalize(item[0]), 10_000), normalize(item[0])))
+        if indirect_component_order:
+            for co_value, items in indirect_components_by_co.items():
+                order_map = {normalize(name): idx for idx, name in enumerate(indirect_component_order)}
+                items.sort(key=lambda item: (order_map.get(normalize(item[0]), 10_000), normalize(item[0])))
 
         output_wb = openpyxl.Workbook()
         default_sheet = output_wb.active
@@ -2260,24 +2832,132 @@ def generate_final_report_workbook(
             indirect_target_name = co_indirect_sheet_name(co_index)
             dst_direct = output_wb.create_sheet(direct_target_name)
             dst_indirect = output_wb.create_sheet(indirect_target_name)
-            dst_direct.cell(row=1, column=1, value=CO_REPORT_HEADER_SERIAL)
-            dst_direct.cell(row=1, column=2, value=CO_REPORT_HEADER_REG_NO)
-            dst_direct.cell(row=1, column=3, value=CO_REPORT_HEADER_STUDENT_NAME)
-            dst_direct.cell(row=1, column=4, value=direct_total_header)
+            direct_headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
+            co_components = direct_components_by_co.get(co_index, [])
+            if co_components:
+                for component_name, max_marks, weight in co_components:
+                    direct_headers.append(f"{component_name} ({max_marks:g})")
+                    direct_headers.append(f"{component_name} ({weight:g}%)")
+                direct_headers.extend(
+                    [
+                        CO_REPORT_HEADER_TOTAL_100,
+                        CO_REPORT_HEADER_TOTAL_100,
+                        direct_total_header,
+                    ]
+                )
+            else:
+                direct_headers.extend(
+                    [
+                        "Direct (100)",
+                        "Direct (100%)",
+                        "Total (100%)",
+                        CO_REPORT_HEADER_TOTAL_100,
+                        direct_total_header,
+                    ]
+                )
+            for col_index, header in enumerate(direct_headers, start=1):
+                dst_direct.cell(row=1, column=col_index, value=header)
             dst_indirect.cell(row=1, column=1, value=CO_REPORT_HEADER_SERIAL)
             dst_indirect.cell(row=1, column=2, value=CO_REPORT_HEADER_REG_NO)
             dst_indirect.cell(row=1, column=3, value=CO_REPORT_HEADER_STUDENT_NAME)
             dst_indirect.cell(row=1, column=4, value=indirect_total_header)
+            indirect_components = list(indirect_components_by_co.get(co_index, []))
+            indirect_total_weight = round(
+                sum(weight for _component_name, weight in indirect_components),
+                CO_REPORT_MAX_DECIMAL_PLACES,
+            )
+            likert_denominator = float(max(1, LIKERT_MAX - LIKERT_MIN))
             for row_offset, (reg_no, student_name) in enumerate(students, start=2):
                 serial_value = row_offset - 1
+                reg_key = normalize(reg_no)
                 dst_direct.cell(row=row_offset, column=1, value=serial_value)
                 dst_direct.cell(row=row_offset, column=2, value=reg_no)
                 dst_direct.cell(row=row_offset, column=3, value=student_name)
-                dst_direct.cell(row=row_offset, column=4, value=0.0)
+                direct_absent = False
+                weighted_total = 0.0
+                row_total_weight = 0.0
+                current_col = 4
+                for component_name, max_marks, weight in co_components:
+                    component_key = normalize(component_name)
+                    raw_value = (
+                        direct_scores_by_co.get(co_index, {})
+                        .get(component_key, {})
+                        .get(reg_key, CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    )
+                    if normalize(raw_value) == normalize(CO_REPORT_NOT_APPLICABLE_TOKEN):
+                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                        current_col += 2
+                        continue
+                    row_total_weight = round(row_total_weight + weight, CO_REPORT_MAX_DECIMAL_PLACES)
+                    if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
+                        direct_absent = True
+                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_ABSENT_TOKEN)
+                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_ABSENT_TOKEN)
+                        current_col += 2
+                        continue
+                    raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+                    weighted = round((raw_numeric * weight / max_marks) if max_marks > 0 else 0.0, CO_REPORT_MAX_DECIMAL_PLACES)
+                    weighted_total = round(weighted_total + weighted, CO_REPORT_MAX_DECIMAL_PLACES)
+                    dst_direct.cell(row=row_offset, column=current_col, value=round(raw_numeric, CO_REPORT_MAX_DECIMAL_PLACES))
+                    dst_direct.cell(row=row_offset, column=current_col + 1, value=weighted)
+                    current_col += 2
+                if co_components:
+                    if direct_absent:
+                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                        dst_direct.cell(row=row_offset, column=current_col + 2, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    else:
+                        total_100 = round(
+                            (weighted_total * 100.0 / row_total_weight) if row_total_weight > 0 else 0.0,
+                            CO_REPORT_MAX_DECIMAL_PLACES,
+                        )
+                        total_ratio = round(total_100 * DIRECT_RATIO, CO_REPORT_MAX_DECIMAL_PLACES)
+                        dst_direct.cell(row=row_offset, column=current_col, value=weighted_total)
+                        dst_direct.cell(row=row_offset, column=current_col + 1, value=total_100)
+                        dst_direct.cell(row=row_offset, column=current_col + 2, value=total_ratio)
+                else:
+                    for col_index in range(4, len(direct_headers) + 1):
+                        dst_direct.cell(row=row_offset, column=col_index, value=0.0)
                 dst_indirect.cell(row=row_offset, column=1, value=serial_value)
                 dst_indirect.cell(row=row_offset, column=2, value=reg_no)
                 dst_indirect.cell(row=row_offset, column=3, value=student_name)
-                dst_indirect.cell(row=row_offset, column=4, value=0.0)
+                indirect_absent = False
+                has_single_component = len(indirect_components) == 1
+                total_weighted = 0.0
+                for component_name, weight in indirect_components:
+                    component_key = normalize(component_name)
+                    raw_value = (
+                        indirect_scores_by_co.get(co_index, {})
+                        .get(component_key, {})
+                        .get(reg_key, 0.0)
+                    )
+                    if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
+                        indirect_absent = True
+                        break
+                    raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+                    scaled_raw = round(raw_numeric - LIKERT_MIN, CO_REPORT_MAX_DECIMAL_PLACES)
+                    scaled_raw = max(0.0, min(float(max(0, LIKERT_MAX - LIKERT_MIN)), scaled_raw))
+                    if has_single_component:
+                        total_weighted = round((scaled_raw / likert_denominator) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
+                    else:
+                        weighted = round((scaled_raw / likert_denominator) * weight, CO_REPORT_MAX_DECIMAL_PLACES)
+                        total_weighted = round(total_weighted + weighted, CO_REPORT_MAX_DECIMAL_PLACES)
+                if indirect_absent:
+                    dst_indirect.cell(row=row_offset, column=4, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                else:
+                    if has_single_component:
+                        total_100 = total_weighted
+                    else:
+                        total_100 = round(
+                            (total_weighted * 100.0 / indirect_total_weight) if indirect_total_weight > 0 else 0.0,
+                            CO_REPORT_MAX_DECIMAL_PLACES,
+                        )
+                    dst_indirect.cell(
+                        row=row_offset,
+                        column=4,
+                        value=round(total_100 * INDIRECT_RATIO, CO_REPORT_MAX_DECIMAL_PLACES),
+                    )
             sheet_order.extend([direct_target_name, indirect_target_name])
 
         hash_sheet = output_wb.create_sheet(SYSTEM_HASH_SHEET)

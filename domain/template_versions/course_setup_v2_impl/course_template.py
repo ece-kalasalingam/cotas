@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Sequence
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,12 +14,10 @@ from common.excel_sheet_layout import build_template_xlsxwriter_formats
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import get_blueprint as _registry_get_blueprint
+from common.registry import COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _shareops
-from domain.template_versions.course_setup_v2_impl.course_semantics import (
-    build_course_template_filename_base,
-)
 
 _logger = logging.getLogger(__name__)
 _TEMPLATE_ID = "COURSE_SETUP_V2"
@@ -90,6 +87,13 @@ def generate_course_details_template(
         body_format = format_bundle["body"]
 
         for sheet_schema in blueprint.sheets:
+            wrap_columns: tuple[int, ...] = ()
+            wrapped_body_format = None
+            wrapped_column_format = None
+            if sheet_schema.key == COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION:
+                wrap_columns = (1, 3)
+                wrapped_body_format = format_bundle.get("body_wrap", body_format)
+                wrapped_column_format = format_bundle.get("column_wrap", wrapped_body_format)
             _shareops.write_schema_sheet(
                 workbook=workbook,
                 sheet_schema=sheet_schema,
@@ -97,6 +101,9 @@ def generate_course_details_template(
                 header_format=header_format,
                 body_format=body_format,
                 cancel_token=cancel_token,
+                wrap_columns=wrap_columns,
+                wrapped_body_format=wrapped_body_format,
+                wrapped_column_format=wrapped_column_format,
             )
 
         if cancel_token is not None:
@@ -127,116 +134,6 @@ def generate_course_details_template(
     return output
 
 
-def generate_course_details_templates_batch(
-    *,
-    workbook_paths: Sequence[str | Path],
-    output_dir: str | Path,
-    allow_overwrite: bool = False,
-    cancel_token: CancellationToken | None = None,
-) -> dict[str, object]:
-    """Generate course details templates batch.
-    
-    Args:
-        workbook_paths: Parameter value (Sequence[str | Path]).
-        output_dir: Parameter value (str | Path).
-        allow_overwrite: Parameter value (bool).
-        cancel_token: Parameter value (CancellationToken | None).
-    
-    Returns:
-        dict[str, object]: Return value.
-    
-    Raises:
-        None.
-    """
-    unexpected_workbook_paths = [str(raw).strip() for raw in workbook_paths if str(raw).strip()]
-    if unexpected_workbook_paths:
-        raise validation_error_from_key(
-            "common.validation_failed_invalid_data",
-            code="WORKBOOK_PATHS_NOT_APPLICABLE",
-            workbook_kind="course_details_template",
-            expected="empty_sequence",
-        )
-
-    output_root = Path(output_dir)
-    output_root.mkdir(parents=True, exist_ok=True)
-    output_name = f"{build_course_template_filename_base()}.xlsx"
-    output_path = output_root / output_name
-
-    if output_path.exists() and not allow_overwrite:
-        return {
-            "total": 1,
-            "generated": 0,
-            "failed": 1,
-            "skipped": 0,
-            "generated_workbook_paths": [],
-            "output_urls": [],
-            "results": {
-                "course_template": {
-                    "status": "failed",
-                    "source_path": None,
-                    "workbook_path": None,
-                    "output": None,
-                    "output_path": None,
-                    "output_url": None,
-                    "reason": "output_already_exists",
-                    "existing_output_path": str(output_path),
-                }
-            },
-        }
-
-    results: dict[str, object] = {}
-    try:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        generated_path = generate_course_details_template(
-            output_path=output_path,
-            cancel_token=cancel_token,
-        )
-        output_value = str(generated_path)
-        results["course_template"] = {
-            "status": "generated",
-            "source_path": None,
-            "workbook_path": output_value,
-            "output": output_value,
-            "output_path": output_value,
-            "output_url": output_value,
-            "reason": None,
-        }
-        generated = 1
-        failed = 0
-    except JobCancelledError:
-        raise
-    except Exception as exc:
-        results["course_template"] = {
-            "status": "failed",
-            "source_path": None,
-            "workbook_path": None,
-            "output": None,
-            "output_path": None,
-            "output_url": None,
-            "reason": str(exc),
-        }
-        generated = 0
-        failed = 1
-
-    generated_paths = [
-        str(entry.get("workbook_path"))
-        for entry in results.values()
-        if isinstance(entry, dict) and str(entry.get("status")) == "generated" and entry.get("workbook_path")
-    ]
-
-    return {
-        "total": 1,
-        "generated": generated,
-        "failed": failed,
-        "skipped": 0,
-        "generated_workbook_paths": generated_paths,
-        "output_urls": list(generated_paths),
-        "results": results,
-    }
-
-
 __all__ = [
     "generate_course_details_template",
-    "generate_course_details_templates_batch",
 ]

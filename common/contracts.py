@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from common.attainment_policy import (
     has_valid_co_attainment_percent,
     thresholds_all_numeric,
@@ -23,27 +21,6 @@ from common.constants import (
 )
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
-
-
-def require_keys(namespace: Mapping[str, object], *, keys: tuple[str, ...], context: str) -> None:
-    """Require keys.
-    
-    Args:
-        namespace: Parameter value (Mapping[str, object]).
-        keys: Parameter value (tuple[str, ...]).
-        context: Parameter value (str).
-    
-    Returns:
-        None.
-    
-    Raises:
-        None.
-    """
-    missing = [key for key in keys if key not in namespace]
-    if missing:
-        ordered = ", ".join(sorted(missing))
-        raise ConfigurationError(f"{context} namespace is missing required keys: {ordered}")
-
 
 def validate_blueprint_registry_contracts() -> None:
     """Validate blueprint registry contracts.

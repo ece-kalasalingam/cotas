@@ -19,6 +19,7 @@ from common.registry import (
     COURSE_SETUP_ASSESSMENT_MODE_OPTIONS,
     COURSE_SETUP_ASSESSMENT_PARTICIPATION_OPTIONS,
     COURSE_SETUP_ASSESSMENT_TYPE_OPTIONS,
+    COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
     COURSE_SETUP_QUESTION_DOMAIN_LEVEL_OPTIONS,
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
@@ -65,6 +66,28 @@ _COL_CO = "co"
 _COL_BLOOM_LEVEL = "bloom_level"
 _COL_REG_NO = "reg_no"
 _COL_STUDENT_NAME = "student_name"
+
+
+def _effective_course_details_schemas(workbook: Any, sheet_schemas: Sequence[SheetSchema]) -> list[SheetSchema]:
+    """Effective course-details schemas for current validation stage.
+
+    `CO_Description` may be collected later in a separate workbook flow, so
+    course-details validation accepts inputs with or without that sheet.
+
+    Args:
+        workbook: Open workbook object to inspect.
+        sheet_schemas: Ordered schema list from blueprint.
+
+    Returns:
+        list[SheetSchema]: Effective schemas to validate at this stage.
+
+    Raises:
+        None.
+    """
+    co_description_name = get_sheet_name_by_key(_TEMPLATE_ID, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+    if co_description_name in workbook.sheetnames:
+        return list(sheet_schemas)
+    return [schema for schema in sheet_schemas if normalize(schema.name) != normalize(co_description_name)]
 
 
 class _CourseIdentity:
@@ -218,12 +241,13 @@ def validate_course_details_rules(workbook: Any) -> None:
         except ValidationError as exc:
             collector.add(exc)
 
-    collector.capture(_validate_sheet_order, workbook, blueprint.sheets)
-    collector.capture(_reject_any_formula_cells, workbook, blueprint.sheets)
-    collector.capture(_validate_sheet_headers, workbook, blueprint.sheets)
+    effective_sheets = _effective_course_details_schemas(workbook, blueprint.sheets)
+    collector.capture(_validate_sheet_order, workbook, effective_sheets)
+    collector.capture(_reject_any_formula_cells, workbook, effective_sheets)
+    collector.capture(_validate_sheet_headers, workbook, effective_sheets)
 
     row_data_by_sheet: dict[str, list[tuple[int, list[Any]]]] = {}
-    for sheet_schema in blueprint.sheets:
+    for sheet_schema in effective_sheets:
         worksheet = workbook[sheet_schema.name] if sheet_schema.name in workbook.sheetnames else None
         if worksheet is None:
             continue
@@ -416,6 +440,12 @@ def _validate_sheet_headers(
     for sheet_schema in sheet_schemas:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
+        if sheet_schema.name not in workbook.sheetnames:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="SHEET_DATA_REQUIRED",
+                sheet_name=sheet_schema.name,
+            )
         if len(sheet_schema.header_matrix) != 1:
             raise validation_error_from_key(
                 "instructor.validation.sheet_single_header_row",
@@ -456,6 +486,12 @@ def _reject_any_formula_cells(
     for sheet_schema in sheet_schemas:
         if cancel_token is not None:
             cancel_token.raise_if_cancelled()
+        if sheet_schema.name not in workbook.sheetnames:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="SHEET_DATA_REQUIRED",
+                sheet_name=sheet_schema.name,
+            )
         worksheet = workbook[sheet_schema.name]
         for row in worksheet.iter_rows(
             min_row=1,

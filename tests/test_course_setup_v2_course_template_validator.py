@@ -8,9 +8,13 @@ import pytest
 
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
+from common.jobs import CancellationToken
+from common.constants import ID_COURSE_SETUP
+from domain.template_strategy_router import generate_workbook, validate_workbooks
 from domain.template_versions.course_setup_v2_impl import (
     course_template_validator as validator,
 )
+openpyxl = pytest.importorskip("openpyxl")
 
 
 def _identity(*, section: str, course_code: str = "CS101", semester: str = "V", year: str = "2026-27", outcomes: int = 3) -> object:
@@ -244,3 +248,43 @@ def test_course_workbook_impl_rejects_symlink_path(
         validator._validate_course_details_workbook_impl(workbook_path=workbook_path)
 
     assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"
+
+
+def test_course_details_validation_accepts_missing_co_description(tmp_path) -> None:
+    """Course-details validation accepts workbooks without CO_Description.
+
+    Args:
+        tmp_path: Parameter value.
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    workbook_path = tmp_path / "course_details_no_co_desc.xlsx"
+    generate_workbook(
+        template_id=ID_COURSE_SETUP,
+        output_path=workbook_path,
+        workbook_name=workbook_path.name,
+        workbook_kind="course_details_template",
+        cancel_token=CancellationToken(),
+    )
+
+    wb = openpyxl.load_workbook(workbook_path)
+    try:
+        wb.remove(wb["CO_Description"])
+        wb.save(workbook_path)
+    finally:
+        wb.close()
+
+    result = cast(
+        dict[str, Any],
+        validate_workbooks(
+            template_id=ID_COURSE_SETUP,
+            workbook_paths=[workbook_path],
+            workbook_kind="course_details",
+            cancel_token=CancellationToken(),
+        ),
+    )
+    assert result["valid_paths"] == [str(workbook_path)]

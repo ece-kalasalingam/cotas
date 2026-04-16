@@ -242,68 +242,6 @@ def _render_marks_template_to_output(
     return output
 
 
-def generate_marks_template_from_course_details(
-    course_details_path: str | Path,
-    output_path: str | Path,
-    *,
-    allow_overwrite: bool = False,
-    cancel_token: CancellationToken | None = None,
-) -> Path:
-    """Generate marks-entry workbook from a validated course-details workbook."""
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise _ve(
-            "instructor.validation.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
-
-    source_file = Path(course_details_path)
-    if not source_file.exists():
-        raise _ve(
-            "instructor.validation.workbook_not_found",
-            code="WORKBOOK_NOT_FOUND",
-            workbook=str(source_file),
-        )
-    output_target = Path(output_path)
-    if output_target.exists() and not allow_overwrite:
-        raise _ve(
-            "common.validation_failed_invalid_data",
-            code="OUTPUT_PATH_ALREADY_EXISTS",
-            output_path=str(output_target),
-        )
-
-    try:
-        if cancel_token is not None:
-            cancel_token.raise_if_cancelled()
-        # Open once in formula-visible mode so validator checks remain authoritative.
-        source_workbook = openpyxl.load_workbook(source_file, data_only=False)
-    except JobCancelledError:
-        raise
-    except Exception as exc:
-        raise _ve(
-            "instructor.validation.workbook_open_failed",
-            code="WORKBOOK_OPEN_FAILED",
-            workbook=str(source_file),
-        ) from exc
-
-    try:
-        template_id, context = _prepare_marks_generation_from_workbook(
-            source_workbook,
-            source_path=source_file,
-            cancel_token=cancel_token,
-        )
-        return _render_marks_template_to_output(
-            source_workbook=source_workbook,
-            output_path=output_target,
-            template_id=template_id,
-            context=context,
-            cancel_token=cancel_token,
-        )
-    finally:
-        source_workbook.close()
-
-
 def _marks_output_base_from_context(context: dict[str, Any]) -> str:
     """Marks output base from context.
     
@@ -1081,6 +1019,5 @@ def _iter_data_rows(worksheet: Any, expected_col_count: int) -> list[list[Any]]:
 
 
 __all__ = [
-    "generate_marks_template_from_course_details",
     "generate_marks_templates_from_course_details_batch",
 ]

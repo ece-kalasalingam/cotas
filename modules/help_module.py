@@ -1,4 +1,4 @@
-﻿# modules/help_module.py
+# modules/help_module.py
 
 import logging
 import shutil

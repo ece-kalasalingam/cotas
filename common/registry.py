@@ -266,8 +266,8 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
             validations=[
                 _rule(
                     first_row=1,
-                    first_col=2,
-                    last_col=2,
+                    first_col=4,
+                    last_col=4,
                     options={
                         "validate": "list",
                         "source": list(COURSE_SETUP_ASSESSMENT_VALIDATION_YES_NO_OPTIONS),
@@ -288,8 +288,8 @@ def _course_setup_sheet_catalog() -> dict[str, SheetSchema]:
                 ),
                 _rule(
                     first_row=1,
-                    first_col=4,
-                    last_col=4,
+                    first_col=2,
+                    last_col=2,
                     options={
                         "validate": "list",
                         "source": list(COURSE_SETUP_ASSESSMENT_VALIDATION_YES_NO_OPTIONS),
@@ -528,6 +528,7 @@ COURSE_SETUP_V2 = _build_course_setup_blueprint(
         COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
         COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
         COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
+        COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
         COURSE_SETUP_SHEET_KEY_STUDENTS,
     ),
 )
@@ -550,29 +551,6 @@ def get_blueprint(template_id: str) -> WorkbookBlueprint | None:
         None.
     """
     return BLUEPRINT_REGISTRY.get(str(template_id).strip())
-
-
-def get_sheet_schema(template_id: str, sheet_name: str) -> SheetSchema | None:
-    """Get sheet schema.
-    
-    Args:
-        template_id: Parameter value (str).
-        sheet_name: Parameter value (str).
-    
-    Returns:
-        SheetSchema | None: Return value.
-    
-    Raises:
-        None.
-    """
-    blueprint = get_blueprint(template_id)
-    if blueprint is None:
-        return None
-    target = str(sheet_name).strip()
-    for sheet in blueprint.sheets:
-        if sheet.name == target:
-            return sheet
-    return None
 
 
 def get_sheet_schema_by_key(template_id: str, sheet_key: str) -> SheetSchema | None:
@@ -955,26 +933,3 @@ def resolve_dynamic_sheet_headers(
     )
 
 
-def get_system_hash_sheet_schema() -> dict[str, object]:
-    """Get system hash sheet schema.
-    
-    Args:
-        None.
-    
-    Returns:
-        dict[str, object]: Return value.
-    
-    Raises:
-        None.
-    """
-    return {
-        "name": SYSTEM_HASH_SHEET_NAME,
-        "headers": (
-            SYSTEM_HASH_HEADER_TEMPLATE_ID,
-            SYSTEM_HASH_HEADER_TEMPLATE_HASH,
-        ),
-        "keys": (
-            SYSTEM_HASH_KEY_TEMPLATE_ID,
-            SYSTEM_HASH_KEY_TEMPLATE_HASH,
-        ),
-    }

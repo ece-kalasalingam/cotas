@@ -5,22 +5,6 @@ from typing import Any, cast
 
 from common import ui_logging
 
-
-def test_format_log_line_wrapper_delegates() -> None:
-    """Test format log line wrapper delegates.
-    
-    Args:
-        None.
-    
-    Returns:
-        None.
-    
-    Raises:
-        None.
-    """
-    assert ui_logging.format_log_line("hello") is not None
-
-
 def test_parse_i18n_log_message_non_dict_payload_and_non_string_fallback() -> None:
     """Test parse i18n log message non dict payload and non string fallback.
     

@@ -1,4 +1,4 @@
-﻿"""Shared utility helpers used across the application."""
+"""Shared utility helpers used across the application."""
 
 import atexit
 import json
@@ -16,7 +16,6 @@ from typing import Any, Callable, Iterable, Literal
 from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, ValidationError
 from common.i18n import t
-from common.constants import WORKBOOK_TEMP_SUFFIX
 
 SETTINGS_FILE_NAME = "settings.json"
 DEFAULT_LOG_FILE_NAME = "focus.log"
@@ -556,35 +555,6 @@ def dedupe_paths_by_canonical_key(
         seen.add(key)
         unique_paths.append(path)
     return unique_paths, duplicate_paths
-
-
-def atomic_copy_file(source_path: str | Path, output_path: str | Path, *, logger: object | None = None) -> Path:
-    source = Path(source_path)
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temp_name = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            delete=False,
-            dir=str(output.parent),
-            prefix=f"{output.name}.",
-            suffix=WORKBOOK_TEMP_SUFFIX,
-        ) as temp_file:
-            temp_name = temp_file.name
-        shutil.copyfile(str(source), temp_name)
-        os.replace(temp_name, output)
-    except Exception:
-        if temp_name:
-            try:
-                Path(temp_name).unlink(missing_ok=True)
-            except OSError:
-                if logger is not None:
-                    warning = getattr(logger, "warning", None)
-                    if callable(warning):
-                        warning("Failed to cleanup temp report file: %s", temp_name)
-        raise
-    return output
 
 
 def coerce_excel_number(value: Any) -> Any:

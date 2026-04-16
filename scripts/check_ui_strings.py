@@ -1,4 +1,4 @@
-﻿"""Fail when user-facing UI strings are hardcoded in UI modules."""
+"""Fail when user-facing UI strings are hardcoded in UI modules."""
 
 from __future__ import annotations
 

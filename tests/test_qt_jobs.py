@@ -125,3 +125,4 @@ def test_run_in_background_wires_callbacks_and_starts_job() -> None:
     # Simulate thread execution completion
     job.run()
     assert events == [("finished", "ok")]
+

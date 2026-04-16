@@ -1,4 +1,4 @@
-﻿"""Qt translator accessors for user-facing UI strings."""
+"""Qt translator accessors for user-facing UI strings."""
 
 from __future__ import annotations
 

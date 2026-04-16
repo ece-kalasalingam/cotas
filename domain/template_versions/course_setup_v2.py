@@ -42,30 +42,6 @@ class CourseSetupV2Strategy:
         """
         return normalize(operation) in _SUPPORTED_OPERATION_TOKENS
 
-    def default_workbook_name(
-        self,
-        *,
-        workbook_kind: str,
-        context: Mapping[str, Any] | None,
-        fallback: str,
-    ) -> str:
-        """Default workbook name.
-        
-        Args:
-            workbook_kind: Parameter value (str).
-            context: Parameter value (Mapping[str, Any] | None).
-            fallback: Parameter value (str).
-        
-        Returns:
-            str: Return value.
-        
-        Raises:
-            None.
-        """
-        del workbook_kind
-        del context
-        return fallback
-
     def generate_workbook(
         self,
         *,

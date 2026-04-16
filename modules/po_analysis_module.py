@@ -1,4 +1,4 @@
-﻿"""PO Analysis placeholder module."""
+"""PO Analysis placeholder module."""
 
 from __future__ import annotations
 

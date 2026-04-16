@@ -1,4 +1,4 @@
-﻿"""Compile Qt TS catalogs into QM files (Qt-native i18n workflow)."""
+"""Compile Qt TS catalogs into QM files (Qt-native i18n workflow)."""
 
 from __future__ import annotations
 

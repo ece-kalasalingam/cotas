@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 
 from common.constants import (
-    WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
     WORKFLOW_OPERATION_GENERATE_MARKS_TEMPLATE,
     WORKFLOW_USER_MESSAGE_FAILED_TEMPLATE,
 )
@@ -102,37 +101,6 @@ class InstructorWorkflowService(WorkflowServiceBase):
                 ),
                 fallback=Path(output_path),
             ),
-        )
-
-    def generate_final_report(
-        self,
-        filled_marks_path: str | Path,
-        output_path: str | Path,
-        *,
-        context: JobContext,
-        cancel_token: CancellationToken | None = None,
-    ) -> Path:
-        """Generate final report.
-        
-        Args:
-            filled_marks_path: Parameter value (str | Path).
-            output_path: Parameter value (str | Path).
-            context: Parameter value (JobContext).
-            cancel_token: Parameter value (CancellationToken | None).
-        
-        Returns:
-            Path: Return value.
-        
-        Raises:
-            None.
-        """
-        del filled_marks_path
-        del output_path
-        return self._execute_with_telemetry(
-            context=context,
-            operation=WORKFLOW_OPERATION_GENERATE_FINAL_REPORT,
-            cancel_token=cancel_token,
-            work=lambda _effective_cancel_token: (_raise_final_report_generation_removed()),
         )
 
     def _handle_domain_exception(
@@ -252,25 +220,5 @@ class InstructorWorkflowService(WorkflowServiceBase):
                 if first:
                     return Path(first)
         return InstructorWorkflowService._result_to_path(result, fallback=fallback)
-
-
-def _raise_final_report_generation_removed() -> Path:
-    """Raise final report generation removed.
-    
-    Args:
-        None.
-    
-    Returns:
-        Path: Return value.
-    
-    Raises:
-        None.
-    """
-    raise validation_error_from_key(
-        "common.validation_failed_invalid_data",
-        code="WORKBOOK_KIND_UNSUPPORTED",
-        workbook_kind="final_report",
-        expected="course_details_template|marks_template|course_details",
-    )
 
 

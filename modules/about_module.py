@@ -1,4 +1,4 @@
-﻿"""About module using a single visible Module UI Engine pane."""
+"""About module using a single visible Module UI Engine pane."""
 
 from __future__ import annotations
 
