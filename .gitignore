@@ -59,5 +59,6 @@ Thumbs.db
 coverage.xml
 coverage.json
 version.txt
+artifact-manifest.json
 .claude
 .claude/
