@@ -2,10 +2,10 @@
 conda run -n obe python scripts/quality_gate.py
 
 # Windows build (PyInstaller data separator is ;)
-conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean --windowed --onedir --name "focus" --icon assets/kare-logo.ico --version-file version.txt --add-data "assets;assets" --hidden-import PySide6.QtPdf --hidden-import PySide6.QtPdfWidgets --hidden-import PySide6.QtSvg main.py
+conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean --windowed --onedir --name "focus" --icon assets/kare-logo.ico --version-file version.txt --add-data "assets;assets" --hidden-import PySide6.QtSvg main.py
 
 # Windows installer package (Inno Setup)
-powershell -ExecutionPolicy Bypass -File installer/installerscript.ps1 -AppVersion 1.0.2
+powershell -ExecutionPolicy Bypass -File installer/installerscript.ps1 -AppVersion 1.0.3
 
 # macOS/Linux build (PyInstaller data separator is :)
-conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean --windowed --onedir --name "focus" --icon assets/kare-logo.ico --add-data "assets:assets" --hidden-import PySide6.QtPdf --hidden-import PySide6.QtPdfWidgets --hidden-import PySide6.QtSvg main.py
+conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean --windowed --onedir --name "focus" --icon assets/kare-logo.ico --add-data "assets:assets" --hidden-import PySide6.QtSvg main.py

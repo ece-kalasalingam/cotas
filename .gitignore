@@ -30,6 +30,7 @@ htmlcov/
 .audit_cache_new/
 .tmp_audit_run/
 .co_attainment_tmp/
+co_attainment_tmp/
 
 # Type checker / linter caches
 .mypy_cache/

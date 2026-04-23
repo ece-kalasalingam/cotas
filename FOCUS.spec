@@ -1,11 +1,11 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')],
+    datas=[('assets', 'assets')],
     hiddenimports=['PySide6.QtPdf', 'PySide6.QtPdfWidgets', 'PySide6.QtSvg'],
     hookspath=[],
     hooksconfig={},
@@ -44,4 +44,3 @@ coll = COLLECT(
     upx_exclude=[],
     name='focus',
 )
-
