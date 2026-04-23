@@ -1,28 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules
 
-# Qt DLLs live in site-packages/PySide6/ (155 of them).
-# collect_dynamic_libs places them in the PySide6/ subdirectory of the bundle.
-# The runtime hook (installer/rthook_pyside6.py) calls os.add_dll_directory()
-# so Python 3.8+ can find them when loading QtCore.pyd and friends.
-_qt_binaries = collect_dynamic_libs('PySide6')
-
-# Platform and image-format plugins.  Actual path in this PySide6 layout is
-# PySide6/plugins/ (not PySide6/Qt/plugins/).
-_qt_datas = (
-    collect_data_files('PySide6', subdir='plugins/platforms')
-    + collect_data_files('PySide6', subdir='plugins/imageformats')
-    + collect_data_files('PySide6', subdir='plugins/iconengines')
-    + collect_data_files('PySide6', subdir='plugins/styles')
-    + collect_data_files('PySide6', subdir='plugins/tls')
+# Dynamic loading roots discovered in codebase:
+# - common/module_plugins.py -> lazy_module_class("modules.*", ...)
+# - domain/template_strategy_router.py -> importlib.import_module("domain.template_versions.*")
+_DYNAMIC_IMPORT_ROOTS = (
+    'modules',
+    'domain.template_versions',
 )
+_dynamic_hiddenimports = []
+for _root in _DYNAMIC_IMPORT_ROOTS:
+    _dynamic_hiddenimports.extend(collect_submodules(_root))
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=_qt_binaries,
-    datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')] + _qt_datas,
+    binaries=[],
+    datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')],
     hiddenimports=[
         'PySide6.QtCore',
         'PySide6.QtGui',
@@ -31,11 +26,7 @@ a = Analysis(
         'PySide6.QtSvg',
         'PySide6.QtPdf',
         'PySide6.QtPdfWidgets',
-        'modules.instructor_module',
-        'modules.co_analysis_module',
-        'modules.po_analysis_module',
-        'modules.help_module',
-        'modules.about_module',
+        *_dynamic_hiddenimports,
     ],
     hookspath=[],
     hooksconfig={},

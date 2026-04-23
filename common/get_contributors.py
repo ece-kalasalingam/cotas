@@ -9,7 +9,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 from http.client import HTTPSConnection
 from pathlib import Path
@@ -36,13 +37,17 @@ def _resolve_token() -> str | None:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
         return token
+    gh_path = shutil.which("gh")
+    if not gh_path:
+        return None
     try:
+        # Trusted local executable path from shutil.which; static args; no shell.
         result = subprocess.run(
-            ["gh", "auth", "token"],
+            [gh_path, "auth", "token"],
             capture_output=True,
             text=True,
             check=True,
-        )
+        )  # nosec B603
         return result.stdout.strip() or None
     except (OSError, subprocess.CalledProcessError):
         return None
@@ -291,11 +296,6 @@ def parse_args() -> argparse.Namespace:
         default=str(root / "assets" / "about_contributors.txt"),
         help="Primary output file path.",
     )
-    parser.add_argument(
-        "--legacy-output",
-        default="",
-        help="Optional secondary output file path.",
-    )
     return parser.parse_args()
 
 
@@ -315,10 +315,6 @@ def main() -> int:
     owner = str(args.owner).strip()
     repo = str(args.repo).strip()
     output_path = Path(str(args.output)).resolve()
-    legacy_output_raw = str(args.legacy_output).strip()
-    legacy_output = (
-        Path(legacy_output_raw).resolve() if legacy_output_raw else None
-    )
 
     stats_names = _from_stats(owner, repo)
     contributors_names = _from_contributors(owner, repo)
@@ -329,13 +325,9 @@ def main() -> int:
         return 1
 
     _write_lines(output_path, names)
-    if legacy_output is not None and legacy_output != output_path:
-        _write_lines(legacy_output, names)
 
     print(f"Contributors ({len(names)}): {', '.join(names)}")
     print(f"Wrote: {output_path}")
-    if legacy_output is not None and legacy_output != output_path:
-        print(f"Wrote: {legacy_output}")
     return 0
 
 

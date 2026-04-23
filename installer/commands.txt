@@ -5,7 +5,7 @@ conda run -n obe python scripts/quality_gate.py
 conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean FOCUS.spec
 
 # Windows installer package (Inno Setup — includes build step automatically)
-powershell -ExecutionPolicy Bypass -File installer/installerscript.ps1 -AppVersion 1.0.5
+powershell -ExecutionPolicy Bypass -File installer/installerscript.ps1
 
 # macOS/Linux build (PyInstaller data separator is :)
 conda run -n obe python scripts/generate_version_file.py && conda run -n obe python -m PyInstaller --noconfirm --clean --windowed --onedir --name "focus" --icon assets/kare-logo.ico --add-data "assets:assets" --add-data "common/i18n:common/i18n" --hidden-import PySide6.QtSvg --hidden-import PySide6.QtPdf --hidden-import PySide6.QtPdfWidgets --hidden-import modules.instructor_module --hidden-import modules.co_analysis_module --hidden-import modules.po_analysis_module --hidden-import modules.help_module --hidden-import modules.about_module main.py

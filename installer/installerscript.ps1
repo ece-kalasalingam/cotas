@@ -1,8 +1,70 @@
 param(
-    [string]$AppVersion = "1.0.5",
+    [string]$AppVersion = "",
     [switch]$SkipContributorsRefresh,
     [switch]$SkipBuild
 )
+
+function Resolve-AppVersion {
+    param(
+        [string]$RequestedVersion
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
+        return $RequestedVersion.Trim()
+    }
+
+    $resolved = ""
+    $conda = Get-Command conda -ErrorAction SilentlyContinue
+    if ($conda) {
+        $resolved = (conda run -n obe python -c "from common.constants import SYSTEM_VERSION; print(SYSTEM_VERSION)" 2>$null | Select-Object -Last 1).Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($resolved)) {
+        $python = Get-Command python -ErrorAction SilentlyContinue
+        if ($python) {
+            $resolved = (python -c "from common.constants import SYSTEM_VERSION; print(SYSTEM_VERSION)" 2>$null | Select-Object -Last 1).Trim()
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($resolved)) {
+        Write-Error "Could not resolve SYSTEM_VERSION from common/constants.py. Pass -AppVersion explicitly."
+        exit 1
+    }
+
+    return $resolved
+}
+
+function Resolve-AppFileVersion {
+    param(
+        [string]$SemanticVersion
+    )
+
+    $parts = ($SemanticVersion -split '\.')
+    $numericParts = @()
+
+    foreach ($part in $parts) {
+        if ($part -match '^(\d+)') {
+            $numericParts += [int]$Matches[1]
+        } else {
+            $numericParts += 0
+        }
+    }
+
+    while ($numericParts.Count -lt 4) {
+        $numericParts += 0
+    }
+
+    if ($numericParts.Count -gt 4) {
+        $numericParts = $numericParts[0..3]
+    }
+
+    return ($numericParts -join '.')
+}
+
+$ResolvedAppVersion = Resolve-AppVersion -RequestedVersion $AppVersion
+$ResolvedAppFileVersion = Resolve-AppFileVersion -SemanticVersion $ResolvedAppVersion
+Write-Host "Using installer AppVersion: $ResolvedAppVersion"
+Write-Host "Using installer AppFileVersion: $ResolvedAppFileVersion"
 
 if (-not $SkipContributorsRefresh) {
     Write-Host "Refreshing contributors list for About module..."
@@ -38,6 +100,29 @@ if (-not $SkipContributorsRefresh) {
 }
 
 if (-not $SkipBuild) {
+    Write-Host "Running quality gate..."
+    $qualityGatePassed = $false
+    $conda = Get-Command conda -ErrorAction SilentlyContinue
+    if ($conda) {
+        conda run -n obe python scripts/quality_gate.py
+        if ($LASTEXITCODE -eq 0) {
+            $qualityGatePassed = $true
+        }
+    } else {
+        $python = Get-Command python -ErrorAction SilentlyContinue
+        if ($python) {
+            python scripts/quality_gate.py
+            if ($LASTEXITCODE -eq 0) {
+                $qualityGatePassed = $true
+            }
+        }
+    }
+
+    if (-not $qualityGatePassed) {
+        Write-Error "Quality gate failed. Aborting installer packaging."
+        exit 1
+    }
+
     Write-Host "Generating version file and building with PyInstaller..."
     $buildSuccess = $false
 
@@ -50,9 +135,7 @@ if (-not $SkipBuild) {
                 $buildSuccess = $true
             }
         }
-    }
-
-    if (-not $buildSuccess) {
+    } else {
         $python = Get-Command python -ErrorAction SilentlyContinue
         if ($python) {
             python scripts/generate_version_file.py
@@ -72,7 +155,8 @@ if (-not $SkipBuild) {
 }
 
 $isccArgs = @(
-    "/DAppVersion=$AppVersion"
+    "/DAppVersion=$ResolvedAppVersion"
+    "/DAppFileVersion=$ResolvedAppFileVersion"
     "installer\focus.iss"
 )
 
