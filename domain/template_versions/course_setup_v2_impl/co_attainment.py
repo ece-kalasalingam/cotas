@@ -25,11 +25,11 @@ from common.constants import (
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
-    CO_REPORT_HEADER_TOTAL,
-    CO_REPORT_HEADER_TOTAL_100,
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
     CO_REPORT_NOT_APPLICABLE_TOKEN,
+    CO_ANALYSIS_INSTITUTION_ROWS,
+    CO_ANALYSIS_SHEET_FOOTER_TEXT,
     DIRECT_RATIO,
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
@@ -66,8 +66,12 @@ from common.registry import (
 )
 from common.excel_sheet_layout import (
     apply_xlsxwriter_layout as _apply_xlsxwriter_layout_shared,
+    apply_xlsxwriter_column_widths as _apply_xlsxwriter_column_widths,
     build_template_xlsxwriter_formats as _build_template_xlsxwriter_formats,
     compute_sampled_column_widths as _compute_sampled_column_widths,
+    excel_col_name,
+    write_sheet_footer_xlsxwriter,
+    write_two_column_metadata_rows,
 )
 from common.error_catalog import validation_error_from_key
 from common.exceptions import AppSystemError, ValidationError
@@ -85,9 +89,9 @@ from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator imp
     co_direct_sheet_name,
     co_indirect_sheet_name,
     course_metadata_headers as _course_metadata_headers,
-    format_total_marks_display,
     ratio_total_header as _ratio_total_header,
     write_co_outcome_sheets,
+    write_co_outcome_sheets_openpyxl,
 )
 from domain.template_strategy_router import (
     read_template_id_from_system_hash_sheet_if_valid,
@@ -108,6 +112,7 @@ _DEDUP_SQLITE_THRESHOLD_ENTRIES = 10_000
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
 _SIGNATURE_VALIDATION_MAX_WORKERS = 8
+_PASS_PERCENTAGE_SHEET_NAME = "Pass_Percentage"
 
 
 @dataclass(slots=True, frozen=True)
@@ -872,7 +877,9 @@ def _metadata_rows_for_output(metadata: dict[str, str], co_index: int) -> list[t
     Raises:
         None.
     """
+    institution_rows = [(line, "") for line in CO_ANALYSIS_INSTITUTION_ROWS]
     return [
+        *institution_rows,
         ("Course Code", metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")),
         ("Course Name", metadata.get(normalize(_COURSE_METADATA_COURSE_NAME_KEY), "")),
         ("Semester", metadata.get(normalize(COURSE_METADATA_SEMESTER_KEY), "")),
@@ -901,7 +908,9 @@ def _metadata_rows_for_summary_graph(
     total_outcomes_value = metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "").strip()
     if not total_outcomes_value:
         total_outcomes_value = str(total_outcomes)
+    institution_rows = [(line, "") for line in CO_ANALYSIS_INSTITUTION_ROWS]
     return [
+        *institution_rows,
         ("Course Code", metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")),
         ("Course Name", metadata.get(normalize(_COURSE_METADATA_COURSE_NAME_KEY), "")),
         ("Academic Year", metadata.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")),
@@ -940,6 +949,43 @@ def _threshold_rows_for_output(
         ("CO AT%", f"{co_attainment_percent:g}"),
         ("CO AT Level", f"L{co_attainment_level}"),
     ]
+
+
+def _summary_graph_metadata_rows(
+    *,
+    metadata: dict[str, str],
+    total_outcomes: int,
+    thresholds: tuple[float, float, float] | None,
+    co_attainment_percent: float,
+    co_attainment_level: int,
+    include_thresholds: bool,
+) -> list[tuple[str, str]]:
+    """Unified metadata rows for Summary and Graph sheets.
+
+    Args:
+        metadata: Parameter value (dict[str, str]).
+        total_outcomes: Parameter value (int).
+        thresholds: Parameter value (tuple[float, float, float] | None).
+        co_attainment_percent: Parameter value (float).
+        co_attainment_level: Parameter value (int).
+        include_thresholds: Parameter value (bool).
+
+    Returns:
+        list[tuple[str, str]]: Return value.
+
+    Raises:
+        None.
+    """
+    rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
+    rows.extend(
+        _threshold_rows_for_output(
+            thresholds,
+            co_attainment_percent=co_attainment_percent,
+            co_attainment_level=co_attainment_level,
+            include=include_thresholds,
+        )
+    )
+    return rows
 
 
 def _metadata_rows_for_co_analysis_outcome_sheets(
@@ -1439,6 +1485,14 @@ def _direct_component_columns(
     marks_lookup: dict[tuple[int, str], tuple[float | str, ...]] = {}
     if not component_columns:
         return component_columns, marks_lookup
+    reg_col: int | None = None
+    for col_index in range(1, max_col + 1):
+        token = normalize(sheet.cell(row=header_row, column=col_index).value)
+        if token == normalize(CO_REPORT_HEADER_REG_NO):
+            reg_col = col_index
+            break
+    if reg_col is None:
+        return component_columns, marks_lookup
 
     for values in sheet.iter_rows(
         min_row=header_row + 1,
@@ -1447,9 +1501,9 @@ def _direct_component_columns(
         max_col=max_col,
         values_only=True,
     ):
-        if len(values) < 2:
+        if len(values) < reg_col:
             continue
-        reg_raw = values[1]
+        reg_raw = values[reg_col - 1]
         reg_value = coerce_excel_number(reg_raw)
         reg_no = str(reg_value).strip() if reg_value is not None else ""
         if not reg_no:
@@ -1530,6 +1584,14 @@ def _indirect_component_columns(
     marks_lookup: dict[tuple[int, str], tuple[float | str, ...]] = {}
     if not component_columns:
         return component_columns, marks_lookup
+    reg_col: int | None = None
+    for col_index in range(1, max_col + 1):
+        token = normalize(sheet.cell(row=header_row, column=col_index).value)
+        if token == normalize(CO_REPORT_HEADER_REG_NO):
+            reg_col = col_index
+            break
+    if reg_col is None:
+        return component_columns, marks_lookup
 
     for values in sheet.iter_rows(
         min_row=header_row + 1,
@@ -1538,9 +1600,9 @@ def _indirect_component_columns(
         max_col=max_col,
         values_only=True,
     ):
-        if len(values) < 2:
+        if len(values) < reg_col:
             continue
-        reg_raw = values[1]
+        reg_raw = values[reg_col - 1]
         reg_value = coerce_excel_number(reg_raw)
         reg_no = str(reg_value).strip() if reg_value is not None else ""
         if not reg_no:
@@ -1753,15 +1815,23 @@ def _create_co_attainment_sheet(
             include=bool(metadata),
         )
     )
-    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
-        sheet.write(row_idx, 1, label, formats["body"])
-        sheet.write(row_idx, 2, value, formats["body_wrap"])
+    write_two_column_metadata_rows(
+        sheet,
+        rows=metadata_rows,
+        label_col_index=1,
+        value_col_index=2,
+        label_format=formats["body"],
+        value_format=formats["body_wrap"],
+        centered_row_labels=CO_ANALYSIS_INSTITUTION_ROWS,
+        centered_label_format=formats["body_center"],
+        centered_value_format=formats["body_center"],
+    )
 
     header_row_index = len(metadata_rows) + 1
     headers = [
         "#",
-        "Regno",
-        "Student name",
+        "Student Name",
+        "Reg. No.",
         f"Direct ({ratio_percent_token(DIRECT_RATIO)}%)",
         f"Indirect ({ratio_percent_token(INDIRECT_RATIO)}%)",
         "Total (100%)",
@@ -1784,7 +1854,7 @@ def _create_co_attainment_sheet(
         landscape=True,
     )
     sheet.repeat_rows(0, header_row_index)
-    # Freeze rows through the header and columns through Student name (A:C).
+    # Freeze rows through the header and columns through Reg. No. (A:C).
     sheet.freeze_panes(header_row_index + 1, 3)
     return _CoOutputSheetState(
         sheet=sheet,
@@ -1822,10 +1892,10 @@ def _append_co_attainment_row(
     else:
         total = CO_REPORT_ABSENT_TOKEN
     level = _score_to_attainment_level(total, thresholds=thresholds)
-    left = [state.next_serial, row.reg_no]
+    state.sheet.write(state.next_row_index, 0, state.next_serial, state.formats["body"])
+    state.sheet.write(state.next_row_index, 1, row.student_name, state.formats["body_wrap"])
     right = [row.direct_score, row.indirect_score, total, level]
-    state.sheet.write_row(state.next_row_index, 0, left, state.formats["body"])
-    state.sheet.write(state.next_row_index, 2, row.student_name, state.formats["body_wrap"])
+    state.sheet.write(state.next_row_index, 2, row.reg_no, state.formats["body"])
     state.sheet.write_row(state.next_row_index, 3, right, state.formats["body_center"])
     state.on_roll += 1
     if total != CO_REPORT_ABSENT_TOKEN:
@@ -1862,6 +1932,250 @@ def _append_co_attainment_summary(state: _CoOutputSheetState) -> None:
         state.sheet.write(state.next_row_index, 1, label, state.formats["body"])
         state.sheet.write(state.next_row_index, 2, value, state.formats["body_center"])
         state.next_row_index += 1
+    write_sheet_footer_xlsxwriter(
+        state.sheet,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=state.next_row_index + 1,
+        col_index=0,
+        cell_format=state.formats["body"],
+    )
+
+
+def _direct_total_100_from_direct_score(score: float | str) -> float | None:
+    """Direct total 100 from direct score.
+
+    Args:
+        score: Parameter value (float | str).
+
+    Returns:
+        float | None: Return value.
+
+    Raises:
+        None.
+    """
+    if isinstance(score, str):
+        token = normalize(score)
+        if token in {
+            normalize(CO_REPORT_ABSENT_TOKEN),
+            normalize(CO_REPORT_NOT_APPLICABLE_TOKEN),
+        }:
+            return 0.0
+        return None
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return None
+    if DIRECT_RATIO <= 0:
+        return 0.0
+    total_100 = round(float(score) / float(DIRECT_RATIO), CO_REPORT_MAX_DECIMAL_PLACES)
+    return max(0.0, min(100.0, total_100))
+
+
+def _co_direct_total_100_for_row(
+    *,
+    co_index: int,
+    row: _CoAttainmentRow,
+    direct_columns_by_co: dict[int, list[_DirectComponentColumn]],
+    direct_scores_by_co: dict[int, dict[int, dict[str, float | str]]],
+) -> float | None:
+    """Compute direct total (100%) for one row in one CO.
+
+    Args:
+        co_index: Parameter value (int).
+        row: Parameter value (_CoAttainmentRow).
+        direct_columns_by_co: Parameter value (dict[int, list[_DirectComponentColumn]]).
+        direct_scores_by_co: Parameter value (dict[int, dict[int, dict[str, float | str]]]).
+
+    Returns:
+        float | None: Return value.
+
+    Raises:
+        None.
+    """
+    columns = list(direct_columns_by_co.get(co_index, []))
+    if not columns:
+        return _direct_total_100_from_direct_score(row.direct_score)
+
+    score_map = direct_scores_by_co.get(co_index, {}).get(row.reg_hash, {})
+    weighted_total = 0.0
+    total_weight = 0.0
+    for column in columns:
+        max_marks = float(column.max_marks)
+        weight = float(column.weight)
+        if max_marks <= 0 or weight <= 0:
+            continue
+        raw = score_map.get(normalize(column.name), CO_REPORT_NOT_APPLICABLE_TOKEN)
+        if normalize(raw) == normalize(CO_REPORT_NOT_APPLICABLE_TOKEN):
+            continue
+        total_weight += weight
+        if isinstance(raw, str) and normalize(raw) == normalize(CO_REPORT_ABSENT_TOKEN):
+            raw_numeric = 0.0
+        elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            raw_numeric = float(raw)
+        else:
+            raw_numeric = 0.0
+        bounded_raw = max(0.0, min(raw_numeric, max_marks))
+        weighted_total += (bounded_raw * weight / max_marks)
+    if total_weight <= 0:
+        return None
+    total_100 = round((weighted_total * 100.0 / total_weight), CO_REPORT_MAX_DECIMAL_PLACES)
+    return max(0.0, min(100.0, total_100))
+
+
+def _create_pass_percentage_sheet(
+    workbook: Any,
+    *,
+    template_id: str,
+    metadata: dict[str, str],
+    thresholds: tuple[float, float, float],
+    pending_rows: dict[int, list[_CoAttainmentRow]],
+    pending_direct_columns: dict[int, list[_DirectComponentColumn]],
+    pending_direct_scores: dict[int, dict[int, dict[str, float | str]]],
+    total_outcomes: int,
+) -> None:
+    """Create pass percentage sheet.
+
+    Args:
+        workbook: Parameter value (Any).
+        template_id: Parameter value (str).
+        metadata: Parameter value (dict[str, str]).
+        thresholds: Parameter value (tuple[float, float, float]).
+        pending_rows: Parameter value (dict[int, list[_CoAttainmentRow]]).
+        pending_direct_columns: Parameter value (dict[int, list[_DirectComponentColumn]]).
+        pending_direct_scores: Parameter value (dict[int, dict[int, dict[str, float | str]]]).
+        total_outcomes: Parameter value (int).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    sheet = workbook.add_worksheet(_PASS_PERCENTAGE_SHEET_NAME)
+    formats = _xlsxwriter_formats(workbook, template_id=template_id)
+    metadata_headers = _course_metadata_headers(template_id)
+    metadata_rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
+    l1_threshold = float(thresholds[0]) if thresholds else 0.0
+    metadata_rows.append(("Pass Threshold (L1)", f"{l1_threshold:g}"))
+    write_two_column_metadata_rows(
+        sheet,
+        rows=metadata_rows,
+        label_col_index=1,
+        value_col_index=2,
+        label_format=formats["body"],
+        value_format=formats["body_wrap"],
+        centered_row_labels=CO_ANALYSIS_INSTITUTION_ROWS,
+        centered_label_format=formats["body_center"],
+        centered_value_format=formats["body_center"],
+    )
+
+    header_row_index = len(metadata_rows) + 1
+    headers = ["#", "Student Name", "Reg. No.", "Total (100%)", "Result"]
+    table_start_col = 0
+    for col_idx, header in enumerate(headers, start=0):
+        sheet.write(header_row_index, table_start_col + col_idx, header, formats["header"])
+
+    student_rows: dict[int, dict[str, Any]] = {}
+    for co_index in range(1, total_outcomes + 1):
+        for row in pending_rows.get(co_index, []):
+            item = student_rows.setdefault(
+                row.reg_hash,
+                {"reg_no": row.reg_no, "student_name": row.student_name, "direct_totals_100": []},
+            )
+            direct_total_100 = _co_direct_total_100_for_row(
+                co_index=co_index,
+                row=row,
+                direct_columns_by_co=pending_direct_columns,
+                direct_scores_by_co=pending_direct_scores,
+            )
+            if direct_total_100 is not None:
+                item["direct_totals_100"].append(direct_total_100)
+
+    ordered_students = sorted(
+        student_rows.values(),
+        key=lambda item: (_reg_no_sort_key(str(item.get("reg_no", ""))), str(item.get("reg_no", "")).casefold()),
+    )
+
+    pass_count = 0
+    fail_count = 0
+    evaluated_count = 0
+    for idx, item in enumerate(ordered_students, start=1):
+        row_index = header_row_index + idx
+        totals = list(item.get("direct_totals_100", []))
+        if totals:
+            total_100: float | str = round(sum(totals) / float(len(totals)), CO_REPORT_MAX_DECIMAL_PLACES)
+            result = "Pass" if float(total_100) >= l1_threshold else "Fail"
+            evaluated_count += 1
+            if result == "Pass":
+                pass_count += 1
+            else:
+                fail_count += 1
+        else:
+            total_100 = CO_REPORT_NOT_APPLICABLE_TOKEN
+            result = CO_REPORT_NOT_APPLICABLE_TOKEN
+        row_values: list[Any] = [
+            idx,
+            str(item.get("student_name", "")),
+            str(item.get("reg_no", "")),
+            total_100,
+            result,
+        ]
+        for col_offset, value in enumerate(row_values, start=0):
+            col = table_start_col + col_offset
+            if col_offset == 1:
+                fmt = formats["body_wrap"]
+            else:
+                fmt = formats["body_center"]
+            sheet.write(row_index, col, value, fmt)
+
+    summary_row_index = header_row_index + len(ordered_students) + 2
+    pass_percentage = (
+        round((pass_count / float(evaluated_count)) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
+        if evaluated_count > 0
+        else CO_REPORT_NOT_APPLICABLE_TOKEN
+    )
+    summary_rows: list[tuple[str, Any]] = [
+        ("On Roll", len(ordered_students)),
+        ("Evaluated", evaluated_count),
+        ("Pass", pass_count),
+        ("Fail", fail_count),
+        ("Pass Percentage (%)", pass_percentage),
+    ]
+    for label, value in summary_rows:
+        sheet.write(summary_row_index, 1, label, formats["body"])
+        sheet.write(summary_row_index, 2, value, formats["body_center"])
+        summary_row_index += 1
+    write_sheet_footer_xlsxwriter(
+        sheet,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=summary_row_index + 1,
+        col_index=0,
+        cell_format=formats["body"],
+    )
+
+    sampled_rows: list[list[Any]] = [["", metadata_headers[0], metadata_headers[1]]]
+    sampled_rows.extend(["", field, value] for field, value in metadata_rows)
+    sampled_rows.append(["", headers[0], headers[1], headers[2], headers[3], headers[4]])
+    sampled_rows.extend(
+        ["", item["reg_no"], item["student_name"], "100", "Pass"]
+        for item in ordered_students[: min(len(ordered_students), 20)]
+    )
+    sampled_rows.extend([["", label, value] for label, value in summary_rows])
+    widths = _compute_sampled_column_widths(sampled_rows, 4)
+    for col in range(0, 5):
+        if col in {2}:
+            sheet.set_column(col, col, widths.get(col, 8), formats["column_wrap"])
+        else:
+            sheet.set_column(col, col, widths.get(col, 8))
+
+    _apply_xlsxwriter_layout_shared(
+        sheet,
+        header_row_index=header_row_index,
+        paper_size=9,
+        landscape=True,
+        selection_col=table_start_col,
+    )
+    sheet.repeat_rows(0, header_row_index)
+    # Freeze through Reg. No. with table starting at column A.
+    sheet.freeze_panes(header_row_index + 1, 3)
 
 
 def _co_percentage(
@@ -1893,9 +2207,51 @@ def _co_percentage(
     return round((attained_count / float(attended)) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
 
 
+def _summary_table_headers(*, max_level: int) -> list[str]:
+    """Build Summary sheet table headers.
+
+    Args:
+        max_level: Parameter value (int).
+
+    Returns:
+        list[str]: Return value.
+
+    Raises:
+        None.
+    """
+    level_headers = [f"Level {level}" for level in range(0, max_level + 1)]
+    return ["CO", *level_headers, "CO%", "Result"]
+
+
+def _summary_table_start_col() -> int:
+    """Summary table start column index (0-based)."""
+    return 2
+
+
+def _format_level_count_with_percent(*, level_count: int, attended: int) -> str:
+    """Format level count with in-row level percentage.
+
+    Args:
+        level_count: Parameter value (int).
+        attended: Parameter value (int).
+
+    Returns:
+        str: Return value.
+
+    Raises:
+        None.
+    """
+    if attended <= 0:
+        level_percent = 0.0
+    else:
+        level_percent = round((float(level_count) / float(attended)) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
+    return f"{int(level_count)} ({level_percent:g}%)"
+
+
 def _create_summary_sheet(
     workbook: Any,
     *,
+    sheet: Any | None = None,
     template_id: str,
     metadata: dict[str, str],
     thresholds: tuple[float, float, float] | None,
@@ -1903,7 +2259,7 @@ def _create_summary_sheet(
     co_attainment_level: int,
     output_states: dict[int, _CoOutputSheetState],
     total_outcomes: int,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[str]]:
     """Create summary sheet.
     
     Args:
@@ -1917,37 +2273,45 @@ def _create_summary_sheet(
         total_outcomes: Parameter value (int).
     
     Returns:
-        tuple[int, int]: Return value.
+        tuple[int, int, list[str]]: Return value.
     
     Raises:
         None.
     """
-    sheet = workbook.add_worksheet("Summary")
+    if sheet is None:
+        sheet = workbook.add_worksheet("Summary")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
     metadata_headers = _course_metadata_headers(template_id)
-    metadata_rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
-    metadata_rows.extend(
-        _threshold_rows_for_output(
-            thresholds,
-            co_attainment_percent=co_attainment_percent,
-            co_attainment_level=co_attainment_level,
-            include=bool(metadata),
-        )
+    metadata_rows = _summary_graph_metadata_rows(
+        metadata=metadata,
+        total_outcomes=total_outcomes,
+        thresholds=thresholds,
+        co_attainment_percent=co_attainment_percent,
+        co_attainment_level=co_attainment_level,
+        include_thresholds=bool(metadata),
     )
-    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
-        sheet.write(row_idx, 1, label, formats["body"])
-        sheet.write(row_idx, 2, value, formats["body_wrap"])
+    write_two_column_metadata_rows(
+        sheet,
+        rows=metadata_rows,
+        label_col_index=1,
+        value_col_index=2,
+        label_format=formats["body"],
+        value_format=formats["body_wrap"],
+        centered_row_labels=CO_ANALYSIS_INSTITUTION_ROWS,
+        centered_label_format=formats["body_center"],
+        centered_value_format=formats["body_center"],
+    )
 
     header_row_index = len(metadata_rows) + 1
     max_level = max((max(state.level_counts) for state in output_states.values()), default=3)
-    level_headers = [f"Level {level}" for level in range(0, max_level + 1)]
-    headers = ["CO", "Attended", *level_headers, "CO%", "Result"]
-    table_start_col = 1  # Start summary table at column B.
+    headers = _summary_table_headers(max_level=max_level)
+    table_start_col = _summary_table_start_col()  # Start summary table at column C.
     for col_idx, header in enumerate(headers, start=0):
         sheet.write(header_row_index, table_start_col + col_idx, header, formats["header"])
 
     first_data_row = header_row_index + 1
     course_code = metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "").strip()
+    table_row_values: list[list[Any]] = []
     for co_index in range(1, total_outcomes + 1):
         state = output_states.get(co_index)
         level_counts = state.level_counts if state is not None else {level: 0 for level in range(0, max_level + 1)}
@@ -1965,28 +2329,41 @@ def _create_summary_sheet(
         )
         row_values: list[Any] = [
             co_label,
-            attended,
-            *[level_counts.get(level, 0) for level in range(0, max_level + 1)],
+            *[
+                _format_level_count_with_percent(level_count=int(level_counts.get(level, 0)), attended=int(attended))
+                for level in range(0, max_level + 1)
+            ],
             co_percentage,
             result_text,
         ]
+        table_row_values.append(row_values)
         row_index = header_row_index + co_index
         sheet.write_row(row_index, table_start_col, row_values, formats["body_center"])
 
-    sampled_rows: list[list[Any]] = [["", metadata_headers[0], metadata_headers[1]]]
-    sampled_rows.extend(["", field, value] for field, value in metadata_rows)
-    sampled_rows.append(["", headers[0], headers[1]])
-    widths = _compute_sampled_column_widths(sampled_rows, 2)
-    sheet.set_column(1, 1, widths.get(1, 8))
-    sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
-    result_col = table_start_col + (len(headers) - 1)
-    result_sample_rows: list[list[Any]] = [
-        [headers[-1]],
-        ["Attained"],
-        ["Yet to Attain"],
-    ]
-    result_widths = _compute_sampled_column_widths(result_sample_rows, 0)
-    sheet.set_column(result_col, result_col, result_widths.get(0, 12), formats["column_wrap"])
+    last_col = table_start_col + len(headers) - 1
+    max_sample_row = 30
+    sampled_rows: list[list[Any]] = [[""] * (last_col + 1) for _ in range(max_sample_row)]
+    for row_index, (field, value) in enumerate(metadata_rows):
+        if row_index >= max_sample_row:
+            break
+        sampled_rows[row_index][1] = field
+        sampled_rows[row_index][2] = value
+    if header_row_index < max_sample_row:
+        for col_offset, header in enumerate(headers):
+            sampled_rows[header_row_index][table_start_col + col_offset] = header
+    for row_offset, row_values in enumerate(table_row_values, start=1):
+        row_index = header_row_index + row_offset
+        if row_index >= max_sample_row:
+            break
+        for col_offset, value in enumerate(row_values):
+            sampled_rows[row_index][table_start_col + col_offset] = value
+    widths = _compute_sampled_column_widths(sampled_rows, last_col)
+    _apply_xlsxwriter_column_widths(
+        sheet,
+        widths,
+        wrap_columns=(1, 2, last_col),
+        wrap_format=formats["column_wrap"],
+    )
 
     _apply_xlsxwriter_layout_shared(
         sheet,
@@ -1996,14 +2373,23 @@ def _create_summary_sheet(
         selection_col=table_start_col,
     )
     sheet.repeat_rows(0, header_row_index)
-    # Match CO-sheet freeze behavior for header rows and left reference columns.
-    sheet.freeze_panes(header_row_index + 1, 3)
-    return first_data_row, first_data_row + max(0, total_outcomes - 1)
+    # Freeze columns A and B; summary table starts at column C.
+    sheet.freeze_panes(header_row_index + 1, table_start_col)
+    summary_last_data_row = first_data_row + max(0, total_outcomes - 1)
+    write_sheet_footer_xlsxwriter(
+        sheet,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=summary_last_data_row + 2,
+        col_index=0,
+        cell_format=formats["body"],
+    )
+    return first_data_row, first_data_row + max(0, total_outcomes - 1), headers
 
 
 def _create_graph_sheet(
     workbook: Any,
     *,
+    sheet: Any | None = None,
     template_id: str,
     metadata: dict[str, str],
     total_outcomes: int,
@@ -2011,7 +2397,7 @@ def _create_graph_sheet(
     co_attainment_percent: float,
     co_attainment_level: int,
     summary_first_data_row: int,
-    summary_last_data_row: int,
+    summary_headers: list[str],
 ) -> None:
     """Create graph sheet.
     
@@ -2024,7 +2410,7 @@ def _create_graph_sheet(
         co_attainment_percent: Parameter value (float).
         co_attainment_level: Parameter value (int).
         summary_first_data_row: Parameter value (int).
-        summary_last_data_row: Parameter value (int).
+        summary_headers: Parameter value (list[str]).
     
     Returns:
         None.
@@ -2032,21 +2418,33 @@ def _create_graph_sheet(
     Raises:
         None.
     """
-    graph_sheet = workbook.add_worksheet("Graph")
+    graph_sheet = sheet if sheet is not None else workbook.add_worksheet("Graph")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
     metadata_headers = _course_metadata_headers(template_id)
-    metadata_rows = _metadata_rows_for_summary_graph(metadata, total_outcomes=total_outcomes)
-    metadata_rows.extend(
-        _threshold_rows_for_output(
-            thresholds,
-            co_attainment_percent=co_attainment_percent,
-            co_attainment_level=co_attainment_level,
-            include=bool(metadata),
-        )
+    metadata_rows = _summary_graph_metadata_rows(
+        metadata=metadata,
+        total_outcomes=total_outcomes,
+        thresholds=thresholds,
+        co_attainment_percent=co_attainment_percent,
+        co_attainment_level=co_attainment_level,
+        include_thresholds=bool(metadata),
     )
-    for row_idx, (label, value) in enumerate(metadata_rows, start=0):
-        graph_sheet.write(row_idx, 1, label, formats["body"])
-        graph_sheet.write(row_idx, 2, value, formats["body_wrap"])
+    metadata_rows = [
+        (field, value)
+        for field, value in metadata_rows
+        if field not in CO_ANALYSIS_INSTITUTION_ROWS
+    ]
+    write_two_column_metadata_rows(
+        graph_sheet,
+        rows=metadata_rows,
+        label_col_index=1,
+        value_col_index=2,
+        label_format=formats["body"],
+        value_format=formats["body_wrap"],
+        centered_row_labels=CO_ANALYSIS_INSTITUTION_ROWS,
+        centered_label_format=formats["body_center"],
+        centered_value_format=formats["body_center"],
+    )
     sampled_rows: list[list[Any]] = [["", metadata_headers[0], metadata_headers[1]]]
     sampled_rows.extend(["", field, value] for field, value in metadata_rows)
     widths = _compute_sampled_column_widths(sampled_rows, 2)
@@ -2054,18 +2452,26 @@ def _create_graph_sheet(
     graph_sheet.set_column(2, 2, widths.get(2, 8), formats["column_wrap"])
 
     chart = workbook.add_chart({"type": "column"})
-    summary_table_start_col = 1
-    level_count = (len(thresholds) if thresholds is not None else 3) + 1
-    summary_co_percent_col = summary_table_start_col + 2 + level_count
+    summary_table_start_col = _summary_table_start_col()
+    summary_co_header = "CO"
+    summary_co_percent_header = "Attainment %"
+    summary_co_col = summary_table_start_col
+    summary_co_percent_col_index = max(0, len(summary_headers) - 2)
+    if summary_headers:
+        for index, header in enumerate(summary_headers):
+            if str(header).strip().casefold() == "co%":
+                summary_co_percent_col_index = index
+    summary_co_percent_col = summary_table_start_col + summary_co_percent_col_index
+    summary_last_data_row = summary_first_data_row + max(0, total_outcomes - 1)
     chart.add_series(
         {
-            "name": "CO%",
+            "name": summary_co_percent_header,
             "categories": [
                 "Summary",
                 summary_first_data_row,
-                summary_table_start_col,
+                summary_co_col,
                 summary_last_data_row,
-                summary_table_start_col,
+                summary_co_col,
             ],
             "values": [
                 "Summary",
@@ -2074,17 +2480,47 @@ def _create_graph_sheet(
                 summary_last_data_row,
                 summary_co_percent_col,
             ],
-            "data_labels": {"value": True},
+            "fill": {"color": "#4F81BD"},
+            "border": {"color": "#4F81BD"},
+            "data_labels": {
+                "value": True,
+                "series_name": False,
+                "category": False,
+                "legend_key": False,
+                "position": "outside_end",
+                "num_format": '0.##"%"',
+            },
         }
     )
-    x_axis_name = "CO"
-    y_axis_name = "Attinment %"
-    chart.set_title({"name": f"{x_axis_name} {y_axis_name}"})
-    chart.set_x_axis({"name": x_axis_name})
-    chart.set_y_axis({"name": y_axis_name, "min": 0, "max": 100, "major_unit": 10})
+    chart.set_title({"name": "CO Attainment %"})
+    chart.set_x_axis(
+        {
+            "name": summary_co_header,
+            "label_position": "low",
+            "interval_unit": 1,
+        }
+    )
+    chart.set_y_axis(
+        {
+            "name": summary_co_percent_header,
+            "min": 0,
+            "max": 100,
+            "major_unit": 10,
+            "num_format": '0"%"',
+            "major_gridlines": {"visible": True},
+        }
+    )
     chart.set_legend({"none": True})
+    chart.set_style(10)
     chart_anchor_row = len(metadata_rows) + 2
     graph_sheet.insert_chart(f"B{chart_anchor_row + 1}", chart, {"x_scale": 1.4, "y_scale": 1.4})
+    write_sheet_footer_xlsxwriter(
+        graph_sheet,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=chart_anchor_row + 20,
+        col_index=0,
+        cell_format=formats["body"],
+    )
     graph_header_row = max(0, len(metadata_rows) - 1)
     _apply_xlsxwriter_layout_shared(
         graph_sheet,
@@ -2430,6 +2866,18 @@ def _generate_co_attainment_workbook_course_setup_v2(
             finally:
                 workbook.close()
         shared_formats = _xlsxwriter_formats(output_workbook, template_id=template_id)
+        _create_pass_percentage_sheet(
+            output_workbook,
+            template_id=template_id,
+            metadata=metadata,
+            thresholds=level_thresholds,
+            pending_rows=pending_rows,
+            pending_direct_columns=pending_direct_columns,
+            pending_direct_scores=pending_direct_scores,
+            total_outcomes=resolved_total_outcomes,
+        )
+        summary_sheet = output_workbook.add_worksheet("Summary")
+        graph_sheet = output_workbook.add_worksheet("Graph")
         for co_index in range(1, resolved_total_outcomes + 1):
             sorted_rows = sorted(
                 pending_rows.get(co_index, []),
@@ -2523,8 +2971,9 @@ def _generate_co_attainment_workbook_course_setup_v2(
             for row in sorted_rows:
                 _append_co_attainment_row(state, row, thresholds=level_thresholds)
             _append_co_attainment_summary(state)
-        summary_first_data_row, summary_last_data_row = _create_summary_sheet(
+        summary_first_data_row, _summary_last_data_row, summary_headers = _create_summary_sheet(
             output_workbook,
+            sheet=summary_sheet,
             template_id=template_id,
             metadata=metadata,
             thresholds=level_thresholds,
@@ -2535,6 +2984,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
         )
         _create_graph_sheet(
             output_workbook,
+            sheet=graph_sheet,
             template_id=template_id,
             metadata=metadata,
             total_outcomes=resolved_total_outcomes,
@@ -2542,9 +2992,9 @@ def _generate_co_attainment_workbook_course_setup_v2(
             co_attainment_percent=target_percent,
             co_attainment_level=target_level,
             summary_first_data_row=summary_first_data_row,
-            summary_last_data_row=summary_last_data_row,
+            summary_headers=summary_headers,
         )
-        sheet_order: list[str] = []
+        sheet_order: list[str] = [_PASS_PERCENTAGE_SHEET_NAME, "Summary", "Graph"]
         for co_index in range(1, resolved_total_outcomes + 1):
             sheet_order.extend(
                 [
@@ -2553,7 +3003,6 @@ def _generate_co_attainment_workbook_course_setup_v2(
                     f"CO{co_index}",
                 ]
             )
-        sheet_order.extend(["Summary", "Graph"])
         _add_system_hash_sheet(output_workbook, template_id)
         manifest_text, manifest_hash = _build_system_layout_manifest(
             template_id=template_id,
@@ -2953,154 +3402,17 @@ def generate_final_report_workbook(
                 for cell in row:
                     dst_meta.cell(row=cell.row, column=cell.column, value=cell.value)
             sheet_order.append(metadata_sheet_name)
-        direct_total_header = _ratio_total_header(DIRECT_RATIO)
-        indirect_total_header = _ratio_total_header(INDIRECT_RATIO)
-        for co_index in range(1, int(total_outcomes) + 1):
-            direct_target_name = co_direct_sheet_name(co_index)
-            indirect_target_name = co_indirect_sheet_name(co_index)
-            dst_direct = output_wb.create_sheet(direct_target_name)
-            dst_indirect = output_wb.create_sheet(indirect_target_name)
-            direct_headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
-            co_components = direct_components_by_co.get(co_index, [])
-            if co_components:
-                for component_name, max_marks, weight in co_components:
-                    direct_headers.append(f"{component_name} ({max_marks:g})")
-                    direct_headers.append(f"{component_name} ({weight:g}%)")
-                direct_headers.extend(
-                    [
-                        CO_REPORT_HEADER_TOTAL,
-                        CO_REPORT_HEADER_TOTAL_100,
-                        direct_total_header,
-                    ]
-                )
-            else:
-                direct_headers.extend(
-                    [
-                        "Direct (100)",
-                        "Direct (100%)",
-                        "Total (100%)",
-                        CO_REPORT_HEADER_TOTAL_100,
-                        direct_total_header,
-                    ]
-                )
-            for col_index, header in enumerate(direct_headers, start=1):
-                dst_direct.cell(row=1, column=col_index, value=header)
-            indirect_components = list(indirect_components_by_co.get(co_index, []))
-            indirect_total_weight = round(
-                sum(weight for _component_name, weight in indirect_components),
-                CO_REPORT_MAX_DECIMAL_PLACES,
+        sheet_order.extend(
+            write_co_outcome_sheets_openpyxl(
+                output_wb,
+                total_outcomes=int(total_outcomes),
+                students=students,
+                direct_components_by_co=direct_components_by_co,
+                direct_scores_by_co=direct_scores_by_co,
+                indirect_components_by_co=indirect_components_by_co,
+                indirect_scores_by_co=indirect_scores_by_co,
             )
-            likert_denominator = float(max(1, LIKERT_MAX - LIKERT_MIN))
-            indirect_scaled_max = max(0, LIKERT_MAX - LIKERT_MIN)
-            indirect_headers: list[Any] = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
-            for _comp_name, _comp_weight in indirect_components:
-                indirect_headers.append(f"{_comp_name} ({LIKERT_MIN}-{LIKERT_MAX})")
-                indirect_headers.append(f"{_comp_name} (scaled 0-{indirect_scaled_max})")
-                indirect_headers.append(f"{_comp_name} ({_comp_weight:g}%)")
-            indirect_headers.extend([CO_REPORT_HEADER_TOTAL, CO_REPORT_HEADER_TOTAL_100, indirect_total_header])
-            for col_index, header in enumerate(indirect_headers, start=1):
-                dst_indirect.cell(row=1, column=col_index, value=header)
-            for row_offset, (reg_no, student_name) in enumerate(students, start=2):
-                serial_value = row_offset - 1
-                reg_key = normalize(reg_no)
-                dst_direct.cell(row=row_offset, column=1, value=serial_value)
-                dst_direct.cell(row=row_offset, column=2, value=reg_no)
-                dst_direct.cell(row=row_offset, column=3, value=student_name)
-                direct_absent = False
-                weighted_total = 0.0
-                row_total_weight = 0.0
-                current_col = 4
-                for component_name, max_marks, weight in co_components:
-                    component_key = normalize(component_name)
-                    raw_value = (
-                        direct_scores_by_co.get(co_index, {})
-                        .get(component_key, {})
-                        .get(reg_key, CO_REPORT_NOT_APPLICABLE_TOKEN)
-                    )
-                    if normalize(raw_value) == normalize(CO_REPORT_NOT_APPLICABLE_TOKEN):
-                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                        current_col += 2
-                        continue
-                    row_total_weight = round(row_total_weight + weight, CO_REPORT_MAX_DECIMAL_PLACES)
-                    if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
-                        direct_absent = True
-                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_ABSENT_TOKEN)
-                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_ABSENT_TOKEN)
-                        current_col += 2
-                        continue
-                    raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
-                    weighted = round((raw_numeric * weight / max_marks) if max_marks > 0 else 0.0, CO_REPORT_MAX_DECIMAL_PLACES)
-                    weighted_total = round(weighted_total + weighted, CO_REPORT_MAX_DECIMAL_PLACES)
-                    dst_direct.cell(row=row_offset, column=current_col, value=round(raw_numeric, CO_REPORT_MAX_DECIMAL_PLACES))
-                    dst_direct.cell(row=row_offset, column=current_col + 1, value=weighted)
-                    current_col += 2
-                if co_components:
-                    if direct_absent:
-                        dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                        dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                        dst_direct.cell(row=row_offset, column=current_col + 2, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                    else:
-                        total_100 = round(
-                            (weighted_total * 100.0 / row_total_weight) if row_total_weight > 0 else 0.0,
-                            CO_REPORT_MAX_DECIMAL_PLACES,
-                        )
-                        total_display = format_total_marks_display(
-                            student_total_marks=weighted_total,
-                            assessment_total_marks=row_total_weight,
-                        )
-                        dst_direct.cell(row=row_offset, column=current_col, value=total_display)
-                        dst_direct.cell(row=row_offset, column=current_col + 1, value=total_100)
-                        dst_direct.cell(row=row_offset, column=current_col + 2, value=round(total_100 * DIRECT_RATIO, CO_REPORT_MAX_DECIMAL_PLACES))
-                else:
-                    for col_index in range(4, len(direct_headers) + 1):
-                        dst_direct.cell(row=row_offset, column=col_index, value=0.0)
-                dst_indirect.cell(row=row_offset, column=1, value=serial_value)
-                dst_indirect.cell(row=row_offset, column=2, value=reg_no)
-                dst_indirect.cell(row=row_offset, column=3, value=student_name)
-                indirect_absent = False
-                indirect_weighted_total = 0.0
-                indirect_current_col = 4
-                for component_name, weight in indirect_components:
-                    component_key = normalize(component_name)
-                    raw_value = (
-                        indirect_scores_by_co.get(co_index, {})
-                        .get(component_key, {})
-                        .get(reg_key, 0.0)
-                    )
-                    if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
-                        indirect_absent = True
-                        dst_indirect.cell(row=row_offset, column=indirect_current_col, value=CO_REPORT_ABSENT_TOKEN)
-                        dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=CO_REPORT_ABSENT_TOKEN)
-                        dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=CO_REPORT_ABSENT_TOKEN)
-                        indirect_current_col += 3
-                        continue
-                    raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
-                    scaled_raw = round(raw_numeric - LIKERT_MIN, CO_REPORT_MAX_DECIMAL_PLACES)
-                    scaled_raw = max(0.0, min(float(indirect_scaled_max), scaled_raw))
-                    weighted = round((scaled_raw / likert_denominator) * weight, CO_REPORT_MAX_DECIMAL_PLACES)
-                    indirect_weighted_total = round(indirect_weighted_total + weighted, CO_REPORT_MAX_DECIMAL_PLACES)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col, value=round(raw_numeric, CO_REPORT_MAX_DECIMAL_PLACES))
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=scaled_raw)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=weighted)
-                    indirect_current_col += 3
-                if indirect_absent:
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
-                else:
-                    indirect_total_100 = round(
-                        (indirect_weighted_total * 100.0 / indirect_total_weight) if indirect_total_weight > 0 else 0.0,
-                        CO_REPORT_MAX_DECIMAL_PLACES,
-                    )
-                    indirect_total_display = format_total_marks_display(
-                        student_total_marks=indirect_weighted_total,
-                        assessment_total_marks=indirect_total_weight,
-                    )
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col, value=indirect_total_display)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=indirect_total_100)
-                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=round(indirect_total_100 * INDIRECT_RATIO, CO_REPORT_MAX_DECIMAL_PLACES))
-            sheet_order.extend([direct_target_name, indirect_target_name])
+        )
 
         hash_sheet = output_wb.create_sheet(SYSTEM_HASH_SHEET)
         template_hash = sign_payload(template_id)

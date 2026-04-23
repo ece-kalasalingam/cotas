@@ -754,6 +754,87 @@ def set_two_column_metadata_widths(
     ws.set_column(col2_index, col2_index, widths.get(2, default_width))
 
 
+def write_two_column_metadata_rows(
+    ws: Any,
+    *,
+    rows: Sequence[tuple[Any, Any]],
+    label_col_index: int,
+    value_col_index: int,
+    label_format: Any,
+    value_format: Any,
+    start_row_index: int = 0,
+    centered_row_labels: Sequence[str] = (),
+    centered_label_format: Any | None = None,
+    centered_value_format: Any | None = None,
+) -> int:
+    """Write two-column metadata rows with optional centered-label rows.
+
+    Args:
+        ws: Parameter value (Any).
+        rows: Parameter value (Sequence[tuple[Any, Any]]).
+        label_col_index: Parameter value (int).
+        value_col_index: Parameter value (int).
+        label_format: Parameter value (Any).
+        value_format: Parameter value (Any).
+        start_row_index: Parameter value (int).
+        centered_row_labels: Parameter value (Sequence[str]).
+        centered_label_format: Parameter value (Any | None).
+        centered_value_format: Parameter value (Any | None).
+
+    Returns:
+        int: Return value.
+
+    Raises:
+        None.
+    """
+    centered_set = {normalize(label) for label in centered_row_labels}
+    center_label_fmt = centered_label_format if centered_label_format is not None else label_format
+    center_value_fmt = centered_value_format if centered_value_format is not None else value_format
+    row_index = int(start_row_index)
+    for label, value in rows:
+        if normalize(label) in centered_set:
+            ws.write(row_index, label_col_index, label, center_label_fmt)
+            ws.write(row_index, value_col_index, value, center_value_fmt)
+        else:
+            ws.write(row_index, label_col_index, label, label_format)
+            ws.write(row_index, value_col_index, value, value_format)
+        row_index += 1
+    return row_index
+
+
+def write_sheet_footer_xlsxwriter(
+    ws: Any,
+    *,
+    footer_text: str,
+    row_index: int,
+    col_index: int = 0,
+    cell_format: Any | None = None,
+) -> None:
+    """Write a footer text cell on an xlsxwriter worksheet.
+
+    Args:
+        ws: Parameter value (Any).
+        footer_text: Parameter value (str).
+        row_index: Parameter value (int).
+        col_index: Parameter value (int).
+        cell_format: Parameter value (Any | None).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    if not str(footer_text).strip():
+        return
+    target_row = max(0, int(row_index))
+    target_col = max(0, int(col_index))
+    if cell_format is None:
+        ws.write(target_row, target_col, footer_text)
+    else:
+        ws.write(target_row, target_col, footer_text, cell_format)
+
+
 def protect_openpyxl_sheet(ws: Any) -> None:
     """Protect openpyxl sheet.
     

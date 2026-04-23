@@ -31,7 +31,7 @@ def test_co_direct_dynamic_headers_for_v2() -> None:
         sheet_key=CO_REPORT_SHEET_KEY_CO_DIRECT,
         context=context,
     )
-    assert v2_headers[0:3] == ("#", "Reg. No.", "Student Name")
+    assert v2_headers[0:3] == ("#", "Student Name", "Reg. No.")
     assert v2_headers[3:7] == ("CAT (30)", "CAT (25%)", "SEE (60)", "SEE (75%)")
     assert v2_headers[-3:] == ("Total", "Total (100%)", "Total (80%)")
 
@@ -57,7 +57,7 @@ def test_co_indirect_dynamic_headers_for_v2() -> None:
         sheet_key=CO_REPORT_SHEET_KEY_CO_INDIRECT,
         context=context,
     )
-    assert v2_headers[0:3] == ("#", "Reg. No.", "Student Name")
+    assert v2_headers[0:3] == ("#", "Student Name", "Reg. No.")
     assert v2_headers[-2:] == ("Total (100%)", "Total (20%)")
 
 

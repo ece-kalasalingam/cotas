@@ -281,8 +281,8 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
     # Baseline parity contract for current V2 output behavior.
     expected = {
         "marks_template": "731315de1da47b7c6d741d808f8a70537f6892eae0edf1efd122b4f6f06ea0b9",
-        "final_report": "6bb23d1b979f216aed8824dde57b32bdaf1eb63e4970edfe6da5481cdb0043ff",
-        "co_attainment": "bbdaf1201045691b866ba1020f212a946915b9a9427acb4ab791ef78945deaca",
+        "final_report": "d9c2ce3124f3d183969d9c22c5c1e6685ffded59f0d7816d7f2b954506b44266",
+        "co_attainment": "f65dfad104c85cdca6979ddb40c5c18a48db92cedaa9afdbf88982879e9b0d1a",
     }
     actual = {
         "marks_template": marks_hash,

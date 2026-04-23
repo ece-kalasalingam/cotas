@@ -10,6 +10,7 @@ openpyxl = pytest.importorskip("openpyxl")
 pytest.importorskip("xlsxwriter")
 
 from common.constants import (
+    CO_ANALYSIS_SHEET_FOOTER_TEXT,
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
@@ -251,10 +252,21 @@ def _collect_sheet_rows(sheet, *, header_row: int, score_col: int) -> list[tuple
         None.
     """
     rows: list[tuple[str, str, object]] = []
+    reg_col: int | None = None
+    name_col: int | None = None
+    max_col = int(sheet.max_column or 0)
+    for col in range(1, max_col + 1):
+        token = str(sheet.cell(row=header_row, column=col).value or "").strip()
+        if token == CO_REPORT_HEADER_REG_NO:
+            reg_col = col
+        elif token == CO_REPORT_HEADER_STUDENT_NAME:
+            name_col = col
+    if reg_col is None or name_col is None:
+        raise AssertionError(f"Missing identity headers in sheet={sheet.title} row={header_row}")
     row_index = header_row + 1
     while row_index <= int(sheet.max_row or 0):
-        reg_no = sheet.cell(row=row_index, column=2).value
-        student_name = sheet.cell(row=row_index, column=3).value
+        reg_no = sheet.cell(row=row_index, column=reg_col).value
+        student_name = sheet.cell(row=row_index, column=name_col).value
         if reg_no is None and student_name is None:
             break
         reg_text = str(reg_no).strip() if reg_no is not None else ""
@@ -285,6 +297,29 @@ def _header_values(sheet, *, header_row: int) -> list[str]:  # noqa: ANN001
         if token:
             values.append(token)
     return values
+
+
+def _column_for_header(sheet, *, header_row: int, header_value: str) -> int:  # noqa: ANN001
+    """Column for header value in a specific row.
+
+    Args:
+        sheet: Parameter value.
+        header_row: Parameter value (int).
+        header_value: Parameter value (str).
+
+    Returns:
+        int: Return value.
+
+    Raises:
+        AssertionError: if header is not found.
+    """
+    max_col = int(sheet.max_column or 0)
+    wanted = str(header_value).strip()
+    for col in range(1, max_col + 1):
+        token = str(sheet.cell(row=header_row, column=col).value or "").strip()
+        if token == wanted:
+            return col
+    raise AssertionError(f"Header not found in sheet={sheet.title}, row={header_row}, header={header_value!r}")
 
 
 def _normalized_score(value: object) -> float | str:
@@ -339,7 +374,7 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
         total_outcomes = len(co_titles)
         assert total_outcomes > 0
 
-        expected_sheet_order: list[str] = []
+        expected_sheet_order: list[str] = ["Pass_Percentage", "Summary", "Graph"]
         for co_index in range(1, total_outcomes + 1):
             expected_sheet_order.extend(
                 [
@@ -348,8 +383,17 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                     f"CO{co_index}",
                 ]
             )
-        expected_sheet_order.extend(["Summary", "Graph", "__SYSTEM_HASH__", "__SYSTEM_LAYOUT__"])
+        expected_sheet_order.extend(["__SYSTEM_HASH__", "__SYSTEM_LAYOUT__"])
         assert list(workbook.sheetnames) == expected_sheet_order
+        for sheet_name in workbook.sheetnames:
+            if sheet_name in {"__SYSTEM_HASH__", "__SYSTEM_LAYOUT__"}:
+                continue
+            sheet = workbook[sheet_name]
+            values = [
+                str(sheet.cell(row=row, column=1).value or "").strip()
+                for row in range(1, int(sheet.max_row or 0) + 1)
+            ]
+            assert CO_ANALYSIS_SHEET_FOOTER_TEXT in values, f"Footer missing in sheet={sheet_name}"
 
         for co_index in range(1, total_outcomes + 1):
             direct_sheet = workbook[co_direct_sheet_name(co_index)]
@@ -362,8 +406,8 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 source_direct_sheet,
                 [
                     CO_REPORT_HEADER_SERIAL,
-                    CO_REPORT_HEADER_REG_NO,
                     CO_REPORT_HEADER_STUDENT_NAME,
+                    CO_REPORT_HEADER_REG_NO,
                 ],
             )
             source_direct_headers = _header_values(source_direct_sheet, header_row=source_direct_header)
@@ -372,8 +416,8 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 source_indirect_sheet,
                 [
                     CO_REPORT_HEADER_SERIAL,
-                    CO_REPORT_HEADER_REG_NO,
                     CO_REPORT_HEADER_STUDENT_NAME,
+                    CO_REPORT_HEADER_REG_NO,
                 ],
             )
             source_indirect_headers = _header_values(source_indirect_sheet, header_row=source_indirect_header)
@@ -382,21 +426,41 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 co_sheet,
                 [
                     "#",
-                    "Regno",
-                    "Student name",
+                    "Student Name",
+                    "Reg. No.",
                     "Direct (80%)",
                     "Indirect (20%)",
                 ],
             )
 
-            direct_rows = _collect_sheet_rows(direct_sheet, header_row=direct_header, score_col=len(source_direct_headers))
+            direct_rows = _collect_sheet_rows(
+                direct_sheet,
+                header_row=direct_header,
+                score_col=_column_for_header(
+                    direct_sheet,
+                    header_row=direct_header,
+                    header_value=ratio_total_header(0.8),
+                ),
+            )
             indirect_rows = _collect_sheet_rows(
                 indirect_sheet,
                 header_row=indirect_header,
-                score_col=len(source_indirect_headers),
+                score_col=_column_for_header(
+                    indirect_sheet,
+                    header_row=indirect_header,
+                    header_value=ratio_total_header(0.2),
+                ),
             )
-            co_direct_rows = _collect_sheet_rows(co_sheet, header_row=co_header, score_col=4)
-            co_indirect_rows = _collect_sheet_rows(co_sheet, header_row=co_header, score_col=5)
+            co_direct_rows = _collect_sheet_rows(
+                co_sheet,
+                header_row=co_header,
+                score_col=_column_for_header(co_sheet, header_row=co_header, header_value="Direct (80%)"),
+            )
+            co_indirect_rows = _collect_sheet_rows(
+                co_sheet,
+                header_row=co_header,
+                score_col=_column_for_header(co_sheet, header_row=co_header, header_value="Indirect (20%)"),
+            )
 
             assert [row[:2] for row in direct_rows] == [row[:2] for row in co_direct_rows]
             assert [row[:2] for row in indirect_rows] == [row[:2] for row in co_indirect_rows]
@@ -409,5 +473,3 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
     finally:
         source_workbook.close()
         workbook.close()
-
-

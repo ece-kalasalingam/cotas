@@ -140,3 +140,63 @@ def test_iter_co_rows_returns_counts_without_rescans(monkeypatch: pytest.MonkeyP
     assert rows[0].reg_no == "R2"
     assert direct_columns == []
     assert indirect_columns == []
+
+
+def test_direct_total_100_treats_absent_as_zero() -> None:
+    """Test direct total conversion treats absent/NA tokens as zero.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    assert co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_ABSENT_TOKEN) == 0.0
+    assert co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_NOT_APPLICABLE_TOKEN) == 0.0
+
+
+def test_co_direct_total_100_uses_zero_only_for_absent_assessments() -> None:
+    """Test pass-sheet CO total keeps non-absent marks and maps absent assessments to zero.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    row = co_attainment._CoAttainmentRow(
+        reg_hash=10,
+        reg_no="R10",
+        student_name="S",
+        direct_score=0.0,
+        indirect_score=0.0,
+        worksheet_name="CO1_Direct",
+        workbook_name="w.xlsx",
+    )
+    columns = {
+        1: [
+            co_attainment._DirectComponentColumn(name="CAT", max_marks=10.0, weight=50.0, score_column=4),
+            co_attainment._DirectComponentColumn(name="SEE", max_marks=10.0, weight=50.0, score_column=6),
+        ]
+    }
+    scores = {
+        1: {
+            10: {
+                "cat": co_attainment.CO_REPORT_ABSENT_TOKEN,
+                "see": 8.0,
+            }
+        }
+    }
+    value = co_attainment._co_direct_total_100_for_row(
+        co_index=1,
+        row=row,
+        direct_columns_by_co=columns,
+        direct_scores_by_co=scores,
+    )
+    assert value == 40.0

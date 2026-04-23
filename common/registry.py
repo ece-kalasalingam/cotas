@@ -489,7 +489,7 @@ def _build_course_setup_blueprint(
                     "sheet_name_pattern": "CO{co_index}_Direct",
                     "header_kind": "dynamic",
                     "header_resolver": _CO_DIRECT_HEADER_RESOLVER,
-                    "header_base": ("#", "Reg. No.", "Student Name"),
+                    "header_base": ("#", "Student Name", "Reg. No."),
                     "max_marks_label_template": "{name} ({max_marks:g})",
                     "weighted_label_template": "{name} ({weight:g}%)",
                     "total_label": "Total",
@@ -500,7 +500,7 @@ def _build_course_setup_blueprint(
                     "sheet_name_pattern": "CO{co_index}_Indirect",
                     "header_kind": "dynamic",
                     "header_resolver": _CO_INDIRECT_HEADER_RESOLVER,
-                    "header_base": ("#", "Reg. No.", "Student Name"),
+                    "header_base": ("#", "Student Name", "Reg. No."),
                     "likert_range": (1, 5),
                     "scaled_label_template": "scaled 0-{max_value}",
                     "total_label": "Total",
@@ -705,7 +705,7 @@ def _resolve_course_setup_co_indirect_headers(
         None.
     """
     dynamic_template = get_dynamic_sheet_template(template_id, CO_REPORT_SHEET_KEY_CO_INDIRECT)
-    base = dynamic_template.get("header_base", ("#", "Reg. No.", "Student Name"))
+    base = dynamic_template.get("header_base", ("#", "Student Name", "Reg. No."))
     if not isinstance(base, tuple):
         raise ConfigurationError(
             f"Template '{template_id}' indirect header base must be a tuple."
@@ -784,7 +784,7 @@ def _resolve_course_setup_co_direct_headers(
         None.
     """
     dynamic_template = get_dynamic_sheet_template(template_id, CO_REPORT_SHEET_KEY_CO_DIRECT)
-    base = dynamic_template.get("header_base", ("#", "Reg. No.", "Student Name"))
+    base = dynamic_template.get("header_base", ("#", "Student Name", "Reg. No."))
     if not isinstance(base, tuple):
         raise ConfigurationError(
             f"Template '{template_id}' direct header base must be a tuple."
@@ -1026,4 +1026,3 @@ def resolve_dynamic_sheet_headers(
     raise ConfigurationError(
         f"Template '{template_id}' dynamic header resolver not supported for sheet '{sheet_key}': {resolver_name!r}"
     )
-

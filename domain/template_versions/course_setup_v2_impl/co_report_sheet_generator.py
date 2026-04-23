@@ -5,11 +5,15 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from common.constants import (
+    CO_ANALYSIS_INSTITUTION_ROWS,
+    CO_ANALYSIS_SHEET_FOOTER_TEXT,
     CO_REPORT_ABSENT_TOKEN,
     CO_REPORT_DIRECT_SHEET_SUFFIX,
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
+    CO_REPORT_HEADER_TOTAL,
+    CO_REPORT_HEADER_TOTAL_100,
     CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE,
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
@@ -34,6 +38,8 @@ from common.registry import (
 from common.excel_sheet_layout import (
     apply_xlsxwriter_layout,
     set_two_column_metadata_widths,
+    write_sheet_footer_xlsxwriter,
+    write_two_column_metadata_rows,
 )
 from common.error_catalog import validation_error_from_key
 from common.utils import normalize
@@ -262,9 +268,18 @@ def _write_report_metadata(
     metadata_headers = _course_metadata_headers(template_id)
     ws.write(0, 1, metadata_headers[0], formats["header"])
     ws.write(0, 2, metadata_headers[1], formats["header"])
-    for idx, (field, value) in enumerate(metadata_rows, start=1):
-        ws.write(idx, 1, field, formats["body"])
-        ws.write(idx, 2, value, formats["body_wrap"])
+    write_two_column_metadata_rows(
+        ws,
+        rows=metadata_rows,
+        label_col_index=1,
+        value_col_index=2,
+        label_format=formats["body"],
+        value_format=formats["body_wrap"],
+        start_row_index=1,
+        centered_row_labels=CO_ANALYSIS_INSTITUTION_ROWS,
+        centered_label_format=formats["body_center"],
+        centered_value_format=formats["body_center"],
+    )
     return len(metadata_rows) + 2
 
 
@@ -429,7 +444,7 @@ def _write_direct_sheet(
     ]
     for idx, (reg_no, student_name) in enumerate(students, start=1):
         row_index = header_row_index + idx
-        row_values: list[Any] = [idx, reg_no, student_name]
+        row_values: list[Any] = [idx, student_name, reg_no]
         absent = False
         weighted_total = 0.0
         row_total_weight = 0.0
@@ -460,7 +475,7 @@ def _write_direct_sheet(
             row_values.extend([total_display, total_100, total_ratio])
 
         for col, value in enumerate(row_values, start=0):
-            if col == 2:
+            if col == 1:
                 fmt = formats["body_wrap"]
             elif col >= 3:
                 fmt = formats["body_center"]
@@ -468,6 +483,14 @@ def _write_direct_sheet(
                 fmt = formats["body"]
             ws.write(row_index, col, value, fmt)
 
+    footer_row_index = header_row_index + len(students) + 2
+    write_sheet_footer_xlsxwriter(
+        ws,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=footer_row_index,
+        col_index=0,
+        cell_format=formats["body"],
+    )
     _apply_layout(ws, header_row_index=header_row_index, paper_size=8, landscape=True)
 
 
@@ -524,7 +547,7 @@ def _write_joined_total_sheet(
     ws.repeat_rows(0, header_row_index)
     ws.freeze_panes(header_row_index + 1, _EXCEL_COL_FIRST_MARK - 1)
 
-    headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME, score_header]
+    headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_STUDENT_NAME, CO_REPORT_HEADER_REG_NO, score_header]
     for col, value in enumerate(headers, start=0):
         ws.write(header_row_index, col, value, formats["header"])
 
@@ -537,9 +560,9 @@ def _write_joined_total_sheet(
             normalized_score = _round2(float(score_value))
         else:
             normalized_score = 0.0
-        row_values: list[Any] = [idx, reg_no, student_name, normalized_score]
+        row_values: list[Any] = [idx, student_name, reg_no, normalized_score]
         for col, value in enumerate(row_values, start=0):
-            if col == 2:
+            if col == 1:
                 fmt = formats["body_wrap"]
             elif col >= 3:
                 fmt = formats["body_center"]
@@ -547,6 +570,14 @@ def _write_joined_total_sheet(
                 fmt = formats["body"]
             ws.write(row_index, col, value, fmt)
 
+    footer_row_index = header_row_index + len(students) + 2
+    write_sheet_footer_xlsxwriter(
+        ws,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=footer_row_index,
+        col_index=0,
+        cell_format=formats["body"],
+    )
     _apply_layout(ws, header_row_index=header_row_index, paper_size=9, landscape=True)
 
 
@@ -623,7 +654,7 @@ def _write_indirect_sheet(
     denominator = float(max(1, scaled_max_value))
     for idx, (reg_no, student_name) in enumerate(students, start=1):
         row_index = header_row_index + idx
-        row_values: list[Any] = [idx, reg_no, student_name]
+        row_values: list[Any] = [idx, student_name, reg_no]
         absent = False
         total_weighted = 0.0
         for component, component_marks in zip(active_components, marks_by_component):
@@ -650,7 +681,7 @@ def _write_indirect_sheet(
             row_values.extend([total_display, total_100, total_ratio])
 
         for col, value in enumerate(row_values, start=0):
-            if col == 2:
+            if col == 1:
                 fmt = formats["body_wrap"]
             elif col >= 3:
                 fmt = formats["body_center"]
@@ -658,6 +689,14 @@ def _write_indirect_sheet(
                 fmt = formats["body"]
             ws.write(row_index, col, value, fmt)
 
+    footer_row_index = header_row_index + len(students) + 2
+    write_sheet_footer_xlsxwriter(
+        ws,
+        footer_text=CO_ANALYSIS_SHEET_FOOTER_TEXT,
+        row_index=footer_row_index,
+        col_index=0,
+        cell_format=formats["body"],
+    )
     _apply_layout(ws, header_row_index=header_row_index, paper_size=9, landscape=False)
 
 
@@ -713,6 +752,182 @@ def format_total_marks_display(*, student_total_marks: float, assessment_total_m
         student_total_marks=student_total_marks,
         assessment_total_marks=assessment_total_marks,
     )
+
+
+def write_co_outcome_sheets_openpyxl(
+    workbook: Any,
+    *,
+    total_outcomes: int,
+    students: list[tuple[str, str]],
+    direct_components_by_co: dict[int, list[tuple[str, float, float]]],
+    direct_scores_by_co: dict[int, dict[str, dict[str, float | str]]],
+    indirect_components_by_co: dict[int, list[tuple[str, float]]],
+    indirect_scores_by_co: dict[int, dict[str, dict[str, float | str]]],
+) -> list[str]:
+    """Write CO direct/indirect sheets into openpyxl workbook.
+
+    Args:
+        workbook: Parameter value (Any).
+        total_outcomes: Parameter value (int).
+        students: Parameter value (list[tuple[str, str]]).
+        direct_components_by_co: Parameter value (dict[int, list[tuple[str, float, float]]]).
+        direct_scores_by_co: Parameter value (dict[int, dict[str, dict[str, float | str]]]).
+        indirect_components_by_co: Parameter value (dict[int, list[tuple[str, float]]]).
+        indirect_scores_by_co: Parameter value (dict[int, dict[str, dict[str, float | str]]]).
+
+    Returns:
+        list[str]: Return value.
+
+    Raises:
+        None.
+    """
+    direct_total_header = _ratio_total_header(DIRECT_RATIO)
+    indirect_total_header = _ratio_total_header(INDIRECT_RATIO)
+    sheet_order: list[str] = []
+    for co_index in range(1, int(total_outcomes) + 1):
+        direct_target_name = co_direct_sheet_name(co_index)
+        indirect_target_name = co_indirect_sheet_name(co_index)
+        dst_direct = workbook.create_sheet(direct_target_name)
+        dst_indirect = workbook.create_sheet(indirect_target_name)
+        direct_headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_STUDENT_NAME, CO_REPORT_HEADER_REG_NO]
+        co_components = direct_components_by_co.get(co_index, [])
+        if co_components:
+            for component_name, max_marks, weight in co_components:
+                direct_headers.append(f"{component_name} ({max_marks:g})")
+                direct_headers.append(f"{component_name} ({weight:g}%)")
+            direct_headers.extend(
+                [
+                    CO_REPORT_HEADER_TOTAL,
+                    CO_REPORT_HEADER_TOTAL_100,
+                    direct_total_header,
+                ]
+            )
+        else:
+            direct_headers.extend(
+                [
+                    "Direct (100)",
+                    "Direct (100%)",
+                    "Total (100%)",
+                    CO_REPORT_HEADER_TOTAL_100,
+                    direct_total_header,
+                ]
+            )
+        for col_index, header in enumerate(direct_headers, start=1):
+            dst_direct.cell(row=1, column=col_index, value=header)
+        indirect_components = list(indirect_components_by_co.get(co_index, []))
+        indirect_total_weight = _round2(sum(weight for _component_name, weight in indirect_components))
+        likert_denominator = float(max(1, LIKERT_MAX - LIKERT_MIN))
+        indirect_scaled_max = max(0, LIKERT_MAX - LIKERT_MIN)
+        indirect_headers: list[Any] = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_STUDENT_NAME, CO_REPORT_HEADER_REG_NO]
+        for _comp_name, _comp_weight in indirect_components:
+            indirect_headers.append(f"{_comp_name} ({LIKERT_MIN}-{LIKERT_MAX})")
+            indirect_headers.append(f"{_comp_name} (scaled 0-{indirect_scaled_max})")
+            indirect_headers.append(f"{_comp_name} ({_comp_weight:g}%)")
+        indirect_headers.extend([CO_REPORT_HEADER_TOTAL, CO_REPORT_HEADER_TOTAL_100, indirect_total_header])
+        for col_index, header in enumerate(indirect_headers, start=1):
+            dst_indirect.cell(row=1, column=col_index, value=header)
+        for row_offset, (reg_no, student_name) in enumerate(students, start=2):
+            serial_value = row_offset - 1
+            reg_key = normalize(reg_no)
+            dst_direct.cell(row=row_offset, column=1, value=serial_value)
+            dst_direct.cell(row=row_offset, column=2, value=student_name)
+            dst_direct.cell(row=row_offset, column=3, value=reg_no)
+            direct_absent = False
+            weighted_total = 0.0
+            row_total_weight = 0.0
+            current_col = 4
+            for component_name, max_marks, weight in co_components:
+                component_key = normalize(component_name)
+                raw_value = (
+                    direct_scores_by_co.get(co_index, {})
+                    .get(component_key, {})
+                    .get(reg_key, CO_REPORT_NOT_APPLICABLE_TOKEN)
+                )
+                if normalize(raw_value) == normalize(CO_REPORT_NOT_APPLICABLE_TOKEN):
+                    dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    current_col += 2
+                    continue
+                row_total_weight = _round2(row_total_weight + weight)
+                if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
+                    direct_absent = True
+                    dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_ABSENT_TOKEN)
+                    dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_ABSENT_TOKEN)
+                    current_col += 2
+                    continue
+                raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+                weighted = _round2((raw_numeric * weight / max_marks) if max_marks > 0 else 0.0)
+                weighted_total = _round2(weighted_total + weighted)
+                dst_direct.cell(row=row_offset, column=current_col, value=_round2(raw_numeric))
+                dst_direct.cell(row=row_offset, column=current_col + 1, value=weighted)
+                current_col += 2
+            if co_components:
+                if direct_absent:
+                    dst_direct.cell(row=row_offset, column=current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    dst_direct.cell(row=row_offset, column=current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                    dst_direct.cell(row=row_offset, column=current_col + 2, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                else:
+                    total_100 = _round2((weighted_total * 100.0 / row_total_weight) if row_total_weight > 0 else 0.0)
+                    total_display = _format_total_marks_display(
+                        student_total_marks=weighted_total,
+                        assessment_total_marks=row_total_weight,
+                    )
+                    dst_direct.cell(row=row_offset, column=current_col, value=total_display)
+                    dst_direct.cell(row=row_offset, column=current_col + 1, value=total_100)
+                    dst_direct.cell(row=row_offset, column=current_col + 2, value=_round2(total_100 * DIRECT_RATIO))
+            else:
+                for col_index in range(4, len(direct_headers) + 1):
+                    dst_direct.cell(row=row_offset, column=col_index, value=0.0)
+            dst_indirect.cell(row=row_offset, column=1, value=serial_value)
+            dst_indirect.cell(row=row_offset, column=2, value=student_name)
+            dst_indirect.cell(row=row_offset, column=3, value=reg_no)
+            indirect_absent = False
+            indirect_weighted_total = 0.0
+            indirect_current_col = 4
+            for component_name, weight in indirect_components:
+                component_key = normalize(component_name)
+                raw_value = (
+                    indirect_scores_by_co.get(co_index, {})
+                    .get(component_key, {})
+                    .get(reg_key, 0.0)
+                )
+                if isinstance(raw_value, str) and normalize(raw_value) == normalize(CO_REPORT_ABSENT_TOKEN):
+                    indirect_absent = True
+                    dst_indirect.cell(row=row_offset, column=indirect_current_col, value=CO_REPORT_ABSENT_TOKEN)
+                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=CO_REPORT_ABSENT_TOKEN)
+                    dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=CO_REPORT_ABSENT_TOKEN)
+                    indirect_current_col += 3
+                    continue
+                raw_numeric = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+                scaled_raw = _round2(raw_numeric - LIKERT_MIN)
+                scaled_raw = max(0.0, min(float(indirect_scaled_max), scaled_raw))
+                weighted = _round2((scaled_raw / likert_denominator) * weight)
+                indirect_weighted_total = _round2(indirect_weighted_total + weighted)
+                dst_indirect.cell(row=row_offset, column=indirect_current_col, value=_round2(raw_numeric))
+                dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=scaled_raw)
+                dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=weighted)
+                indirect_current_col += 3
+            if indirect_absent:
+                dst_indirect.cell(row=row_offset, column=indirect_current_col, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+                dst_indirect.cell(row=row_offset, column=indirect_current_col + 2, value=CO_REPORT_NOT_APPLICABLE_TOKEN)
+            else:
+                indirect_total_100 = _round2(
+                    (indirect_weighted_total * 100.0 / indirect_total_weight) if indirect_total_weight > 0 else 0.0
+                )
+                indirect_total_display = _format_total_marks_display(
+                    student_total_marks=indirect_weighted_total,
+                    assessment_total_marks=indirect_total_weight,
+                )
+                dst_indirect.cell(row=row_offset, column=indirect_current_col, value=indirect_total_display)
+                dst_indirect.cell(row=row_offset, column=indirect_current_col + 1, value=indirect_total_100)
+                dst_indirect.cell(
+                    row=row_offset,
+                    column=indirect_current_col + 2,
+                    value=_round2(indirect_total_100 * INDIRECT_RATIO),
+                )
+        sheet_order.extend([direct_target_name, indirect_target_name])
+    return sheet_order
 
 
 def _round2(value: float) -> float:
