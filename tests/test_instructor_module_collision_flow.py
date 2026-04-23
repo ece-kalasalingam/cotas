@@ -129,9 +129,11 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
     src1 = "C:/src/one.xlsx"
     src2 = "C:/src/two.xlsx"
     module.course_details_paths = [src1, src2]
-    module._validated_template_ids_by_path_key = {
-        canonical_path_key(src1): "COURSE_SETUP_V2",
-    }
+    setattr(
+        module,
+        "_validated_template_ids_by_path_key",
+        {canonical_path_key(src1): "COURSE_SETUP_V2"},
+    )
 
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(lambda *_a, **_k: str(tmp_path)))
     monkeypatch.setattr(
@@ -242,9 +244,11 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
     module = _build_instructor_module(monkeypatch)
     source_paths = [f"C:/src/{idx}.xlsx" for idx in range(1, 8)]
     module.course_details_paths = list(source_paths)
-    module._validated_template_ids_by_path_key = {
-        canonical_path_key(source_paths[0]): "COURSE_SETUP_V2",
-    }
+    setattr(
+        module,
+        "_validated_template_ids_by_path_key",
+        {canonical_path_key(source_paths[0]): "COURSE_SETUP_V2"},
+    )
 
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(lambda *_a, **_k: str(tmp_path)))
     monkeypatch.setattr(
