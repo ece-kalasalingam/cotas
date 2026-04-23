@@ -9,7 +9,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets')],
-    hiddenimports=['PySide6.QtSvg', *_module_hiddenimports],
+    hiddenimports=[
+        'PySide6.QtSvg',
+        *_module_hiddenimports,
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
