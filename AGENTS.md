@@ -298,3 +298,11 @@
 - Release metadata requirements:
   - tag release commit
   - attach checksum/manifest artifacts with the release tag.
+
+## GitHub Contributor Fetch Guardrail
+
+- `common/get_contributors.py` must use the GitHub GraphQL API (`_from_graphql_authors`) to collect all commit authors, including those credited via `Co-authored-by` trailers in squash-merge commits.
+- Do not revert to REST-only fetching (`/repos/{owner}/{repo}/contributors` alone), as that endpoint only sees commit authors on the default branch and misses co-authors whose contributions were squash-merged.
+- Do not re-introduce `_merged_pr_commit_logins_via_gh` or any helper that walks merged PR commit history via the `gh` CLI; that approach pulls in inactive/renamed GitHub accounts and produces incorrect output.
+- The canonical source of truth for the contributors list is the GraphQL `commit.history.nodes[].authors` field, which GitHub itself uses to power the Contributors graph on the web UI.
+- Token resolution must follow the priority chain: `GH_TOKEN` env var → `GITHUB_TOKEN` env var → `gh auth token` CLI fallback, so the script works in both CI and local environments without modification.

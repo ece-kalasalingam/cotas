@@ -1,5 +1,5 @@
 param(
-    [string]$AppVersion = "1.0.0",
+    [string]$AppVersion = "1.0.5",
     [switch]$SkipContributorsRefresh
 )
 
@@ -12,8 +12,7 @@ if (-not $SkipContributorsRefresh) {
         conda run -n obe python common/get_contributors.py `
             --owner ece-kalasalingam `
             --repo cotas `
-            --output assets/about_contributors.txt `
-            --legacy-output common/contributors_list.txt
+            --output assets/about_contributors.txt
         if ($LASTEXITCODE -eq 0) {
             $contributorsRefreshed = $true
         }
@@ -25,8 +24,7 @@ if (-not $SkipContributorsRefresh) {
             python common/get_contributors.py `
                 --owner ece-kalasalingam `
                 --repo cotas `
-                --output assets/about_contributors.txt `
-                --legacy-output common/contributors_list.txt
+                --output assets/about_contributors.txt
             if ($LASTEXITCODE -eq 0) {
                 $contributorsRefreshed = $true
             }
