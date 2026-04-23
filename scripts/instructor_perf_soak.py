@@ -14,7 +14,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from common.constants import ID_COURSE_SETUP
-from domain.template_strategy_router import validate_workbooks
+from common.jobs import CancellationToken
+from domain.template_strategy_router import generate_workbook, validate_workbooks
+from domain.template_versions.course_setup_v2_impl.co_attainment import (
+    generate_final_report_workbook,
+)
 from services import InstructorWorkflowService
 
 
@@ -33,6 +37,49 @@ def _time_call(fn):
     started = time.perf_counter()
     fn()
     return (time.perf_counter() - started) * 1000.0
+
+
+def _fill_marks_workbook(marks_path: Path, mark_value: float = 1.0) -> None:
+    """Populate generated marks workbook with sample values for perf flow."""
+    try:
+        import openpyxl
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("openpyxl is required for perf soak marks fill.") from exc
+
+    workbook = openpyxl.load_workbook(marks_path)
+    try:
+        manifest_text = workbook["__SYSTEM_LAYOUT__"]["A2"].value
+        if not isinstance(manifest_text, str):
+            return
+        manifest = json.loads(manifest_text)
+        for spec in manifest.get("sheets", []):
+            kind = str(spec.get("kind") or "")
+            if kind not in {"direct_co_wise", "direct_non_co_wise", "indirect"}:
+                continue
+            sheet = workbook[str(spec["name"])]
+            header_row = int(spec["header_row"])
+            header_count = len(spec["headers"])
+            if kind == "indirect":
+                first_data_row = header_row + 1
+                mark_cols = range(4, header_count + 1)
+            elif kind == "direct_non_co_wise":
+                first_data_row = header_row + 3
+                mark_cols = range(4, 5)
+            else:
+                first_data_row = header_row + 3
+                mark_cols = range(4, header_count)
+            row = first_data_row
+            while True:
+                reg_no = sheet.cell(row=row, column=2).value
+                student_name = sheet.cell(row=row, column=3).value
+                if reg_no is None and student_name is None:
+                    break
+                for col in mark_cols:
+                    sheet.cell(row=row, column=col, value=mark_value)
+                row += 1
+        workbook.save(marks_path)
+    finally:
+        workbook.close()
 
 
 def main() -> int:
@@ -84,18 +131,26 @@ def main() -> int:
             marks_template = root / f"marks_template_{index}.xlsx"
             final_report = root / f"final_report_{index}.xlsx"
 
-            ctx1 = service.create_job_context(step_id="step1", payload={"i": index})
             timings["generate_course_details_template"].append(
                 _time_call(
-                    lambda: service.generate_course_details_template(
-                        course_details, context=ctx1
+                    lambda: generate_workbook(
+                        template_id=ID_COURSE_SETUP,
+                        output_path=course_details,
+                        workbook_name=course_details.name,
+                        workbook_kind="course_details_template",
+                        cancel_token=CancellationToken(),
                     )
                 )
             )
 
             timings["validate_course_details_workbooks"].append(
                 _time_call(
-                    lambda: validate_workbooks(template_id=ID_COURSE_SETUP, workbook_paths=[course_details], workbook_kind="course_details", cancel_token=None)
+                    lambda: validate_workbooks(
+                        template_id=ID_COURSE_SETUP,
+                        workbook_paths=[course_details],
+                        workbook_kind="course_details",
+                        cancel_token=CancellationToken(),
+                    )
                 )
             )
 
@@ -103,16 +158,21 @@ def main() -> int:
             timings["generate_marks_template"].append(
                 _time_call(
                     lambda: service.generate_marks_template(
-                        course_details, marks_template, context=ctx3
+                        course_details,
+                        marks_template,
+                        context=ctx3,
+                        cancel_token=CancellationToken(),
                     )
                 )
             )
+            _fill_marks_workbook(marks_template, mark_value=1.0)
 
-            ctx4 = service.create_job_context(step_id="step2", payload={"i": index})
             timings["generate_final_report"].append(
                 _time_call(
-                    lambda: service.generate_final_report(
-                        marks_template, final_report, context=ctx4
+                    lambda: generate_final_report_workbook(
+                        filled_marks_path=marks_template,
+                        output_path=final_report,
+                        cancel_token=CancellationToken(),
                     )
                 )
             )
@@ -148,5 +208,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
