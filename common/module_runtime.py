@@ -2,26 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from logging import Logger
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from logging import Logger
 from typing import Mapping
 
-from common.jobs import CancellationToken
 from common.exceptions import ConfigurationError
+from common.jobs import CancellationToken
 from common.module_messages import (
     NotificationChannel,
     ToastLevel,
-    emit_workbook_generation_feedback,
     emit_validation_batch_feedback,
-    notify_validation_issue,
+    emit_workbook_generation_feedback,
     notify_message,
     notify_message_key,
+    notify_validation_issue,
     publish_status_key,
+    setup_ui_logging,
     show_toast_key,
     show_toast_plain,
-    setup_ui_logging,
 )
 from common.utils import remember_dialog_dir_safe
 

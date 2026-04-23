@@ -163,8 +163,10 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
             None.
         """
         calls.append(dict(kwargs))
-        run_sources = list(kwargs.get("workbook_paths", []))
-        context = dict(kwargs.get("context", {}))
+        raw_run_sources = kwargs.get("workbook_paths", [])
+        run_sources = [str(item) for item in raw_run_sources] if isinstance(raw_run_sources, list) else []
+        raw_context = kwargs.get("context", {})
+        context = dict(raw_context) if isinstance(raw_context, dict) else {}
         if run_sources == [src1, src2] and context.get("overwrite_existing") is False:
             return {
                 "total": 2,
@@ -279,8 +281,10 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
             None.
         """
         call_index["value"] += 1
-        context = dict(kwargs.get("context", {}))
-        run_sources = list(kwargs.get("workbook_paths", []))
+        raw_context = kwargs.get("context", {})
+        context = dict(raw_context) if isinstance(raw_context, dict) else {}
+        raw_run_sources = kwargs.get("workbook_paths", [])
+        run_sources = [str(item) for item in raw_run_sources] if isinstance(raw_run_sources, list) else []
         if call_index["value"] == 1:
             assert context.get("overwrite_existing") is False
             results = {}
@@ -303,7 +307,8 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
             }
 
         assert context.get("overwrite_existing") is True
-        overrides = dict(context.get("output_path_overrides", {}))
+        raw_overrides = context.get("output_path_overrides", {})
+        overrides = dict(raw_overrides) if isinstance(raw_overrides, dict) else {}
         assert set(overrides.keys()) == set(source_paths)
         generated_paths = [str(overrides[src]) for src in source_paths]
         return {

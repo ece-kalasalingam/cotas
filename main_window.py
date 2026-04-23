@@ -41,19 +41,25 @@ from common.constants import (
     WINDOW_TARGET_HEIGHT_RATIO,
     WINDOW_WIDTH_TO_HEIGHT_RATIO,
 )
-from common.module_plugins import ModulePluginSpec
+from common.i18n import get_available_languages, get_language, t
 from common.module_messages import append_user_log as _append_user_log_impl
-from common.module_messages import build_status_message
-from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import (
+    build_status_message,
+)
+from common.module_messages import (
+    default_messages_namespace as _default_messages_namespace,
+)
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
-from common.module_messages import resolve_status_message
+from common.module_messages import (
+    resolve_status_message,
+)
 from common.module_messages import show_toast_key as _show_toast_key
+from common.module_plugins import ModulePluginSpec
 from common.output_panel import (
     OutputPanelData,
     open_output_link,
     render_output_panel_html,
 )
-from common.i18n import get_available_languages, get_language, t
 from common.utils import (
     get_ui_language_preference,
     resource_path,

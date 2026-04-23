@@ -31,27 +31,29 @@ from common.constants import (
     MAX_EXCEL_SHEETNAME_LENGTH,
     MIN_MARK_VALUE,
 )
-from common.registry import (
-    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE,
-    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
-    COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
-    resolve_dynamic_sheet_headers,
-)
+from common.error_catalog import validation_error_from_key
 from common.excel_sheet_layout import (
-    apply_xlsxwriter_column_widths,
-    apply_xlsxwriter_sheet_frame,
-    apply_xlsxwriter_viewport,
-    compute_sampled_column_widths,
-    excel_col_name as _excel_col_name_one_based,
-    protect_xlsxwriter_sheet,
     XLSX_AUTOFIT_MAX_WIDTH,
     XLSX_AUTOFIT_MIN_WIDTH,
     XLSX_AUTOFIT_PADDING,
     XLSX_AUTOFIT_SAMPLE_ROWS,
     XLSX_PAGE_MIN_MARGIN_IN,
     XLSX_PAPER_SIZE_A4,
+    apply_xlsxwriter_column_widths,
+    apply_xlsxwriter_sheet_frame,
+    apply_xlsxwriter_viewport,
+    compute_sampled_column_widths,
 )
-from common.error_catalog import validation_error_from_key
+from common.excel_sheet_layout import excel_col_name as _excel_col_name_one_based
+from common.excel_sheet_layout import (
+    protect_xlsxwriter_sheet,
+)
+from common.registry import (
+    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE,
+    COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
+    COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
+    resolve_dynamic_sheet_headers,
+)
 from common.sheet_schema import SheetSchema, ValidationRule
 from common.utils import (
     coerce_excel_number,

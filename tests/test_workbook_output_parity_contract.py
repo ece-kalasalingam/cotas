@@ -12,9 +12,14 @@ pytest.importorskip("xlsxwriter")
 
 from common.constants import ID_COURSE_SETUP
 from common.jobs import CancellationToken
-from domain.template_strategy_router import generate_workbook, generate_workbooks, validate_workbooks
-from domain.template_versions.course_setup_v2_impl.co_attainment import generate_final_report_workbook
-from services.instructor_workflow_service import InstructorWorkflowService
+from domain.template_strategy_router import (
+    generate_workbook,
+    generate_workbooks,
+    validate_workbooks,
+)
+from domain.template_versions.course_setup_v2_impl.co_attainment import (
+    generate_final_report_workbook,
+)
 
 
 def _set_course_section(course_details_path: Path, section: str) -> None:
@@ -220,7 +225,6 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
     Raises:
         None.
     """
-    instructor = InstructorWorkflowService()
     course_details = tmp_path / "course_details.xlsx"
     marks_template = tmp_path / "marks_template.xlsx"
     final_report = tmp_path / "final_report.xlsx"
@@ -252,7 +256,9 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
             "output_path_overrides": {str(course_details): str(marks_template)},
         },
     )
-    assert int(batch_result.get("generated", 0)) == 1
+    generated_count = batch_result.get("generated", 0)
+    assert isinstance(generated_count, int)
+    assert generated_count == 1
     _fill_marks_workbook(marks_template, mark_value=1.0)
 
     generate_final_report_workbook(
@@ -282,7 +288,7 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
     expected = {
         "marks_template": "731315de1da47b7c6d741d808f8a70537f6892eae0edf1efd122b4f6f06ea0b9",
         "final_report": "d9c2ce3124f3d183969d9c22c5c1e6685ffded59f0d7816d7f2b954506b44266",
-        "co_attainment": "f65dfad104c85cdca6979ddb40c5c18a48db92cedaa9afdbf88982879e9b0d1a",
+        "co_attainment": "573e5cee4e7a6acbe638ba33448a5456a0a78345e7ab085932d01e29731e46d6",
     }
     actual = {
         "marks_template": marks_hash,

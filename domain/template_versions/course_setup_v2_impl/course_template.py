@@ -9,15 +9,17 @@ from uuid import uuid4
 
 from common.constants import WORKBOOK_TEMP_SUFFIX
 from common.error_catalog import validation_error_from_key
-from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.excel_sheet_layout import build_template_xlsxwriter_formats
+from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
 from common.jobs import CancellationToken
-from common.registry import get_blueprint as _registry_get_blueprint
 from common.registry import COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION
+from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
-from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _shareops
+from domain.template_versions.course_setup_v2_impl import (
+    instructor_engine_sheetops as _shareops,
+)
 
 _logger = logging.getLogger(__name__)
 _TEMPLATE_ID = "COURSE_SETUP_V2"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -31,7 +31,9 @@ def marks_template_batch_generator() -> Callable[..., dict[str, object]]:
         None.
     """
     try:
-        from domain.template_versions.course_setup_v2_impl import marks_template as marks_template_impl
+        from domain.template_versions.course_setup_v2_impl import (
+            marks_template as marks_template_impl,
+        )
     except Exception as exc:
         raise ConfigurationError("Unable to import V2 marks template implementation module.") from exc
     fn = getattr(marks_template_impl, "generate_marks_templates_from_course_details_batch", None)

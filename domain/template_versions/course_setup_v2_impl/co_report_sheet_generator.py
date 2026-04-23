@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Protocol
 
 from common.constants import (
@@ -27,6 +28,13 @@ from common.constants import (
     LIKERT_MAX,
     LIKERT_MIN,
 )
+from common.error_catalog import validation_error_from_key
+from common.excel_sheet_layout import (
+    apply_xlsxwriter_layout,
+    set_two_column_metadata_widths,
+    write_sheet_footer_xlsxwriter,
+    write_two_column_metadata_rows,
+)
 from common.registry import (
     CO_REPORT_SHEET_KEY_CO_DIRECT,
     CO_REPORT_SHEET_KEY_CO_INDIRECT,
@@ -35,13 +43,6 @@ from common.registry import (
     get_sheet_headers_by_key,
     resolve_dynamic_sheet_headers,
 )
-from common.excel_sheet_layout import (
-    apply_xlsxwriter_layout,
-    set_two_column_metadata_widths,
-    write_sheet_footer_xlsxwriter,
-    write_two_column_metadata_rows,
-)
-from common.error_catalog import validation_error_from_key
 from common.utils import normalize
 
 _EXCEL_COL_FIRST_MARK = 4
@@ -56,17 +57,31 @@ def course_metadata_headers(template_id: str) -> tuple[str, ...]:
 
 
 class _JoinedCoAnalysisRowLike(Protocol):
-    reg_no: str
-    student_name: str
-    direct_score: float | str
-    indirect_score: float | str
+    @property
+    def reg_no(self) -> str: ...
+
+    @property
+    def student_name(self) -> str: ...
+
+    @property
+    def direct_score(self) -> float | str: ...
+
+    @property
+    def indirect_score(self) -> float | str: ...
 
 
 class _CoReportComponentLike(Protocol):
-    name: str
-    weight: float
-    max_by_co: dict[int, float]
-    marks_by_co: dict[int, list[Any]]
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def weight(self) -> float: ...
+
+    @property
+    def max_by_co(self) -> dict[int, float]: ...
+
+    @property
+    def marks_by_co(self) -> dict[int, list[Any]]: ...
 
 
 def co_direct_sheet_name(co_index: int) -> str:
@@ -105,7 +120,7 @@ def write_co_outcome_joined_total_sheets(
     template_id: str,
     co_index: int,
     metadata_rows: list[tuple[str, Any]],
-    rows: list[_JoinedCoAnalysisRowLike],
+    rows: Sequence[_JoinedCoAnalysisRowLike],
     formats: dict[str, Any],
 ) -> tuple[str, str]:
     """Write co outcome joined total sheets.
@@ -160,9 +175,9 @@ def write_co_outcome_sheets(
     template_id: str,
     co_index: int,
     metadata_rows: list[tuple[str, Any]],
-    rows: list[_JoinedCoAnalysisRowLike],
-    direct_components: list[_CoReportComponentLike],
-    indirect_components: list[_CoReportComponentLike],
+    rows: Sequence[_JoinedCoAnalysisRowLike],
+    direct_components: Sequence[_CoReportComponentLike],
+    indirect_components: Sequence[_CoReportComponentLike],
     formats: dict[str, Any],
 ) -> tuple[str, str]:
     """Write co outcome sheets.
@@ -1016,7 +1031,7 @@ def _template_supports_component_layout(template_id: str) -> bool:
 def _resolve_joined_total_rows_for_template(
     *,
     template_id: str,
-    rows: list[_JoinedCoAnalysisRowLike],
+    rows: Sequence[_JoinedCoAnalysisRowLike],
 ) -> list[tuple[str, str, float | str, float | str]]:
     """Resolve joined total rows for template.
     

@@ -40,11 +40,13 @@ from common.registry import (
 )
 from common.utils import assert_not_symlink_path, coerce_excel_number, normalize
 from common.workbook_integrity.workbook_signing import sign_payload
+from domain.template_versions.course_setup_v2_impl import (
+    instructor_engine_sheetops as _sheetops,
+)
 from domain.template_versions.course_setup_v2_impl.course_template_validator import (
     _validate_course_metadata_rules,
     _validated_non_empty_data_rows,
 )
-from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 from domain.template_versions.course_setup_v2_impl.validation_batch_runner import (
     BatchValidationAccumulator,
     BatchValidationRunner,
@@ -154,10 +156,16 @@ class _ValidationCollector:
             return
         if len(self._issues) == 1:
             issue = self._issues[0]
+            raw_context = issue.get("context", {})
+            context_map: dict[str, Any]
+            if isinstance(raw_context, dict):
+                context_map = {str(key): value for key, value in raw_context.items()}
+            else:
+                context_map = {}
             raise ValidationError(
                 str(issue.get("message", "Validation failed.")),
                 code=str(issue.get("code", "VALIDATION_ERROR")),
-                context=dict(issue.get("context", {}) or {}),
+                context=context_map,
             )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",

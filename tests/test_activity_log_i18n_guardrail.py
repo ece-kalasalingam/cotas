@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULES_ROOT = REPO_ROOT / "modules"
 TARGET_MODULES = tuple(

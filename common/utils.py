@@ -525,7 +525,7 @@ def assert_not_symlink_path(
     raise validation_error_from_key(
         "common.validation_failed_invalid_data",
         code=code,
-        **{context_key: str(path)},
+        context={context_key: str(path)},
     )
 
 
@@ -714,5 +714,4 @@ def emit_user_status(
     except Exception:
         if logger is not None:
             logger.exception("Failed to emit user status message.")
-
 

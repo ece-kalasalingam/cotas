@@ -6,8 +6,8 @@ from typing import Any, Callable, cast
 
 import pytest
 
-from common.exceptions import AppSystemError
 from common.constants import ID_COURSE_SETUP
+from common.exceptions import AppSystemError
 from domain.template_strategy_router import generate_workbook
 
 

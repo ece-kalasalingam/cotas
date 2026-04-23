@@ -430,7 +430,7 @@ def _resolve_translated_message(
         if isinstance(rendered, str) and rendered.strip():
             return rendered
     except Exception:
-        pass
+        return fallback_message.strip() or key
     return fallback_message.strip() or key
 
 

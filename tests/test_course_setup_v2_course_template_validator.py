@@ -6,14 +6,15 @@ from typing import Any, cast
 
 import pytest
 
+from common.constants import ID_COURSE_SETUP
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken
-from common.constants import ID_COURSE_SETUP
 from domain.template_strategy_router import generate_workbook, validate_workbooks
 from domain.template_versions.course_setup_v2_impl import (
     course_template_validator as validator,
 )
+
 openpyxl = pytest.importorskip("openpyxl")
 
 

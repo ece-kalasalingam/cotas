@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from common.exceptions import ValidationError
 from common import utils
+from common.exceptions import ValidationError
 
 
 def test_assert_not_symlink_path_allows_regular_paths(monkeypatch: pytest.MonkeyPatch) -> None:

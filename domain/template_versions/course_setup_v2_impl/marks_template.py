@@ -16,13 +16,13 @@ from common.constants import (
     LAYOUT_SHEET_KIND_INDIRECT,
     LAYOUT_SHEET_SPEC_KEY_KIND,
     LAYOUT_SHEET_SPEC_KEY_NAME,
+    MARKS_ENTRY_ROW_HEADERS,
     WORKBOOK_INTEGRITY_SCHEMA_VERSION,
     WORKBOOK_TEMP_SUFFIX,
-    MARKS_ENTRY_ROW_HEADERS,
 )
 from common.error_catalog import validation_error_from_key
-from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.excel_sheet_layout import build_marks_template_xlsxwriter_formats
+from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import (
@@ -41,16 +41,26 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
-from common.utils import canonical_path_key, coerce_excel_number, dedupe_paths_by_canonical_key, normalize
+from common.utils import (
+    canonical_path_key,
+    coerce_excel_number,
+    dedupe_paths_by_canonical_key,
+    normalize,
+)
 from common.workbook_integrity import (
     add_system_layout_sheet,
     copy_system_hash_sheet,
     read_valid_template_id_from_system_hash_sheet,
 )
 from common.workbook_integrity.constants import SYSTEM_LAYOUT_SHEET
-from domain.template_versions.course_setup_v2_impl.co_token_parser import parse_co_tokens
+from domain.template_versions.course_setup_v2_impl import (
+    instructor_engine_sheetops as _sheetops,
+)
 from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
     parse_assessment_components,
+)
+from domain.template_versions.course_setup_v2_impl.co_token_parser import (
+    parse_co_tokens,
 )
 from domain.template_versions.course_setup_v2_impl.course_semantics import (
     build_marks_template_filename_base_from_identity,
@@ -58,7 +68,6 @@ from domain.template_versions.course_setup_v2_impl.course_semantics import (
 from domain.template_versions.course_setup_v2_impl.course_template_validator import (
     validate_course_details_workbooks as _validate_course_details_workbooks_v2,
 )
-from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
 
 _logger = logging.getLogger(__name__)
 

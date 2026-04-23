@@ -22,6 +22,7 @@ from common.constants import (
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
 
+
 def validate_blueprint_registry_contracts() -> None:
     """Validate blueprint registry contracts.
     

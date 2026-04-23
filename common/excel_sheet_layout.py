@@ -15,7 +15,10 @@ from common.constants import (
 from common.exceptions import ConfigurationError
 from common.registry import BLUEPRINT_REGISTRY
 from common.utils import normalize
-from common.workbook_integrity.workbook_secret import ensure_workbook_secret_policy, get_workbook_password
+from common.workbook_integrity.workbook_secret import (
+    ensure_workbook_secret_policy,
+    get_workbook_password,
+)
 
 _STYLE_REGISTRY_HEADER = "header"
 _STYLE_REGISTRY_BODY = "body"

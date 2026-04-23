@@ -30,10 +30,10 @@ from PySide6.QtWidgets import (
 from common.removable_file_item_widget import RemovableFileItemWidget
 from common.ui_stylings import (
     DROP_LIST_ITEM_SPACING,
-    DROP_ZONE_LAYOUT_MARGINS,
-    DROP_ZONE_LAYOUT_SPACING,
     DROP_LIST_PLACEHOLDER_BOTTOM_MARGINS,
     DROP_LIST_PLACEHOLDER_TEXT_MARGINS,
+    DROP_ZONE_LAYOUT_MARGINS,
+    DROP_ZONE_LAYOUT_SPACING,
 )
 
 

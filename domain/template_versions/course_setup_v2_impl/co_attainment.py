@@ -18,6 +18,8 @@ from typing import Any, Callable, Iterable
 
 from common.constants import (
     APP_NAME,
+    CO_ANALYSIS_INSTITUTION_ROWS,
+    CO_ANALYSIS_SHEET_FOOTER_TEXT,
     CO_ATTAINMENT_LEVEL_DEFAULT,
     CO_ATTAINMENT_PERCENT_DEFAULT,
     CO_REPORT_ABSENT_TOKEN,
@@ -28,8 +30,6 @@ from common.constants import (
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
     CO_REPORT_NOT_APPLICABLE_TOKEN,
-    CO_ANALYSIS_INSTITUTION_ROWS,
-    CO_ANALYSIS_SHEET_FOOTER_TEXT,
     DIRECT_RATIO,
     ID_COURSE_SETUP,
     INDIRECT_RATIO,
@@ -44,11 +44,25 @@ from common.constants import (
     LIKERT_MIN,
     WORKBOOK_INTEGRITY_SCHEMA_VERSION,
 )
-from common.workbook_integrity.constants import (
-    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
-    SYSTEM_LAYOUT_MANIFEST_HEADER,
-    SYSTEM_LAYOUT_SHEET,
+from common.error_catalog import validation_error_from_key
+from common.excel_sheet_layout import (
+    apply_xlsxwriter_column_widths as _apply_xlsxwriter_column_widths,
 )
+from common.excel_sheet_layout import (
+    apply_xlsxwriter_layout as _apply_xlsxwriter_layout_shared,
+)
+from common.excel_sheet_layout import (
+    build_template_xlsxwriter_formats as _build_template_xlsxwriter_formats,
+)
+from common.excel_sheet_layout import (
+    compute_sampled_column_widths as _compute_sampled_column_widths,
+)
+from common.excel_sheet_layout import (
+    write_sheet_footer_xlsxwriter,
+    write_two_column_metadata_rows,
+)
+from common.exceptions import AppSystemError
+from common.jobs import CancellationToken
 from common.registry import (
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
@@ -58,24 +72,18 @@ from common.registry import (
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
+)
+from common.registry import (
     SYSTEM_HASH_HEADER_TEMPLATE_HASH as SYSTEM_HASH_TEMPLATE_HASH_HEADER,
+)
+from common.registry import (
     SYSTEM_HASH_HEADER_TEMPLATE_ID as SYSTEM_HASH_TEMPLATE_ID_HEADER,
-    SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET,
+)
+from common.registry import SYSTEM_HASH_SHEET_NAME as SYSTEM_HASH_SHEET
+from common.registry import (
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
 )
-from common.excel_sheet_layout import (
-    apply_xlsxwriter_layout as _apply_xlsxwriter_layout_shared,
-    apply_xlsxwriter_column_widths as _apply_xlsxwriter_column_widths,
-    build_template_xlsxwriter_formats as _build_template_xlsxwriter_formats,
-    compute_sampled_column_widths as _compute_sampled_column_widths,
-    excel_col_name,
-    write_sheet_footer_xlsxwriter,
-    write_two_column_metadata_rows,
-)
-from common.error_catalog import validation_error_from_key
-from common.exceptions import AppSystemError, ValidationError
-from common.jobs import CancellationToken
 from common.utils import (
     app_runtime_storage_dir,
     canonical_path_key,
@@ -84,18 +92,33 @@ from common.utils import (
     normalize,
     ratio_percent_token,
 )
-from common.workbook_integrity.workbook_signing import sign_payload, verify_payload_signature
-from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
-    co_direct_sheet_name,
-    co_indirect_sheet_name,
-    course_metadata_headers as _course_metadata_headers,
-    ratio_total_header as _ratio_total_header,
-    write_co_outcome_sheets,
-    write_co_outcome_sheets_openpyxl,
+from common.workbook_integrity.constants import (
+    SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
+    SYSTEM_LAYOUT_MANIFEST_HEADER,
+    SYSTEM_LAYOUT_SHEET,
+)
+from common.workbook_integrity.workbook_signing import (
+    sign_payload,
+    verify_payload_signature,
 )
 from domain.template_strategy_router import (
     read_template_id_from_system_hash_sheet_if_valid,
     read_valid_system_workbook_payload,
+    read_valid_template_id_from_system_hash_sheet,
+)
+from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
+    co_direct_sheet_name,
+    co_indirect_sheet_name,
+)
+from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
+    course_metadata_headers as _course_metadata_headers,
+)
+from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
+    ratio_total_header as _ratio_total_header,
+)
+from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
+    write_co_outcome_sheets,
+    write_co_outcome_sheets_openpyxl,
 )
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -2280,8 +2303,9 @@ def _create_summary_sheet(
     """
     if sheet is None:
         sheet = workbook.add_worksheet("Summary")
+    if sheet is None:
+        raise AppSystemError("Unable to create Summary worksheet.")
     formats = _xlsxwriter_formats(workbook, template_id=template_id)
-    metadata_headers = _course_metadata_headers(template_id)
     metadata_rows = _summary_graph_metadata_rows(
         metadata=metadata,
         total_outcomes=total_outcomes,
@@ -3155,7 +3179,9 @@ def generate_final_report_workbook(
 
     source_wb = openpyxl.load_workbook(filled_marks_path, data_only=False)
     try:
-        from domain.template_strategy_router import read_template_id_from_system_hash_sheet_if_valid
+        from domain.template_strategy_router import (
+            read_template_id_from_system_hash_sheet_if_valid,
+        )
 
         template_id = read_template_id_from_system_hash_sheet_if_valid(source_wb) or ID_COURSE_SETUP
         metadata_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
@@ -3199,7 +3225,9 @@ def generate_final_report_workbook(
         indirect_component_weights: dict[str, float] = {}
         assessment_sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
         if assessment_sheet_name in source_wb.sheetnames:
-            from domain.template_versions.course_setup_v2_impl.assessment_semantics import parse_assessment_components
+            from domain.template_versions.course_setup_v2_impl.assessment_semantics import (
+                parse_assessment_components,
+            )
 
             assessment_headers = get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG)
             assessment_header_row = int(sheet_specs_by_name.get(assessment_sheet_name, {}).get("header_row") or 1)
@@ -3469,7 +3497,9 @@ def extract_total_outcomes_from_workbook_path(path: Path) -> int | None:
         return None
     try:
         try:
-            from domain.template_strategy_router import read_template_id_from_system_hash_sheet_if_valid
+            from domain.template_strategy_router import (
+                read_template_id_from_system_hash_sheet_if_valid,
+            )
 
             template_id = read_template_id_from_system_hash_sheet_if_valid(workbook) or ID_COURSE_SETUP
         except Exception:

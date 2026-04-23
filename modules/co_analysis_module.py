@@ -22,6 +22,12 @@ from PySide6.QtWidgets import (
 )
 
 from common.async_operation_runner import AsyncOperationRunner
+from common.attainment_policy import (
+    has_valid_attainment_thresholds as _has_valid_attainment_thresholds_policy,
+)
+from common.attainment_policy import (
+    has_valid_co_attainment_percent as _has_valid_co_attainment_percent_policy,
+)
 from common.constants import (
     APP_NAME,
     CO_ANALYSIS_WORKFLOW_OPERATION_GENERATE_WORKBOOK,
@@ -36,27 +42,24 @@ from common.constants import (
     MODULE_LEFT_PANE_LAYOUT_SPACING,
     MODULE_LEFT_PANE_WIDTH_OFFSET,
 )
-from common.registry import (
-    COURSE_METADATA_ACADEMIC_YEAR_KEY,
-    COURSE_METADATA_COURSE_CODE_KEY,
-)
 from common.drag_drop_file_widget import ManagedDropFileWidget
 from common.error_catalog import resolve_validation_issue, validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import get_language, t
 from common.jobs import CancellationToken
-from common.attainment_policy import (
-    has_valid_attainment_thresholds as _has_valid_attainment_thresholds_policy,
-    has_valid_co_attainment_percent as _has_valid_co_attainment_percent_policy,
-)
-from common.module_messages import default_messages_namespace as _default_messages_namespace
 from common.module_messages import build_status_message as _build_status_message
+from common.module_messages import (
+    default_messages_namespace as _default_messages_namespace,
+)
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
-from common.module_messages import show_toast_plain as _show_toast_plain
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
+from common.registry import (
+    COURSE_METADATA_ACADEMIC_YEAR_KEY,
+    COURSE_METADATA_COURSE_CODE_KEY,
+)
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
     canonical_path_key,
@@ -1628,4 +1631,3 @@ class COAnalysisModule(QWidget):
 
 
 __all__ = ["COAnalysisModule"]
-

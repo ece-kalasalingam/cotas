@@ -91,7 +91,9 @@ def copy_system_hash_sheet(source_workbook: Any, target_workbook: Any) -> None:
     Raises:
         None.
     """
-    from common.workbook_integrity.validation import read_valid_template_id_from_system_hash_sheet
+    from common.workbook_integrity.validation import (
+        read_valid_template_id_from_system_hash_sheet,
+    )
 
     template_id = read_valid_template_id_from_system_hash_sheet(source_workbook)
     source = source_workbook[SYSTEM_HASH_SHEET_NAME]

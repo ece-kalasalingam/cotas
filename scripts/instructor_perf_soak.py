@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -68,7 +69,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    service = InstructorWorkflowService()
+    service: Any = InstructorWorkflowService()
     timings: dict[str, list[float]] = {
         "generate_course_details_template": [],
         "validate_course_details_workbooks": [],
@@ -92,7 +93,6 @@ def main() -> int:
                 )
             )
 
-            ctx2 = service.create_job_context(step_id="step2", payload={"i": index})
             timings["validate_course_details_workbooks"].append(
                 _time_call(
                     lambda: validate_workbooks(template_id=ID_COURSE_SETUP, workbook_paths=[course_details], workbook_kind="course_details", cancel_token=None)

@@ -69,7 +69,6 @@ def test_iter_co_rows_returns_counts_without_rescans(monkeypatch: pytest.MonkeyP
     """
     calls = {"direct": 0, "indirect": 0}
     direct_name = co_attainment.co_direct_sheet_name(1)
-    indirect_name = co_attainment.co_indirect_sheet_name(1)
 
     direct_rows = [
         co_attainment._ParsedScoreRow(

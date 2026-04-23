@@ -11,9 +11,10 @@ from common.registry import (
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_QUESTION_MAP,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
-    get_sheet_schema_by_key,
     get_sheet_name_by_key,
+    get_sheet_schema_by_key,
 )
+
 
 def _sheet_name_or_none(sheet_key: str) -> str | None:
     """Sheet name or none.

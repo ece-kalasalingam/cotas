@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any, Protocol, cast
 
@@ -9,6 +10,7 @@ from common.jobs import CancellationToken
 from common.qt_jobs import run_in_background
 
 _JOB_REF_KEY = "job"
+_logger = logging.getLogger(__name__)
 
 
 class _RunnerTarget(Protocol):
@@ -180,6 +182,6 @@ class AsyncOperationRunner:
             if callable(setter):
                 try:
                     setter(active)
+                    break
                 except Exception:
-                    continue
-                break
+                    _logger.debug("Failed to apply global processing state on candidate.", exc_info=True)

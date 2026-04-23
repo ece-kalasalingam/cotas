@@ -6,9 +6,9 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from common.constants import INSTRUCTOR_INFO_TAB_FIXED_HEIGHT
+from common.i18n import t
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputPanelData
-from common.i18n import t
 
 
 class POAnalysisModule(QWidget):

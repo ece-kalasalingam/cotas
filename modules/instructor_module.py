@@ -25,23 +25,29 @@ from common.constants import (
     ID_COURSE_SETUP,
     INSTRUCTOR_INFO_TAB_FIXED_HEIGHT,
 )
-from common.error_catalog import validation_error_from_key
 from common.drag_drop_file_widget import ManagedDropFileWidget
+from common.error_catalog import validation_error_from_key
 from common.exceptions import AppSystemError, JobCancelledError, ValidationError
+from common.i18n import t
 from common.jobs import CancellationToken
 from common.module_messages import build_status_message as _build_status_message
-from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import (
+    default_messages_namespace as _default_messages_namespace,
+)
 from common.module_messages import rerender_user_log as _rerender_user_log_impl
 from common.module_runtime import ModuleRuntime
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.output_panel import OutputItem, OutputPanelData
 from common.qt_jobs import run_in_background
+from common.utils import (
+    canonical_path_key,
+    log_process_message,
+    resolve_dialog_start_path,
+)
 from common.workbook_output_resolution import (
     extract_overwrite_conflicts_from_generation_result,
     resolve_overwrite_conflicts,
 )
-from common.i18n import t
-from common.utils import canonical_path_key, log_process_message, resolve_dialog_start_path
 from domain import BusyWorkflowState
 from domain.template_strategy_router import (
     generate_workbook,

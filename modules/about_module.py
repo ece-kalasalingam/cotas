@@ -15,8 +15,8 @@ from common.constants import (
     APP_REPOSITORY_URL,
     SYSTEM_VERSION,
 )
-from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.i18n import t
+from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
 from common.utils import resource_path
 
 

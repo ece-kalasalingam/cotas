@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import re
-from dataclasses import dataclass
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -14,11 +15,21 @@ from common.jobs import CancellationToken
 from common.utils import assert_not_symlink_path, normalize
 from common.workbook_integrity import (
     SystemWorkbookPayload,
+)
+from common.workbook_integrity import (
     read_template_id_from_system_hash_sheet_if_valid as _read_template_id_from_system_hash_sheet_if_valid_integrity,
+)
+from common.workbook_integrity import (
     read_valid_system_workbook_payload as _read_valid_system_workbook_payload_integrity,
+)
+from common.workbook_integrity import (
     read_valid_template_id_from_system_hash_sheet as _read_valid_template_id_from_system_hash_sheet_integrity,
+)
+from common.workbook_integrity import (
     verify_payload_signature,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -247,7 +258,7 @@ def available_template_ids() -> tuple[str, ...]:
             if resolved_template_id:
                 discovered.append(resolved_template_id)
         except Exception:
-            continue
+            _logger.debug("Failed to auto-discover template strategy.", exc_info=True)
     return tuple(sorted({item for item in discovered}))
 
 
@@ -693,8 +704,17 @@ def extract_course_metadata_and_students_from_workbook_path(
             workbook_kind="co_attainment",
             template_id=template_id,
         )
-    students, metadata_map = extractor(workbook_path, template_id=template_id)
-    return set(students), dict(metadata_map)
+    extracted = extractor(workbook_path, template_id=template_id)
+    if not isinstance(extracted, tuple) or len(extracted) != 2:
+        return set(), {}
+    students, metadata_map = extracted
+    if not isinstance(students, (list, tuple, set)):
+        students = []
+    if not isinstance(metadata_map, dict):
+        metadata_map = {}
+    return {str(item) for item in students if str(item).strip()}, {
+        str(key): str(value) for key, value in metadata_map.items()
+    }
 
 
 def consume_marks_anomaly_warnings(template_id: str) -> list[str]:
@@ -713,7 +733,10 @@ def consume_marks_anomaly_warnings(template_id: str) -> list[str]:
     consumer = getattr(strategy, "consume_last_marks_anomaly_warnings", None)
     if not callable(consumer):
         return []
-    return [str(item) for item in consumer() if str(item).strip()]
+    consumed = consumer()
+    if not isinstance(consumed, (list, tuple, set)):
+        return []
+    return [str(item) for item in consumed if str(item).strip()]
 
 
 def read_template_id_from_system_hash_sheet_if_valid(

@@ -13,12 +13,14 @@ from PySide6.QtWidgets import QFileDialog, QMenu, QStyleFactory, QVBoxLayout, QW
 from common.constants import (
     APP_NAME,
 )
+from common.i18n import t
 from common.module_messages import build_status_message as _build_status_message
-from common.module_messages import default_messages_namespace as _default_messages_namespace
+from common.module_messages import (
+    default_messages_namespace as _default_messages_namespace,
+)
 from common.module_messages import publish_status_key as _publish_status_key_impl
 from common.module_messages import show_toast_key as _show_toast_key
 from common.module_ui_engine import ModuleUIEngine, ModuleUIEngineConfig
-from common.i18n import t
 from common.utils import (
     log_process_message,
     remember_dialog_dir_safe,

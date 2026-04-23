@@ -9,7 +9,6 @@ from uuid import uuid4
 
 from common.constants import ID_COURSE_SETUP, WORKBOOK_TEMP_SUFFIX
 from common.error_catalog import validation_error_from_key
-from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.excel_sheet_layout import (
     XLSX_AUTOFIT_MAX_WIDTH,
     XLSX_AUTOFIT_MIN_WIDTH,
@@ -19,6 +18,7 @@ from common.excel_sheet_layout import (
     build_template_xlsxwriter_formats,
     compute_sampled_column_widths,
 )
+from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import (
@@ -28,7 +28,9 @@ from common.registry import (
 )
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
-from domain.template_versions.course_setup_v2_impl import instructor_engine_sheetops as _sheetops
+from domain.template_versions.course_setup_v2_impl import (
+    instructor_engine_sheetops as _sheetops,
+)
 
 _logger = logging.getLogger(__name__)
 _WRAP_HEADER_NAMES = {"Description", "Summary_of_Topics/Expts./Project"}
