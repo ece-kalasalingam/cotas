@@ -1,12 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
+_module_hiddenimports = collect_submodules('modules')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets')],
-    hiddenimports=['PySide6.QtPdf', 'PySide6.QtPdfWidgets', 'PySide6.QtSvg'],
+    hiddenimports=['PySide6.QtSvg', *_module_hiddenimports],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
