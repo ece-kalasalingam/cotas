@@ -356,6 +356,7 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
             indirect_sheet = workbook[co_indirect_sheet_name(co_index)]
             co_sheet = workbook[f"CO{co_index}"]
             source_direct_sheet = source_workbook[co_direct_sheet_name(co_index)]
+            source_indirect_sheet = source_workbook[co_indirect_sheet_name(co_index)]
 
             source_direct_header = _find_header_row(
                 source_direct_sheet,
@@ -367,15 +368,16 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
             )
             source_direct_headers = _header_values(source_direct_sheet, header_row=source_direct_header)
             direct_header = _find_header_row(direct_sheet, source_direct_headers)
-            indirect_header = _find_header_row(
-                indirect_sheet,
+            source_indirect_header = _find_header_row(
+                source_indirect_sheet,
                 [
                     CO_REPORT_HEADER_SERIAL,
                     CO_REPORT_HEADER_REG_NO,
                     CO_REPORT_HEADER_STUDENT_NAME,
-                    ratio_total_header(0.2),
                 ],
             )
+            source_indirect_headers = _header_values(source_indirect_sheet, header_row=source_indirect_header)
+            indirect_header = _find_header_row(indirect_sheet, source_indirect_headers)
             co_header = _find_header_row(
                 co_sheet,
                 [
@@ -388,7 +390,11 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
             )
 
             direct_rows = _collect_sheet_rows(direct_sheet, header_row=direct_header, score_col=len(source_direct_headers))
-            indirect_rows = _collect_sheet_rows(indirect_sheet, header_row=indirect_header, score_col=4)
+            indirect_rows = _collect_sheet_rows(
+                indirect_sheet,
+                header_row=indirect_header,
+                score_col=len(source_indirect_headers),
+            )
             co_direct_rows = _collect_sheet_rows(co_sheet, header_row=co_header, score_col=4)
             co_indirect_rows = _collect_sheet_rows(co_sheet, header_row=co_header, score_col=5)
 
@@ -403,6 +409,5 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
     finally:
         source_workbook.close()
         workbook.close()
-
 
 

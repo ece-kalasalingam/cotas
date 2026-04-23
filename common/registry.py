@@ -17,6 +17,7 @@ COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG = "assessment_config"
 COURSE_SETUP_SHEET_KEY_QUESTION_MAP = "question_map"
 COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION = "co_description"
 COURSE_SETUP_SHEET_KEY_STUDENTS = "students"
+CO_REPORT_SHEET_KEY_CO_DIRECT = "co_direct"
 CO_REPORT_SHEET_KEY_CO_INDIRECT = "co_indirect"
 COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE = "marks_direct_co_wise"
 COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE = "marks_direct_non_co_wise"
@@ -92,6 +93,7 @@ SETUP_STYLE_REGISTRY_V2 = {
     },
 }
 
+_CO_DIRECT_HEADER_RESOLVER = "course_setup.co_direct_headers"
 _CO_INDIRECT_HEADER_RESOLVER = "course_setup.co_indirect_headers"
 _MARKS_DIRECT_CO_WISE_HEADER_RESOLVER = "course_setup.marks_direct_co_wise_headers"
 _MARKS_DIRECT_NON_CO_WISE_HEADER_RESOLVER = "course_setup.marks_direct_non_co_wise_headers"
@@ -483,6 +485,17 @@ def _build_course_setup_blueprint(
             "declares_dynamic_headers": False,
             "sheet_order_enforced": True,
             "dynamic_sheet_templates": {
+                CO_REPORT_SHEET_KEY_CO_DIRECT: {
+                    "sheet_name_pattern": "CO{co_index}_Direct",
+                    "header_kind": "dynamic",
+                    "header_resolver": _CO_DIRECT_HEADER_RESOLVER,
+                    "header_base": ("#", "Reg. No.", "Student Name"),
+                    "max_marks_label_template": "{name} ({max_marks:g})",
+                    "weighted_label_template": "{name} ({weight:g}%)",
+                    "total_label": "Total",
+                    "total_100_label": "Total (100%)",
+                    "ratio_header_template": "Total ({ratio}%)",
+                },
                 CO_REPORT_SHEET_KEY_CO_INDIRECT: {
                     "sheet_name_pattern": "CO{co_index}_Indirect",
                     "header_kind": "dynamic",
@@ -490,6 +503,7 @@ def _build_course_setup_blueprint(
                     "header_base": ("#", "Reg. No.", "Student Name"),
                     "likert_range": (1, 5),
                     "scaled_label_template": "scaled 0-{max_value}",
+                    "total_label": "Total",
                     "total_100_label": "Total (100%)",
                     "ratio_header_template": "Total ({ratio}%)",
                 },
@@ -708,6 +722,7 @@ def _resolve_course_setup_co_indirect_headers(
         )
     likert_min, likert_max = likert_range
     scaled_template = str(dynamic_template.get("scaled_label_template", "scaled 0-{max_value}"))
+    total_label = str(dynamic_template.get("total_label", "Total"))
     total_100_label = str(dynamic_template.get("total_100_label", "Total (100%)"))
     ratio_template = str(dynamic_template.get("ratio_header_template", "Total ({ratio}%)"))
     raw_ratio = context.get("ratio", 0.2)
@@ -740,13 +755,88 @@ def _resolve_course_setup_co_indirect_headers(
                 if isinstance(name, str) and isinstance(weight, (int, float)):
                     components.append((name, float(weight)))
     scaled_max = max(0, likert_max - likert_min)
-    has_single_component = len(components) == 1
     headers = list(base)
     for name, weight in components:
         headers.append(f"{name} ({likert_min}-{likert_max})")
         headers.append(f"{name} ({scaled_template.format(max_value=scaled_max)})")
-        if not has_single_component:
-            headers.append(f"{name} ({weight:g}%)")
+        headers.append(f"{name} ({weight:g}%)")
+    headers.append(total_label)
+    headers.append(total_100_label)
+    headers.append(ratio_template.format(ratio=ratio_token))
+    return tuple(headers)
+
+
+def _resolve_course_setup_co_direct_headers(
+    *,
+    template_id: str,
+    context: dict[str, object],
+) -> tuple[str, ...]:
+    """Resolve course setup co direct headers.
+
+    Args:
+        template_id: Parameter value (str).
+        context: Parameter value (dict[str, object]).
+
+    Returns:
+        tuple[str, ...]: Return value.
+
+    Raises:
+        None.
+    """
+    dynamic_template = get_dynamic_sheet_template(template_id, CO_REPORT_SHEET_KEY_CO_DIRECT)
+    base = dynamic_template.get("header_base", ("#", "Reg. No.", "Student Name"))
+    if not isinstance(base, tuple):
+        raise ConfigurationError(
+            f"Template '{template_id}' direct header base must be a tuple."
+        )
+    max_marks_template = str(dynamic_template.get("max_marks_label_template", "{name} ({max_marks:g})"))
+    weighted_template = str(dynamic_template.get("weighted_label_template", "{name} ({weight:g}%)"))
+    total_label = str(dynamic_template.get("total_label", "Total"))
+    total_100_label = str(dynamic_template.get("total_100_label", "Total (100%)"))
+    ratio_template = str(dynamic_template.get("ratio_header_template", "Total ({ratio}%)"))
+    raw_ratio = context.get("ratio", 0.8)
+    if isinstance(raw_ratio, (int, float)):
+        ratio = float(raw_ratio)
+    elif isinstance(raw_ratio, str):
+        try:
+            ratio = float(raw_ratio)
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"Template '{template_id}' direct ratio must be numeric, got {raw_ratio!r}."
+            ) from exc
+    else:
+        raise ConfigurationError(
+            f"Template '{template_id}' direct ratio must be numeric, got {type(raw_ratio).__name__}."
+        )
+    ratio_token = _ratio_percent_token(ratio)
+
+    raw_components = context.get("components", [])
+    components: list[tuple[str, float, float]] = []
+    if isinstance(raw_components, list):
+        for item in raw_components:
+            if isinstance(item, tuple) and len(item) == 3:
+                name, max_marks, weight = item
+                if (
+                    isinstance(name, str)
+                    and isinstance(max_marks, (int, float))
+                    and isinstance(weight, (int, float))
+                ):
+                    components.append((name, float(max_marks), float(weight)))
+            elif isinstance(item, dict):
+                name = item.get("name")
+                max_marks = item.get("max_marks")
+                weight = item.get("weight")
+                if (
+                    isinstance(name, str)
+                    and isinstance(max_marks, (int, float))
+                    and isinstance(weight, (int, float))
+                ):
+                    components.append((name, float(max_marks), float(weight)))
+    headers = list(base)
+    for name, max_marks, weight in components:
+        headers.append(max_marks_template.format(name=name, max_marks=max_marks))
+        headers.append(weighted_template.format(name=name, weight=weight))
+    headers.append(total_label)
     headers.append(total_100_label)
     headers.append(ratio_template.format(ratio=ratio_token))
     return tuple(headers)
@@ -902,6 +992,11 @@ def resolve_dynamic_sheet_headers(
     dynamic_template = get_dynamic_sheet_template(template_id, sheet_key)
     resolver_name = str(dynamic_template.get("header_resolver", "")).strip()
     resolved_context = dict(context or {})
+    if resolver_name == _CO_DIRECT_HEADER_RESOLVER and sheet_key == CO_REPORT_SHEET_KEY_CO_DIRECT:
+        return _resolve_course_setup_co_direct_headers(
+            template_id=template_id,
+            context=resolved_context,
+        )
     if resolver_name == _CO_INDIRECT_HEADER_RESOLVER and sheet_key == CO_REPORT_SHEET_KEY_CO_INDIRECT:
         return _resolve_course_setup_co_indirect_headers(
             template_id=template_id,
@@ -931,5 +1026,4 @@ def resolve_dynamic_sheet_headers(
     raise ConfigurationError(
         f"Template '{template_id}' dynamic header resolver not supported for sheet '{sheet_key}': {resolver_name!r}"
     )
-
 

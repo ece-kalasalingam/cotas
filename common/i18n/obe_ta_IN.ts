@@ -324,9 +324,9 @@ course coordinator report க்காக, பாடநெறியின் ந
     </message>
     <message>
       <source>co_analysis.thresholds.description</source>
-      <translation>- L1 வரம்பு - பாடத்தின் தேர்ச்சி மதிப்பெண் அல்லது முந்தைய ஒழுங்கில் வழங்கப்பட்ட 3 தொகுதிகளின் பாட சராசரி.
-- L2 வரம்பு - முதல் தரம்.
-- L3 வரம்பு - சிறப்புத் தரம்.</translation>
+      <translation>- L1 வரம்பு - பாடத்தின் தேர்ச்சி மதிப்பெண்.
+- L2 வரம்பு - முதல் தரம் (60%) அல்லது முந்தைய ஒழுங்கில் கடந்த 3 தொகுதிகளுக்கான பாட சராசரி மதிப்பெண்கள்.
+- L3 வரம்பு - சிறப்புத் தரம் (75%).</translation>
     </message>
     <message>
       <source>co_analysis.thresholds.invalid_rule</source>

@@ -1,12 +1,39 @@
 from __future__ import annotations
 
 from common.registry import (
+    CO_REPORT_SHEET_KEY_CO_DIRECT,
     CO_REPORT_SHEET_KEY_CO_INDIRECT,
     COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_CO_WISE,
     COURSE_SETUP_SHEET_KEY_MARKS_DIRECT_NON_CO_WISE,
     COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
     resolve_dynamic_sheet_headers,
 )
+
+
+def test_co_direct_dynamic_headers_for_v2() -> None:
+    """Test co direct dynamic headers for v2.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    context = {
+        "components": [("CAT", 30.0, 25.0), ("SEE", 60.0, 75.0)],
+        "ratio": 0.8,
+    }
+    v2_headers = resolve_dynamic_sheet_headers(
+        "COURSE_SETUP_V2",
+        sheet_key=CO_REPORT_SHEET_KEY_CO_DIRECT,
+        context=context,
+    )
+    assert v2_headers[0:3] == ("#", "Reg. No.", "Student Name")
+    assert v2_headers[3:7] == ("CAT (30)", "CAT (25%)", "SEE (60)", "SEE (75%)")
+    assert v2_headers[-3:] == ("Total", "Total (100%)", "Total (80%)")
 
 
 def test_co_indirect_dynamic_headers_for_v2() -> None:

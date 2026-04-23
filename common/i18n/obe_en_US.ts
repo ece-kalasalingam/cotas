@@ -335,9 +335,9 @@ For course coordinator report, upload the filled CO description template workboo
     </message>
     <message>
       <source>co_analysis.thresholds.description</source>
-      <translation>- L1 Threshold - pass mark of the course or course average for the 3 batches offered in the previous regulation.
-- L2 Threshold - First Class.
-- L3 Threshold - Distinction Class.</translation>
+      <translation>- L1 Threshold - Pass Mark of the course.
+- L2 Threshold - First Class (60%) or Course Average Marks for the last 3 batches in the previous regulation.
+- L3 Threshold - Distinction Class (75%).</translation>
     </message>
     <message>
       <source>co_analysis.thresholds.invalid_rule</source>

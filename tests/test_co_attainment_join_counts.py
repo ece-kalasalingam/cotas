@@ -126,7 +126,7 @@ def test_iter_co_rows_returns_counts_without_rescans(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(co_attainment, "_iter_score_rows", _fake_iter_score_rows)
 
-    rows, direct_total, indirect_total, dropped, direct_columns = co_attainment._iter_co_rows_from_workbook(
+    rows, direct_total, indirect_total, dropped, direct_columns, indirect_columns = co_attainment._iter_co_rows_from_workbook(
         _Workbook(),
         co_index=1,
         workbook_name="w.xlsx",
@@ -139,3 +139,4 @@ def test_iter_co_rows_returns_counts_without_rescans(monkeypatch: pytest.MonkeyP
     assert len(rows) == 1
     assert rows[0].reg_no == "R2"
     assert direct_columns == []
+    assert indirect_columns == []

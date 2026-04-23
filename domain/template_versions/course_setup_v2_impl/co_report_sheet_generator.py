@@ -10,7 +10,6 @@ from common.constants import (
     CO_REPORT_HEADER_REG_NO,
     CO_REPORT_HEADER_SERIAL,
     CO_REPORT_HEADER_STUDENT_NAME,
-    CO_REPORT_HEADER_TOTAL_100,
     CO_REPORT_HEADER_TOTAL_RATIO_TEMPLATE,
     CO_REPORT_INDIRECT_SHEET_SUFFIX,
     CO_REPORT_MAX_DECIMAL_PLACES,
@@ -18,7 +17,6 @@ from common.constants import (
     CO_REPORT_METADATA_OUTCOME_VALUE_INDIRECT_TEMPLATE,
     CO_REPORT_METADATA_OUTCOME_VALUE_TEMPLATE,
     CO_REPORT_NOT_APPLICABLE_TOKEN,
-    CO_REPORT_PERCENT_SYMBOL,
     COURSE_METADATA_FACULTY_NAME_KEY,
     DIRECT_RATIO,
     INDIRECT_RATIO,
@@ -26,6 +24,7 @@ from common.constants import (
     LIKERT_MIN,
 )
 from common.registry import (
+    CO_REPORT_SHEET_KEY_CO_DIRECT,
     CO_REPORT_SHEET_KEY_CO_INDIRECT,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
@@ -43,18 +42,11 @@ _EXCEL_COL_FIRST_MARK = 4
 
 
 def _course_metadata_headers(template_id: str) -> tuple[str, ...]:
-    """Course metadata headers.
-    
-    Args:
-        template_id: Parameter value (str).
-    
-    Returns:
-        tuple[str, ...]: Return value.
-    
-    Raises:
-        None.
-    """
     return get_sheet_headers_by_key(template_id, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
+
+
+def course_metadata_headers(template_id: str) -> tuple[str, ...]:
+    return _course_metadata_headers(template_id)
 
 
 class _JoinedCoAnalysisRowLike(Protocol):
@@ -410,14 +402,23 @@ def _write_direct_sheet(
     ws.repeat_rows(0, header_row_index)
     ws.freeze_panes(header_row_index + 1, _EXCEL_COL_FIRST_MARK - 1)
     active_components = [component for component in components if component.max_by_co.get(co_index, 0.0) > 0]
-    headers = [CO_REPORT_HEADER_SERIAL, CO_REPORT_HEADER_REG_NO, CO_REPORT_HEADER_STUDENT_NAME]
-    for component in active_components:
-        max_marks = _round2(component.max_by_co.get(co_index, 0.0))
-        headers.append(f"{component.name} ({max_marks:g})")
-        headers.append(f"{component.name} ({component.weight:g}{CO_REPORT_PERCENT_SYMBOL})")
-    headers.append(CO_REPORT_HEADER_TOTAL_100)
-    headers.append(CO_REPORT_HEADER_TOTAL_100)
-    headers.append(_ratio_total_header(DIRECT_RATIO))
+    headers = list(
+        resolve_dynamic_sheet_headers(
+            template_id,
+            sheet_key=CO_REPORT_SHEET_KEY_CO_DIRECT,
+            context={
+                "components": [
+                    (
+                        component.name,
+                        _round2(component.max_by_co.get(co_index, 0.0)),
+                        float(component.weight),
+                    )
+                    for component in active_components
+                ],
+                "ratio": DIRECT_RATIO,
+            },
+        )
+    )
     for col, value in enumerate(headers, start=0):
         ws.write(header_row_index, col, value, formats["header"])
 
@@ -452,7 +453,11 @@ def _write_direct_sheet(
         else:
             total_100 = _round2((weighted_total * 100.0 / row_total_weight) if row_total_weight > 0 else 0.0)
             total_ratio = _round2(total_100 * DIRECT_RATIO)
-            row_values.extend([_round2(weighted_total), total_100, total_ratio])
+            total_display = _format_total_marks_display(
+                student_total_marks=weighted_total,
+                assessment_total_marks=row_total_weight,
+            )
+            row_values.extend([total_display, total_100, total_ratio])
 
         for col, value in enumerate(row_values, start=0):
             if col == 2:
@@ -594,14 +599,9 @@ def _write_indirect_sheet(
     ws.repeat_rows(0, header_row_index)
     ws.freeze_panes(header_row_index + 1, _EXCEL_COL_FIRST_MARK - 1)
 
-    active_components = [
-        component
-        for component in components
-        if any(not (isinstance(value, float) and value == 0.0) for value in component.marks_by_co.get(co_index, []))
-    ]
+    active_components = list(components)
     total_weight = _round2(sum(component.weight for component in active_components))
     scaled_max_value = max(0, LIKERT_MAX - LIKERT_MIN)
-    has_single_component = len(active_components) == 1
     headers = list(
         resolve_dynamic_sheet_headers(
             template_id,
@@ -630,29 +630,24 @@ def _write_indirect_sheet(
             raw = component_marks[idx - 1]
             if isinstance(raw, str) and _is_absent(raw):
                 absent = True
-                row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
-                if not has_single_component:
-                    row_values.append(CO_REPORT_ABSENT_TOKEN)
+                row_values.extend([CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN, CO_REPORT_ABSENT_TOKEN])
                 continue
             raw_numeric = float(raw) if isinstance(raw, (int, float)) else 0.0
             scaled_raw = _round2(raw_numeric - LIKERT_MIN)
             scaled_raw = max(0.0, min(float(scaled_max_value), scaled_raw))
-            if has_single_component:
-                total_weighted = _round2((scaled_raw / denominator) * 100.0)
-                row_values.extend([_round2(raw_numeric), scaled_raw])
-            else:
-                weighted = _round2((scaled_raw / denominator) * component.weight)
-                total_weighted += weighted
-                row_values.extend([_round2(raw_numeric), scaled_raw, weighted])
+            weighted = _round2((scaled_raw / denominator) * component.weight)
+            total_weighted += weighted
+            row_values.extend([_round2(raw_numeric), scaled_raw, weighted])
         if absent:
-            row_values.extend([CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN])
+            row_values.extend([CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN, CO_REPORT_NOT_APPLICABLE_TOKEN])
         else:
-            if has_single_component:
-                total_100 = _round2(total_weighted)
-            else:
-                total_100 = _round2((total_weighted * 100.0 / total_weight) if total_weight > 0 else 0.0)
+            total_100 = _round2((total_weighted * 100.0 / total_weight) if total_weight > 0 else 0.0)
             total_ratio = _round2(total_100 * INDIRECT_RATIO)
-            row_values.extend([total_100, total_ratio])
+            total_display = _format_total_marks_display(
+                student_total_marks=total_weighted,
+                assessment_total_marks=total_weight,
+            )
+            row_values.extend([total_display, total_100, total_ratio])
 
         for col, value in enumerate(row_values, start=0):
             if col == 2:
@@ -701,6 +696,25 @@ def ratio_total_header(ratio: float) -> str:
     return _ratio_total_header(ratio)
 
 
+def format_total_marks_display(*, student_total_marks: float, assessment_total_marks: float) -> str:
+    """Format total marks display.
+    
+    Args:
+        student_total_marks: Parameter value (float).
+        assessment_total_marks: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    return _format_total_marks_display(
+        student_total_marks=student_total_marks,
+        assessment_total_marks=assessment_total_marks,
+    )
+
+
 def _round2(value: float) -> float:
     """Round2.
     
@@ -714,6 +728,44 @@ def _round2(value: float) -> float:
         None.
     """
     return round(float(value), CO_REPORT_MAX_DECIMAL_PLACES)
+
+
+def _number_token(value: float) -> str:
+    """Number token.
+    
+    Args:
+        value: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    rounded = _round2(value)
+    if abs(rounded - round(rounded)) <= 1e-9:
+        return str(int(round(rounded)))
+    return f"{rounded:g}"
+
+
+def _format_total_marks_display(*, student_total_marks: float, assessment_total_marks: float) -> str:
+    """Format total marks display.
+    
+    Args:
+        student_total_marks: Parameter value (float).
+        assessment_total_marks: Parameter value (float).
+    
+    Returns:
+        str: Return value.
+    
+    Raises:
+        None.
+    """
+    denominator = _round2(max(0.0, float(assessment_total_marks)))
+    if denominator <= 0:
+        return CO_REPORT_NOT_APPLICABLE_TOKEN
+    numerator = _round2(min(max(0.0, float(student_total_marks)), denominator))
+    return f"{_number_token(numerator)}/{_number_token(denominator)}"
 
 
 def _is_absent(value: Any) -> bool:
