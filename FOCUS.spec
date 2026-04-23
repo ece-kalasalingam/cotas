@@ -2,13 +2,21 @@
 
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
 
-# collect_dynamic_libs scans PySide6's __path__ (the package directory) and
-# returns all Qt6*.dll files — the ones that C extension .pyd modules cannot
-# self-report via collect_all on individual submodules.
-# collect_data_files picks up the Qt platform/image plugins (qwindows.dll etc.)
-# that Qt requires at runtime to initialise a window.
+# Qt DLLs live in site-packages/PySide6/ (155 of them).
+# collect_dynamic_libs places them in the PySide6/ subdirectory of the bundle.
+# The runtime hook (installer/rthook_pyside6.py) calls os.add_dll_directory()
+# so Python 3.8+ can find them when loading QtCore.pyd and friends.
 _qt_binaries = collect_dynamic_libs('PySide6')
-_qt_datas    = collect_data_files('PySide6', subdir='Qt/plugins')
+
+# Platform and image-format plugins.  Actual path in this PySide6 layout is
+# PySide6/plugins/ (not PySide6/Qt/plugins/).
+_qt_datas = (
+    collect_data_files('PySide6', subdir='plugins/platforms')
+    + collect_data_files('PySide6', subdir='plugins/imageformats')
+    + collect_data_files('PySide6', subdir='plugins/iconengines')
+    + collect_data_files('PySide6', subdir='plugins/styles')
+    + collect_data_files('PySide6', subdir='plugins/tls')
+)
 
 a = Analysis(
     ['main.py'],
@@ -31,7 +39,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['installer/rthook_pyside6.py'],
     excludes=[],
     noarchive=False,
     optimize=0,
