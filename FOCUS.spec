@@ -11,6 +11,8 @@ a = Analysis(
     datas=[('assets', 'assets')],
     hiddenimports=[
         'PySide6.QtSvg',
+        'PySide6.QtPdf',
+        'PySide6.QtPdfWidgets',
         *_module_hiddenimports,
     ],
     hookspath=[],

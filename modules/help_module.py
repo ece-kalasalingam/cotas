@@ -6,24 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QMenu,
-    QPushButton,
-    QStyleFactory,
-    QVBoxLayout,
-    QWidget,
-)
-
-try:
-    from PySide6.QtPdf import QPdfDocument
-    from PySide6.QtPdfWidgets import QPdfView
-
-    QT_PDF_AVAILABLE = True
-except ImportError:
-    QPdfDocument = None
-    QPdfView = None
-    QT_PDF_AVAILABLE = False
+from PySide6.QtPdf import QPdfDocument
+from PySide6.QtPdfWidgets import QPdfView
+from PySide6.QtWidgets import QFileDialog, QMenu, QStyleFactory, QVBoxLayout, QWidget
 
 from common.constants import (
     APP_NAME,
@@ -82,28 +67,19 @@ class HelpModule(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self._ui_engine.set_top_widget(right_pane)
 
-        self.pdf_view = None
-        self.pdf_doc = None
-        if QT_PDF_AVAILABLE and QPdfView is not None and QPdfDocument is not None:
-            self.pdf_view = QPdfView()
-            self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
-            self.pdf_view.setPageMode(QPdfView.PageMode.MultiPage)
+        self.pdf_view = QPdfView()
+        self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
+        self.pdf_view.setPageMode(QPdfView.PageMode.MultiPage)
 
-            self.pdf_doc = QPdfDocument(self)
-            self.pdf_view.setDocument(self.pdf_doc)
-            self.pdf_doc.statusChanged.connect(self._on_pdf_status_changed)
+        self.pdf_doc = QPdfDocument(self)
+        self.pdf_view.setDocument(self.pdf_doc)
+        self.pdf_doc.statusChanged.connect(self._on_pdf_status_changed)
 
-            # Enable custom context menu
-            self.pdf_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            self.pdf_view.customContextMenuRequested.connect(self.show_context_menu)
+        # Enable custom context menu
+        self.pdf_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.pdf_view.customContextMenuRequested.connect(self.show_context_menu)
 
-            layout.addWidget(self.pdf_view)
-        else:
-            open_button = QPushButton(t("help.open_default_viewer"))
-            open_button.clicked.connect(self.open_external)
-            layout.addStretch(1)
-            layout.addWidget(open_button, 0, Qt.AlignmentFlag.AlignCenter)
-            layout.addStretch(1)
+        layout.addWidget(self.pdf_view)
         self._load_pdf()
 
     def _emit_status_key(self, key: str, **kwargs: object) -> None:
@@ -127,13 +103,6 @@ class HelpModule(QWidget):
             self._emit_status_key("help.status.doc_missing")
             return
 
-        if self.pdf_doc is None:
-            self._logger.warning(
-                "PySide6.QtPdf is unavailable. Falling back to system PDF viewer."
-            )
-            self.open_external()
-            return
-
         self.pdf_doc.load(str(self.pdf_path))
         log_process_message(
             "loading help PDF",
@@ -146,7 +115,7 @@ class HelpModule(QWidget):
         )
         self._emit_status_key("help.status.doc_loaded")
 
-    def _on_pdf_status_changed(self, status) -> None:
+    def _on_pdf_status_changed(self, status: QPdfDocument.Status) -> None:
         if status == QPdfDocument.Status.Ready:
             self._pdf_error_shown = False
             return
@@ -168,8 +137,6 @@ class HelpModule(QWidget):
     # -----------------------------------------------------
 
     def show_context_menu(self, position):
-        if self.pdf_view is None:
-            return
         # Keep native OS rendering.
         menu = QMenu(self.pdf_view)
         fusion = QStyleFactory.create("Fusion")
@@ -313,3 +280,4 @@ class HelpModule(QWidget):
             level="success",
         )
         self._emit_status_key("help.status.open_success")
+
