@@ -1,28 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
 
-_qt_datas, _qt_binaries, _qt_hiddenimports = [], [], []
-for _mod in [
-    'PySide6.QtCore',
-    'PySide6.QtGui',
-    'PySide6.QtWidgets',
-    'PySide6.QtNetwork',
-    'PySide6.QtSvg',
-    'PySide6.QtPdf',
-    'PySide6.QtPdfWidgets',
-]:
-    _d, _b, _h = collect_all(_mod)
-    _qt_datas += _d
-    _qt_binaries += _b
-    _qt_hiddenimports += _h
+# collect_dynamic_libs scans PySide6's __path__ (the package directory) and
+# returns all Qt6*.dll files — the ones that C extension .pyd modules cannot
+# self-report via collect_all on individual submodules.
+# collect_data_files picks up the Qt platform/image plugins (qwindows.dll etc.)
+# that Qt requires at runtime to initialise a window.
+_qt_binaries = collect_dynamic_libs('PySide6')
+_qt_datas    = collect_data_files('PySide6', subdir='Qt/plugins')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=_qt_binaries,
     datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')] + _qt_datas,
-    hiddenimports=['modules.instructor_module', 'modules.co_analysis_module', 'modules.po_analysis_module', 'modules.help_module', 'modules.about_module'] + _qt_hiddenimports,
+    hiddenimports=[
+        'PySide6.QtCore',
+        'PySide6.QtGui',
+        'PySide6.QtWidgets',
+        'PySide6.QtNetwork',
+        'PySide6.QtSvg',
+        'PySide6.QtPdf',
+        'PySide6.QtPdfWidgets',
+        'modules.instructor_module',
+        'modules.co_analysis_module',
+        'modules.po_analysis_module',
+        'modules.help_module',
+        'modules.about_module',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
