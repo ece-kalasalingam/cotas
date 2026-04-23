@@ -1,12 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_all
+
+pyside6_datas, pyside6_binaries, pyside6_hiddenimports = collect_all('PySide6')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')],
-    hiddenimports=['PySide6.QtSvg', 'PySide6.QtPdf', 'PySide6.QtPdfWidgets', 'modules.instructor_module', 'modules.co_analysis_module', 'modules.po_analysis_module', 'modules.help_module', 'modules.about_module'],
+    binaries=pyside6_binaries,
+    datas=[('assets', 'assets'), ('common/i18n', 'common/i18n')] + pyside6_datas,
+    hiddenimports=['PySide6.QtSvg', 'PySide6.QtPdf', 'PySide6.QtPdfWidgets', 'modules.instructor_module', 'modules.co_analysis_module', 'modules.po_analysis_module', 'modules.help_module', 'modules.about_module'] + pyside6_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
