@@ -63,6 +63,15 @@
       <translation>ఊహించని లోపం సంభవించింది. దయచేసి లాగ్ ఫైల్‌ని తనిఖీ చేయండి.</translation>
     </message>
     <message>
+      <source>app.update.available.body</source>
+      <translation>కొత్త {app_name} {latest_version} అందుబాటులో ఉంది.
+మీరు ప్రస్తుతం {current_version} ఉపయోగిస్తున్నారు.</translation>
+    </message>
+    <message>
+      <source>app.update.available.open_latest_release</source>
+      <translation>తాజా విడుదలను తెరవండి</translation>
+    </message>
+    <message>
       <source>co_analysis.dialog.select_files</source>
       <translation>విశ్లేషణ కోసం ఫైళ్లను ఎంచుకోండి</translation>
     </message>

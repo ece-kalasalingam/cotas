@@ -63,6 +63,15 @@
       <translation>An unexpected error occurred. Please check the log file.</translation>
     </message>
     <message>
+      <source>app.update.available.body</source>
+      <translation>A newer {app_name} {latest_version} is available.
+You are using {current_version}.</translation>
+    </message>
+    <message>
+      <source>app.update.available.open_latest_release</source>
+      <translation>Open Latest Release</translation>
+    </message>
+    <message>
       <source>co_analysis.dialog.select_files</source>
       <translation>Select files for analysis</translation>
     </message>

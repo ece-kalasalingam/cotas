@@ -100,6 +100,34 @@ if (-not $SkipContributorsRefresh) {
 }
 
 if (-not $SkipBuild) {
+    function Invoke-ReleaseGateCommand {
+        param(
+            [string]$Name,
+            [string[]]$CondaArgs,
+            [string[]]$PythonArgs
+        )
+
+        Write-Host "Running $Name..."
+        $conda = Get-Command conda -ErrorAction SilentlyContinue
+        if ($conda) {
+            conda run -n obe @CondaArgs
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        } else {
+            $python = Get-Command python -ErrorAction SilentlyContinue
+            if ($python) {
+                python @PythonArgs
+                if ($LASTEXITCODE -eq 0) {
+                    return $true
+                }
+            }
+        }
+
+        Write-Error "$Name failed. Aborting installer packaging."
+        return $false
+    }
+
     Write-Host "Running quality gate..."
     $qualityGatePassed = $false
     $conda = Get-Command conda -ErrorAction SilentlyContinue
@@ -120,6 +148,22 @@ if (-not $SkipBuild) {
 
     if (-not $qualityGatePassed) {
         Write-Error "Quality gate failed. Aborting installer packaging."
+        exit 1
+    }
+
+    if (-not (Invoke-ReleaseGateCommand -Name "Ruff check" -CondaArgs @("python", "-m", "ruff", "check", ".") -PythonArgs @("-m", "ruff", "check", "."))) {
+        exit 1
+    }
+    if (-not (Invoke-ReleaseGateCommand -Name "isort check" -CondaArgs @("python", "-m", "isort", "--check-only", "--diff", ".") -PythonArgs @("-m", "isort", "--check-only", "--diff", "."))) {
+        exit 1
+    }
+    if (-not (Invoke-ReleaseGateCommand -Name "Pyright" -CondaArgs @("python", "-m", "pyright") -PythonArgs @("-m", "pyright"))) {
+        exit 1
+    }
+    if (-not (Invoke-ReleaseGateCommand -Name "Bandit" -CondaArgs @("python", "-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services") -PythonArgs @("-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services"))) {
+        exit 1
+    }
+    if (-not (Invoke-ReleaseGateCommand -Name "pip-audit" -CondaArgs @("python", "-m", "pip_audit", "--cache-dir", ".pip_audit_cache") -PythonArgs @("-m", "pip_audit", "--cache-dir", ".pip_audit_cache"))) {
         exit 1
     }
 

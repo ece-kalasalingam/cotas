@@ -6,7 +6,7 @@
 #define MyAppPublisher "Focus"
 #define MyAppCopyright "Copyright (c) 2026"
 #define MyAppExeName "focus.exe"
-#define MyAppId "{{8BAABC11-ED0F-4A29-B2A5-61DABFF0A24A}}"
+#define MyAppId "{8BAABC11-ED0F-4A29-B2A5-61DABFF0A24A}"
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"
@@ -16,10 +16,10 @@
 #endif
 
 [Setup]
-AppId={#MyAppId}
+AppId={{#MyAppId}
 AppName={#MyAppName}
 AppVersion={#AppVersion}
-AppVerName={#MyAppName} - {#AppVersion}
+AppVerName={#MyAppName} {#AppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright={#MyAppCopyright}
 DefaultDirName={autopf}\{#MyAppName}
@@ -32,11 +32,14 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+DisableWelcomePage=no
 OutputDir=dist
 OutputBaseFilename=focus-installer
-UninstallDisplayName={#MyAppName} - {#AppVersion}
+UninstallDisplayName={#MyAppName} {#AppVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\assets\kare-logo.ico
+WizardImageFile=..\assets\wizard-image.bmp
+WizardSmallImageFile=..\assets\wizard-small.bmp
 VersionInfoVersion={#AppFileVersion}
 VersionInfoProductVersion={#AppVersion}
 VersionInfoTextVersion={#AppFileVersion}
@@ -75,6 +78,9 @@ Type: filesandordirs; Name: "{commonappdata}\FOCUS"
 Type: filesandordirs; Name: "{commonappdata}\Focus"
 
 [Code]
+var
+  SetupModeMessage: string;
+
 function ExtractNumericPart(const Token: string): Integer;
 var
   I: Integer;
@@ -140,13 +146,144 @@ end;
 
 function TryGetInstalledVersion(var InstalledVersion: string): Boolean;
 var
+  AppId: string;
+  AppIdExtraClose: string;
+  AppIdSingleClose: string;
+  AppIdNoBraces: string;
   UninstallKey: string;
+  BaseUninstallKey: string;
+  SubKeys: TArrayOfString;
+  I: Integer;
+  DisplayName: string;
+  Publisher: string;
+  CandidateVersion: string;
 begin
-  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+  { Use explicit preprocessor AppId define to avoid SetupSetting escape ambiguity. }
+  AppId := '{#MyAppId}';
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1';
   Result :=
     RegQueryStringValue(HKLM64, UninstallKey, 'DisplayVersion', InstalledVersion) or
-    RegQueryStringValue(HKLM, UninstallKey, 'DisplayVersion', InstalledVersion) or
+    RegQueryStringValue(HKLM32, UninstallKey, 'DisplayVersion', InstalledVersion) or
     RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion);
+  if Result then
+    Exit;
+
+  { Variant: one extra closing brace before _is1 (seen in existing installs). }
+  AppIdExtraClose := AppId;
+  if (Length(AppIdExtraClose) > 0) and (AppIdExtraClose[Length(AppIdExtraClose)] = '}') then
+  begin
+    AppIdExtraClose := AppIdExtraClose + '}';
+    UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + AppIdExtraClose + '_is1';
+    Result :=
+      RegQueryStringValue(HKLM64, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKLM32, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion);
+    if Result then
+      Exit;
+  end;
+
+  { Variant: trim one trailing brace (if AppId already carries doubled close-brace). }
+  AppIdSingleClose := AppId;
+  if (Length(AppIdSingleClose) > 1) and
+     (AppIdSingleClose[Length(AppIdSingleClose)] = '}') and
+     (AppIdSingleClose[Length(AppIdSingleClose) - 1] = '}') then
+  begin
+    Delete(AppIdSingleClose, Length(AppIdSingleClose), 1);
+    UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + AppIdSingleClose + '_is1';
+    Result :=
+      RegQueryStringValue(HKLM64, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKLM32, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion);
+    if Result then
+      Exit;
+  end;
+
+  { Variant: no outer braces. }
+  AppIdNoBraces := AppId;
+  if (Length(AppIdNoBraces) >= 2) and
+     (AppIdNoBraces[1] = '{') and
+     (AppIdNoBraces[Length(AppIdNoBraces)] = '}') then
+  begin
+    AppIdNoBraces := Copy(AppIdNoBraces, 2, Length(AppIdNoBraces) - 2);
+    UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + AppIdNoBraces + '_is1';
+    Result :=
+      RegQueryStringValue(HKLM64, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKLM32, UninstallKey, 'DisplayVersion', InstalledVersion) or
+      RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion);
+    if Result then
+      Exit;
+  end;
+
+  { Fallback: scan uninstall entries by DisplayName/Publisher to avoid AppId format drift. }
+  BaseUninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
+
+  if RegGetSubkeyNames(HKLM64, BaseUninstallKey, SubKeys) then
+  begin
+    for I := 0 to GetArrayLength(SubKeys) - 1 do
+    begin
+      UninstallKey := BaseUninstallKey + '\' + SubKeys[I];
+      if RegQueryStringValue(HKLM64, UninstallKey, 'DisplayName', DisplayName) and
+         RegQueryStringValue(HKLM64, UninstallKey, 'DisplayVersion', CandidateVersion) then
+      begin
+        Publisher := '';
+        RegQueryStringValue(HKLM64, UninstallKey, 'Publisher', Publisher);
+        if ((Length(Trim(DisplayName)) >= Length('{#MyAppName}')) and
+            (CompareText(Copy(Trim(DisplayName), 1, Length('{#MyAppName}')), '{#MyAppName}') = 0)) or
+           (CompareText(Trim(Publisher), '{#MyAppPublisher}') = 0) then
+        begin
+          InstalledVersion := CandidateVersion;
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  if RegGetSubkeyNames(HKLM32, BaseUninstallKey, SubKeys) then
+  begin
+    for I := 0 to GetArrayLength(SubKeys) - 1 do
+    begin
+      UninstallKey := BaseUninstallKey + '\' + SubKeys[I];
+      if RegQueryStringValue(HKLM32, UninstallKey, 'DisplayName', DisplayName) and
+         RegQueryStringValue(HKLM32, UninstallKey, 'DisplayVersion', CandidateVersion) then
+      begin
+        Publisher := '';
+        RegQueryStringValue(HKLM32, UninstallKey, 'Publisher', Publisher);
+        if ((Length(Trim(DisplayName)) >= Length('{#MyAppName}')) and
+            (CompareText(Copy(Trim(DisplayName), 1, Length('{#MyAppName}')), '{#MyAppName}') = 0)) or
+           (CompareText(Trim(Publisher), '{#MyAppPublisher}') = 0) then
+        begin
+          InstalledVersion := CandidateVersion;
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  if RegGetSubkeyNames(HKCU, BaseUninstallKey, SubKeys) then
+  begin
+    for I := 0 to GetArrayLength(SubKeys) - 1 do
+    begin
+      UninstallKey := BaseUninstallKey + '\' + SubKeys[I];
+      if RegQueryStringValue(HKCU, UninstallKey, 'DisplayName', DisplayName) and
+         RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', CandidateVersion) then
+      begin
+        Publisher := '';
+        RegQueryStringValue(HKCU, UninstallKey, 'Publisher', Publisher);
+        if ((Length(Trim(DisplayName)) >= Length('{#MyAppName}')) and
+            (CompareText(Copy(Trim(DisplayName), 1, Length('{#MyAppName}')), '{#MyAppName}') = 0)) or
+           (CompareText(Trim(Publisher), '{#MyAppPublisher}') = 0) then
+        begin
+          InstalledVersion := CandidateVersion;
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  Result := False;
 end;
 
 function InitializeSetup(): Boolean;
@@ -171,6 +308,36 @@ begin
     end;
   end;
   Result := True;
+end;
+
+procedure InitializeWizard();
+var
+  InstalledVersion: string;
+  CurrentVersion: string;
+begin
+  CurrentVersion := '{#AppVersion}';
+  if TryGetInstalledVersion(InstalledVersion) then
+  begin
+    if CompareVersionStrings(CurrentVersion, InstalledVersion) = 0 then
+      SetupModeMessage := 'This will re-install Focus {#AppVersion}.'
+    else
+      SetupModeMessage := 'This will update to {#MyAppName} {#AppVersion}.';
+  end
+  else
+    SetupModeMessage := 'This will install {#MyAppName} {#AppVersion}.';
+
+  { Prime welcome text; also re-applied in CurPageChanged when welcome page is shown. }
+  WizardForm.WelcomeLabel1.Caption := SetupModeMessage;
+  WizardForm.WelcomeLabel2.Caption := SetupModeMessage;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpWelcome then
+  begin
+    WizardForm.WelcomeLabel1.Caption := SetupModeMessage;
+    WizardForm.WelcomeLabel2.Caption := '';
+  end;
 end;
 
 procedure DeleteFocusRoamingDir(const Dir: string);

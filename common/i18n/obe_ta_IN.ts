@@ -63,6 +63,15 @@
       <translation>எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.</translation>
     </message>
     <message>
+      <source>app.update.available.body</source>
+      <translation>புதிய {app_name} {latest_version} கிடைக்கிறது.
+நீங்கள் தற்போது {current_version} பயன்படுத்துகிறீர்கள்.</translation>
+    </message>
+    <message>
+      <source>app.update.available.open_latest_release</source>
+      <translation>சமீபத்திய வெளியீட்டை திறக்க</translation>
+    </message>
+    <message>
       <source>co_analysis.dialog.select_files</source>
       <translation>ஆய்விற்கான கோப்புகளை தேர்வு செய்யவும்</translation>
     </message>

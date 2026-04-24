@@ -63,6 +63,15 @@
       <translation>एक अप्रत्याशित त्रुटि हुई। कृपया लॉग फ़ाइल देखें।</translation>
     </message>
     <message>
+      <source>app.update.available.body</source>
+      <translation>{app_name} का नया {latest_version} उपलब्ध है।
+आप अभी {current_version} उपयोग कर रहे हैं।</translation>
+    </message>
+    <message>
+      <source>app.update.available.open_latest_release</source>
+      <translation>नवीनतम रिलीज़ खोलें</translation>
+    </message>
+    <message>
       <source>co_analysis.dialog.select_files</source>
       <translation>विश्लेषण के लिए फ़ाइलें चुनें</translation>
     </message>
