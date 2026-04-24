@@ -48,6 +48,11 @@ crash_reports/
 .tmp/*.env
 secrets/
 
+# Runtime sqlite artifacts
+sqlite/*.sqlite3
+sqlite/*.sqlite-wal
+sqlite/*.sqlite-shm
+
 # IDE/editor settings
 .vscode/
 .idea/
@@ -59,7 +64,9 @@ Thumbs.db
 
 coverage.xml
 coverage.json
-version.txt
 artifact-manifest.json
 .claude
 .claude/
+
+# Private/internal docs
+.private_docs/
