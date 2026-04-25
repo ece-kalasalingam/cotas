@@ -9,6 +9,7 @@ from typing import Any, cast
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -84,6 +85,7 @@ _TAMIL_LANGUAGE_CODES = {"ta-in", "ta_in"}
 _TAMIL_COMPACT_TEXT_STYLE = "font-size: 12px;"
 _logger = logging.getLogger(__name__)
 _DOWNLOAD_CO_DESCRIPTION_TEMPLATE_HREF = "download-co-description-template"
+_WORD_FILE_FILTER = "Word Files (*.docx);;All Files (*)"
 
 
 def _messages_namespace() -> dict[str, object]:
@@ -378,6 +380,24 @@ class COAnalysisModule(QWidget):
         )
         self.co_attainment_level_input.activated.connect(lambda _idx: self._on_threshold_editing_finished())
         thresholds_layout.addLayout(co_attainment_rows)
+
+        self.generate_word_report_checkbox = QCheckBox()
+        self.generate_word_report_checkbox.setObjectName("coAnalysisWordReportToggle")
+        self.generate_word_report_checkbox.setStyleSheet(
+            """
+            QCheckBox#coAnalysisWordReportToggle,
+            QCheckBox#coAnalysisWordReportToggle:hover,
+            QCheckBox#coAnalysisWordReportToggle:focus,
+            QCheckBox#coAnalysisWordReportToggle:pressed,
+            QCheckBox#coAnalysisWordReportToggle:checked {
+                text-decoration: none;
+                border: none;
+                outline: none;
+            }
+            """
+        )
+        self.generate_word_report_checkbox.setChecked(True)
+        thresholds_layout.addWidget(self.generate_word_report_checkbox)
         left_layout.addLayout(thresholds_layout)
         left_layout.addStretch(1)
 
@@ -474,6 +494,7 @@ class COAnalysisModule(QWidget):
         self.co_attainment_description_label.setText(t("co_analysis.co_attainment.description"))
         self.co_attainment_percent_label.setText(t("co_analysis.co_attainment.percent.label"))
         self.co_attainment_level_label.setText(t("co_analysis.co_attainment.level.label"))
+        self.generate_word_report_checkbox.setText(t("co_analysis.generate_word_report.label"))
         self._apply_locale_text_density()
         self._set_download_co_description_template_link_enabled(not self.state.busy)
         self._refresh_summary()
@@ -589,6 +610,7 @@ class COAnalysisModule(QWidget):
         self.threshold_l3_input.setEnabled(True)
         self.co_attainment_percent_input.setEnabled(True)
         self.co_attainment_level_input.setEnabled(True)
+        self.generate_word_report_checkbox.setEnabled(True)
         self.drop_list.setEnabled(enabled)
         self.clear_button.setEnabled(enabled and has_files)
         self.calculate_button.setEnabled(can_submit)
@@ -1326,6 +1348,8 @@ class COAnalysisModule(QWidget):
         )
         prefix = f"{course_code}_{academic_year}_" if course_code and academic_year else ""
         output_path = Path(output_dir) / f"{prefix}CO_Analysis.xlsx"
+        should_generate_word_report = self.generate_word_report_checkbox.isChecked()
+        word_output_path = Path(output_dir) / f"{prefix}CO_Analysis_Report.docx"
         if output_path.exists():
             replacement_path, _ = QFileDialog.getSaveFileName(
                 self,
@@ -1336,6 +1360,17 @@ class COAnalysisModule(QWidget):
             if not replacement_path:
                 return
             output_path = Path(replacement_path)
+            word_output_path = output_path.with_name(f"{prefix}CO_Analysis_Report.docx")
+        if should_generate_word_report and word_output_path.exists():
+            replacement_word_path, _ = QFileDialog.getSaveFileName(
+                self,
+                t("co_analysis.calculate"),
+                resolve_dialog_start_path(APP_NAME, word_output_path.name),
+                _WORD_FILE_FILTER,
+            )
+            if not replacement_word_path:
+                return
+            word_output_path = Path(replacement_word_path)
 
         token = CancellationToken()
         thresholds = self._read_attainment_thresholds()
@@ -1375,6 +1410,8 @@ class COAnalysisModule(QWidget):
                     "thresholds": tuple(thresholds),
                     "co_attainment_percent": co_attainment_percent,
                     "co_attainment_level": co_attainment_level,
+                    "generate_word_report": should_generate_word_report,
+                    "word_output_path": str(word_output_path),
                 },
             )
 
@@ -1393,8 +1430,53 @@ class COAnalysisModule(QWidget):
             result_path = Path(
                 str(getattr(result, "output_path", None) or getattr(result, "workbook_path", None) or output_path)
             )
+            generated_excel_count = 0
+            failed_word_count = 0
             if all(canonical_path_key(path) != canonical_path_key(result_path) for path in self._downloaded_outputs):
                 self._downloaded_outputs.append(result_path)
+            generated_excel_count = 1
+            self._publish_status_key(
+                "co_analysis.status.output_generated_excel",
+                path=str(result_path),
+            )
+            word_report_path_value = str(
+                getattr(result, "word_report_path", None)
+                or getattr(result, "report_output_path", None)
+                or ""
+            ).strip()
+            word_generated = False
+            if word_report_path_value:
+                word_report_path = Path(word_report_path_value)
+                if all(canonical_path_key(path) != canonical_path_key(word_report_path) for path in self._downloaded_outputs):
+                    self._downloaded_outputs.append(word_report_path)
+                word_generated = True
+                self._publish_status_key(
+                    "co_analysis.status.output_generated_word",
+                    path=str(word_report_path),
+                )
+                self._runtime.notify_message_key(
+                    "co_analysis.status.word_report_generated",
+                    channels=("status", "activity_log", "toast"),
+                    toast_title_key="co_analysis.title",
+                    toast_level="success",
+                )
+            word_report_error_key = str(getattr(result, "word_report_error_key", None) or "").strip()
+            if word_report_error_key and not word_generated:
+                failed_word_count = 1
+                self._runtime.notify_message_key(
+                    word_report_error_key,
+                    channels=("status", "activity_log", "toast"),
+                    toast_title_key="co_analysis.title",
+                    toast_level="warning",
+                )
+            elif should_generate_word_report and not word_generated:
+                failed_word_count = 1
+                self._runtime.notify_message_key(
+                    "co_analysis.status.word_report_not_generated",
+                    channels=("status", "activity_log", "toast"),
+                    toast_title_key="co_analysis.title",
+                    toast_level="warning",
+                )
             self._remember_dialog_dir_safe(str(result_path))
             self._publish_status_key("co_analysis.status.calculate_completed")
             log_process_message(
@@ -1411,7 +1493,10 @@ class COAnalysisModule(QWidget):
                     fallback=t("co_analysis.status.calculate_completed"),
                 ),
             )
-            self._runtime.emit_workbook_generation_feedback(success_count=1, failed_count=0)
+            self._runtime.emit_workbook_generation_feedback(
+                success_count=generated_excel_count,
+                failed_count=failed_word_count,
+            )
 
         def _on_failure(exc: Exception) -> None:
             """On failure.
@@ -1578,7 +1663,14 @@ class COAnalysisModule(QWidget):
             None.
         """
         return tuple(
-            OutputItem(label_key="co_analysis.links.downloaded_output", path=str(path))
+            OutputItem(
+                label_key=(
+                    "co_analysis.links.generated_word_output"
+                    if str(path.suffix).lower() == ".docx"
+                    else "co_analysis.links.generated_excel_output"
+                ),
+                path=str(path),
+            )
             for path in self._downloaded_outputs
         )
 

@@ -59,6 +59,10 @@
       <translation>Workbook secret is unavailable. Please reinstall the software or contact support.</translation>
     </message>
     <message>
+      <source>app.startup.runtime_dependencies_missing</source>
+      <translation>Startup blocked: missing required runtime libraries: {packages}. Install dependencies and relaunch the app.</translation>
+    </message>
+    <message>
       <source>app.unexpected_error</source>
       <translation>An unexpected error occurred. Please check the log file.</translation>
     </message>
@@ -235,6 +239,11 @@ Cohort Mismatch: {cohort_mismatch}</translation>
       <translation>CO AT Level:</translation>
     </message>
     <message>
+      <source>co_analysis.generate_word_report.label</source>
+      <translation>Generate Course Coordinator
+(.docx) report</translation>
+    </message>
+    <message>
       <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
@@ -290,6 +299,14 @@ For course coordinator report, upload the filled CO description template workboo
       <translation>Downloaded Output</translation>
     </message>
     <message>
+      <source>co_analysis.links.generated_excel_output</source>
+      <translation>Generated Excel Output</translation>
+    </message>
+    <message>
+      <source>co_analysis.links.generated_word_output</source>
+      <translation>Generated Word Output</translation>
+    </message>
+    <message>
       <source>co_analysis.regno_dedup.body</source>
       <translation>{count} duplicate register number entr(ies) were removed while generating CO attainment.</translation>
     </message>
@@ -317,6 +334,26 @@ For course coordinator report, upload the filled CO description template workboo
     <message>
       <source>co_analysis.status.calculate_completed</source>
       <translation>CO attainment calculation completed and output workbook generated.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_generated</source>
+      <translation>CO analysis Word report generated successfully.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_generate_failed</source>
+      <translation>CO analysis workbook generated, but Word report generation failed.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_not_generated</source>
+      <translation>CO analysis workbook generated, but Word report was not generated.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.output_generated_excel</source>
+      <translation>Generated Excel workbook: {path}</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.output_generated_word</source>
+      <translation>Generated Word report: {path}</translation>
     </message>
     <message>
       <source>co_analysis.status.cleared</source>
@@ -1238,6 +1275,10 @@ Details: {error}</translation>
     <message>
       <source>validation.dependency.xlsxwriter_missing</source>
       <translation>xlsxwriter is not installed. Install it to generate course templates.</translation>
+    </message>
+    <message>
+      <source>validation.dependency.python_docx_missing</source>
+      <translation>python-docx is not installed. Install it to generate Course Coordinator reports.</translation>
     </message>
     <message>
       <source>validation.layout.hash_mismatch</source>

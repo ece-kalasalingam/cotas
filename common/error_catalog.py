@@ -56,6 +56,11 @@ _VALIDATION_ISSUE_CATALOG: Mapping[str, ValidationIssueSpec] = {
         translation_key="validation.dependency.xlsxwriter_missing",
         category="dependency",
     ),
+    "PYTHON_DOCX_MISSING": ValidationIssueSpec(
+        code="PYTHON_DOCX_MISSING",
+        translation_key="validation.dependency.python_docx_missing",
+        category="dependency",
+    ),
     "WORKBOOK_NOT_FOUND": ValidationIssueSpec(
         code="WORKBOOK_NOT_FOUND",
         translation_key="validation.workbook.not_found",
@@ -513,4 +518,3 @@ def resolve_validation_issue(
         message=translated,
         context=clean_context,
     )
-

@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import sqlite3
@@ -13,6 +14,7 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -84,6 +86,7 @@ from common.registry import (
     get_sheet_headers_by_key,
     get_sheet_name_by_key,
 )
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import (
     app_runtime_storage_dir,
     canonical_path_key,
@@ -216,6 +219,8 @@ class _CoAttainmentWorkbookResult:
     duplicate_entries: tuple[tuple[str, str, str], ...]
     inner_join_drop_count: int = 0
     inner_join_drop_details: tuple[str, ...] = ()
+    word_report_path: Path | None = None
+    word_report_error_key: str | None = None
 
 
 class _RegisterDedupStore:
@@ -2230,6 +2235,442 @@ def _co_percentage(
     return round((attained_count / float(attended)) * 100.0, CO_REPORT_MAX_DECIMAL_PLACES)
 
 
+def _indirect_total_100_from_indirect_score(score: float | str) -> float | None:
+    """Indirect total 100 from indirect score.
+
+    Args:
+        score: Parameter value (float | str).
+
+    Returns:
+        float | None: Return value.
+
+    Raises:
+        None.
+    """
+    if isinstance(score, str):
+        token = normalize(score)
+        if token in {
+            normalize(CO_REPORT_ABSENT_TOKEN),
+            normalize(CO_REPORT_NOT_APPLICABLE_TOKEN),
+        }:
+            return 0.0
+        return None
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return None
+    if INDIRECT_RATIO <= 0:
+        return 0.0
+    total_100 = round(float(score) / float(INDIRECT_RATIO), CO_REPORT_MAX_DECIMAL_PLACES)
+    return max(0.0, min(100.0, total_100))
+
+
+def _format_report_percent(value: float | str) -> str:
+    """Format report percent.
+
+    Args:
+        value: Parameter value (float | str).
+
+    Returns:
+        str: Return value.
+
+    Raises:
+        None.
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{float(value):g}%"
+    return str(value)
+
+
+def _shortfall_severity(
+    *,
+    overall_percent: float | None,
+    shortfall_percent: float,
+) -> str:
+    """Shortfall severity classification based on CO AT student-percentage gap."""
+    if overall_percent is None:
+        return "Data Gap (Insufficient Evidence)"
+    if shortfall_percent <= 0:
+        return "On Target (Meets CO AT Target)"
+    if shortfall_percent <= 5.0:
+        return "Low (Shortfall up to 5%)"
+    if shortfall_percent <= 15.0:
+        return "Moderate (Shortfall 5%-15%)"
+    return "High (Shortfall above 15%)"
+
+
+def _recommended_corrective_action(
+    *,
+    direct_value: float | None,
+    indirect_value: float | None,
+    severity: str,
+) -> str:
+    """Recommended corrective action line for one CO."""
+    if severity.startswith("On Target"):
+        return (
+            "Sustain current attainment with continuous formative assessment and periodic CO-mapping review as per OBE cycle."
+        )
+    if severity.startswith("Data Gap"):
+        return (
+            "Complete missing direct/indirect evidence and validate data integrity before CO attainment review."
+        )
+    if severity.startswith("High"):
+        return (
+            "Initiate immediate remedial instruction, bridge assignments, and compulsory reassessment for units mapped to this CO."
+        )
+    if severity.startswith("Moderate"):
+        return (
+            "Plan focused tutorial/problem-solving sessions and strengthen question-to-CO alignment in direct assessments."
+        )
+    if severity.startswith("Low"):
+        return (
+            "Run targeted improvement activities and additional formative checks to close the remaining CO AT shortfall."
+        )
+    if direct_value is None and indirect_value is None:
+        return (
+            "Review evidence completeness and ensure both direct and indirect assessments are captured."
+        )
+    if direct_value is None:
+        return "Strengthen direct assessment design and improve question-to-CO alignment for this CO."
+    if indirect_value is None:
+        return "Improve indirect feedback coverage and instrument quality for this CO."
+    if direct_value + 5.0 < indirect_value:
+        return "Direct attainment is lagging. Recalibrate teaching-learning activities and map assessments more tightly to this CO."
+    if indirect_value + 5.0 < direct_value:
+        return "Indirect attainment is lagging. Improve survey administration, response quality, and student awareness for this CO."
+    return "Apply micro-interventions and targeted reassessment to close the CO AT shortfall."
+
+
+def _build_co_word_summary_rows(
+    *,
+    pending_rows: dict[int, list[_CoAttainmentRow]],
+    output_states: dict[int, _CoOutputSheetState],
+    total_outcomes: int,
+    course_code: str,
+    co_attainment_level: int,
+    co_attainment_percent: float,
+) -> list[dict[str, str]]:
+    """Build CO summary rows for Word report."""
+    rows: list[dict[str, str]] = []
+    for co_index in range(1, total_outcomes + 1):
+        co_rows = list(pending_rows.get(co_index, []))
+        direct_values: list[float] = []
+        indirect_values: list[float] = []
+        for row in co_rows:
+            direct_value = _direct_total_100_from_direct_score(row.direct_score)
+            if direct_value is not None:
+                direct_values.append(float(direct_value))
+            indirect_value = _indirect_total_100_from_indirect_score(row.indirect_score)
+            if indirect_value is not None:
+                indirect_values.append(float(indirect_value))
+        direct_avg: float | str = (
+            round(sum(direct_values) / len(direct_values), CO_REPORT_MAX_DECIMAL_PLACES)
+            if direct_values
+            else CO_REPORT_NOT_APPLICABLE_TOKEN
+        )
+        indirect_avg: float | str = (
+            round(sum(indirect_values) / len(indirect_values), CO_REPORT_MAX_DECIMAL_PLACES)
+            if indirect_values
+            else CO_REPORT_NOT_APPLICABLE_TOKEN
+        )
+        state = output_states.get(co_index)
+        level_counts = state.level_counts if state is not None else {}
+        attended = state.attended if state is not None else 0
+        overall_attainment = _co_percentage(
+            level_counts=level_counts,
+            attended=attended,
+            co_attainment_level=co_attainment_level,
+        )
+        result_text = (
+            "Attained"
+            if isinstance(overall_attainment, (int, float))
+            and float(overall_attainment) >= float(co_attainment_percent)
+            else "Yet to Attain"
+        )
+        direct_value = float(direct_avg) if isinstance(direct_avg, (int, float)) and not isinstance(direct_avg, bool) else None
+        indirect_value = (
+            float(indirect_avg)
+            if isinstance(indirect_avg, (int, float)) and not isinstance(indirect_avg, bool)
+            else None
+        )
+        overall_value = (
+            float(overall_attainment)
+            if isinstance(overall_attainment, (int, float)) and not isinstance(overall_attainment, bool)
+            else None
+        )
+        shortfall_percent = (
+            max(0.0, float(co_attainment_percent) - overall_value)
+            if overall_value is not None
+            else float(co_attainment_percent)
+        )
+        severity = _shortfall_severity(
+            overall_percent=overall_value,
+            shortfall_percent=shortfall_percent,
+        )
+        action = _recommended_corrective_action(
+            direct_value=direct_value,
+            indirect_value=indirect_value,
+            severity=severity,
+        )
+        co_label = f"{course_code}.{co_index}" if course_code else f"CO{co_index}"
+        rows.append(
+            {
+                "co": co_label,
+                "direct": _format_report_percent(direct_avg),
+                "indirect": _format_report_percent(indirect_avg),
+                "overall": _format_report_percent(overall_attainment),
+                "result": result_text,
+                "shortfall": _format_report_percent(round(shortfall_percent, CO_REPORT_MAX_DECIMAL_PLACES)),
+                "severity": severity,
+                "recommended_action": action,
+            }
+        )
+    return rows
+
+
+def _metadata_report_value(metadata: dict[str, str], key: str) -> str:
+    """Read normalized metadata value for reporting."""
+    return str(metadata.get(normalize(key), "")).strip()
+
+
+def _generate_co_attainment_word_report(
+    *,
+    output_path: Path,
+    metadata: dict[str, str],
+    thresholds: tuple[float, float, float],
+    co_attainment_percent: float,
+    co_attainment_level: int,
+    total_outcomes: int,
+    co_rows: list[dict[str, str]],
+) -> Path:
+    """Generate CO attainment Word report document."""
+    docx_mod = import_runtime_dependency("docx")
+    Document = docx_mod.Document
+    Pt = docx_mod.shared.Pt
+    Inches = docx_mod.shared.Inches
+    WD_PARAGRAPH_ALIGNMENT = docx_mod.enum.text.WD_PARAGRAPH_ALIGNMENT
+
+    document = Document()
+    qn = docx_mod.oxml.ns.qn
+    times_new_roman = "Times New Roman"
+
+    def _set_run_font(run: Any) -> None:
+        run.font.name = times_new_roman
+        run.font.size = Pt(12)
+        r_pr = run._element.get_or_add_rPr()
+        r_fonts = r_pr.get_or_add_rFonts()
+        r_fonts.set(qn("w:ascii"), times_new_roman)
+        r_fonts.set(qn("w:hAnsi"), times_new_roman)
+        r_fonts.set(qn("w:eastAsia"), times_new_roman)
+        r_fonts.set(qn("w:cs"), times_new_roman)
+
+    def _style_paragraph(paragraph: Any, *, bold: bool = False, justify: bool = False) -> None:
+        if justify:
+            paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        if not paragraph.runs:
+            _set_run_font(paragraph.add_run(""))
+        for run in paragraph.runs:
+            _set_run_font(run)
+            if bold:
+                run.bold = True
+
+    def _add_section_heading(text: str, *, centered: bool = False) -> Any:
+        paragraph = document.add_paragraph(text)
+        if centered:
+            paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        _style_paragraph(paragraph, bold=True)
+        return paragraph
+
+    for institution_line in CO_ANALYSIS_INSTITUTION_ROWS:
+        para = document.add_paragraph(str(institution_line).upper())
+        para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        para.paragraph_format.space_before = Pt(0)
+        para.paragraph_format.space_after = Pt(0)
+        _style_paragraph(para, bold=True)
+
+    _add_section_heading("Course Coordinator Report", centered=True)
+    generated_on = document.add_paragraph(f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    generated_on.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    _style_paragraph(generated_on)
+
+    enriched_rows: list[dict[str, str]] = []
+    for item in co_rows:
+        result_text = str(item.get("result", "")).strip() or "Yet to Attain"
+        shortfall_text = str(item.get("shortfall", "")).strip()
+        if not shortfall_text:
+            shortfall_text = "0%" if result_text == "Attained" else f"{co_attainment_percent:g}%"
+        severity_text = str(item.get("severity", "")).strip()
+        if not severity_text:
+            severity_text = "None" if result_text == "Attained" else "Moderate"
+        action_text = str(item.get("recommended_action", "")).strip()
+        if not action_text:
+            action_text = (
+                "Sustain current delivery and monitor consistency in subsequent assessments."
+                if result_text == "Attained"
+                else "Use targeted remedial sessions, focused practice, and reassessment on key weak units mapped to this CO."
+            )
+        enriched_rows.append(
+            {
+                "co": str(item.get("co", "")).strip(),
+                "direct": str(item.get("direct", "")).strip(),
+                "indirect": str(item.get("indirect", "")).strip(),
+                "overall": str(item.get("overall", "")).strip(),
+                "result": result_text,
+                "shortfall": shortfall_text,
+                "severity": severity_text,
+                "recommended_action": action_text,
+            }
+        )
+
+    _add_section_heading("Course Details")
+    course_code = _metadata_report_value(metadata, COURSE_METADATA_COURSE_CODE_KEY) or "N/A"
+    semester = _metadata_report_value(metadata, COURSE_METADATA_SEMESTER_KEY) or "N/A"
+    academic_year = _metadata_report_value(metadata, COURSE_METADATA_ACADEMIC_YEAR_KEY) or "N/A"
+    course_details_templates = (
+        (
+            "This Course Coordinator report presents the CO attainment analysis for course {course_code}, "
+            "offered in Semester {semester}, during the academic year {academic_year}. "
+            "The course is mapped to {total_outcomes} course outcomes (COs), and the sections below summarize "
+            "attainment status, identified shortfalls, severity classification, and recommended corrective actions."
+        ),
+        (
+            "For the academic year {academic_year}, this report reviews course {course_code} in Semester {semester} "
+            "through the lens of CO attainment. A total of {total_outcomes} COs are covered, and this document "
+            "captures attainment outcomes, shortfall severity, and suggested corrective interventions."
+        ),
+        (
+            "Course {course_code} (Semester {semester}, {academic_year}) is evaluated here using the CO attainment framework. "
+            "With {total_outcomes} mapped COs, the report provides a concise view of attainment performance, "
+            "areas below target, severity levels, and follow-up action points."
+        ),
+        (
+            "This document summarizes the Course Coordinator analysis for {course_code} in Semester {semester} "
+            "for the academic cycle {academic_year}. Across {total_outcomes} course outcomes, the report highlights "
+            "attainment trends, shortfall conditions, severity categorization, and practical corrective actions."
+        ),
+        (
+            "As part of continuous OBE monitoring, this report analyzes CO attainment for course {course_code}, "
+            "offered in Semester {semester} during {academic_year}. The evaluation spans {total_outcomes} COs and "
+            "presents attainment status, the extent of shortfall, severity classification, and recommended improvements."
+        ),
+        (
+            "Presented here is the CO attainment review for course {course_code} in Semester {semester} for {academic_year}. "
+            "The course includes {total_outcomes} COs, and the following sections outline attainment position, "
+            "shortfall severity, and corrective actions to strengthen outcome achievement."
+        ),
+    )
+    course_details_paragraph = document.add_paragraph(
+        random.choice(course_details_templates).format(
+            course_code=course_code,
+            semester=semester,
+            academic_year=academic_year,
+            total_outcomes=total_outcomes,
+        )
+    )
+    _style_paragraph(course_details_paragraph, justify=True)
+
+    _add_section_heading("Threshold Details")
+    l1, l2, l3 = thresholds
+    l2_policy_text = (
+        "Level L2 is fixed at 60% as configured for this run."
+        if abs(float(l2) - 60.0) < 1e-9
+        else (
+            f"Level L2 is set to {l2:g}% for this run, and this value is treated as "
+            "the average of the last three offerings in the previous regulations."
+        )
+    )
+    threshold_templates = (
+        (
+            "The threshold policy applied in this analysis is as follows: Level L1 is set to "
+            "{l1:g}% for this run. {l2_policy} Level L3 is set to 75%. "
+            "For attainment judgement, the configured CO attainment target is {co_at:g}% at or above Level L{co_level}."
+        ),
+        (
+            "For this course run, Level L1 corresponds to the configured value of {l1:g}%. {l2_policy} "
+            "Level L3 is considered as 75%. The CO attainment decision is evaluated against "
+            "{co_at:g}% of students at or above Level L{co_level}."
+        ),
+        (
+            "Threshold interpretation used in this report: Level L1 equals {l1:g}% for this run. "
+            "{l2_policy} Level L3 represents 75%. CO attainment is finalized using the target "
+            "{co_at:g}% at or above Level L{co_level}."
+        ),
+        (
+            "As per the configured OBE threshold settings, Level L1 is {l1:g}%. "
+            "{l2_policy} Level L3 is maintained at 75%. In addition, the run uses a CO attainment target of "
+            "{co_at:g}% at or above Level L{co_level}."
+        ),
+        (
+            "The present analysis applies these thresholds: Level L1 is provided as {l1:g}% for this run. "
+            "{l2_policy} Level L3 is 75%. CO-wise attainment status is then computed using "
+            "{co_at:g}% at or above Level L{co_level}."
+        ),
+        (
+            "For threshold-based classification in this report, Level L1 is taken as "
+            "{l1:g}%. {l2_policy} Level L3 is fixed at 75%. CO attainment is assessed against "
+            "the configured target of {co_at:g}% at or above Level L{co_level}."
+        ),
+    )
+    threshold_paragraph = document.add_paragraph(
+        random.choice(threshold_templates).format(
+            l1=l1,
+            l2_policy=l2_policy_text,
+            co_at=co_attainment_percent,
+            co_level=co_attainment_level,
+        )
+    )
+    _style_paragraph(threshold_paragraph, justify=True)
+
+    formula_image_path = Path("assets") / "formula.jpg"
+    if formula_image_path.is_file():
+        image_paragraph = document.add_paragraph()
+        image_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        image_paragraph.add_run().add_picture(str(formula_image_path), width=Inches(5.8))
+    else:
+        equation_fallback = document.add_paragraph("Formula image not available.")
+        equation_fallback.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        _style_paragraph(equation_fallback)
+
+    attained_count = sum(1 for item in enriched_rows if item["result"] == "Attained")
+    _add_section_heading("CO-wise Attainment Summary")
+    summary_para = document.add_paragraph(
+        "This report summarizes CO-wise attainment using configured thresholds and target attainment policy. "
+        f"Out of {total_outcomes} COs, {attained_count} attained and {max(0, total_outcomes - attained_count)} are below target."
+    )
+    _style_paragraph(summary_para, justify=True)
+
+    co_table = document.add_table(rows=1, cols=5)
+    co_table.style = "Table Grid"
+    co_table.rows[0].cells[0].text = "CO"
+    co_table.rows[0].cells[1].text = "Overall"
+    co_table.rows[0].cells[2].text = "Shortfall"
+    co_table.rows[0].cells[3].text = "Severity"
+    co_table.rows[0].cells[4].text = "Result"
+    for item in enriched_rows:
+        cells = co_table.add_row().cells
+        cells[0].text = item["co"]
+        cells[1].text = item["overall"]
+        cells[2].text = item["shortfall"]
+        cells[3].text = item["severity"]
+        cells[4].text = item["result"]
+
+    severity_note_para = document.add_paragraph(
+        "Severity is classified by CO attainment shortfall percentage only: "
+        "Low (up to 5%), Moderate (5%-15%), High (above 15%). "
+        f"Target used for this run: {co_attainment_percent:g}% of students at or above Level L{co_attainment_level}."
+    )
+    _style_paragraph(severity_note_para, justify=True)
+
+    _add_section_heading("Continuous Improvement Action Suggestions")
+
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    _style_paragraph(paragraph)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(output_path)
+    return output_path
+
+
 def _summary_table_headers(*, max_level: int) -> list[str]:
     """Build Summary sheet table headers.
 
@@ -2749,6 +3190,8 @@ def _generate_co_attainment_workbook_course_setup_v2(
     thresholds: tuple[float, float, float] | None = None,
     co_attainment_percent: float | None = None,
     co_attainment_level: int | None = None,
+    generate_word_report: bool = False,
+    word_output_path: Path | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook course setup v2.
     
@@ -2761,6 +3204,8 @@ def _generate_co_attainment_workbook_course_setup_v2(
         thresholds: Parameter value (tuple[float, float, float] | None).
         co_attainment_percent: Parameter value (float | None).
         co_attainment_level: Parameter value (int | None).
+        generate_word_report: Parameter value (bool).
+        word_output_path: Parameter value (Path | None).
     
     Returns:
         _CoAttainmentWorkbookResult: Return value.
@@ -2768,11 +3213,9 @@ def _generate_co_attainment_workbook_course_setup_v2(
     Raises:
         None.
     """
-    try:
-        import xlsxwriter
-        from openpyxl import load_workbook
-    except Exception as exc:  # pragma: no cover - guarded by runtime dependency availability
-        raise AppSystemError("openpyxl and xlsxwriter are required for CO attainment calculation.") from exc
+    xlsxwriter = import_runtime_dependency("xlsxwriter")
+    openpyxl = import_runtime_dependency("openpyxl")
+    load_workbook = openpyxl.load_workbook
 
     resolved_total_outcomes = int(total_outcomes or 0)
     if resolved_total_outcomes <= 0:
@@ -2800,6 +3243,8 @@ def _generate_co_attainment_workbook_course_setup_v2(
     duplicate_entries: list[tuple[str, str, str]] = []
     inner_join_drop_count = 0
     inner_join_drop_details: list[str] = []
+    generated_word_report_path: Path | None = None
+    word_report_error_key: str | None = None
     level_thresholds = _attainment_thresholds(thresholds)
     target_percent, target_level = _co_attainment_target(
         co_attainment_percent=co_attainment_percent,
@@ -3042,12 +3487,38 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 output_workbook.close()
             except Exception:
                 _logger.debug("Suppressing workbook close error during cleanup.", exc_info=True)
+    if generate_word_report:
+        try:
+            course_code = str(metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")).strip()
+            co_rows = _build_co_word_summary_rows(
+                pending_rows=pending_rows,
+                output_states=output_states,
+                total_outcomes=resolved_total_outcomes,
+                course_code=course_code,
+                co_attainment_level=target_level,
+                co_attainment_percent=target_percent,
+            )
+            resolved_word_output = word_output_path or output_path.with_name(f"{output_path.stem}_Report.docx")
+            generated_word_report_path = _generate_co_attainment_word_report(
+                output_path=resolved_word_output,
+                metadata=metadata,
+                thresholds=level_thresholds,
+                co_attainment_percent=target_percent,
+                co_attainment_level=target_level,
+                total_outcomes=resolved_total_outcomes,
+                co_rows=co_rows,
+            )
+        except Exception:
+            word_report_error_key = "co_analysis.status.word_report_generate_failed"
+            _logger.exception("CO analysis Word report generation failed.")
     return _CoAttainmentWorkbookResult(
         output_path=output_path,
         duplicate_reg_count=duplicate_reg_count,
         duplicate_entries=tuple(duplicate_entries),
         inner_join_drop_count=inner_join_drop_count,
         inner_join_drop_details=tuple(inner_join_drop_details),
+        word_report_path=generated_word_report_path,
+        word_report_error_key=word_report_error_key,
     )
 
 
@@ -3061,6 +3532,8 @@ def generate_co_attainment_workbook(
     thresholds: tuple[float, float, float] | None = None,
     co_attainment_percent: float | None = None,
     co_attainment_level: int | None = None,
+    generate_word_report: bool = False,
+    word_output_path: Path | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook.
     
@@ -3073,6 +3546,8 @@ def generate_co_attainment_workbook(
         thresholds: Parameter value (tuple[float, float, float] | None).
         co_attainment_percent: Parameter value (float | None).
         co_attainment_level: Parameter value (int | None).
+        generate_word_report: Parameter value (bool).
+        word_output_path: Parameter value (Path | None).
     
     Returns:
         _CoAttainmentWorkbookResult: Return value.
@@ -3131,6 +3606,8 @@ def generate_co_attainment_workbook(
                 thresholds=thresholds,
                 co_attainment_percent=co_attainment_percent,
                 co_attainment_level=co_attainment_level,
+                generate_word_report=generate_word_report,
+                word_output_path=word_output_path,
             )
         raise validation_error_from_key(
             "validation.template.unknown",
@@ -3169,13 +3646,7 @@ def generate_final_report_workbook(
             code="WORKBOOK_NOT_FOUND",
             workbook=str(filled_marks_path),
         )
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "validation.dependency.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+    openpyxl = import_runtime_dependency("openpyxl")
 
     source_wb = openpyxl.load_workbook(filled_marks_path, data_only=False)
     try:

@@ -54,6 +54,8 @@ def test_strategy_generate_workbook_routes_co_attainment_to_generator(
             "thresholds": (40.0, 60.0, 75.0),
             "co_attainment_percent": 80.0,
             "co_attainment_level": 2,
+            "generate_word_report": True,
+            "word_output_path": tmp_path / "co_attainment_report.docx",
         }
 
     def _fake_generator():
@@ -113,6 +115,8 @@ def test_strategy_generate_workbook_routes_co_attainment_to_generator(
     assert captured["source_paths"] == [tmp_path / "source.xlsx"]
     assert captured["co_attainment_percent"] == 80.0
     assert captured["co_attainment_level"] == 2
+    assert captured["generate_word_report"] is True
+    assert captured["word_output_path"] == tmp_path / "co_attainment_report.docx"
 
 
 def test_strategy_generate_workbook_co_attainment_requires_source_paths(tmp_path: Path) -> None:

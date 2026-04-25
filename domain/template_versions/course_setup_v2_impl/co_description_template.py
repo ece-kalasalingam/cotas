@@ -26,6 +26,7 @@ from common.registry import (
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     get_sheet_schema_by_key,
 )
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl import (
@@ -53,13 +54,7 @@ def generate_co_description_template(
     Raises:
         None.
     """
-    try:
-        import xlsxwriter
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "instructor.validation.xlsxwriter_missing",
-            code="XLSXWRITER_MISSING",
-        ) from exc
+    xlsxwriter = import_runtime_dependency("xlsxwriter")
 
     metadata_schema = get_sheet_schema_by_key(ID_COURSE_SETUP, COURSE_SETUP_SHEET_KEY_COURSE_METADATA)
     if metadata_schema is None:

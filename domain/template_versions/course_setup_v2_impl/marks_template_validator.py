@@ -38,6 +38,7 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import assert_not_symlink_path, coerce_excel_number, normalize
 from common.workbook_integrity.workbook_signing import sign_payload
 from domain.template_versions.course_setup_v2_impl import (
@@ -607,13 +608,7 @@ def _validate_filled_marks_workbook_impl(
         read_valid_system_workbook_payload,
     )
 
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "validation.dependency.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+    openpyxl = import_runtime_dependency("openpyxl")
 
     workbook_file = Path(workbook_path)
     if not workbook_file.exists():

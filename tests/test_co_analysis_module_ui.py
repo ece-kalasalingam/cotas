@@ -230,6 +230,230 @@ def test_submit_shows_threshold_violation_when_invalid(
     _dispose_widget(module, qapp)
 
 
+def test_word_report_toggle_defaults_enabled(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
+    """Test word report toggle defaults enabled.
+
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    assert module.generate_word_report_checkbox.isChecked() is True
+    _dispose_widget(module, qapp)
+
+
+def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test prepare co analysis passes word report context and records docx output.
+
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    module, seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    captured: dict[str, object] = {}
+    notify_events: list[tuple[str, dict[str, object]]] = []
+    original_notify = module._runtime.notify_message_key
+
+    def _capture_notify(text_key: str, **kwargs: object) -> None:
+        notify_events.append((text_key, dict(kwargs)))
+        original_notify(text_key, **kwargs)
+
+    monkeypatch.setattr(module._runtime, "notify_message_key", _capture_notify)
+    monkeypatch.setattr(
+        co_analysis_ui.QFileDialog,
+        "getExistingDirectory",
+        lambda *_args, **_kwargs: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "extract_course_metadata_and_students_from_workbook_path",
+        lambda _path: (
+            set(),
+            {
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_COURSE_CODE_KEY): "CSE101",
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_ACADEMIC_YEAR_KEY): "2025-26",
+            },
+        ),
+    )
+
+    def _fake_generate_workbook(**kwargs):
+        captured.update(kwargs)
+        return type(
+            "_Result",
+            (),
+            {
+                "output_path": str(tmp_path / "CSE101_2025-26_CO_Analysis.xlsx"),
+                "word_report_path": str(tmp_path / "CSE101_2025-26_CO_Analysis_Report.docx"),
+            },
+        )()
+
+    monkeypatch.setattr(co_analysis_ui, "generate_workbook", _fake_generate_workbook)
+    module._prepare_co_analysis_async()
+    qapp.processEvents()
+
+    context = dict(captured.get("context", {}))
+    assert context.get("generate_word_report") is True
+    assert str(context.get("word_output_path", "")).endswith("CSE101_2025-26_CO_Analysis_Report.docx")
+    assert "co_analysis.status.output_generated_excel" in seen_keys
+    assert "co_analysis.status.output_generated_word" in seen_keys
+    assert "co_analysis.status.word_report_generated" in seen_keys
+    assert any(
+        key == "co_analysis.status.word_report_generated"
+        and "toast" in tuple(event_kwargs.get("channels", ()))
+        for key, event_kwargs in notify_events
+    )
+    output_items = module.get_shared_outputs_data().items
+    assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
+    assert any(item.label_key == "co_analysis.links.generated_word_output" for item in output_items)
+    assert any(path.suffix == ".docx" for path in module._downloaded_outputs)
+    _dispose_widget(module, qapp)
+
+
+def test_prepare_co_analysis_word_report_failure_emits_warning_and_keeps_excel_success(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test prepare co analysis word report failure emits warning and keeps excel success.
+
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    module, seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    notify_events: list[tuple[str, dict[str, object]]] = []
+    original_notify = module._runtime.notify_message_key
+
+    def _capture_notify(text_key: str, **kwargs: object) -> None:
+        notify_events.append((text_key, dict(kwargs)))
+        original_notify(text_key, **kwargs)
+
+    monkeypatch.setattr(module._runtime, "notify_message_key", _capture_notify)
+    monkeypatch.setattr(
+        co_analysis_ui.QFileDialog,
+        "getExistingDirectory",
+        lambda *_args, **_kwargs: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "extract_course_metadata_and_students_from_workbook_path",
+        lambda _path: (set(), {}),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "generate_workbook",
+        lambda **_kwargs: type(
+            "_Result",
+            (),
+            {
+                "output_path": str(tmp_path / "CO_Analysis.xlsx"),
+                "word_report_error_key": "co_analysis.status.word_report_generate_failed",
+            },
+        )(),
+    )
+    module._prepare_co_analysis_async()
+    qapp.processEvents()
+
+    assert "co_analysis.status.output_generated_excel" in seen_keys
+    assert "co_analysis.status.calculate_completed" in seen_keys
+    assert "co_analysis.status.word_report_generate_failed" in seen_keys
+    assert any(
+        key == "co_analysis.status.word_report_generate_failed"
+        and "toast" in tuple(event_kwargs.get("channels", ()))
+        for key, event_kwargs in notify_events
+    )
+    output_items = module.get_shared_outputs_data().items
+    assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
+    assert any(path.suffix == ".xlsx" for path in module._downloaded_outputs)
+    _dispose_widget(module, qapp)
+
+
+def test_prepare_co_analysis_prompts_for_existing_word_output_path(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test prepare co analysis prompts for existing word output path.
+
+    Args:
+        monkeypatch: Parameter value (pytest.MonkeyPatch).
+        qapp: Parameter value (QApplication).
+        tmp_path: Parameter value (Path).
+
+    Returns:
+        None.
+
+    Raises:
+        None.
+    """
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    default_word = tmp_path / "CSE101_2025-26_CO_Analysis_Report.docx"
+    default_word.write_text("existing", encoding="utf-8")
+    replacement_word = tmp_path / "CSE101_2025-26_CO_Analysis_Report_v2.docx"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        co_analysis_ui.QFileDialog,
+        "getExistingDirectory",
+        lambda *_args, **_kwargs: str(tmp_path),
+    )
+
+    def _fake_get_save_file_name(*_args, **_kwargs):
+        return (str(replacement_word), "Word Files (*.docx)")
+
+    monkeypatch.setattr(co_analysis_ui.QFileDialog, "getSaveFileName", _fake_get_save_file_name)
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "extract_course_metadata_and_students_from_workbook_path",
+        lambda _path: (
+            set(),
+            {
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_COURSE_CODE_KEY): "CSE101",
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_ACADEMIC_YEAR_KEY): "2025-26",
+            },
+        ),
+    )
+
+    def _fake_generate_workbook(**kwargs):
+        captured.update(kwargs)
+        return type("_Result", (), {"output_path": str(tmp_path / "CSE101_2025-26_CO_Analysis.xlsx")})()
+
+    monkeypatch.setattr(co_analysis_ui, "generate_workbook", _fake_generate_workbook)
+    module._prepare_co_analysis_async()
+    qapp.processEvents()
+
+    context = dict(captured.get("context", {}))
+    assert str(context.get("word_output_path", "")) == str(replacement_word)
+    _dispose_widget(module, qapp)
+
+
 def test_download_co_description_template_link_triggers_generation(
     monkeypatch: pytest.MonkeyPatch,
     qapp: QApplication,
@@ -390,4 +614,3 @@ def test_marks_upload_validation_emits_issue_and_summary_toast(
     )
     assert seen_keys == []
     _dispose_widget(module, qapp)
-

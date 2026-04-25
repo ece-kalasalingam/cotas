@@ -134,6 +134,7 @@ def test_fusion_style_runs_before_theme_setup(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(main_mod, "get_ui_language_preference", lambda _app_name: "en")
     monkeypatch.setattr(main_mod, "set_language", lambda _code: None)
     monkeypatch.setattr(main_mod, "_install_excepthook", lambda: None)
+    monkeypatch.setattr(main_mod, "_validate_startup_runtime_dependencies", lambda _app: None)
     monkeypatch.setattr(main_mod, "_validate_startup_workbook_password", lambda _app: 1)
 
     result = main_mod.main()

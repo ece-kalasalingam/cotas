@@ -14,6 +14,7 @@ from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.registry import get_blueprint as _registry_get_blueprint
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
@@ -31,13 +32,7 @@ def generate_course_details_template(
     cancel_token: CancellationToken | None = None,
 ) -> Path:
     """Generate and save COURSE_SETUP_V2 course-details template workbook."""
-    try:
-        import xlsxwriter
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "instructor.validation.xlsxwriter_missing",
-            code="XLSXWRITER_MISSING",
-        ) from exc
+    xlsxwriter = import_runtime_dependency("xlsxwriter")
 
     blueprint = _registry_get_blueprint(_TEMPLATE_ID)
     if blueprint is None:

@@ -326,6 +326,17 @@ def co_attainment_generation_inputs(
         if payload.get("co_attainment_level") is not None
         else None
     )
+    raw_generate_word_report = payload.get("generate_word_report", False)
+    if isinstance(raw_generate_word_report, bool):
+        generate_word_report = raw_generate_word_report
+    elif isinstance(raw_generate_word_report, (int, float)):
+        generate_word_report = bool(raw_generate_word_report)
+    elif isinstance(raw_generate_word_report, str):
+        generate_word_report = normalize(raw_generate_word_report) in {"1", "true", "yes", "y", "on"}
+    else:
+        generate_word_report = False
+    word_output_raw = str(payload.get("word_output_path") or "").strip()
+    word_output_path = Path(word_output_raw) if word_output_raw else None
     signature = final_report_signature_reader()(source_paths[0])
     resolved_template_id = default_template_id
     resolved_total_outcomes: int | None = None
@@ -348,6 +359,8 @@ def co_attainment_generation_inputs(
         "thresholds": thresholds,
         "co_attainment_percent": co_attainment_percent,
         "co_attainment_level": co_attainment_level,
+        "generate_word_report": generate_word_report,
+        "word_output_path": word_output_path,
     }
 
 

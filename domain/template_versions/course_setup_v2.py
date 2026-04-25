@@ -103,6 +103,8 @@ class CourseSetupV2Strategy:
                 thresholds=inputs["thresholds"],
                 co_attainment_percent=inputs["co_attainment_percent"],
                 co_attainment_level=inputs["co_attainment_level"],
+                generate_word_report=bool(inputs.get("generate_word_report", False)),
+                word_output_path=inputs.get("word_output_path"),
             )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",

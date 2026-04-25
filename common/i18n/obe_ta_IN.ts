@@ -59,6 +59,10 @@
       <translation>பணிப்புத்தகம் ரகசியம் கிடைக்கவில்லை. மென்பொருளை மீண்டும் நிறுவவும் அல்லது ஆதரவைக் தொடர்புகொள்ளவும்.</translation>
     </message>
     <message>
+      <source>app.startup.runtime_dependencies_missing</source>
+      <translation>தொடக்கம் நிறுத்தப்பட்டது: தேவையான runtime நூலகங்கள் இல்லை: {packages}. அவற்றை நிறுவி பயன்பாட்டை மீண்டும் தொடங்கவும்.</translation>
+    </message>
+    <message>
       <source>app.unexpected_error</source>
       <translation>எதிர்பாராத பிழை ஏற்பட்டது. பதிவு கோப்பை சரிபார்க்கவும்.</translation>
     </message>
@@ -224,6 +228,11 @@
       <translation>CO AT நிலை:</translation>
     </message>
     <message>
+      <source>co_analysis.generate_word_report.label</source>
+      <translation>Course Coordinator
+(.docx) அறிக்கையை உருவாக்கு</translation>
+    </message>
+    <message>
       <source>co_analysis.co_attainment.percent.label</source>
       <translation>CO AT%:</translation>
     </message>
@@ -279,6 +288,14 @@ course coordinator report க்காக, பாடநெறியின் ந
       <translation>பதிவிறக்கப்பட்ட வெளியீடு</translation>
     </message>
     <message>
+      <source>co_analysis.links.generated_excel_output</source>
+      <translation>உருவாக்கப்பட்ட Excel வெளியீடு</translation>
+    </message>
+    <message>
+      <source>co_analysis.links.generated_word_output</source>
+      <translation>உருவாக்கப்பட்ட Word வெளியீடு</translation>
+    </message>
+    <message>
       <source>co_analysis.regno_dedup.body</source>
       <translation>CO அடைவு உருவாக்கும்போது {count} நகல் பதிவு எண் பதிவுகள் நீக்கப்பட்டன.</translation>
     </message>
@@ -306,6 +323,26 @@ course coordinator report க்காக, பாடநெறியின் ந
     <message>
       <source>co_analysis.status.calculate_completed</source>
       <translation>CO அடைவு கணக்கீடு நிறைவடைந்து வெளியீட்டு பணிப்புத்தகம் உருவாக்கப்பட்டது.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_generated</source>
+      <translation>CO analysis Word அறிக்கை வெற்றிகரமாக உருவாக்கப்பட்டது.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_generate_failed</source>
+      <translation>CO analysis workbook உருவாக்கப்பட்டது, ஆனால் Word அறிக்கை உருவாக்க இயலவில்லை.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.word_report_not_generated</source>
+      <translation>CO analysis workbook உருவாக்கப்பட்டது, ஆனால் Word அறிக்கை உருவாக்கப்படவில்லை.</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.output_generated_excel</source>
+      <translation>உருவாக்கப்பட்ட Excel workbook: {path}</translation>
+    </message>
+    <message>
+      <source>co_analysis.status.output_generated_word</source>
+      <translation>உருவாக்கப்பட்ட Word அறிக்கை: {path}</translation>
     </message>
     <message>
       <source>co_analysis.status.cleared</source>
@@ -1226,6 +1263,10 @@ course coordinator report க்காக, பாடநெறியின் ந
     <message>
       <source>validation.dependency.xlsxwriter_missing</source>
       <translation>xlsxwriter நிறுவப்படவில்லை. பாட வார்ப்புருக்களை உருவாக்க அதை நிறுவவும்.</translation>
+    </message>
+    <message>
+      <source>validation.dependency.python_docx_missing</source>
+      <translation>python-docx நிறுவப்படவில்லை. Course Coordinator அறிக்கைகளை உருவாக்க அதை நிறுவவும்.</translation>
     </message>
     <message>
       <source>validation.layout.hash_mismatch</source>

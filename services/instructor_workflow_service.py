@@ -12,6 +12,7 @@ from common.constants import (
 from common.error_catalog import validation_error_from_key
 from common.exceptions import ValidationError
 from common.jobs import CancellationToken, JobContext
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import assert_not_symlink_path
 from domain.template_strategy_router import (
     generate_workbooks,
@@ -154,13 +155,7 @@ class InstructorWorkflowService(WorkflowServiceBase):
         Raises:
             None.
         """
-        try:
-            import openpyxl
-        except ModuleNotFoundError as exc:
-            raise validation_error_from_key(
-                "validation.dependency.openpyxl_missing",
-                code="OPENPYXL_MISSING",
-            ) from exc
+        openpyxl = import_runtime_dependency("openpyxl")
         source = Path(workbook_path)
         assert_not_symlink_path(source, context_key="workbook")
         try:
@@ -220,5 +215,4 @@ class InstructorWorkflowService(WorkflowServiceBase):
                 if first:
                     return Path(first)
         return InstructorWorkflowService._result_to_path(result, fallback=fallback)
-
 

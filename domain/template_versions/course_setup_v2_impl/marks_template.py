@@ -41,6 +41,7 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import (
     canonical_path_key,
     coerce_excel_number,
@@ -169,13 +170,7 @@ def _render_marks_template_to_output(
     Raises:
         None.
     """
-    try:
-        import xlsxwriter
-    except ModuleNotFoundError as exc:
-        raise _ve(
-            "instructor.validation.xlsxwriter_missing",
-            code="XLSXWRITER_MISSING",
-        ) from exc
+    xlsxwriter = import_runtime_dependency("xlsxwriter")
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -322,13 +317,7 @@ def generate_marks_templates_from_course_details_batch(
     Raises:
         None.
     """
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise _ve(
-            "instructor.validation.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+    openpyxl = import_runtime_dependency("openpyxl")
 
     output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)

@@ -55,6 +55,9 @@ QLabel#coordinatorThresholdL1Label {
     font-weight: 700;
     color: palette(text);
 }
+QCheckBox#coAnalysisWordReportToggle:hover {
+    text-decoration: none;
+}
 QScrollArea#coordinatorLeftScroll,
 QScrollArea#coordinatorRightScroll,
 QScrollArea#instructorLeftScroll,
@@ -253,4 +256,3 @@ def apply_global_ui_styles(app: QApplication) -> None:
     if merged_stylesheet == current_stylesheet:
         return
     set_stylesheet(merged_stylesheet)
-

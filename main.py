@@ -54,6 +54,7 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
+from common.runtime_dependency_guard import missing_runtime_dependency_packages
 from common.workbook_integrity.workbook_secret import ensure_workbook_secret_policy
 from main_window import MainWindow
 
@@ -576,6 +577,27 @@ def _validate_startup_workbook_password(app: QApplication) -> int | None:
     return 1
 
 
+def _validate_startup_runtime_dependencies(_app: QApplication) -> int | None:
+    """Validate required runtime dependencies before loading MainWindow."""
+    missing_packages = missing_runtime_dependency_packages()
+    if not missing_packages:
+        return None
+    message = t(
+        "app.startup.runtime_dependencies_missing",
+        packages=", ".join(missing_packages),
+    )
+    _logger.error(
+        "Startup blocked: required runtime dependencies are missing.",
+        extra={
+            "user_message": message,
+            "error_code": "MISSING_RUNTIME_DEPENDENCIES",
+            "missing_packages": list(missing_packages),
+        },
+    )
+    _show_startup_error_dialog(title=APP_NAME, message=message)
+    return 1
+
+
 def main() -> int:
     """Main.
     
@@ -608,6 +630,9 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
     _install_excepthook()
+    startup_dependency_error = _validate_startup_runtime_dependencies(app)
+    if startup_dependency_error is not None:
+        return startup_dependency_error
     startup_validation_error = _validate_startup_workbook_password(app)
     if startup_validation_error is not None:
         return startup_validation_error

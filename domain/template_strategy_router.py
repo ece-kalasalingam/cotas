@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping, Protocol
 
 from common.error_catalog import validation_error_from_key
 from common.jobs import CancellationToken
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import assert_not_symlink_path, normalize
 from common.workbook_integrity import (
     SystemWorkbookPayload,
@@ -39,6 +40,8 @@ class WorkbookGenerationResult:
     output_path: str
     output_url: str
     reason: str | None = None
+    word_report_path: str | None = None
+    word_report_error_key: str | None = None
 
 
 class _TemplateStrategy(Protocol):
@@ -577,12 +580,23 @@ def _normalize_generate_workbook_result(
     status = str(getattr(raw, "status", "generated")).strip() or "generated"
     reason_attr = getattr(raw, "reason", None)
     reason = str(reason_attr).strip() if isinstance(reason_attr, str) and reason_attr.strip() else None
+    raw_word_report = getattr(raw, "word_report_path", None)
+    if isinstance(raw_word_report, Path):
+        word_report_path: str | None = str(raw_word_report)
+    elif isinstance(raw_word_report, str) and raw_word_report.strip():
+        word_report_path = raw_word_report.strip()
+    else:
+        word_report_path = None
+    raw_word_error = getattr(raw, "word_report_error_key", None)
+    word_report_error_key = str(raw_word_error).strip() if isinstance(raw_word_error, str) and raw_word_error.strip() else None
     return WorkbookGenerationResult(
         status=status,
         workbook_path=output_value if status == "generated" else None,
         output_path=output_value,
         output_url=output_value,
         reason=reason,
+        word_report_path=word_report_path,
+        word_report_error_key=word_report_error_key,
     )
 
 
@@ -657,13 +671,7 @@ def resolve_template_id_from_workbook_path(workbook_path: str | Path) -> str:
     Raises:
         None.
     """
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "validation.dependency.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+    openpyxl = import_runtime_dependency("openpyxl")
     source = Path(workbook_path)
     assert_not_symlink_path(source, context_key="workbook")
     try:

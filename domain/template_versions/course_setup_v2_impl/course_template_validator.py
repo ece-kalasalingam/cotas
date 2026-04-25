@@ -31,6 +31,7 @@ from common.registry import (
     get_sheet_name_by_key,
     get_sheet_schema_by_key,
 )
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.sheet_schema import SheetSchema, ValidationRule
 from common.utils import (
@@ -339,13 +340,7 @@ def _validate_course_details_workbook_impl(
             business-rule validation fails.
         JobCancelledError: If cancellation is requested while validating.
     """
-    try:
-        import openpyxl
-    except ModuleNotFoundError as exc:
-        raise validation_error_from_key(
-            "validation.dependency.openpyxl_missing",
-            code="OPENPYXL_MISSING",
-        ) from exc
+    openpyxl = import_runtime_dependency("openpyxl")
 
     workbook_file = Path(workbook_path)
     if not workbook_file.exists():
@@ -1117,5 +1112,4 @@ __all__ = [
     "validate_course_details_rules",
     "validate_course_details_workbooks",
 ]
-
 
