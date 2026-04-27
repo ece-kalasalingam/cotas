@@ -216,7 +216,7 @@ if (-not (Test-Path -LiteralPath $distRoot)) {
 Copy-Item -LiteralPath $cipConfigSource -Destination $cipConfigTarget -Force
 Write-Host "Staged cip_config.json to $cipConfigTarget"
 
-$portableArchivePath = Join-Path $repoRoot "dist\portableexefile.zip"
+$portableArchivePath = Join-Path $repoRoot "dist\focus.zip"
 if (Test-Path -LiteralPath $portableArchivePath) {
     Remove-Item -LiteralPath $portableArchivePath -Force
 }
