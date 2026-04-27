@@ -198,6 +198,24 @@ if (-not $SkipBuild) {
     }
 }
 
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$cipConfigSource = Join-Path $repoRoot "cip_config.json"
+$distRoot = Join-Path $repoRoot "dist\focus"
+$cipConfigTarget = Join-Path $distRoot "cip_config.json"
+
+if (-not (Test-Path -LiteralPath $cipConfigSource)) {
+    Write-Error "Missing required cip_config.json at repo root. Aborting installer packaging."
+    exit 1
+}
+
+if (-not (Test-Path -LiteralPath $distRoot)) {
+    Write-Error "Missing PyInstaller output directory '$distRoot'. Aborting installer packaging."
+    exit 1
+}
+
+Copy-Item -LiteralPath $cipConfigSource -Destination $cipConfigTarget -Force
+Write-Host "Staged cip_config.json to $cipConfigTarget"
+
 $isccArgs = @(
     "/DAppVersion=$ResolvedAppVersion"
     "/DAppFileVersion=$ResolvedAppFileVersion"
