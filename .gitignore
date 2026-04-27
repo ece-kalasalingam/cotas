@@ -36,6 +36,9 @@ co_attainment_tmp/
 .mypy_cache/
 .ruff_cache/
 
+# CIP Worker config (contains shared app token — never commit)
+cip_config.json
+
 # Logs and local runtime files
 *.log
 *.log.*

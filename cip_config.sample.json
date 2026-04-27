@@ -1,0 +1,4 @@
+{
+  "worker_url": "https://cotas-cip.<your-subdomain>.workers.dev",
+  "app_token": "<paste-the-APP_TOKEN-value-you-set-in-Cloudflare>"
+}
