@@ -13,6 +13,15 @@ _dynamic_hiddenimports = []
 for _root in _DYNAMIC_IMPORT_ROOTS:
     _dynamic_hiddenimports.extend(collect_submodules(_root))
 
+# Runtime dependencies imported via guarded dynamic imports in app code.
+# Keep them explicit so startup dependency checks pass in frozen builds.
+_runtime_dependency_roots = (
+    'xlsxwriter',
+    'docx',
+)
+for _root in _runtime_dependency_roots:
+    _dynamic_hiddenimports.extend(collect_submodules(_root))
+
 a = Analysis(
     ['main.py'],
     pathex=[],
