@@ -1,8 +1,8 @@
 # UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 0, 0),
-    prodvers=(1, 1, 0, 0),
+    filevers=(1, 2, 3, 0),
+    prodvers=(1, 2, 3, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -18,12 +18,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'Focus'),
             StringStruct('FileDescription', 'Focus'),
-            StringStruct('FileVersion', '1.1.0.0'),
+            StringStruct('FileVersion', '1.2.3.0'),
             StringStruct('InternalName', 'focus'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026'),
             StringStruct('OriginalFilename', 'focus.exe'),
             StringStruct('ProductName', 'Focus'),
-            StringStruct('ProductVersion', '1.1.0.0')
+            StringStruct('ProductVersion', '1.2.3.0')
           ]
         )
       ]
