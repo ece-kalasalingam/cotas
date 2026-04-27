@@ -60,6 +60,8 @@ from common.qt_jobs import run_in_background
 from common.registry import (
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
+    COURSE_METADATA_SEMESTER_KEY,
+    COURSE_METADATA_TOTAL_OUTCOMES_KEY,
 )
 from common.ui_stylings import GLOBAL_QPUSHBUTTON_MIN_WIDTH
 from common.utils import (
@@ -169,6 +171,8 @@ class COAnalysisModule(QWidget):
         """
         super().__init__()
         self._files: list[Path] = []
+        self._marks_files: list[Path] = []
+        self._co_description_files: list[Path] = []
         self._downloaded_outputs: list[Path] = []
         self.state = BusyWorkflowState()
         self._threshold_violation_active = False
@@ -397,6 +401,7 @@ class COAnalysisModule(QWidget):
             """
         )
         self.generate_word_report_checkbox.setChecked(True)
+        self.generate_word_report_checkbox.toggled.connect(lambda _checked: self._refresh_ui())
         thresholds_layout.addWidget(self.generate_word_report_checkbox)
         left_layout.addLayout(thresholds_layout)
         left_layout.addStretch(1)
@@ -594,9 +599,11 @@ class COAnalysisModule(QWidget):
             None.
         """
         enabled = not self.state.busy
-        has_files = bool(self._files)
+        has_marks_files = bool(self._marks_files)
+        has_valid_co_description_selection = self._has_valid_co_description_selection()
         can_submit = (
-            has_files
+            has_marks_files
+            and has_valid_co_description_selection
             and self._has_valid_attainment_thresholds()
             and self._has_valid_co_attainment_target()
             and enabled
@@ -612,7 +619,7 @@ class COAnalysisModule(QWidget):
         self.co_attainment_level_input.setEnabled(True)
         self.generate_word_report_checkbox.setEnabled(True)
         self.drop_list.setEnabled(enabled)
-        self.clear_button.setEnabled(enabled and has_files)
+        self.clear_button.setEnabled(enabled and bool(self._files))
         self.calculate_button.setEnabled(can_submit)
         self._refresh_summary()
 
@@ -944,6 +951,22 @@ class COAnalysisModule(QWidget):
         self.drop_widget.set_summary_text_builder(lambda _count: t("co_analysis.summary", count=count))
         self.drop_widget.summary_label.setEnabled(count > 0)
 
+    def _has_valid_co_description_selection(self) -> bool:
+        """Return whether current CO-description selection satisfies submit policy."""
+        if not self.generate_word_report_checkbox.isChecked():
+            return True
+        return len(self._co_description_files) == 1
+
+    @staticmethod
+    def _cohort_signature_from_metadata(metadata: dict[str, str]) -> tuple[str, str, str, str]:
+        """Return normalized cohort signature from extracted metadata map."""
+        return (
+            normalize(metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")),
+            normalize(metadata.get(normalize(COURSE_METADATA_SEMESTER_KEY), "")),
+            normalize(metadata.get(normalize(COURSE_METADATA_ACADEMIC_YEAR_KEY), "")),
+            normalize(metadata.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "")),
+        )
+
     @staticmethod
     def _consume_marks_anomaly_warnings(template_id: str) -> list[str]:
         """Consume marks anomaly warnings.
@@ -1021,6 +1044,7 @@ class COAnalysisModule(QWidget):
 
         candidate_paths = [str(path).strip() for path in file_paths if str(path).strip()]
         process_name = t("co_analysis.status.processing_started")
+        require_single_co_description = self.generate_word_report_checkbox.isChecked()
         token = CancellationToken()
 
         def _work() -> dict[str, object]:
@@ -1035,21 +1059,126 @@ class COAnalysisModule(QWidget):
             Raises:
                 None.
             """
-            result = validate_workbooks(
+            marks_result = validate_workbooks(
                 template_id=ID_COURSE_SETUP,
                 workbook_paths=candidate_paths,
                 workbook_kind="marks_template",
             )
-            accepted_paths = [
-                str(path) for path in cast(list[object], result.get("valid_paths", [])) if str(path).strip()
+            co_description_result = validate_workbooks(
+                template_id=ID_COURSE_SETUP,
+                workbook_paths=candidate_paths,
+                workbook_kind="co_description",
+            )
+            marks_accepted_paths = [
+                str(path) for path in cast(list[object], marks_result.get("valid_paths", [])) if str(path).strip()
             ]
-            rejected_items = [
+            co_description_accepted_paths = [
+                str(path)
+                for path in cast(list[object], co_description_result.get("valid_paths", []))
+                if str(path).strip()
+            ]
+            marks_rejected_items = [
                 item
-                for item in cast(list[object], result.get("rejections", []))
+                for item in cast(list[object], marks_result.get("rejections", []))
                 if isinstance(item, dict)
             ]
+            co_description_rejected_items = [
+                item
+                for item in cast(list[object], co_description_result.get("rejections", []))
+                if isinstance(item, dict)
+            ]
+            marks_valid_keys = {canonical_path_key(path) for path in marks_accepted_paths}
+            co_description_valid_keys = {
+                canonical_path_key(path) for path in co_description_accepted_paths
+            }
+            marks_rejections_by_key = {
+                canonical_path_key(str(item.get("path", "")).strip()): item for item in marks_rejected_items
+            }
+            co_description_rejections_by_key = {
+                canonical_path_key(str(item.get("path", "")).strip()): item
+                for item in co_description_rejected_items
+            }
+
+            accepted_marks_paths: list[str] = []
+            accepted_co_description_paths: list[str] = []
+            accepted_paths: list[str] = []
+            rejected_items: list[dict[str, object]] = []
+
+            for path in candidate_paths:
+                key = canonical_path_key(path)
+                is_marks_valid = key in marks_valid_keys
+                is_co_description_valid = key in co_description_valid_keys
+                if is_co_description_valid:
+                    accepted_co_description_paths.append(path)
+                    accepted_paths.append(path)
+                    continue
+                if is_marks_valid:
+                    accepted_marks_paths.append(path)
+                    accepted_paths.append(path)
+                    continue
+                rejection = marks_rejections_by_key.get(key) or co_description_rejections_by_key.get(key)
+                if isinstance(rejection, dict):
+                    rejected_items.append(rejection)
+                    continue
+                rejection_payload = self._build_validation_rejection_payload(
+                    path_text=path,
+                    exc=validation_error_from_key(
+                        "validation.workbook.open_failed",
+                        code="WORKBOOK_OPEN_FAILED",
+                        workbook=path,
+                    ),
+                )
+                rejected_items.append(
+                    {
+                        "path": path,
+                        "reason_kind": "invalid",
+                        "issue": rejection_payload["issue"],
+                    }
+                )
+
+            if require_single_co_description and len(accepted_co_description_paths) > 1:
+                accepted_paths = [
+                    path
+                    for path in accepted_paths
+                    if canonical_path_key(path)
+                    not in {canonical_path_key(item) for item in accepted_co_description_paths}
+                ]
+                accepted_co_description_paths = []
+                for path in candidate_paths:
+                    if canonical_path_key(path) not in {
+                        canonical_path_key(item) for item in co_description_accepted_paths
+                    }:
+                        continue
+                    resolved = resolve_validation_issue(
+                        "CO_DESCRIPTION_SELECTION_INVALID",
+                        context={
+                            "workbook": path,
+                            "count": len(co_description_accepted_paths),
+                        },
+                        fallback_message=(
+                            "Exactly one CO description workbook is required when "
+                            "Course Coordinator report generation is enabled."
+                        ),
+                    )
+                    rejected_items.append(
+                        {
+                            "path": path,
+                            "reason_kind": "invalid",
+                            "issue": {
+                                "code": resolved.code,
+                                "category": resolved.category,
+                                "severity": resolved.severity,
+                                "translation_key": resolved.translation_key,
+                                "message": resolved.message,
+                                "context": dict(resolved.context),
+                            },
+                        }
+                    )
+
             anomaly_warnings = self._consume_marks_anomaly_warnings(ID_COURSE_SETUP)
             return {
+                "accepted_marks_paths": accepted_marks_paths,
+                "accepted_co_description_paths": accepted_co_description_paths,
                 "accepted_paths": accepted_paths,
                 "rejected_items": rejected_items,
                 "anomaly_warnings": anomaly_warnings,
@@ -1069,7 +1198,19 @@ class COAnalysisModule(QWidget):
                 None.
             """
             data = result if isinstance(result, dict) else {}
-            accepted_paths = [str(path) for path in cast(list[object], data.get("accepted_paths", [])) if str(path).strip()]
+            accepted_marks_paths = [
+                str(path)
+                for path in cast(list[object], data.get("accepted_marks_paths", []))
+                if str(path).strip()
+            ]
+            accepted_co_description_paths = [
+                str(path)
+                for path in cast(list[object], data.get("accepted_co_description_paths", []))
+                if str(path).strip()
+            ]
+            accepted_paths = [
+                str(path) for path in cast(list[object], data.get("accepted_paths", [])) if str(path).strip()
+            ]
             rejected_items = [
                 item
                 for item in cast(list[object], data.get("rejected_items", []))
@@ -1077,6 +1218,9 @@ class COAnalysisModule(QWidget):
             ]
             anomaly_warnings = [str(item) for item in cast(list[object], data.get("anomaly_warnings", [])) if str(item).strip()]
             original_paths = [str(path) for path in cast(list[object], data.get("original_paths", [])) if str(path).strip()]
+
+            self._marks_files = [Path(path) for path in accepted_marks_paths]
+            self._co_description_files = [Path(path) for path in accepted_co_description_paths]
 
             if accepted_paths != original_paths:
                 self._syncing_validated_files = True
@@ -1308,10 +1452,12 @@ class COAnalysisModule(QWidget):
         """
         if self.state.busy:
             return
-        if not self._files:
+        if not self._marks_files:
             return
         if not self._has_valid_attainment_thresholds() or not self._has_valid_co_attainment_target():
             self._notify_threshold_violation(force=False)
+            return
+        if not self._has_valid_co_description_selection():
             return
         self._prepare_co_analysis_async()
 
@@ -1327,7 +1473,7 @@ class COAnalysisModule(QWidget):
         Raises:
             None.
         """
-        if self.state.busy or not self._files:
+        if self.state.busy or not self._marks_files:
             return
 
         output_dir = QFileDialog.getExistingDirectory(
@@ -1339,7 +1485,7 @@ class COAnalysisModule(QWidget):
             return
         self._remember_dialog_dir_safe(output_dir)
 
-        first_metadata = extract_course_metadata_and_students_from_workbook_path(self._files[0])[1]
+        first_metadata = extract_course_metadata_and_students_from_workbook_path(self._marks_files[0])[1]
         course_code = sanitize_filename_token(
             first_metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")
         )
@@ -1393,12 +1539,56 @@ class COAnalysisModule(QWidget):
             token.raise_if_cancelled()
             validation_result = validate_workbooks(
                 template_id=ID_COURSE_SETUP,
-                workbook_paths=[str(path) for path in self._files],
+                workbook_paths=[str(path) for path in self._marks_files],
                 workbook_kind="marks_template",
             )
-            for workbook_path in [str(path) for path in self._files]:
+            for workbook_path in [str(path) for path in self._marks_files]:
                 self._raise_first_validation_issue(result=validation_result, workbook_path=workbook_path)
             _ = self._consume_marks_anomaly_warnings(ID_COURSE_SETUP)
+
+            co_description_path: str | None = None
+            if should_generate_word_report:
+                if len(self._co_description_files) != 1:
+                    raise validation_error_from_key(
+                        "common.validation_failed_invalid_data",
+                        code="CO_DESCRIPTION_SELECTION_INVALID",
+                        count=len(self._co_description_files),
+                    )
+                co_description_path = str(self._co_description_files[0])
+                co_description_validation_result = validate_workbooks(
+                    template_id=ID_COURSE_SETUP,
+                    workbook_paths=[co_description_path],
+                    workbook_kind="co_description",
+                )
+                self._raise_first_validation_issue(
+                    result=co_description_validation_result,
+                    workbook_path=co_description_path,
+                )
+
+                marks_metadata = extract_course_metadata_and_students_from_workbook_path(
+                    self._marks_files[0]
+                )[1]
+                co_description_metadata = extract_course_metadata_and_students_from_workbook_path(
+                    co_description_path
+                )[1]
+                marks_signature = self._cohort_signature_from_metadata(marks_metadata)
+                co_description_signature = self._cohort_signature_from_metadata(co_description_metadata)
+                if marks_signature != co_description_signature:
+                    mismatch_fields: list[str] = []
+                    if marks_signature[0] != co_description_signature[0]:
+                        mismatch_fields.append(COURSE_METADATA_COURSE_CODE_KEY)
+                    if marks_signature[1] != co_description_signature[1]:
+                        mismatch_fields.append(COURSE_METADATA_SEMESTER_KEY)
+                    if marks_signature[2] != co_description_signature[2]:
+                        mismatch_fields.append(COURSE_METADATA_ACADEMIC_YEAR_KEY)
+                    if marks_signature[3] != co_description_signature[3]:
+                        mismatch_fields.append(COURSE_METADATA_TOTAL_OUTCOMES_KEY)
+                    raise validation_error_from_key(
+                        "common.validation_failed_invalid_data",
+                        code="CO_DESCRIPTION_MARKS_COHORT_MISMATCH",
+                        fields=", ".join(mismatch_fields) if mismatch_fields else "cohort",
+                    )
+
             return generate_workbook(
                 template_id=ID_COURSE_SETUP,
                 output_path=output_path,
@@ -1406,7 +1596,8 @@ class COAnalysisModule(QWidget):
                 workbook_kind="co_attainment",
                 cancel_token=token,
                 context={
-                    "source_paths": [str(path) for path in self._files],
+                    "source_paths": [str(path) for path in self._marks_files],
+                    "co_description_path": co_description_path,
                     "thresholds": tuple(thresholds),
                     "co_attainment_percent": co_attainment_percent,
                     "co_attainment_level": co_attainment_level,
@@ -1496,6 +1687,11 @@ class COAnalysisModule(QWidget):
             self._runtime.emit_workbook_generation_feedback(
                 success_count=generated_excel_count,
                 failed_count=failed_word_count,
+                channels=(
+                    ("status", "activity_log")
+                    if should_generate_word_report
+                    else ("status", "activity_log", "toast")
+                ),
             )
 
         def _on_failure(exc: Exception) -> None:

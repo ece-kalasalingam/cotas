@@ -309,6 +309,30 @@ _VALIDATION_ISSUE_CATALOG: Mapping[str, ValidationIssueSpec] = {
         severity="warning",
         default_message="File skipped due to an unexpected validation failure.",
     ),
+    "CO_DESCRIPTION_TEMPLATE_DUPLICATE_PATH": ValidationIssueSpec(
+        code="CO_DESCRIPTION_TEMPLATE_DUPLICATE_PATH",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="duplicate",
+        severity="warning",
+        default_message="Duplicate file path skipped.",
+    ),
+    "CO_DESCRIPTION_TEMPLATE_COHORT_MISMATCH": ValidationIssueSpec(
+        code="CO_DESCRIPTION_TEMPLATE_COHORT_MISMATCH",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        severity="warning",
+        default_message=(
+            "File skipped because course cohort metadata does not match "
+            "(course code, semester, academic year, total outcomes must match)."
+        ),
+    ),
+    "CO_DESCRIPTION_TEMPLATE_UNEXPECTED_REJECTION": ValidationIssueSpec(
+        code="CO_DESCRIPTION_TEMPLATE_UNEXPECTED_REJECTION",
+        translation_key=_DEFAULT_TRANSLATION_KEY,
+        category="validation",
+        severity="warning",
+        default_message="File skipped due to an unexpected validation failure.",
+    ),
 }
 
 

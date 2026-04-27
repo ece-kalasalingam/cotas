@@ -63,6 +63,38 @@ def test_router_accepts_marks_template_batch_validation(monkeypatch: pytest.Monk
     assert captured["workbook_kind"] == "marks_template"
 
 
+def test_router_accepts_co_description_batch_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test router accepts CO-description template batch validation."""
+    captured: dict[str, object] = {}
+
+    class _DummyStrategy:
+        def validate_workbooks(
+            self,
+            *,
+            template_id: str,
+            workbook_kind: str,
+            workbook_paths: list[str],
+            cancel_token: object | None = None,
+            context: object | None = None,
+        ) -> dict[str, object]:
+            del cancel_token
+            del context
+            captured["template_id"] = template_id
+            captured["workbook_kind"] = workbook_kind
+            captured["workbook_paths"] = workbook_paths
+            return {"valid_paths": list(workbook_paths)}
+
+    monkeypatch.setattr(router, "get_template_strategy", lambda _template_id: _DummyStrategy())
+    result = router.validate_workbooks(
+        template_id="COURSE_SETUP_V2",
+        workbook_paths=["co_description.xlsx"],
+        workbook_kind="co_description",
+    )
+
+    assert result["valid_paths"] == ["co_description.xlsx"]
+    assert captured["workbook_kind"] == "co_description"
+
+
 def test_router_rejects_unsupported_batch_validation_kind() -> None:
     """Test router rejects unsupported batch validation kind.
     

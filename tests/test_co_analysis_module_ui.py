@@ -95,7 +95,20 @@ def _build_module_with_message_capture(
         co_analysis_ui,
         "validate_workbooks",
         lambda **kwargs: {
-            "valid_paths": list(kwargs.get("workbook_paths", [])),
+            "valid_paths": [
+                str(path)
+                for path in list(kwargs.get("workbook_paths", []))
+                if (
+                    (
+                        str(kwargs.get("workbook_kind", "")).strip() == "marks_template"
+                        and "co_description" not in Path(str(path)).name.lower()
+                    )
+                    or (
+                        str(kwargs.get("workbook_kind", "")).strip() == "co_description"
+                        and "co_description" in Path(str(path)).name.lower()
+                    )
+                )
+            ],
             "rejections": [],
             "invalid_paths": [],
         },
@@ -155,6 +168,7 @@ def test_drop_widget_syncs_files_and_clear(monkeypatch: pytest.MonkeyPatch, qapp
     """
     module, _seen_keys = _build_module_with_message_capture(monkeypatch)
     module.drop_widget.add_files(["C:/a.xlsx", "C:/b.xlsx"], emit_drop=True)
+    module.generate_word_report_checkbox.setChecked(False)
     assert module._files == [Path("C:/a.xlsx"), Path("C:/b.xlsx")]
     assert module.clear_button.isEnabled() is True
     assert module.calculate_button.isEnabled() is True
@@ -199,6 +213,7 @@ def test_submit_triggers_async_save_workbook(monkeypatch: pytest.MonkeyPatch, qa
 
     monkeypatch.setattr(module, "_prepare_co_analysis_async", _fake_prepare_co_analysis_async)
     module.drop_widget.add_files(["C:/a.xlsx"], emit_drop=True)
+    module.generate_word_report_checkbox.setChecked(False)
     module._on_submit_requested()
     assert called["count"] == 1
     _dispose_widget(module, qapp)
@@ -267,7 +282,13 @@ def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
         None.
     """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
-    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    module.drop_widget.add_files(
+        [
+            str(tmp_path / "source.xlsx"),
+            str(tmp_path / "co_description.xlsx"),
+        ],
+        emit_drop=True,
+    )
     captured: dict[str, object] = {}
     notify_events: list[tuple[str, dict[str, object]]] = []
     original_notify = module._runtime.notify_message_key
@@ -311,6 +332,7 @@ def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
 
     context = dict(captured.get("context", {}))
     assert context.get("generate_word_report") is True
+    assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
     assert str(context.get("word_output_path", "")).endswith("CSE101_2025-26_CO_Analysis_Report.docx")
     assert "co_analysis.status.output_generated_excel" in seen_keys
     assert "co_analysis.status.output_generated_word" in seen_keys
@@ -346,7 +368,13 @@ def test_prepare_co_analysis_word_report_failure_emits_warning_and_keeps_excel_s
         None.
     """
     module, seen_keys = _build_module_with_message_capture(monkeypatch)
-    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    module.drop_widget.add_files(
+        [
+            str(tmp_path / "source.xlsx"),
+            str(tmp_path / "co_description.xlsx"),
+        ],
+        emit_drop=True,
+    )
     notify_events: list[tuple[str, dict[str, object]]] = []
     original_notify = module._runtime.notify_message_key
 
@@ -413,7 +441,13 @@ def test_prepare_co_analysis_prompts_for_existing_word_output_path(
         None.
     """
     module, _seen_keys = _build_module_with_message_capture(monkeypatch)
-    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    module.drop_widget.add_files(
+        [
+            str(tmp_path / "source.xlsx"),
+            str(tmp_path / "co_description.xlsx"),
+        ],
+        emit_drop=True,
+    )
     default_word = tmp_path / "CSE101_2025-26_CO_Analysis_Report.docx"
     default_word.write_text("existing", encoding="utf-8")
     replacement_word = tmp_path / "CSE101_2025-26_CO_Analysis_Report_v2.docx"
@@ -450,7 +484,129 @@ def test_prepare_co_analysis_prompts_for_existing_word_output_path(
     qapp.processEvents()
 
     context = dict(captured.get("context", {}))
+    assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
     assert str(context.get("word_output_path", "")) == str(replacement_word)
+    _dispose_widget(module, qapp)
+
+
+def test_submit_blocked_when_word_report_enabled_without_co_description(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test submit is blocked when report toggle is on and CO-description file is missing."""
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    called: dict[str, object] = {"started": False}
+    monkeypatch.setattr(module, "_prepare_co_analysis_async", lambda: called.update(started=True))
+
+    module.generate_word_report_checkbox.setChecked(True)
+    module._on_submit_requested()
+    qapp.processEvents()
+
+    assert called["started"] is False
+    _dispose_widget(module, qapp)
+
+
+def test_submit_blocked_when_multiple_co_description_files_uploaded(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test submit is blocked when more than one CO-description file is uploaded with report toggle on."""
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files(
+        [
+            str(tmp_path / "source.xlsx"),
+            str(tmp_path / "co_description_a.xlsx"),
+            str(tmp_path / "co_description_b.xlsx"),
+        ],
+        emit_drop=True,
+    )
+    called: dict[str, object] = {"started": False}
+    monkeypatch.setattr(module, "_prepare_co_analysis_async", lambda: called.update(started=True))
+
+    module.generate_word_report_checkbox.setChecked(True)
+    module._on_submit_requested()
+    qapp.processEvents()
+
+    assert called["started"] is False
+    _dispose_widget(module, qapp)
+
+
+def test_submit_allows_marks_only_when_word_report_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test submit proceeds with marks-only upload when report toggle is off."""
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    called: dict[str, object] = {"started": False}
+    monkeypatch.setattr(module, "_prepare_co_analysis_async", lambda: called.update(started=True))
+
+    module.generate_word_report_checkbox.setChecked(False)
+    module._on_submit_requested()
+    qapp.processEvents()
+
+    assert called["started"] is True
+    _dispose_widget(module, qapp)
+
+
+def test_prepare_co_analysis_with_word_toggle_off_emits_summary_toast(
+    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Test generation feedback includes toast when word-report toggle is disabled."""
+    module, _seen_keys = _build_module_with_message_capture(monkeypatch)
+    module.drop_widget.add_files([str(tmp_path / "source.xlsx")], emit_drop=True)
+    module.generate_word_report_checkbox.setChecked(False)
+    captured_feedback: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        co_analysis_ui.QFileDialog,
+        "getExistingDirectory",
+        lambda *_args, **_kwargs: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "extract_course_metadata_and_students_from_workbook_path",
+        lambda _path: (
+            set(),
+            {
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_COURSE_CODE_KEY): "CSE101",
+                co_analysis_ui.normalize(co_analysis_ui.COURSE_METADATA_ACADEMIC_YEAR_KEY): "2025-26",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "generate_workbook",
+        lambda **_kwargs: type(
+            "_Result",
+            (),
+            {"output_path": str(tmp_path / "CSE101_2025-26_CO_Analysis.xlsx")},
+        )(),
+    )
+
+    def _capture_emit_workbook_generation_feedback(*, success_count: int, failed_count: int, channels):
+        captured_feedback["success_count"] = success_count
+        captured_feedback["failed_count"] = failed_count
+        captured_feedback["channels"] = tuple(channels)
+
+    monkeypatch.setattr(
+        module._runtime,
+        "emit_workbook_generation_feedback",
+        _capture_emit_workbook_generation_feedback,
+    )
+
+    module._prepare_co_analysis_async()
+    qapp.processEvents()
+
+    assert captured_feedback["success_count"] == 1
+    assert captured_feedback["failed_count"] == 0
+    assert captured_feedback["channels"] == ("status", "activity_log", "toast")
     _dispose_widget(module, qapp)
 
 

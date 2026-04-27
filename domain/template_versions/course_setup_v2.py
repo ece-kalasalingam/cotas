@@ -105,6 +105,7 @@ class CourseSetupV2Strategy:
                 co_attainment_level=inputs["co_attainment_level"],
                 generate_word_report=bool(inputs.get("generate_word_report", False)),
                 word_output_path=inputs.get("word_output_path"),
+                co_description_path=inputs.get("co_description_path"),
             )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",
@@ -149,6 +150,12 @@ class CourseSetupV2Strategy:
             )
         if kind == "marks_template":
             return _bindings.marks_template_batch_validator()(
+                workbook_paths=workbook_paths,
+                template_id=self.template_id,
+                cancel_token=cancel_token,
+            )
+        if kind == "co_description":
+            return _bindings.co_description_batch_validator()(
                 workbook_paths=workbook_paths,
                 template_id=self.template_id,
                 cancel_token=cancel_token,

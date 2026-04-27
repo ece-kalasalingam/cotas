@@ -31,12 +31,14 @@ def test_co_attainment_generation_inputs_parses_word_report_settings(
             "source_paths": [str(source_path)],
             "generate_word_report": True,
             "word_output_path": str(tmp_path / "co_report.docx"),
+            "co_description_path": str(tmp_path / "co_description.xlsx"),
         },
         output_path=tmp_path / "co_attainment.xlsx",
         default_template_id="COURSE_SETUP_V2",
     )
     assert result["generate_word_report"] is True
     assert result["word_output_path"] == tmp_path / "co_report.docx"
+    assert result["co_description_path"] == tmp_path / "co_description.xlsx"
 
 
 def test_co_attainment_generation_inputs_disables_word_report_for_false_string(
@@ -62,9 +64,11 @@ def test_co_attainment_generation_inputs_disables_word_report_for_false_string(
         context={
             "source_paths": [str(source_path)],
             "generate_word_report": "false",
+            "co_description_path": str(tmp_path / "co_description.xlsx"),
         },
         output_path=tmp_path / "co_attainment.xlsx",
         default_template_id="COURSE_SETUP_V2",
     )
     assert result["generate_word_report"] is False
     assert result["word_output_path"] is None
+    assert result["co_description_path"] == tmp_path / "co_description.xlsx"

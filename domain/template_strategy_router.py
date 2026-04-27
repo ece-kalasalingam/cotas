@@ -196,7 +196,7 @@ _ACTIVE_TEMPLATE_IDS = ("COURSE_SETUP_V2",)
 _ACTIVE_TEMPLATE_IDS_NORMALIZED = frozenset(normalize(item) for item in _ACTIVE_TEMPLATE_IDS)
 _SINGLE_GENERATION_KINDS = ("course_details_template", "co_description_template", "co_attainment")
 _BATCH_GENERATION_KIND = "marks_template"
-_BATCH_VALIDATION_KINDS = frozenset({"course_details", "marks_template"})
+_BATCH_VALIDATION_KINDS = frozenset({"course_details", "marks_template", "co_description"})
 
 
 def _tokenize_template_id(template_id: str) -> list[str]:

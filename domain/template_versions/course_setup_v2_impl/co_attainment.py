@@ -63,7 +63,7 @@ from common.excel_sheet_layout import (
     write_sheet_footer_xlsxwriter,
     write_two_column_metadata_rows,
 )
-from common.exceptions import AppSystemError
+from common.exceptions import AppSystemError, ValidationError
 from common.jobs import CancellationToken
 from common.registry import (
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
@@ -72,6 +72,7 @@ from common.registry import (
     COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_TOTAL_OUTCOMES_KEY,
     COURSE_SETUP_SHEET_KEY_ASSESSMENT_CONFIG,
+    COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION,
     COURSE_SETUP_SHEET_KEY_COURSE_METADATA,
     COURSE_SETUP_SHEET_KEY_STUDENTS,
 )
@@ -122,6 +123,9 @@ from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator imp
 from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
     write_co_outcome_sheets,
     write_co_outcome_sheets_openpyxl,
+)
+from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
+    validate_co_description_workbooks,
 )
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -2431,6 +2435,122 @@ def _metadata_report_value(metadata: dict[str, str], key: str) -> str:
     return str(metadata.get(normalize(key), "")).strip()
 
 
+def _raise_first_validation_issue_from_result(*, result: dict[str, object], workbook_path: str) -> None:
+    """Raise first validation issue for workbook from batch validator payload."""
+    workbook_key = canonical_path_key(workbook_path)
+    valid_paths_raw = result.get("valid_paths", [])
+    valid_paths = [str(path) for path in valid_paths_raw] if isinstance(valid_paths_raw, list) else []
+    valid_keys = {canonical_path_key(path) for path in valid_paths}
+    if workbook_key in valid_keys:
+        return
+    rejections_raw = result.get("rejections", [])
+    rejection_items = [item for item in rejections_raw if isinstance(item, dict)] if isinstance(rejections_raw, list) else []
+    for item in rejection_items:
+        if canonical_path_key(str(item.get("path", "")).strip()) != workbook_key:
+            continue
+        issue = item.get("issue", {})
+        if not isinstance(issue, dict):
+            continue
+        code = str(issue.get("code", "VALIDATION_ERROR")).strip() or "VALIDATION_ERROR"
+        message = str(issue.get("message", code)).strip() or code
+        context = issue.get("context", {})
+        context_dict = dict(context) if isinstance(context, dict) else {}
+        raise ValidationError(message, code=code, context=context_dict)
+    raise validation_error_from_key(
+        "validation.workbook.open_failed",
+        code="WORKBOOK_OPEN_FAILED",
+        workbook=workbook_path,
+    )
+
+
+def _validated_co_description_sentences(
+    *,
+    co_description_path: Path,
+    template_id: str,
+    total_outcomes: int,
+    token: CancellationToken | None = None,
+) -> list[str]:
+    """Validate CO-description workbook and return CO description sentences ordered by CO#."""
+    if token is not None:
+        token.raise_if_cancelled()
+    result = validate_co_description_workbooks(
+        workbook_paths=[str(co_description_path)],
+        template_id=template_id,
+        cancel_token=token,
+    )
+    _raise_first_validation_issue_from_result(result=result, workbook_path=str(co_description_path))
+    metadata_map = extract_course_metadata_and_students_from_workbook_path(co_description_path)[1]
+    total_token = metadata_map.get(normalize(COURSE_METADATA_TOTAL_OUTCOMES_KEY), "")
+    parsed_total = coerce_excel_number(total_token)
+    if isinstance(parsed_total, bool) or not isinstance(parsed_total, (int, float)):
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="COA_TOTAL_OUTCOMES_MISSING",
+        )
+    if int(parsed_total) != int(total_outcomes):
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="CO_DESCRIPTION_MARKS_COHORT_MISMATCH",
+            fields=COURSE_METADATA_TOTAL_OUTCOMES_KEY,
+        )
+
+    openpyxl = import_runtime_dependency("openpyxl")
+    workbook = openpyxl.load_workbook(co_description_path, data_only=True, read_only=True)
+    try:
+        validated_template_id = read_valid_template_id_from_system_hash_sheet(workbook)
+        sheet_name = get_sheet_name_by_key(validated_template_id, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+        if sheet_name not in workbook.sheetnames:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="SHEET_DATA_REQUIRED",
+                sheet_name=sheet_name,
+            )
+        sheet = workbook[sheet_name]
+        headers = {
+            normalize(sheet.cell(row=1, column=col).value): col
+            for col in range(1, int(sheet.max_column or 0) + 1)
+        }
+        co_col = int(headers.get("co#", 0) or 0)
+        description_col = int(headers.get("description", 0) or 0)
+        if co_col <= 0 or description_col <= 0:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="SCHEMA_COLUMN_KEY_MISSING",
+                sheet_name=sheet_name,
+            )
+        by_co: dict[int, str] = {}
+        for row in range(2, int(sheet.max_row or 0) + 1):
+            raw_co = sheet.cell(row=row, column=co_col).value
+            raw_description = sheet.cell(row=row, column=description_col).value
+            if normalize(raw_co) == "" and normalize(raw_description) == "":
+                continue
+            parsed_co = coerce_excel_number(raw_co)
+            if isinstance(parsed_co, bool) or not isinstance(parsed_co, (int, float)):
+                continue
+            co_value = int(parsed_co)
+            if co_value <= 0:
+                continue
+            description = str(raw_description or "").strip()
+            if not description:
+                continue
+            by_co[co_value] = description
+    finally:
+        workbook.close()
+    expected = set(range(1, int(total_outcomes) + 1))
+    found = set(by_co)
+    if found != expected:
+        missing = sorted(expected - found)
+        extras = sorted(found - expected)
+        raise validation_error_from_key(
+            "common.validation_failed_invalid_data",
+            code="CO_DESCRIPTION_CO_NUMBER_SET_MISMATCH",
+            expected=f"1..{int(total_outcomes)}",
+            missing=", ".join(str(value) for value in missing) if missing else "",
+            extras=", ".join(str(value) for value in extras) if extras else "",
+        )
+    return [by_co[index] for index in range(1, int(total_outcomes) + 1)]
+
+
 def _generate_co_attainment_word_report(
     *,
     output_path: Path,
@@ -2440,6 +2560,7 @@ def _generate_co_attainment_word_report(
     co_attainment_level: int,
     total_outcomes: int,
     co_rows: list[dict[str, str]],
+    co_sentences: list[str] | None = None,
 ) -> Path:
     """Generate CO attainment Word report document."""
     docx_mod = import_runtime_dependency("docx")
@@ -2567,6 +2688,32 @@ def _generate_co_attainment_word_report(
     )
     _style_paragraph(course_details_paragraph, justify=True)
 
+    if co_sentences:
+        _add_section_heading("Course Outcomes")
+        intro_paragraph = document.add_paragraph("The students will be able to:")
+        _style_paragraph(intro_paragraph, justify=True)
+        intro_paragraph.paragraph_format.space_before = Pt(0)
+        intro_paragraph.paragraph_format.space_after = Pt(0)
+        intro_paragraph.paragraph_format.line_spacing = 1.0
+        last_sentence_paragraph: Any | None = None
+        for index, sentence in enumerate(co_sentences, start=1):
+            normalized_sentence = str(sentence or "").strip()
+            if not normalized_sentence:
+                continue
+            if normalized_sentence.endswith("."):
+                line_text = f"CO{index}: {normalized_sentence}"
+            else:
+                line_text = f"CO{index}: {normalized_sentence}."
+            sentence_line_paragraph = document.add_paragraph(f"\t{line_text}")
+            _style_paragraph(sentence_line_paragraph, justify=True)
+            sentence_line_paragraph.paragraph_format.space_before = Pt(0)
+            sentence_line_paragraph.paragraph_format.space_after = Pt(0)
+            sentence_line_paragraph.paragraph_format.line_spacing = 1.0
+            last_sentence_paragraph = sentence_line_paragraph
+        if last_sentence_paragraph is not None:
+            # Restore normal visual separation after the final CO item.
+            last_sentence_paragraph.paragraph_format.space_after = Pt(12)
+
     _add_section_heading("Threshold Details")
     l1, l2, l3 = thresholds
     l2_policy_text = (
@@ -2637,27 +2784,18 @@ def _generate_co_attainment_word_report(
     )
     _style_paragraph(summary_para, justify=True)
 
-    co_table = document.add_table(rows=1, cols=5)
+    co_table = document.add_table(rows=1, cols=4)
     co_table.style = "Table Grid"
     co_table.rows[0].cells[0].text = "CO"
     co_table.rows[0].cells[1].text = "Overall"
     co_table.rows[0].cells[2].text = "Shortfall"
-    co_table.rows[0].cells[3].text = "Severity"
-    co_table.rows[0].cells[4].text = "Result"
+    co_table.rows[0].cells[3].text = "Result"
     for item in enriched_rows:
         cells = co_table.add_row().cells
         cells[0].text = item["co"]
         cells[1].text = item["overall"]
         cells[2].text = item["shortfall"]
-        cells[3].text = item["severity"]
-        cells[4].text = item["result"]
-
-    severity_note_para = document.add_paragraph(
-        "Severity is classified by CO attainment shortfall percentage only: "
-        "Low (up to 5%), Moderate (5%-15%), High (above 15%). "
-        f"Target used for this run: {co_attainment_percent:g}% of students at or above Level L{co_attainment_level}."
-    )
-    _style_paragraph(severity_note_para, justify=True)
+        cells[3].text = item["result"]
 
     _add_section_heading("Continuous Improvement Action Suggestions")
 
@@ -3192,6 +3330,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
     co_attainment_level: int | None = None,
     generate_word_report: bool = False,
     word_output_path: Path | None = None,
+    co_description_path: Path | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook course setup v2.
     
@@ -3206,6 +3345,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
         co_attainment_level: Parameter value (int | None).
         generate_word_report: Parameter value (bool).
         word_output_path: Parameter value (Path | None).
+        co_description_path: Parameter value (Path | None).
     
     Returns:
         _CoAttainmentWorkbookResult: Return value.
@@ -3489,6 +3629,11 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 _logger.debug("Suppressing workbook close error during cleanup.", exc_info=True)
     if generate_word_report:
         try:
+            if co_description_path is None:
+                raise validation_error_from_key(
+                    "common.validation_failed_invalid_data",
+                    code="CO_DESCRIPTION_SELECTION_INVALID",
+                )
             course_code = str(metadata.get(normalize(COURSE_METADATA_COURSE_CODE_KEY), "")).strip()
             co_rows = _build_co_word_summary_rows(
                 pending_rows=pending_rows,
@@ -3497,6 +3642,12 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 course_code=course_code,
                 co_attainment_level=target_level,
                 co_attainment_percent=target_percent,
+            )
+            co_sentences = _validated_co_description_sentences(
+                co_description_path=co_description_path,
+                template_id=template_id,
+                total_outcomes=resolved_total_outcomes,
+                token=token,
             )
             resolved_word_output = word_output_path or output_path.with_name(f"{output_path.stem}_Report.docx")
             generated_word_report_path = _generate_co_attainment_word_report(
@@ -3507,7 +3658,10 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 co_attainment_level=target_level,
                 total_outcomes=resolved_total_outcomes,
                 co_rows=co_rows,
+                co_sentences=co_sentences,
             )
+        except ValidationError:
+            raise
         except Exception:
             word_report_error_key = "co_analysis.status.word_report_generate_failed"
             _logger.exception("CO analysis Word report generation failed.")
@@ -3534,6 +3688,7 @@ def generate_co_attainment_workbook(
     co_attainment_level: int | None = None,
     generate_word_report: bool = False,
     word_output_path: Path | None = None,
+    co_description_path: Path | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook.
     
@@ -3548,6 +3703,7 @@ def generate_co_attainment_workbook(
         co_attainment_level: Parameter value (int | None).
         generate_word_report: Parameter value (bool).
         word_output_path: Parameter value (Path | None).
+        co_description_path: Parameter value (Path | None).
     
     Returns:
         _CoAttainmentWorkbookResult: Return value.
@@ -3608,6 +3764,7 @@ def generate_co_attainment_workbook(
                 co_attainment_level=co_attainment_level,
                 generate_word_report=generate_word_report,
                 word_output_path=word_output_path,
+                co_description_path=co_description_path,
             )
         raise validation_error_from_key(
             "validation.template.unknown",

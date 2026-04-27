@@ -5,6 +5,10 @@ from zipfile import ZipFile
 
 import pytest
 
+from common.constants import ID_COURSE_SETUP
+from common.exceptions import ValidationError
+from common.jobs import CancellationToken
+from domain.template_strategy_router import generate_workbook
 from domain.template_versions.course_setup_v2_impl import co_attainment
 
 
@@ -101,6 +105,10 @@ def test_generate_co_attainment_word_report_writes_docx(tmp_path: Path) -> None:
             {"co": "CSE101.1", "direct": "70%", "indirect": "68%", "overall": "75%", "result": "Attained"},
             {"co": "CSE101.2", "direct": "55%", "indirect": "58%", "overall": "50%", "result": "Yet to Attain"},
         ],
+        co_sentences=[
+            "Understand semiconductor devices",
+            "Analyze communication systems",
+        ],
     )
     assert generated == output_path
     assert output_path.exists()
@@ -112,9 +120,70 @@ def test_generate_co_attainment_word_report_writes_docx(tmp_path: Path) -> None:
     assert "2025-26" in document_xml
     assert "2 course outcomes (COs)" in document_xml or "2 COs" in document_xml
     assert "CO-wise Attainment Summary" in document_xml
-    assert "Severity" in document_xml
+    assert "Course Outcomes" in document_xml
+    assert "The students will be able to:" in document_xml
+    assert "CO1: Understand semiconductor devices." in document_xml
+    assert "CO2: Analyze communication systems." in document_xml
+    assert "Severity" not in document_xml
     assert "Identification of Shortfall COs" not in document_xml
     assert "Severity Classification" not in document_xml
-    assert "Severity is classified by CO attainment shortfall percentage only" in document_xml
+    assert "Severity is classified by CO attainment shortfall percentage only" not in document_xml
     assert "Recommended Corrective Actions" not in document_xml
     assert "Continuous Improvement Action Suggestions" in document_xml
+
+
+def _generate_co_description_template(path: Path) -> Path:
+    result = generate_workbook(
+        template_id=ID_COURSE_SETUP,
+        output_path=path,
+        workbook_name=path.name,
+        workbook_kind="co_description_template",
+    )
+    output = getattr(result, "output_path", None)
+    if isinstance(output, str) and output.strip():
+        return Path(output)
+    return path
+
+
+def _fill_co_descriptions(path: Path, *, total_outcomes: int = 6) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.load_workbook(path)
+    try:
+        sheet = workbook["CO_Description"]
+        for index in range(1, total_outcomes + 1):
+            row = index + 1
+            sheet.cell(row=row, column=1, value=index)
+            sheet.cell(row=row, column=2, value=f"CO{index} statement")
+            sheet.cell(row=row, column=3, value="K2")
+            sheet.cell(row=row, column=4, value=f"CO{index} summary " + ("x" * 120))
+        workbook.save(path)
+    finally:
+        workbook.close()
+
+
+def test_validated_co_description_sentences_reads_ordered_descriptions(tmp_path: Path) -> None:
+    workbook_path = _generate_co_description_template(tmp_path / "co_description.xlsx")
+    _fill_co_descriptions(workbook_path, total_outcomes=6)
+    sentences = co_attainment._validated_co_description_sentences(
+        co_description_path=workbook_path,
+        template_id=ID_COURSE_SETUP,
+        total_outcomes=6,
+        token=CancellationToken(),
+    )
+    assert sentences == [f"CO{index} statement" for index in range(1, 7)]
+
+
+def test_validated_co_description_sentences_rejects_total_outcomes_mismatch(tmp_path: Path) -> None:
+    workbook_path = _generate_co_description_template(tmp_path / "co_description_mismatch.xlsx")
+    _fill_co_descriptions(workbook_path, total_outcomes=6)
+    with pytest.raises(ValidationError) as excinfo:
+        co_attainment._validated_co_description_sentences(
+            co_description_path=workbook_path,
+            template_id=ID_COURSE_SETUP,
+            total_outcomes=5,
+            token=CancellationToken(),
+        )
+    assert getattr(excinfo.value, "code", "") in {
+        "CO_DESCRIPTION_MARKS_COHORT_MISMATCH",
+        "CO_DESCRIPTION_CO_NUMBER_SET_MISMATCH",
+    }

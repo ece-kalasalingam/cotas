@@ -147,6 +147,23 @@ def marks_template_batch_validator() -> Callable[..., dict[str, object]]:
 
 
 @lru_cache(maxsize=1)
+def co_description_batch_validator() -> Callable[..., dict[str, object]]:
+    """CO description batch validator."""
+    try:
+        from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
+            validate_co_description_workbooks,
+        )
+    except Exception as exc:
+        raise ConfigurationError("Unable to import V2 CO description template validator module.") from exc
+    fn = validate_co_description_workbooks
+    if not callable(fn):
+        raise ConfigurationError(
+            "V2 CO description template validator missing validate_co_description_workbooks()."
+        )
+    return cast(Callable[..., dict[str, object]], fn)
+
+
+@lru_cache(maxsize=1)
 def marks_template_warning_consumer() -> Callable[[], list[str]]:
     """Marks template warning consumer.
     
@@ -337,6 +354,8 @@ def co_attainment_generation_inputs(
         generate_word_report = False
     word_output_raw = str(payload.get("word_output_path") or "").strip()
     word_output_path = Path(word_output_raw) if word_output_raw else None
+    co_description_raw = str(payload.get("co_description_path") or "").strip()
+    co_description_path = Path(co_description_raw) if co_description_raw else None
     signature = final_report_signature_reader()(source_paths[0])
     resolved_template_id = default_template_id
     resolved_total_outcomes: int | None = None
@@ -361,6 +380,7 @@ def co_attainment_generation_inputs(
         "co_attainment_level": co_attainment_level,
         "generate_word_report": generate_word_report,
         "word_output_path": word_output_path,
+        "co_description_path": co_description_path,
     }
 
 
@@ -421,6 +441,7 @@ def output_path_overrides_from_context(
 __all__ = [
     "co_attainment_generation_inputs",
     "co_attainment_generator",
+    "co_description_batch_validator",
     "co_description_template_generator",
     "consume_last_marks_anomaly_warnings",
     "course_metadata_students_extractor",
