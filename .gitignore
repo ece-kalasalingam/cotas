@@ -39,6 +39,12 @@ co_attainment_tmp/
 # CIP Worker config (contains shared app token — never commit)
 cip_config.json
 
+# Wrangler local state (contains Cloudflare account ID — never commit)
+cloudflare/.wrangler/
+
+# Node.js local runtime artifact
+node
+
 # Logs and local runtime files
 *.log
 *.log.*
