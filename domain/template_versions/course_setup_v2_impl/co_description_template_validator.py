@@ -36,6 +36,7 @@ from domain.template_versions.course_setup_v2_impl.validation_batch_runner impor
 _CO_DESCRIPTION_HEADERS = {
     "co_number": "co#",
     "description": "description",
+    "domain_level": "domain_level",
     "summary": "summary_of_topics/expts./project",
 }
 
@@ -400,4 +401,89 @@ def _issue_dict(*, code: str, context: dict[str, Any], fallback_message: str) ->
         "context": dict(resolved.context),
     }
 
-__all__ = ["validate_co_description_workbooks"]
+
+@dataclass(frozen=True, slots=True)
+class CoDescriptionRecord:
+    co_number: int
+    description: str
+    domain_level: str
+    topics: str
+
+
+def read_co_description_records(
+    co_description_path: Path | str,
+    *,
+    template_id: str,
+    total_outcomes: int,
+    cancel_token: CancellationToken | None = None,
+) -> list[CoDescriptionRecord]:
+    """Read structured CO description records from an already-validated CO description workbook.
+
+    Returns one record per CO index from 1..total_outcomes, ordered by CO number.
+    Missing or unreadable rows produce empty-field records rather than raising.
+    """
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    openpyxl = import_runtime_dependency("openpyxl")
+    workbook_file = Path(co_description_path)
+    workbook = openpyxl.load_workbook(workbook_file, data_only=True, read_only=True)
+    try:
+        sheet_name = get_sheet_name_by_key(template_id, COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION)
+        if sheet_name not in workbook.sheetnames:
+            return _empty_records(total_outcomes)
+        sheet = workbook[sheet_name]
+        headers: dict[str, int] = {}
+        for col in range(1, int(sheet.max_column or 0) + 1):
+            raw = sheet.cell(row=1, column=col).value
+            if raw is not None:
+                headers[normalize(str(raw))] = col
+        co_col = headers.get(_CO_DESCRIPTION_HEADERS["co_number"], 0)
+        desc_col = headers.get(_CO_DESCRIPTION_HEADERS["description"], 0)
+        domain_col = headers.get(_CO_DESCRIPTION_HEADERS["domain_level"], 0)
+        topics_col = headers.get(_CO_DESCRIPTION_HEADERS["summary"], 0)
+        if co_col <= 0 or desc_col <= 0:
+            return _empty_records(total_outcomes)
+        by_co: dict[int, CoDescriptionRecord] = {}
+        for row in range(2, int(sheet.max_row or 0) + 1):
+            raw_co = sheet.cell(row=row, column=co_col).value
+            if normalize(raw_co) == "":
+                continue
+            parsed_co = coerce_excel_number(raw_co)
+            if isinstance(parsed_co, bool) or not isinstance(parsed_co, (int, float)):
+                continue
+            co_value = int(parsed_co)
+            if co_value <= 0 or co_value > total_outcomes:
+                continue
+            description = str(sheet.cell(row=row, column=desc_col).value or "").strip()
+            domain_level = (
+                str(sheet.cell(row=row, column=domain_col).value or "").strip().upper()
+                if domain_col > 0
+                else ""
+            )
+            topics = (
+                str(sheet.cell(row=row, column=topics_col).value or "").strip()
+                if topics_col > 0
+                else ""
+            )
+            by_co[co_value] = CoDescriptionRecord(
+                co_number=co_value,
+                description=description,
+                domain_level=domain_level,
+                topics=topics,
+            )
+    finally:
+        workbook.close()
+    return [
+        by_co.get(i, CoDescriptionRecord(co_number=i, description="", domain_level="", topics=""))
+        for i in range(1, total_outcomes + 1)
+    ]
+
+
+def _empty_records(total_outcomes: int) -> list[CoDescriptionRecord]:
+    return [
+        CoDescriptionRecord(co_number=i, description="", domain_level="", topics="")
+        for i in range(1, total_outcomes + 1)
+    ]
+
+
+__all__ = ["CoDescriptionRecord", "read_co_description_records", "validate_co_description_workbooks"]

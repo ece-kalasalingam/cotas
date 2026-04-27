@@ -124,7 +124,12 @@ from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator imp
     write_co_outcome_sheets,
     write_co_outcome_sheets_openpyxl,
 )
+from domain.template_versions.course_setup_v2_impl.co_cip_json_builder import (
+    build_cip_payload,
+)
 from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
+    CoDescriptionRecord as _CoDescriptionRecord,
+    read_co_description_records,
     validate_co_description_workbooks,
 )
 
@@ -225,6 +230,7 @@ class _CoAttainmentWorkbookResult:
     inner_join_drop_details: tuple[str, ...] = ()
     word_report_path: Path | None = None
     word_report_error_key: str | None = None
+    cip_payload: dict[str, object] | None = None
 
 
 class _RegisterDedupStore:
@@ -3385,6 +3391,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
     inner_join_drop_details: list[str] = []
     generated_word_report_path: Path | None = None
     word_report_error_key: str | None = None
+    generated_cip_payload: dict[str, object] | None = None
     level_thresholds = _attainment_thresholds(thresholds)
     target_percent, target_level = _co_attainment_target(
         co_attainment_percent=co_attainment_percent,
@@ -3649,7 +3656,52 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 total_outcomes=resolved_total_outcomes,
                 token=token,
             )
+            co_level_data: dict[int, tuple[int, dict[int, int]]] = {
+                co_idx: (state.attended, dict(state.level_counts))
+                for co_idx, state in output_states.items()
+            }
+            seen_direct: dict[str, float] = {}
+            for _cols in pending_direct_columns.values():
+                for _col in _cols:
+                    if _col.name not in seen_direct:
+                        seen_direct[_col.name] = _col.weight
+            seen_indirect: dict[str, float] = {}
+            for _cols in pending_indirect_columns.values():
+                for _col in _cols:
+                    if _col.name not in seen_indirect:
+                        seen_indirect[_col.name] = _col.weight
+            cip_assessments: list[dict[str, object]] = [
+                {"name": name, "wt": round(wt, 2), "d": True}
+                for name, wt in seen_direct.items()
+            ] + [
+                {"name": name, "wt": round(wt, 2), "d": False}
+                for name, wt in seen_indirect.items()
+            ]
+            co_desc_records: list[_CoDescriptionRecord] = read_co_description_records(
+                co_description_path,
+                template_id=template_id,
+                total_outcomes=resolved_total_outcomes,
+                cancel_token=token,
+            )
+            generated_cip_payload = build_cip_payload(
+                metadata=metadata,
+                thresholds=level_thresholds,
+                co_attainment_percent=target_percent,
+                co_attainment_level=target_level,
+                total_outcomes=resolved_total_outcomes,
+                co_rows=co_rows,
+                co_level_data=co_level_data,
+                assessments=cip_assessments,
+                co_description_records=co_desc_records,
+            )
             resolved_word_output = word_output_path or output_path.with_name(f"{output_path.stem}_Report.docx")
+            cip_json_path = resolved_word_output.with_name(
+                resolved_word_output.stem + "_CIP_Payload.json"
+            )
+            cip_json_path.write_text(
+                json.dumps(generated_cip_payload, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
             generated_word_report_path = _generate_co_attainment_word_report(
                 output_path=resolved_word_output,
                 metadata=metadata,
@@ -3673,6 +3725,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
         inner_join_drop_details=tuple(inner_join_drop_details),
         word_report_path=generated_word_report_path,
         word_report_error_key=word_report_error_key,
+        cip_payload=generated_cip_payload,
     )
 
 
