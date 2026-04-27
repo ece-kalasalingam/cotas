@@ -78,6 +78,7 @@ from domain.template_strategy_router import (
     generate_workbook,
     validate_workbooks,
 )
+from services.gemini_cip_client import CipWorkerError, call_cip_worker
 
 _LEFT_PANE_WIDTH = GLOBAL_QPUSHBUTTON_MIN_WIDTH + MODULE_LEFT_PANE_WIDTH_OFFSET
 _LEFT_PANE_SCROLLBAR_GUTTER = 12
@@ -86,6 +87,14 @@ _LEFT_PANE_TEXT_RIGHT_SAFE_GAP = 28
 _TAMIL_LANGUAGE_CODES = {"ta-in", "ta_in"}
 _TAMIL_COMPACT_TEXT_STYLE = "font-size: 12px;"
 _logger = logging.getLogger(__name__)
+
+
+def _safe_cip_provider(payload: dict) -> str | None:
+    try:
+        return call_cip_worker(payload)
+    except CipWorkerError:
+        _logger.exception("CIP Worker call failed; Word report will be generated without CIP text.")
+        return None
 _DOWNLOAD_CO_DESCRIPTION_TEMPLATE_HREF = "download-co-description-template"
 _WORD_FILE_FILTER = "Word Files (*.docx);;All Files (*)"
 
@@ -1603,6 +1612,7 @@ class COAnalysisModule(QWidget):
                     "co_attainment_level": co_attainment_level,
                     "generate_word_report": should_generate_word_report,
                     "word_output_path": str(word_output_path),
+                    "cip_text_provider": _safe_cip_provider if should_generate_word_report else None,
                 },
             )
 

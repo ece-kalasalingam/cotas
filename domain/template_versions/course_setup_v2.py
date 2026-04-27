@@ -106,6 +106,7 @@ class CourseSetupV2Strategy:
                 generate_word_report=bool(inputs.get("generate_word_report", False)),
                 word_output_path=inputs.get("word_output_path"),
                 co_description_path=inputs.get("co_description_path"),
+                cip_text_provider=inputs.get("cip_text_provider"),
             )
         raise validation_error_from_key(
             "common.validation_failed_invalid_data",

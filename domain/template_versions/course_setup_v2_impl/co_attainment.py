@@ -2567,6 +2567,7 @@ def _generate_co_attainment_word_report(
     total_outcomes: int,
     co_rows: list[dict[str, str]],
     co_sentences: list[str] | None = None,
+    cip_text: str | None = None,
 ) -> Path:
     """Generate CO attainment Word report document."""
     docx_mod = import_runtime_dependency("docx")
@@ -2804,6 +2805,24 @@ def _generate_co_attainment_word_report(
         cells[3].text = item["result"]
 
     _add_section_heading("Continuous Improvement Action Suggestions")
+    if cip_text:
+        import re as _re
+        _section_heading_re = _re.compile(r"^\d+\.\s+\S")
+        for line in cip_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if _section_heading_re.match(line):
+                _add_section_heading(line)
+            else:
+                para = document.add_paragraph(line)
+                _style_paragraph(para, justify=True)
+    else:
+        placeholder = document.add_paragraph(
+            "Continuous improvement recommendations could not be generated. "
+            "Ensure cip_config.json is present and the network is available, then regenerate the report."
+        )
+        _style_paragraph(placeholder, justify=True)
 
     for table in document.tables:
         for row in table.rows:
@@ -3337,6 +3356,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
     generate_word_report: bool = False,
     word_output_path: Path | None = None,
     co_description_path: Path | None = None,
+    cip_text_provider: Callable[[dict[str, object]], str | None] | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook course setup v2.
     
@@ -3702,6 +3722,12 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 json.dumps(generated_cip_payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+            cip_report_text: str | None = None
+            if cip_text_provider is not None:
+                try:
+                    cip_report_text = cip_text_provider(generated_cip_payload)
+                except Exception:
+                    _logger.exception("CIP text provider failed; report will be generated without CIP text.")
             generated_word_report_path = _generate_co_attainment_word_report(
                 output_path=resolved_word_output,
                 metadata=metadata,
@@ -3711,6 +3737,7 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 total_outcomes=resolved_total_outcomes,
                 co_rows=co_rows,
                 co_sentences=co_sentences,
+                cip_text=cip_report_text,
             )
         except ValidationError:
             raise
@@ -3742,6 +3769,7 @@ def generate_co_attainment_workbook(
     generate_word_report: bool = False,
     word_output_path: Path | None = None,
     co_description_path: Path | None = None,
+    cip_text_provider: Callable[[dict[str, object]], str | None] | None = None,
 ) -> _CoAttainmentWorkbookResult:
     """Generate co attainment workbook.
     
@@ -3818,6 +3846,7 @@ def generate_co_attainment_workbook(
                 generate_word_report=generate_word_report,
                 word_output_path=word_output_path,
                 co_description_path=co_description_path,
+                cip_text_provider=cip_text_provider,
             )
         raise validation_error_from_key(
             "validation.template.unknown",

@@ -356,6 +356,7 @@ def co_attainment_generation_inputs(
     word_output_path = Path(word_output_raw) if word_output_raw else None
     co_description_raw = str(payload.get("co_description_path") or "").strip()
     co_description_path = Path(co_description_raw) if co_description_raw else None
+    cip_text_provider = payload.get("cip_text_provider")
     signature = final_report_signature_reader()(source_paths[0])
     resolved_template_id = default_template_id
     resolved_total_outcomes: int | None = None
@@ -381,6 +382,7 @@ def co_attainment_generation_inputs(
         "generate_word_report": generate_word_report,
         "word_output_path": word_output_path,
         "co_description_path": co_description_path,
+        "cip_text_provider": cip_text_provider,
     }
 
 
