@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import HTTPSHandler, Request, build_opener
 
 from common.exceptions import AppError
 
@@ -57,6 +58,12 @@ def load_cip_config(config_path: Path | str | None = None) -> dict[str, str] | N
             "cip_config.json is missing 'worker_url' or 'app_token'",
             code="CIP_CONFIG_INCOMPLETE",
         )
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise CipWorkerError(
+            "cip_config.json 'worker_url' must be a valid https URL",
+            code="CIP_CONFIG_INVALID_URL",
+        )
     return {"worker_url": url, "app_token": token}
 
 
@@ -89,7 +96,8 @@ def call_cip_worker(
     )
 
     try:
-        with urlopen(req, timeout=timeout) as response:
+        opener = build_opener(HTTPSHandler())
+        with opener.open(req, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
     except HTTPError as exc:
         snippet = exc.read().decode("utf-8", errors="replace")[:200]

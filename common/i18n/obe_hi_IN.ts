@@ -532,6 +532,18 @@ course coordinator report के लिए, पाठ्यक्रम की �
       <translation>मार्क्स टेम्प्लेट सहेजें</translation>
     </message>
     <message>
+      <source>instructor.dialog.overwrite_conflicts.body</source>
+      <translation>कुछ मार्क्स-टेम्प्लेट आउटपुट पहले से मौजूद हैं।
+
+{preview}{extra_suffix}
+
+क्या सभी टकराव वाली फ़ाइलों को ओवरराइट करना है?</translation>
+    </message>
+    <message>
+      <source>instructor.dialog.overwrite_conflicts.more_suffix</source>
+      <translation>... (+{count} और)</translation>
+    </message>
+    <message>
       <source>instructor.drop.summary</source>
       <translation>फ़ाइलें: {count}</translation>
     </message>

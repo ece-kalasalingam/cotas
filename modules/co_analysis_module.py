@@ -76,6 +76,7 @@ from domain.template_strategy_router import (
     consume_marks_anomaly_warnings,
     extract_course_metadata_and_students_from_workbook_path,
     generate_workbook,
+    resolve_template_id_from_workbook_path,
     validate_workbooks,
 )
 from services.gemini_cip_client import CipWorkerError, call_cip_worker
@@ -547,6 +548,30 @@ class COAnalysisModule(QWidget):
         """
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
 
+    def _emit_uniform_validation_feedback(
+        self,
+        *,
+        rejections: list[dict[str, object]],
+        valid_count: int,
+    ) -> None:
+        """Emit the shared validation feedback contract (status/log + common toast summary)."""
+        self._runtime.emit_validation_batch_feedback(
+            rejections=rejections,
+            valid_count=valid_count,
+        )
+
+    def _emit_uniform_workbook_generation_feedback(
+        self,
+        *,
+        success_count: int,
+        failed_count: int,
+    ) -> None:
+        """Emit the shared workbook-generation feedback contract (status/log + common toast summary)."""
+        self._runtime.emit_workbook_generation_feedback(
+            success_count=success_count,
+            failed_count=failed_count,
+        )
+
     def _set_busy(self, busy: bool, *, job_id: str | None = None) -> None:
         """Set busy.
         
@@ -764,13 +789,7 @@ class COAnalysisModule(QWidget):
                     fallback=t("co_analysis.status.co_description_template_generated"),
                 ),
             )
-            self._runtime.notify_message_key(
-                "co_analysis.toast.co_description_template_generated",
-                channels=("toast",),
-                toast_title_key="co_analysis.title",
-                toast_level="success",
-            )
-            self._runtime.emit_workbook_generation_feedback(
+            self._emit_uniform_workbook_generation_feedback(
                 success_count=1,
                 failed_count=0,
             )
@@ -992,6 +1011,37 @@ class COAnalysisModule(QWidget):
         return consume_marks_anomaly_warnings(template_id)
 
     @staticmethod
+    def _resolve_template_id(workbook_path: str | Path) -> str:
+        """Resolve template id from workbook system-hash metadata."""
+        return resolve_template_id_from_workbook_path(workbook_path)
+
+    @classmethod
+    def _resolve_single_template_id(
+        cls,
+        workbook_paths: list[str],
+        *,
+        mismatch_code: str,
+    ) -> str:
+        """Resolve one template id from a workbook list; fail on mixed templates."""
+        template_ids = {
+            cls._resolve_template_id(path)
+            for path in workbook_paths
+            if str(path).strip()
+        }
+        if not template_ids:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code="WORKBOOK_SELECTION_EMPTY",
+            )
+        if len(template_ids) > 1:
+            raise validation_error_from_key(
+                "common.validation_failed_invalid_data",
+                code=mismatch_code,
+                count=len(template_ids),
+            )
+        return next(iter(template_ids))
+
+    @staticmethod
     def _raise_first_validation_issue(*, result: dict[str, object], workbook_path: str) -> None:
         """Raise first validation issue.
         
@@ -1068,64 +1118,60 @@ class COAnalysisModule(QWidget):
             Raises:
                 None.
             """
-            marks_result = validate_workbooks(
-                template_id=ID_COURSE_SETUP,
-                workbook_paths=candidate_paths,
-                workbook_kind="marks_template",
-            )
-            co_description_result = validate_workbooks(
-                template_id=ID_COURSE_SETUP,
-                workbook_paths=candidate_paths,
-                workbook_kind="co_description",
-            )
-            marks_accepted_paths = [
-                str(path) for path in cast(list[object], marks_result.get("valid_paths", [])) if str(path).strip()
-            ]
-            co_description_accepted_paths = [
-                str(path)
-                for path in cast(list[object], co_description_result.get("valid_paths", []))
-                if str(path).strip()
-            ]
-            marks_rejected_items = [
-                item
-                for item in cast(list[object], marks_result.get("rejections", []))
-                if isinstance(item, dict)
-            ]
-            co_description_rejected_items = [
-                item
-                for item in cast(list[object], co_description_result.get("rejections", []))
-                if isinstance(item, dict)
-            ]
-            marks_valid_keys = {canonical_path_key(path) for path in marks_accepted_paths}
-            co_description_valid_keys = {
-                canonical_path_key(path) for path in co_description_accepted_paths
-            }
-            marks_rejections_by_key = {
-                canonical_path_key(str(item.get("path", "")).strip()): item for item in marks_rejected_items
-            }
-            co_description_rejections_by_key = {
-                canonical_path_key(str(item.get("path", "")).strip()): item
-                for item in co_description_rejected_items
-            }
-
             accepted_marks_paths: list[str] = []
             accepted_co_description_paths: list[str] = []
             accepted_paths: list[str] = []
             rejected_items: list[dict[str, object]] = []
+            co_description_accepted_paths: list[str] = []
+            evaluated_template_ids: set[str] = set()
+
+            def _is_path_valid(*, result: dict[str, object], key: str) -> bool:
+                valid_paths_raw = result.get("valid_paths", [])
+                if not isinstance(valid_paths_raw, list):
+                    return False
+                return any(canonical_path_key(str(path)) == key for path in valid_paths_raw)
+
+            def _rejection_for_path(*, result: dict[str, object], key: str) -> dict[str, object] | None:
+                rejections_raw = result.get("rejections", [])
+                if not isinstance(rejections_raw, list):
+                    return None
+                for item in rejections_raw:
+                    if not isinstance(item, dict):
+                        continue
+                    item_path = str(item.get("path", "")).strip()
+                    if item_path and canonical_path_key(item_path) == key:
+                        return item
+                return None
 
             for path in candidate_paths:
                 key = canonical_path_key(path)
-                is_marks_valid = key in marks_valid_keys
-                is_co_description_valid = key in co_description_valid_keys
+                template_id = self._resolve_template_id(path)
+                evaluated_template_ids.add(template_id)
+                marks_result = validate_workbooks(
+                    template_id=template_id,
+                    workbook_paths=[path],
+                    workbook_kind="marks_template",
+                )
+                co_description_result = validate_workbooks(
+                    template_id=template_id,
+                    workbook_paths=[path],
+                    workbook_kind="co_description",
+                )
+                is_marks_valid = _is_path_valid(result=marks_result, key=key)
+                is_co_description_valid = _is_path_valid(result=co_description_result, key=key)
                 if is_co_description_valid:
                     accepted_co_description_paths.append(path)
+                    co_description_accepted_paths.append(path)
                     accepted_paths.append(path)
                     continue
                 if is_marks_valid:
                     accepted_marks_paths.append(path)
                     accepted_paths.append(path)
                     continue
-                rejection = marks_rejections_by_key.get(key) or co_description_rejections_by_key.get(key)
+                rejection = (
+                    _rejection_for_path(result=marks_result, key=key)
+                    or _rejection_for_path(result=co_description_result, key=key)
+                )
                 if isinstance(rejection, dict):
                     rejected_items.append(rejection)
                     continue
@@ -1184,7 +1230,9 @@ class COAnalysisModule(QWidget):
                         }
                     )
 
-            anomaly_warnings = self._consume_marks_anomaly_warnings(ID_COURSE_SETUP)
+            anomaly_warnings: list[str] = []
+            for template_id in sorted(evaluated_template_ids):
+                anomaly_warnings.extend(self._consume_marks_anomaly_warnings(template_id))
             return {
                 "accepted_marks_paths": accepted_marks_paths,
                 "accepted_co_description_paths": accepted_co_description_paths,
@@ -1250,12 +1298,12 @@ class COAnalysisModule(QWidget):
                 self.drop_widget.set_validation_state("neutral")
 
             if rejected_items:
-                self._runtime.emit_validation_batch_feedback(
+                self._emit_uniform_validation_feedback(
                     rejections=cast(list[dict[str, object]], rejected_items),
                     valid_count=len(accepted_paths),
                 )
             elif accepted_paths:
-                self._runtime.emit_validation_batch_feedback(
+                self._emit_uniform_validation_feedback(
                     rejections=[],
                     valid_count=len(accepted_paths),
                 )
@@ -1546,14 +1594,19 @@ class COAnalysisModule(QWidget):
                 None.
             """
             token.raise_if_cancelled()
+            marks_paths = [str(path) for path in self._marks_files]
+            template_id = self._resolve_single_template_id(
+                marks_paths,
+                mismatch_code="CO_ANALYSIS_MARKS_TEMPLATE_MISMATCH",
+            )
             validation_result = validate_workbooks(
-                template_id=ID_COURSE_SETUP,
-                workbook_paths=[str(path) for path in self._marks_files],
+                template_id=template_id,
+                workbook_paths=marks_paths,
                 workbook_kind="marks_template",
             )
-            for workbook_path in [str(path) for path in self._marks_files]:
+            for workbook_path in marks_paths:
                 self._raise_first_validation_issue(result=validation_result, workbook_path=workbook_path)
-            _ = self._consume_marks_anomaly_warnings(ID_COURSE_SETUP)
+            _ = self._consume_marks_anomaly_warnings(template_id)
 
             co_description_path: str | None = None
             if should_generate_word_report:
@@ -1564,8 +1617,16 @@ class COAnalysisModule(QWidget):
                         count=len(self._co_description_files),
                     )
                 co_description_path = str(self._co_description_files[0])
+                co_description_template_id = self._resolve_template_id(co_description_path)
+                if normalize(co_description_template_id) != normalize(template_id):
+                    raise validation_error_from_key(
+                        "common.validation_failed_invalid_data",
+                        code="CO_DESCRIPTION_MARKS_TEMPLATE_MISMATCH",
+                        template_id=co_description_template_id,
+                        expected_template_id=template_id,
+                    )
                 co_description_validation_result = validate_workbooks(
-                    template_id=ID_COURSE_SETUP,
+                    template_id=co_description_template_id,
                     workbook_paths=[co_description_path],
                     workbook_kind="co_description",
                 )
@@ -1599,7 +1660,7 @@ class COAnalysisModule(QWidget):
                     )
 
             return generate_workbook(
-                template_id=ID_COURSE_SETUP,
+                template_id=template_id,
                 output_path=output_path,
                 workbook_name=output_path.name,
                 workbook_kind="co_attainment",
@@ -1657,26 +1718,20 @@ class COAnalysisModule(QWidget):
                 )
                 self._runtime.notify_message_key(
                     "co_analysis.status.word_report_generated",
-                    channels=("status", "activity_log", "toast"),
-                    toast_title_key="co_analysis.title",
-                    toast_level="success",
+                    channels=("status", "activity_log"),
                 )
             word_report_error_key = str(getattr(result, "word_report_error_key", None) or "").strip()
             if word_report_error_key and not word_generated:
                 failed_word_count = 1
                 self._runtime.notify_message_key(
                     word_report_error_key,
-                    channels=("status", "activity_log", "toast"),
-                    toast_title_key="co_analysis.title",
-                    toast_level="warning",
+                    channels=("status", "activity_log"),
                 )
             elif should_generate_word_report and not word_generated:
                 failed_word_count = 1
                 self._runtime.notify_message_key(
                     "co_analysis.status.word_report_not_generated",
-                    channels=("status", "activity_log", "toast"),
-                    toast_title_key="co_analysis.title",
-                    toast_level="warning",
+                    channels=("status", "activity_log"),
                 )
             self._remember_dialog_dir_safe(str(result_path))
             self._publish_status_key("co_analysis.status.calculate_completed")
@@ -1694,14 +1749,9 @@ class COAnalysisModule(QWidget):
                     fallback=t("co_analysis.status.calculate_completed"),
                 ),
             )
-            self._runtime.emit_workbook_generation_feedback(
+            self._emit_uniform_workbook_generation_feedback(
                 success_count=generated_excel_count,
                 failed_count=failed_word_count,
-                channels=(
-                    ("status", "activity_log")
-                    if should_generate_word_report
-                    else ("status", "activity_log", "toast")
-                ),
             )
 
         def _on_failure(exc: Exception) -> None:

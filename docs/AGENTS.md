@@ -211,6 +211,10 @@
   - `notify_message_key(..., channels=(\"toast\", ...))`
   - `show_toast_key(...)`
   - `show_toast_plain(...)`
+- Unified feedback-toast rule (Instructor + CO Analysis):
+  - Validator flows must emit summary toasts through `ModuleRuntime.emit_validation_batch_feedback(...)` only.
+  - Workbook-generation flows must emit summary toasts through `ModuleRuntime.emit_workbook_generation_feedback(...)` only.
+  - Do not add module-specific success/warning generation toasts that duplicate these shared feedback summaries.
 - Do not import `common/ui_logging.py` directly in module/runtime UI files; `ui_logging` is an internal dependency of `module_messages`.
 - Do not import `common/toast.py` directly in module/runtime UI files; route toasts through `module_messages`.
 - Keep startup/crash bootstrap paths (for example `main.py`) as exceptions where direct low-level wiring may remain.
@@ -293,6 +297,7 @@
   - Artifact checksum manifest generated.
   - Module catalog validation complete (`modules/module_catalog.py` contains expected modules and labels).
 - Run the executable gate checklist from `docs/QUALITY_GATE.md` as the source of truth for release commands.
+- Dependency-audit exception tracking: re-check `GHSA-58qw-9mgm-455v` on every release; remove `pip-audit --ignore-vuln GHSA-58qw-9mgm-455v` immediately once an upstream fix is published and available.
 - Promotion flow must follow immutable-artifact practice:
   - build in `dev`, verify/sign in `stage`, promote same verified artifact to `prod` without rebuild.
 - Release metadata requirements:

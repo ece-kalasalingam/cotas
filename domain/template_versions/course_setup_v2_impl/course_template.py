@@ -14,8 +14,8 @@ from common.exceptions import AppSystemError, JobCancelledError, ValidationError
 from common.i18n import t
 from common.jobs import CancellationToken
 from common.registry import COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION
-from common.runtime_dependency_guard import import_runtime_dependency
 from common.registry import get_blueprint as _registry_get_blueprint
+from common.runtime_dependency_guard import import_runtime_dependency
 from common.sample_setup_data import SAMPLE_SETUP_DATA
 from common.workbook_integrity import add_system_hash_sheet
 from domain.template_versions.course_setup_v2_impl import (

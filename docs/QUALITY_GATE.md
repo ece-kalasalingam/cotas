@@ -22,7 +22,7 @@ Keep high-level policy in `AGENTS.md`; keep executable gate commands here.
 8. `conda run -n obe python -m coverage run -m pytest -q`
 9. `conda run -n obe python -m coverage report -m`
 10. `conda run -n obe python -m bandit -q -c .bandit.yaml -r common modules services`
-11. `conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache`
+11. `conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache --ignore-vuln GHSA-58qw-9mgm-455v`
 12. `conda run -n obe python scripts/instructor_perf_soak.py --iterations 10 --enforce --max-step-ms 8000`
 
 ## Instructor Reliability Checks

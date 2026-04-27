@@ -63,7 +63,7 @@ conda run --no-capture-output -n obe python -m pytest -q
 conda run -n obe python -m coverage run -m pytest -q
 conda run -n obe python -m coverage report -m
 conda run -n obe python -m bandit -q -r common modules services -c .bandit.yaml
-conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache
+conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache --ignore-vuln GHSA-58qw-9mgm-455v
 ```
 
 ## Notes

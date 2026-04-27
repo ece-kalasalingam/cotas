@@ -6,8 +6,8 @@ import hashlib
 import json
 import logging
 import os
-import random
 import re
+import secrets
 import shutil
 import sqlite3
 import tempfile
@@ -110,6 +110,16 @@ from domain.template_strategy_router import (
     read_valid_system_workbook_payload,
     read_valid_template_id_from_system_hash_sheet,
 )
+from domain.template_versions.course_setup_v2_impl.co_cip_json_builder import (
+    build_cip_payload,
+)
+from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
+    CoDescriptionRecord as _CoDescriptionRecord,
+)
+from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
+    read_co_description_records,
+    validate_co_description_workbooks,
+)
 from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
     co_direct_sheet_name,
     co_indirect_sheet_name,
@@ -123,14 +133,6 @@ from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator imp
 from domain.template_versions.course_setup_v2_impl.co_report_sheet_generator import (
     write_co_outcome_sheets,
     write_co_outcome_sheets_openpyxl,
-)
-from domain.template_versions.course_setup_v2_impl.co_cip_json_builder import (
-    build_cip_payload,
-)
-from domain.template_versions.course_setup_v2_impl.co_description_template_validator import (
-    CoDescriptionRecord as _CoDescriptionRecord,
-    read_co_description_records,
-    validate_co_description_workbooks,
 )
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -2686,7 +2688,7 @@ def _generate_co_attainment_word_report(
         ),
     )
     course_details_paragraph = document.add_paragraph(
-        random.choice(course_details_templates).format(
+        secrets.choice(course_details_templates).format(
             course_code=course_code,
             semester=semester,
             academic_year=academic_year,
@@ -2764,7 +2766,7 @@ def _generate_co_attainment_word_report(
         ),
     )
     threshold_paragraph = document.add_paragraph(
-        random.choice(threshold_templates).format(
+        secrets.choice(threshold_templates).format(
             l1=l1,
             l2_policy=l2_policy_text,
             co_at=co_attainment_percent,

@@ -5,7 +5,7 @@ import sys
 from json import JSONDecodeError, loads
 from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, Request, build_opener
 
 from PySide6.QtCore import QEvent, QLockFile, QObject, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPixmap
@@ -44,6 +44,7 @@ from common.crash_reporting import (
 )
 from common.exceptions import ConfigurationError
 from common.i18n import get_language, set_language, t
+from common.runtime_dependency_guard import missing_runtime_dependency_packages
 from common.toast import ToastLevel, show_toast
 from common.ui_stylings import apply_global_ui_styles
 from common.utils import (
@@ -54,7 +55,6 @@ from common.utils import (
     resource_path,
     set_ui_language_preference,
 )
-from common.runtime_dependency_guard import missing_runtime_dependency_packages
 from common.workbook_integrity.workbook_secret import ensure_workbook_secret_policy
 from main_window import MainWindow
 
@@ -487,6 +487,9 @@ def _fetch_latest_release() -> tuple[str, str] | None:
 
     owner, repo = repo_parts
     endpoint = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
+    endpoint_parts = urlparse(endpoint)
+    if endpoint_parts.scheme != "https" or not endpoint_parts.netloc:
+        return None
     request = Request(
         endpoint,
         headers={
@@ -495,7 +498,8 @@ def _fetch_latest_release() -> tuple[str, str] | None:
         },
     )
     try:
-        with urlopen(request, timeout=_GITHUB_RELEASE_CHECK_TIMEOUT_SECONDS) as response:
+        opener = build_opener(HTTPSHandler())
+        with opener.open(request, timeout=_GITHUB_RELEASE_CHECK_TIMEOUT_SECONDS) as response:
             payload = loads(response.read().decode("utf-8"))
     except (TimeoutError, URLError, OSError, JSONDecodeError):
         return None

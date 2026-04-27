@@ -19,7 +19,6 @@ from domain.template_versions.course_setup_v2_impl.co_description_template_valid
     CoDescriptionRecord,
 )
 
-
 _BLOOMS_CODE: dict[str, int] = {
     "REMEMBER": 1,
     "UNDERSTAND": 2,

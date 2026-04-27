@@ -621,7 +621,7 @@ class InstructorModule(QWidget):
                 success_message=f"{process_name} completed successfully.",
                 user_success_message=user_success_message,
             )
-            self._runtime.emit_workbook_generation_feedback(
+            self._emit_uniform_workbook_generation_feedback(
                 success_count=1,
                 failed_count=0,
             )
@@ -776,7 +776,7 @@ class InstructorModule(QWidget):
             )
 
             duplicate_count = len(duplicate_paths) + len(duplicate_sections)
-            self._runtime.emit_validation_batch_feedback(
+            self._emit_uniform_validation_feedback(
                 rejections=cast(list[Mapping[str, object]], rejection_items),
                 valid_count=len(self.course_details_paths),
             )
@@ -970,7 +970,7 @@ class InstructorModule(QWidget):
                     success_message=f"{process_name} completed successfully.",
                     user_success_message=user_success_message,
                 )
-                self._runtime.emit_workbook_generation_feedback(
+                self._emit_uniform_workbook_generation_feedback(
                     success_count=len(self.marks_template_paths),
                     failed_count=len(failed),
                 )
@@ -1082,6 +1082,30 @@ class InstructorModule(QWidget):
         """
         self._runtime.notify_message_key(text_key, channels=("status", "activity_log"), kwargs=kwargs)
 
+    def _emit_uniform_validation_feedback(
+        self,
+        *,
+        rejections: list[Mapping[str, object]],
+        valid_count: int,
+    ) -> None:
+        """Emit the shared validation feedback contract (status/log + common toast summary)."""
+        self._runtime.emit_validation_batch_feedback(
+            rejections=rejections,
+            valid_count=valid_count,
+        )
+
+    def _emit_uniform_workbook_generation_feedback(
+        self,
+        *,
+        success_count: int,
+        failed_count: int,
+    ) -> None:
+        """Emit the shared workbook-generation feedback contract (status/log + common toast summary)."""
+        self._runtime.emit_workbook_generation_feedback(
+            success_count=success_count,
+            failed_count=failed_count,
+        )
+
 
     def _rerender_user_log(self) -> None:
         """Rerender user log.
@@ -1167,14 +1191,18 @@ class InstructorModule(QWidget):
         """
         preview = "\n".join(output_paths[:5])
         extra_count = len(output_paths) - 5
-        extra_suffix = f"\n... (+{extra_count} more)" if extra_count > 0 else ""
+        extra_suffix = (
+            "\n" + t("instructor.dialog.overwrite_conflicts.more_suffix", count=extra_count)
+            if extra_count > 0
+            else ""
+        )
         choice = QMessageBox.question(
             self,
             t("instructor.msg.validation_title"),
-            (
-                "Some marks-template outputs already exist.\n\n"
-                f"{preview}{extra_suffix}\n\n"
-                "Overwrite all collided files?"
+            t(
+                "instructor.dialog.overwrite_conflicts.body",
+                preview=preview,
+                extra_suffix=extra_suffix,
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -1331,5 +1359,3 @@ def _localized_log_messages(process_key: str) -> tuple[str, str]:
 
 
 __all__ = ["InstructorModule"]
-
-

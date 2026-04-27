@@ -163,7 +163,7 @@ if (-not $SkipBuild) {
     if (-not (Invoke-ReleaseGateCommand -Name "Bandit" -CondaArgs @("python", "-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services") -PythonArgs @("-m", "bandit", "-q", "-c", ".bandit.yaml", "-r", "common", "modules", "services"))) {
         exit 1
     }
-    if (-not (Invoke-ReleaseGateCommand -Name "pip-audit" -CondaArgs @("python", "-m", "pip_audit", "--cache-dir", ".pip_audit_cache") -PythonArgs @("-m", "pip_audit", "--cache-dir", ".pip_audit_cache"))) {
+    if (-not (Invoke-ReleaseGateCommand -Name "pip-audit" -CondaArgs @("python", "-m", "pip_audit", "--cache-dir", ".pip_audit_cache", "--ignore-vuln", "GHSA-58qw-9mgm-455v") -PythonArgs @("-m", "pip_audit", "--cache-dir", ".pip_audit_cache", "--ignore-vuln", "GHSA-58qw-9mgm-455v"))) {
         exit 1
     }
 

@@ -547,6 +547,18 @@ For course coordinator report, upload the filled CO description template workboo
       <translation>Save Marks Template</translation>
     </message>
     <message>
+      <source>instructor.dialog.overwrite_conflicts.body</source>
+      <translation>Some marks-template outputs already exist.
+
+{preview}{extra_suffix}
+
+Overwrite all collided files?</translation>
+    </message>
+    <message>
+      <source>instructor.dialog.overwrite_conflicts.more_suffix</source>
+      <translation>... (+{count} more)</translation>
+    </message>
+    <message>
       <source>instructor.drop.summary</source>
       <translation>Files: {count}</translation>
     </message>

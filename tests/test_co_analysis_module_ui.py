@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Callable, cast
 
 import pytest
 
@@ -9,6 +9,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
 
+from common.module_messages import NotificationChannel
 from modules import co_analysis_module as co_analysis_ui
 
 
@@ -69,6 +70,11 @@ def _build_module_with_message_capture(
     """
     seen_keys: list[str] = []
     monkeypatch.setattr(co_analysis_ui, "t", lambda key, **kwargs: key)
+    monkeypatch.setattr(
+        co_analysis_ui,
+        "resolve_template_id_from_workbook_path",
+        lambda _workbook_path: co_analysis_ui.ID_COURSE_SETUP,
+    )
 
     def _capture_notify_message_key(self, text_key: str, **kwargs: object) -> None:
         """Capture notify message key.
@@ -291,7 +297,7 @@ def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
     )
     captured: dict[str, object] = {}
     notify_events: list[tuple[str, dict[str, object]]] = []
-    original_notify = module._runtime.notify_message_key
+    original_notify = cast(Callable[..., None], module._runtime.notify_message_key)
 
     def _capture_notify(text_key: str, **kwargs: object) -> None:
         notify_events.append((text_key, dict(kwargs)))
@@ -330,18 +336,13 @@ def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
     module._prepare_co_analysis_async()
     qapp.processEvents()
 
-    context = dict(captured.get("context", {}))
+    context = cast(dict[str, object], captured.get("context", {}))
     assert context.get("generate_word_report") is True
     assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
     assert str(context.get("word_output_path", "")).endswith("CSE101_2025-26_CO_Analysis_Report.docx")
     assert "co_analysis.status.output_generated_excel" in seen_keys
     assert "co_analysis.status.output_generated_word" in seen_keys
     assert "co_analysis.status.word_report_generated" in seen_keys
-    assert any(
-        key == "co_analysis.status.word_report_generated"
-        and "toast" in tuple(event_kwargs.get("channels", ()))
-        for key, event_kwargs in notify_events
-    )
     output_items = module.get_shared_outputs_data().items
     assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
     assert any(item.label_key == "co_analysis.links.generated_word_output" for item in output_items)
@@ -376,7 +377,7 @@ def test_prepare_co_analysis_word_report_failure_emits_warning_and_keeps_excel_s
         emit_drop=True,
     )
     notify_events: list[tuple[str, dict[str, object]]] = []
-    original_notify = module._runtime.notify_message_key
+    original_notify = cast(Callable[..., None], module._runtime.notify_message_key)
 
     def _capture_notify(text_key: str, **kwargs: object) -> None:
         notify_events.append((text_key, dict(kwargs)))
@@ -411,11 +412,6 @@ def test_prepare_co_analysis_word_report_failure_emits_warning_and_keeps_excel_s
     assert "co_analysis.status.output_generated_excel" in seen_keys
     assert "co_analysis.status.calculate_completed" in seen_keys
     assert "co_analysis.status.word_report_generate_failed" in seen_keys
-    assert any(
-        key == "co_analysis.status.word_report_generate_failed"
-        and "toast" in tuple(event_kwargs.get("channels", ()))
-        for key, event_kwargs in notify_events
-    )
     output_items = module.get_shared_outputs_data().items
     assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
     assert any(path.suffix == ".xlsx" for path in module._downloaded_outputs)
@@ -483,7 +479,7 @@ def test_prepare_co_analysis_prompts_for_existing_word_output_path(
     module._prepare_co_analysis_async()
     qapp.processEvents()
 
-    context = dict(captured.get("context", {}))
+    context = cast(dict[str, object], captured.get("context", {}))
     assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
     assert str(context.get("word_output_path", "")) == str(replacement_word)
     _dispose_widget(module, qapp)
@@ -590,10 +586,15 @@ def test_prepare_co_analysis_with_word_toggle_off_emits_summary_toast(
         )(),
     )
 
-    def _capture_emit_workbook_generation_feedback(*, success_count: int, failed_count: int, channels):
+    def _capture_emit_workbook_generation_feedback(
+        *,
+        success_count: int,
+        failed_count: int,
+        channels: tuple[NotificationChannel, ...] = ("status", "activity_log", "toast"),
+    ) -> None:
         captured_feedback["success_count"] = success_count
         captured_feedback["failed_count"] = failed_count
-        captured_feedback["channels"] = tuple(channels)
+        captured_feedback["channels"] = channels
 
     monkeypatch.setattr(
         module._runtime,
@@ -606,7 +607,11 @@ def test_prepare_co_analysis_with_word_toggle_off_emits_summary_toast(
 
     assert captured_feedback["success_count"] == 1
     assert captured_feedback["failed_count"] == 0
-    assert captured_feedback["channels"] == ("status", "activity_log", "toast")
+    assert cast(tuple[NotificationChannel, ...], captured_feedback["channels"]) == (
+        "status",
+        "activity_log",
+        "toast",
+    )
     _dispose_widget(module, qapp)
 
 
@@ -698,7 +703,6 @@ def test_download_co_description_template_link_triggers_generation(
     assert called["template_id"] == co_analysis_ui.ID_COURSE_SETUP
     assert output_path in module._downloaded_outputs
     assert "co_analysis.status.co_description_template_generated" in seen_keys
-    assert "co_analysis.toast.co_description_template_generated" in seen_keys
     _dispose_widget(module, qapp)
 
 

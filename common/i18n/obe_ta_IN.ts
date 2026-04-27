@@ -535,6 +535,18 @@ course coordinator report க்காக, பாடநெறியின் ந
       <translation>மதிப்பெண் வார்ப்புருவை சேமிக்க</translation>
     </message>
     <message>
+      <source>instructor.dialog.overwrite_conflicts.body</source>
+      <translation>சில மதிப்பெண் வார்ப்புரு வெளியீடுகள் ஏற்கனவே உள்ளன.
+
+{preview}{extra_suffix}
+
+மோதிய எல்லா கோப்புகளையும் மேலெழுதவா?</translation>
+    </message>
+    <message>
+      <source>instructor.dialog.overwrite_conflicts.more_suffix</source>
+      <translation>... (+{count} மேலும்)</translation>
+    </message>
+    <message>
       <source>instructor.drop.summary</source>
       <translation>கோப்புகள்: {count}</translation>
     </message>

@@ -8,6 +8,11 @@ import subprocess  # nosec B404 - trusted local command orchestration
 import sys
 from pathlib import Path
 
+_PIP_AUDIT_IGNORED_VULNS: tuple[str, ...] = (
+    # No fix published as of 2026-04-27; tracked in upstream advisory.
+    "GHSA-58qw-9mgm-455v",
+)
+
 
 def _run(
     command: list[str],
@@ -93,8 +98,18 @@ def main() -> int:
     ]
     if args.mode == "strict":
         pip_audit_cache.mkdir(parents=True, exist_ok=True)
+        pip_audit_command = [
+            sys.executable,
+            "-m",
+            "pip_audit",
+            "--cache-dir",
+            str(pip_audit_cache),
+        ]
+        for vuln_id in _PIP_AUDIT_IGNORED_VULNS:
+            pip_audit_command.extend(["--ignore-vuln", vuln_id])
         commands.insert(
-            0, ([sys.executable, "-m", "pip_audit", "--cache-dir", str(pip_audit_cache)], None)
+            0,
+            (pip_audit_command, None),
         )
         commands[-1] = (
             [sys.executable, "-m", "pytest", "-q", "tests"],
