@@ -240,6 +240,12 @@
 - Use `scripts/build_qt_translations.py` to compile `.ts` to `.qm`; do not add alternate translation-build scripts.
 - Keep translation scope limited to UI/UX strings only; do not translate workbook data, generated Excel cell values, sheet names, filenames, or filesystem paths unless explicitly required by a separate spec.
 
+## Runtime Asset Path Guardrail
+
+- Runtime-loaded bundled assets (for example report images used by `python-docx`) must resolve via `common/utils.py::resource_path(...)`.
+- Do not read packaged assets through CWD-relative paths such as `Path("assets") / ...`; this is invalid for frozen/exe runs.
+- Any asset needed by frozen runtime logic must be present in PyInstaller `datas` and resolved through `resource_path(...)` so behavior is consistent in dev and packaged modes.
+
 ## Module UI Engine Guardrail
 
 - `common/module_ui_engine.py` must remain generic and blackbox-only.

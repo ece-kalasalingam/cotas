@@ -132,6 +132,49 @@ def test_generate_co_attainment_word_report_writes_docx(tmp_path: Path) -> None:
     assert "Continuous Improvement Action Suggestions" in document_xml
 
 
+def test_generate_co_attainment_word_report_uses_runtime_formula_asset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test word report resolves formula image through runtime resource path."""
+    pytest.importorskip("docx")
+
+    runtime_assets = tmp_path / "runtime_assets"
+    runtime_assets.mkdir(parents=True, exist_ok=True)
+    formula_target = runtime_assets / "formula.jpg"
+    formula_target.write_bytes((Path("assets") / "formula.jpg").read_bytes())
+
+    def _fake_resource_path(relative_path: str) -> str:
+        if relative_path == "assets/formula.jpg":
+            return str(formula_target)
+        return relative_path
+
+    monkeypatch.setattr(co_attainment, "resource_path", _fake_resource_path)
+
+    output_path = tmp_path / "co_report_with_formula.docx"
+    generated = co_attainment._generate_co_attainment_word_report(
+        output_path=output_path,
+        metadata={
+            "course_code": "CSE101",
+            "semester": "5",
+            "section": "A",
+            "academic_year": "2025-26",
+        },
+        thresholds=(40.0, 60.0, 75.0),
+        co_attainment_percent=60.0,
+        co_attainment_level=2,
+        total_outcomes=1,
+        co_rows=[
+            {"co": "CSE101.1", "direct": "70%", "indirect": "68%", "overall": "75%", "result": "Attained"},
+        ],
+        co_sentences=["Understand semiconductor devices"],
+    )
+    assert generated == output_path
+    with ZipFile(output_path) as archive:
+        media_files = [name for name in archive.namelist() if name.startswith("word/media/")]
+    assert media_files
+
+
 def _generate_co_description_template(path: Path) -> Path:
     result = generate_workbook(
         template_id=ID_COURSE_SETUP,

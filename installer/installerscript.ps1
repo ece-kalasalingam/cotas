@@ -216,6 +216,15 @@ if (-not (Test-Path -LiteralPath $distRoot)) {
 Copy-Item -LiteralPath $cipConfigSource -Destination $cipConfigTarget -Force
 Write-Host "Staged cip_config.json to $cipConfigTarget"
 
+$portableArchivePath = Join-Path $repoRoot "dist\portableexefile.zip"
+if (Test-Path -LiteralPath $portableArchivePath) {
+    Remove-Item -LiteralPath $portableArchivePath -Force
+}
+
+$portableArchiveSource = Join-Path $distRoot "*"
+Compress-Archive -Path $portableArchiveSource -DestinationPath $portableArchivePath -CompressionLevel Optimal
+Write-Host "Built portable archive: $portableArchivePath"
+
 $isccArgs = @(
     "/DAppVersion=$ResolvedAppVersion"
     "/DAppFileVersion=$ResolvedAppFileVersion"

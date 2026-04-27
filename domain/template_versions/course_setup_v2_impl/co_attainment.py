@@ -95,6 +95,7 @@ from common.utils import (
     create_app_runtime_sqlite_file,
     normalize,
     ratio_percent_token,
+    resource_path,
 )
 from common.workbook_integrity.constants import (
     SYSTEM_LAYOUT_MANIFEST_HASH_HEADER,
@@ -2775,7 +2776,7 @@ def _generate_co_attainment_word_report(
     )
     _style_paragraph(threshold_paragraph, justify=True)
 
-    formula_image_path = Path("assets") / "formula.jpg"
+    formula_image_path = Path(resource_path("assets/formula.jpg"))
     if formula_image_path.is_file():
         image_paragraph = document.add_paragraph()
         image_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
