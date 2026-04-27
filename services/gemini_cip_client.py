@@ -82,8 +82,10 @@ def call_cip_worker(
         method="POST",
         headers={
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "X-App-Token": config["app_token"],
-        },
+            "User-Agent": "COTAS-CIP-Client/1.0",
+        }
     )
 
     try:

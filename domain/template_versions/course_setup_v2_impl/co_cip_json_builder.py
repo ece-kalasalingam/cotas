@@ -11,7 +11,6 @@ from common.constants import DIRECT_RATIO, INDIRECT_RATIO
 from common.registry import (
     COURSE_METADATA_ACADEMIC_YEAR_KEY,
     COURSE_METADATA_COURSE_CODE_KEY,
-    COURSE_METADATA_SECTION_KEY,
     COURSE_METADATA_SEMESTER_KEY,
     COURSE_METADATA_TOTAL_STUDENTS_KEY,
 )
@@ -126,7 +125,6 @@ def build_cip_payload(
         "course": {
             "code": _meta(metadata, COURSE_METADATA_COURSE_CODE_KEY),
             "sem": _meta(metadata, COURSE_METADATA_SEMESTER_KEY),
-            "sec": _meta(metadata, COURSE_METADATA_SECTION_KEY),
             "ay": _meta(metadata, COURSE_METADATA_ACADEMIC_YEAR_KEY),
             "students": total_students,
         },
