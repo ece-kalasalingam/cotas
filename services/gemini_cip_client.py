@@ -45,12 +45,18 @@ def load_cip_config(config_path: Path | str | None = None) -> dict[str, str] | N
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    except Exception as exc:
+        raise CipWorkerError(
+            f"Invalid cip_config.json: {exc}",
+            code="CIP_CONFIG_INVALID",
+        ) from exc
     url = str(data.get("worker_url", "")).strip()
     token = str(data.get("app_token", "")).strip()
     if not url or not token:
-        return None
+        raise CipWorkerError(
+            "cip_config.json is missing 'worker_url' or 'app_token'",
+            code="CIP_CONFIG_INCOMPLETE",
+        )
     return {"worker_url": url, "app_token": token}
 
 
