@@ -17,6 +17,7 @@ const MAX_BODY_BYTES = 64 * 1024; // 64 KB hard cap on incoming payload
 const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_MAX_OUTPUT_TOKENS = 2048;
 const GEMINI_TEMPERATURE = 0.4;
+const GEMINI_TIMEOUT_MS = 25_000; // abort if Gemini hasn't responded in 25 s
 const GEMINI_ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
@@ -150,7 +151,12 @@ export default {
       return json(400, { error: "Missing required fields: course, cos" });
     }
 
-    // 8. Call Gemini and return the CIP text.
+    // 8. Guard: Gemini key must be configured as a Worker secret.
+    if (!env.GEMINI_API_KEY) {
+      return json(500, { error: "Gemini API key not configured" });
+    }
+
+    // 9. Call Gemini and return the CIP text.
     try {
       const cipText = await callGemini(payload, env.GEMINI_API_KEY);
       return json(200, { report_text: cipText });
@@ -167,7 +173,7 @@ export default {
 async function callGemini(payload, apiKey) {
   const userMessage =
     "Here is the CO attainment data for the course. Write the CIP.\n\n" +
-    JSON.stringify(payload, null, 2);
+    JSON.stringify(payload);
 
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
@@ -178,11 +184,25 @@ async function callGemini(payload, apiKey) {
     },
   };
 
-  const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS} ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "(no body)");
