@@ -76,6 +76,10 @@ Confirm every item in:
 - Use sample config files (for example `cip_config.sample.json`) for shared examples.
 - Follow `SECURITY.md` for vulnerability reporting and security expectations.
 
+## Community Conduct
+
+- Please follow `CODE_OF_CONDUCT.md` in all project interactions and contribution discussions.
+
 ## Documentation Updates
 
 When behavior changes, update docs in the same PR:

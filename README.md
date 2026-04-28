@@ -1,5 +1,7 @@
 # FOCUS
 
+FOCUS is a desktop OBE workflow repository focused on generating, validating, and safeguarding course-analysis workbooks with consistent, policy-aligned academic reporting outputs.
+
 ## About
 FOCUS (Framework for Outcome Computation and Unification System) is a desktop tool for Outcome-Based Education (OBE) workflows.
 
