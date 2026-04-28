@@ -50,6 +50,7 @@ conda run -n obe python main.py
 Primary source of truth for release checks:
 - `docs/QUALITY_GATE.md` (executable command checklist)
 - `AGENTS.md` (policy and guardrails)
+- `CONTRIBUTING.md` (developer workflow and PR expectations)
 
 Common commands:
 ```powershell
