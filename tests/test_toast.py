@@ -448,7 +448,8 @@ def test_resolve_parent_prefers_explicit_parent_window() -> None:
         None.
     """
     parent = _FakeWidget()
-    assert toast._resolve_parent(cast(Any, parent)) is parent
+    if toast._resolve_parent(cast(Any, parent)) is not parent:
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_parent_uses_active_visible_window(monkeypatch) -> None:
@@ -469,7 +470,8 @@ def test_resolve_parent_uses_active_visible_window(monkeypatch) -> None:
     _FakeApp._active = active
     _FakeApp._top = []
 
-    assert toast._resolve_parent(None) is active
+    if toast._resolve_parent(None) is not active:
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_parent_falls_back_to_first_visible_toplevel(monkeypatch) -> None:
@@ -490,7 +492,8 @@ def test_resolve_parent_falls_back_to_first_visible_toplevel(monkeypatch) -> Non
     visible_top = _FakeWidget(visible=True, minimized=False)
     _FakeApp._top = [_FakeWidget(visible=False), visible_top]
 
-    assert toast._resolve_parent(None) is visible_top
+    if toast._resolve_parent(None) is not visible_top:
+        raise AssertionError('assertion failed')
 
 
 def test_show_toast_returns_early_for_hidden_host(monkeypatch) -> None:
@@ -515,8 +518,10 @@ def test_show_toast_returns_early_for_hidden_host(monkeypatch) -> None:
     _FakeToastWidget.instances.clear()
     toast.show_toast(None, "hello")
 
-    assert _FakeToastWidget.instances == []
-    assert calls == []
+    if not (_FakeToastWidget.instances == []):
+        raise AssertionError('assertion failed')
+    if not (calls == []):
+        raise AssertionError('assertion failed')
 
 
 def test_show_toast_uses_error_default_ttl_and_host_positioning(monkeypatch) -> None:
@@ -545,12 +550,16 @@ def test_show_toast_uses_error_default_ttl_and_host_positioning(monkeypatch) -> 
     toast.show_toast(None, "err", level="error")
 
     created = _FakeToastWidget.instances[-1]
-    assert created.fit_width_calls, "fit_width should be used when host width is available"
+    if not (created.fit_width_calls):
+        raise AssertionError("fit_width should be used when host width is available")
     expected_x = host.mapToGlobal(None).x() + host.width() - created.width() - TOAST_MARGIN
     expected_y = host.mapToGlobal(None).y() + TOAST_MARGIN
-    assert created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))
-    assert created.shown is True
-    assert timer_calls and timer_calls[-1][0] == TOAST_ERROR_DURATION_MS
+    if not (created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))):
+        raise AssertionError('assertion failed')
+    if created.shown is not True:
+        raise AssertionError('assertion failed')
+    if not (timer_calls and timer_calls[-1][0] == TOAST_ERROR_DURATION_MS):
+        raise AssertionError('assertion failed')
 
 
 def test_show_toast_prefers_custom_duration_over_defaults(monkeypatch) -> None:
@@ -577,7 +586,8 @@ def test_show_toast_prefers_custom_duration_over_defaults(monkeypatch) -> None:
     _FakeToastWidget.instances.clear()
     toast.show_toast(None, "info", level="info", duration_ms=1234)
 
-    assert timer_calls[-1][0] == 1234
+    if not (timer_calls[-1][0] == 1234):
+        raise AssertionError('assertion failed')
 
 
 def test_show_toast_uses_global_screen_position_when_no_host(monkeypatch) -> None:
@@ -606,8 +616,10 @@ def test_show_toast_uses_global_screen_position_when_no_host(monkeypatch) -> Non
     created = _FakeToastWidget.instances[-1]
     expected_x = 10 + 900 - created.width() - TOAST_MARGIN
     expected_y = 20 + TOAST_MARGIN
-    assert created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))
-    assert timer_calls[-1][0] == TOAST_DEFAULT_DURATION_MS
+    if not (created.moves[-1] == (max(expected_x, TOAST_MARGIN), max(expected_y, TOAST_MARGIN))):
+        raise AssertionError('assertion failed')
+    if not (timer_calls[-1][0] == TOAST_DEFAULT_DURATION_MS):
+        raise AssertionError('assertion failed')
 
 
 def test_toast_fit_width_early_return_and_no_screen_fallback(monkeypatch) -> None:
@@ -638,4 +650,5 @@ def test_toast_fit_width_early_return_and_no_screen_fallback(monkeypatch) -> Non
     _FakeToastWidget.instances.clear()
     toast.show_toast(None, "hello")
     created = _FakeToastWidget.instances[-1]
-    assert created.moves[-1] == (TOAST_MARGIN, TOAST_MARGIN)
+    if not (created.moves[-1] == (TOAST_MARGIN, TOAST_MARGIN)):
+        raise AssertionError('assertion failed')

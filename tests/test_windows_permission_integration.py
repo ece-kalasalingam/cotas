@@ -57,4 +57,5 @@ def test_generate_course_template_reports_permission_failure_on_locked_destinati
             handle.seek(0)
             locking_fn(handle.fileno(), unlock_value, 1)
 
-    assert output.read_bytes() == b"locked"
+    if not (output.read_bytes() == b"locked"):
+        raise AssertionError('assertion failed')

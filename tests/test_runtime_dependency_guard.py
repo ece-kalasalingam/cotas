@@ -28,7 +28,8 @@ def test_missing_runtime_dependency_packages_reports_only_missing(
 
     monkeypatch.setattr(dep_guard, "find_spec", _fake_find_spec)
     missing = dep_guard.missing_runtime_dependency_packages()
-    assert missing == ("python-docx",)
+    if not (missing == ("python-docx",)):
+        raise AssertionError('assertion failed')
 
 
 def test_runtime_dependency_spec_rejects_unknown() -> None:

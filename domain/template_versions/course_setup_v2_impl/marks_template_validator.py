@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from common.constants import (
+    CO_REPORT_ABSENT_TOKEN,
     LAYOUT_MANIFEST_KEY_SHEET_ORDER,
     LAYOUT_MANIFEST_KEY_SHEETS,
     LAYOUT_SHEET_KIND_DIRECT_CO_WISE,
@@ -968,7 +969,7 @@ def _validate_non_empty_marks_entries(
             cell = worksheet.cell(row=row, column=col)
             cell_value = cell.value
             token = normalize(cell_value)
-            if token == "":
+            if not token:
                 collector.add(
                     validation_error_from_key(
                         "instructor.validation.step2.mark_entry_empty",
@@ -978,7 +979,7 @@ def _validate_non_empty_marks_entries(
                     )
                 )
                 continue
-            if token == "a":
+            if token == normalize(CO_REPORT_ABSENT_TOKEN):
                 has_absent = True
                 absent_count_by_col[col] += 1
                 continue

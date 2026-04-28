@@ -59,8 +59,10 @@ def test_router_accepts_marks_template_batch_validation(monkeypatch: pytest.Monk
         workbook_kind="marks_template",
     )
 
-    assert result["valid_paths"] == ["marks.xlsx"]
-    assert captured["workbook_kind"] == "marks_template"
+    if not (result["valid_paths"] == ["marks.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (captured["workbook_kind"] == "marks_template"):
+        raise AssertionError('assertion failed')
 
 
 def test_router_accepts_co_description_batch_validation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,8 +93,10 @@ def test_router_accepts_co_description_batch_validation(monkeypatch: pytest.Monk
         workbook_kind="co_description",
     )
 
-    assert result["valid_paths"] == ["co_description.xlsx"]
-    assert captured["workbook_kind"] == "co_description"
+    if not (result["valid_paths"] == ["co_description.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (captured["workbook_kind"] == "co_description"):
+        raise AssertionError('assertion failed')
 
 
 def test_router_rejects_unsupported_batch_validation_kind() -> None:
@@ -113,7 +117,8 @@ def test_router_rejects_unsupported_batch_validation_kind() -> None:
             workbook_paths=["marks.xlsx"],
             workbook_kind="unsupported_kind",
         )
-    assert getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"
+    if not (getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"):
+        raise AssertionError('assertion failed')
 
 
 def test_router_consume_marks_anomaly_warnings_uses_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,4 +150,5 @@ def test_router_consume_marks_anomaly_warnings_uses_strategy(monkeypatch: pytest
 
     monkeypatch.setattr(router, "get_template_strategy", lambda _template_id: _DummyStrategy())
     warnings = router.consume_marks_anomaly_warnings("COURSE_SETUP_V2")
-    assert warnings == ["warn-a", "warn-b"]
+    if not (warnings == ["warn-a", "warn-b"]):
+        raise AssertionError('assertion failed')

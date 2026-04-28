@@ -67,8 +67,10 @@ def test_validate_co_description_workbooks_accepts_valid_workbook(tmp_path: Path
         template_id=ID_COURSE_SETUP,
     )
 
-    assert result["valid_paths"] == [str(workbook_path)]
-    assert result["rejections"] == []
+    if not (result["valid_paths"] == [str(workbook_path)]):
+        raise AssertionError('assertion failed')
+    if not (result["rejections"] == []):
+        raise AssertionError('assertion failed')
 
 
 def test_validate_co_description_workbooks_rejects_missing_summary(tmp_path: Path) -> None:
@@ -86,8 +88,10 @@ def test_validate_co_description_workbooks_rejects_missing_summary(tmp_path: Pat
         template_id=ID_COURSE_SETUP,
     )
 
-    assert result["valid_paths"] == []
-    assert _first_issue_code(result) in {"CELL_EMPTY_NOT_ALLOWED", "CO_DESCRIPTION_SUMMARY_REQUIRED"}
+    if not (result["valid_paths"] == []):
+        raise AssertionError('assertion failed')
+    if _first_issue_code(result) not in {"CELL_EMPTY_NOT_ALLOWED", "CO_DESCRIPTION_SUMMARY_REQUIRED"}:
+        raise AssertionError('assertion failed')
 
 
 def test_validate_co_description_workbooks_rejects_gapped_co_numbers(tmp_path: Path) -> None:
@@ -105,8 +109,10 @@ def test_validate_co_description_workbooks_rejects_gapped_co_numbers(tmp_path: P
         template_id=ID_COURSE_SETUP,
     )
 
-    assert result["valid_paths"] == []
-    assert _first_issue_code(result) == "CO_DESCRIPTION_CO_NUMBER_SET_MISMATCH"
+    if not (result["valid_paths"] == []):
+        raise AssertionError('assertion failed')
+    if not (_first_issue_code(result) == "CO_DESCRIPTION_CO_NUMBER_SET_MISMATCH"):
+        raise AssertionError('assertion failed')
 
 
 def test_validate_co_description_workbooks_rejects_tampered_system_hash(tmp_path: Path) -> None:
@@ -124,5 +130,7 @@ def test_validate_co_description_workbooks_rejects_tampered_system_hash(tmp_path
         template_id=ID_COURSE_SETUP,
     )
 
-    assert result["valid_paths"] == []
-    assert _first_issue_code(result) in {"COA_SYSTEM_HASH_MISMATCH", "UNKNOWN_TEMPLATE"}
+    if not (result["valid_paths"] == []):
+        raise AssertionError('assertion failed')
+    if _first_issue_code(result) not in {"COA_SYSTEM_HASH_MISMATCH", "UNKNOWN_TEMPLATE"}:
+        raise AssertionError('assertion failed')

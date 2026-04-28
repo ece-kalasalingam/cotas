@@ -27,14 +27,21 @@ def test_capture_unhandled_exception_writes_json_report(tmp_path: Path, monkeypa
     except ValueError as exc:
         report = crash_reporting.capture_unhandled_exception(type(exc), exc, exc.__traceback__)
 
-    assert report is not None
-    assert report.exists()
+    if not (report is not None):
+        raise AssertionError('assertion failed')
+    if not (report.exists()):
+        raise AssertionError('assertion failed')
     payload = json.loads(report.read_text(encoding="utf-8"))
-    assert payload["app_name"]
-    assert payload["version"]
-    assert payload["exception_type"] == "ValueError"
-    assert payload["exception_message"] == "boom"
-    assert "ValueError: boom" in payload["traceback"]
+    if not (payload["app_name"]):
+        raise AssertionError('assertion failed')
+    if not (payload["version"]):
+        raise AssertionError('assertion failed')
+    if not (payload["exception_type"] == "ValueError"):
+        raise AssertionError('assertion failed')
+    if not (payload["exception_message"] == "boom"):
+        raise AssertionError('assertion failed')
+    if "ValueError: boom" not in payload["traceback"]:
+        raise AssertionError('assertion failed')
 
 
 def test_capture_unhandled_exception_returns_none_on_internal_failure(monkeypatch) -> None:
@@ -50,7 +57,8 @@ def test_capture_unhandled_exception_returns_none_on_internal_failure(monkeypatc
         None.
     """
     monkeypatch.setattr(crash_reporting, "_crash_reports_dir", lambda: (_ for _ in ()).throw(OSError("denied")))
-    assert crash_reporting.capture_unhandled_exception(RuntimeError, RuntimeError("x"), None) is None
+    if crash_reporting.capture_unhandled_exception(RuntimeError, RuntimeError("x"), None) is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_has_remote_crash_endpoint_env_parsing(monkeypatch) -> None:
@@ -66,10 +74,12 @@ def test_has_remote_crash_endpoint_env_parsing(monkeypatch) -> None:
         None.
     """
     monkeypatch.setenv(crash_reporting.CRASH_REPORT_ENDPOINT_ENV_VAR, "   ")
-    assert crash_reporting.has_remote_crash_endpoint() is False
+    if crash_reporting.has_remote_crash_endpoint() is not False:
+        raise AssertionError('assertion failed')
 
     monkeypatch.setenv(crash_reporting.CRASH_REPORT_ENDPOINT_ENV_VAR, "https://example.invalid/collect")
-    assert crash_reporting.has_remote_crash_endpoint() is True
+    if crash_reporting.has_remote_crash_endpoint() is not True:
+        raise AssertionError('assertion failed')
 
 
 def test_crash_reports_dir_uses_settings_parent(monkeypatch) -> None:
@@ -86,5 +96,6 @@ def test_crash_reports_dir_uses_settings_parent(monkeypatch) -> None:
     """
     monkeypatch.setattr(crash_reporting, "app_settings_path", lambda _name: Path("C:/focus/settings.json"))
     out = crash_reporting._crash_reports_dir()
-    assert out == Path("C:/focus") / crash_reporting.CRASH_REPORTS_DIR_NAME
+    if not (out == Path("C:/focus") / crash_reporting.CRASH_REPORTS_DIR_NAME):
+        raise AssertionError('assertion failed')
 

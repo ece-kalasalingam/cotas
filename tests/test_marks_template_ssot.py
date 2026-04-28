@@ -102,12 +102,18 @@ def test_registry_declares_v2_marks_dynamic_sheet_templates() -> None:
     )
     indirect = get_dynamic_sheet_template("COURSE_SETUP_V2", COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT)
 
-    assert direct_co["header_kind"] == "dynamic"
-    assert direct_non_co["header_kind"] == "dynamic"
-    assert indirect["header_kind"] == "dynamic"
-    assert direct_co["header_resolver"] == "course_setup.marks_direct_co_wise_headers"
-    assert direct_non_co["header_resolver"] == "course_setup.marks_direct_non_co_wise_headers"
-    assert indirect["header_resolver"] == "course_setup.marks_indirect_headers"
+    if not (direct_co["header_kind"] == "dynamic"):
+        raise AssertionError('assertion failed')
+    if not (direct_non_co["header_kind"] == "dynamic"):
+        raise AssertionError('assertion failed')
+    if not (indirect["header_kind"] == "dynamic"):
+        raise AssertionError('assertion failed')
+    if not (direct_co["header_resolver"] == "course_setup.marks_direct_co_wise_headers"):
+        raise AssertionError('assertion failed')
+    if not (direct_non_co["header_resolver"] == "course_setup.marks_direct_non_co_wise_headers"):
+        raise AssertionError('assertion failed')
+    if not (indirect["header_resolver"] == "course_setup.marks_indirect_headers"):
+        raise AssertionError('assertion failed')
 
 
 def test_instructor_sheetops_does_not_duplicate_marks_dynamic_header_tokens() -> None:
@@ -129,9 +135,12 @@ def test_instructor_sheetops_does_not_duplicate_marks_dynamic_header_tokens() ->
         / "course_setup_v2_impl"
         / "instructor_engine_sheetops.py"
     ).read_text(encoding="utf-8")
-    assert "MARKS_ENTRY_QUESTION_PREFIX" not in source
-    assert "MARKS_ENTRY_CO_MARKS_LABEL_PREFIX" not in source
-    assert "resolve_dynamic_sheet_headers" in source
+    if not ("MARKS_ENTRY_QUESTION_PREFIX" not in source):
+        raise AssertionError('assertion failed')
+    if not ("MARKS_ENTRY_CO_MARKS_LABEL_PREFIX" not in source):
+        raise AssertionError('assertion failed')
+    if "resolve_dynamic_sheet_headers" not in source:
+        raise AssertionError('assertion failed')
 
 
 def test_marks_template_uses_shared_format_bundle_only() -> None:
@@ -153,8 +162,10 @@ def test_marks_template_uses_shared_format_bundle_only() -> None:
         / "course_setup_v2_impl"
         / "marks_template.py"
     ).read_text(encoding="utf-8")
-    assert "build_marks_template_xlsxwriter_formats" in source
-    assert ".add_format(" not in source
+    if "build_marks_template_xlsxwriter_formats" not in source:
+        raise AssertionError('assertion failed')
+    if not (".add_format(" not in source):
+        raise AssertionError('assertion failed')
 
 
 def test_xlsx_style_policy_constants_live_in_excel_layout_module() -> None:
@@ -175,10 +186,14 @@ def test_xlsx_style_policy_constants_live_in_excel_layout_module() -> None:
     layout_source = (
         Path(__file__).resolve().parents[1] / "common" / "excel_sheet_layout.py"
     ).read_text(encoding="utf-8")
-    assert "XLSX_AUTOFIT_SAMPLE_ROWS" not in constants_source
-    assert "XLSX_PAPER_SIZE_A4" not in constants_source
-    assert "XLSX_AUTOFIT_SAMPLE_ROWS" in layout_source
-    assert "XLSX_PAPER_SIZE_A4" in layout_source
+    if not ("XLSX_AUTOFIT_SAMPLE_ROWS" not in constants_source):
+        raise AssertionError('assertion failed')
+    if not ("XLSX_PAPER_SIZE_A4" not in constants_source):
+        raise AssertionError('assertion failed')
+    if "XLSX_AUTOFIT_SAMPLE_ROWS" not in layout_source:
+        raise AssertionError('assertion failed')
+    if "XLSX_PAPER_SIZE_A4" not in layout_source:
+        raise AssertionError('assertion failed')
 
 
 def test_generated_marks_sheet_headers_match_registry_dynamic_resolvers(tmp_path: Path) -> None:
@@ -201,7 +216,8 @@ def test_generated_marks_sheet_headers_match_registry_dynamic_resolvers(tmp_path
     wb = openpyxl.load_workbook(marks_template, data_only=False)
     try:
         manifest_text = wb["__SYSTEM_LAYOUT__"]["A2"].value
-        assert isinstance(manifest_text, str)
+        if not (isinstance(manifest_text, str)):
+            raise AssertionError('assertion failed')
         manifest = json.loads(manifest_text)
 
         for spec in manifest.get("sheets", []):
@@ -213,7 +229,8 @@ def test_generated_marks_sheet_headers_match_registry_dynamic_resolvers(tmp_path
             }:
                 continue
             headers = spec.get("headers", [])
-            assert isinstance(headers, list)
+            if not (isinstance(headers, list)):
+                raise AssertionError('assertion failed')
             if kind == LAYOUT_SHEET_KIND_DIRECT_CO_WISE:
                 question_count = max(1, len(headers) - 4)
                 expected = resolve_dynamic_sheet_headers(
@@ -244,6 +261,7 @@ def test_generated_marks_sheet_headers_match_registry_dynamic_resolvers(tmp_path
                     sheet_key=COURSE_SETUP_SHEET_KEY_MARKS_INDIRECT,
                     context={"total_outcomes": total_outcomes},
                 )
-            assert tuple(headers) == expected
+            if not (tuple(headers) == expected):
+                raise AssertionError('assertion failed')
     finally:
         wb.close()

@@ -76,10 +76,14 @@ def test_v2_marks_validator_warning_buffer_consume_clears_state() -> None:
     )
 
     warnings = v2_validator.consume_last_marks_anomaly_warnings()
-    assert len(warnings) == 2
-    assert any("High absence ratio" in message for message in warnings)
-    assert any("Near-constant marks" in message for message in warnings)
-    assert v2_validator.consume_last_marks_anomaly_warnings() == []
+    if not (len(warnings) == 2):
+        raise AssertionError('assertion failed')
+    if not (any("High absence ratio" in message for message in warnings)):
+        raise AssertionError('assertion failed')
+    if not (any("Near-constant marks" in message for message in warnings)):
+        raise AssertionError('assertion failed')
+    if not (v2_validator.consume_last_marks_anomaly_warnings() == []):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_validator_resets_warning_buffer_per_run() -> None:
@@ -99,13 +103,15 @@ def test_v2_marks_validator_resets_warning_buffer_per_run() -> None:
     class _Workbook:
         sheetnames = ["OnlySheet"]
 
-    try:
-        v2_validator.validate_filled_marks_manifest_schema(workbook=_Workbook(), manifest={"sheet_order": [], "sheets": []})
-    except Exception:
-        pass
+    with pytest.raises(Exception):
+        v2_validator.validate_filled_marks_manifest_schema(
+            workbook=_Workbook(),
+            manifest={"sheet_order": [], "sheets": []},
+        )
 
     # stale warnings should be cleared at validation start
-    assert "stale warning" not in v2_validator.consume_last_marks_anomaly_warnings()
+    if not ("stale warning" not in v2_validator.consume_last_marks_anomaly_warnings()):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_batch_validator_returns_course_like_shape(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,13 +152,20 @@ def test_v2_marks_batch_validator_returns_course_like_shape(monkeypatch: pytest.
         template_id="COURSE_SETUP_V2",
     )
 
-    assert result["valid_paths"] == ["valid.xlsx"]
-    assert result["invalid_paths"] == ["invalid.xlsx"]
-    assert result["duplicate_paths"] == ["valid.xlsx"]
-    assert result["mismatched_paths"] == []
-    assert result["duplicate_sections"] == []
-    assert isinstance(result["template_ids"], dict)
-    assert result["rejections"]
+    if not (result["valid_paths"] == ["valid.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == ["invalid.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_paths"] == ["valid.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["mismatched_paths"] == []):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_sections"] == []):
+        raise AssertionError('assertion failed')
+    if not (isinstance(result["template_ids"], dict)):
+        raise AssertionError('assertion failed')
+    if not (result["rejections"]):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_batch_validator_tracks_template_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,11 +208,15 @@ def test_v2_marks_batch_validator_tracks_template_mismatch(monkeypatch: pytest.M
         ),
     )
 
-    assert result["valid_paths"] == []
-    assert result["invalid_paths"] == ["wrong_template.xlsx"]
-    assert result["mismatched_paths"] == ["wrong_template.xlsx"]
+    if not (result["valid_paths"] == []):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == ["wrong_template.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["mismatched_paths"] == ["wrong_template.xlsx"]):
+        raise AssertionError('assertion failed')
     rejection = cast(list[dict[str, Any]], result["rejections"])[0]
-    assert rejection["reason_kind"] == "template_mismatch"
+    if not (rejection["reason_kind"] == "template_mismatch"):
+        raise AssertionError('assertion failed')
 
 
 @dataclass(frozen=True)
@@ -311,13 +328,20 @@ def test_marks_impl_two_stage_trust_flow_uses_read_only_then_full_workbook(
         expected_template_id="COURSE_SETUP_V2",
     )
 
-    assert getattr(resolved, "template_id", "") == "COURSE_SETUP_V2"
-    assert calls[0].get("read_only") is True
-    assert calls[1].get("read_only", False) is False
-    assert workbooks[0].closed is True
-    assert workbooks[1].closed is True
-    assert len(manifest_calls) == 1
-    assert manifest_calls[0][0] is workbooks[1]
+    if not (getattr(resolved, "template_id", "") == "COURSE_SETUP_V2"):
+        raise AssertionError('assertion failed')
+    if calls[0].get("read_only") is not True:
+        raise AssertionError('assertion failed')
+    if calls[1].get("read_only", False) is not False:
+        raise AssertionError('assertion failed')
+    if workbooks[0].closed is not True:
+        raise AssertionError('assertion failed')
+    if workbooks[1].closed is not True:
+        raise AssertionError('assertion failed')
+    if not (len(manifest_calls) == 1):
+        raise AssertionError('assertion failed')
+    if manifest_calls[0][0] is not workbooks[1]:
+        raise AssertionError('assertion failed')
 
 
 def test_marks_impl_manifest_validation_error_is_preserved(
@@ -384,7 +408,8 @@ def test_marks_impl_manifest_validation_error_is_preserved(
             workbook_path=workbook_path,
             expected_template_id="COURSE_SETUP_V2",
         )
-    assert excinfo.value.code == "COA_MARK_ENTRY_EMPTY"
+    if not (excinfo.value.code == "COA_MARK_ENTRY_EMPTY"):
+        raise AssertionError('assertion failed')
 
 
 def test_marks_impl_raises_open_failed_when_read_only_open_fails(
@@ -433,8 +458,10 @@ def test_marks_impl_raises_open_failed_when_read_only_open_fails(
             expected_template_id="COURSE_SETUP_V2",
         )
 
-    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
-    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+    if not (excinfo.value.code == "WORKBOOK_OPEN_FAILED"):
+        raise AssertionError('assertion failed')
+    if not (str(excinfo.value.context.get("workbook", "")) == str(workbook_path)):
+        raise AssertionError('assertion failed')
 
 
 def test_marks_impl_raises_open_failed_when_full_open_fails_after_payload_read(
@@ -516,10 +543,14 @@ def test_marks_impl_raises_open_failed_when_full_open_fails_after_payload_read(
             expected_template_id="COURSE_SETUP_V2",
         )
 
-    assert load_calls[0].get("read_only") is True
-    assert load_calls[1].get("read_only", False) is False
-    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
-    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+    if load_calls[0].get("read_only") is not True:
+        raise AssertionError('assertion failed')
+    if load_calls[1].get("read_only", False) is not False:
+        raise AssertionError('assertion failed')
+    if not (excinfo.value.code == "WORKBOOK_OPEN_FAILED"):
+        raise AssertionError('assertion failed')
+    if not (str(excinfo.value.context.get("workbook", "")) == str(workbook_path)):
+        raise AssertionError('assertion failed')
 
 
 def test_marks_impl_rejects_symlink_path(
@@ -552,7 +583,8 @@ def test_marks_impl_rejects_symlink_path(
             expected_template_id="COURSE_SETUP_V2",
         )
 
-    assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"
+    if not (excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_batch_validator_tracks_cohort_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -596,16 +628,21 @@ def test_v2_marks_batch_validator_tracks_cohort_mismatch(monkeypatch: pytest.Mon
         ),
     )
 
-    assert result["valid_paths"] == ["ok.xlsx"]
-    assert result["mismatched_paths"] == ["cohort_bad.xlsx"]
-    assert result["invalid_paths"] == []
+    if not (result["valid_paths"] == ["ok.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["mismatched_paths"] == ["cohort_bad.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == []):
+        raise AssertionError('assertion failed')
     rejection = next(
         item
         for item in cast(list[dict[str, Any]], result["rejections"])
         if item["path"] == "cohort_bad.xlsx"
     )
-    assert rejection["reason_kind"] == "cohort_mismatch"
-    assert rejection["issue"]["code"] == "MARKS_TEMPLATE_COHORT_MISMATCH"
+    if not (rejection["reason_kind"] == "cohort_mismatch"):
+        raise AssertionError('assertion failed')
+    if not (rejection["issue"]["code"] == "MARKS_TEMPLATE_COHORT_MISMATCH"):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_batch_validator_tracks_duplicate_section(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -649,16 +686,21 @@ def test_v2_marks_batch_validator_tracks_duplicate_section(monkeypatch: pytest.M
         ),
     )
 
-    assert result["valid_paths"] == ["first.xlsx"]
-    assert result["duplicate_sections"] == ["dup_section.xlsx"]
-    assert result["invalid_paths"] == []
+    if not (result["valid_paths"] == ["first.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_sections"] == ["dup_section.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == []):
+        raise AssertionError('assertion failed')
     rejection = next(
         item
         for item in cast(list[dict[str, Any]], result["rejections"])
         if item["path"] == "dup_section.xlsx"
     )
-    assert rejection["reason_kind"] == "duplicate_section"
-    assert rejection["issue"]["code"] == "MARKS_TEMPLATE_SECTION_DUPLICATE"
+    if not (rejection["reason_kind"] == "duplicate_section"):
+        raise AssertionError('assertion failed')
+    if not (rejection["issue"]["code"] == "MARKS_TEMPLATE_SECTION_DUPLICATE"):
+        raise AssertionError('assertion failed')
 
 
 def test_v2_marks_batch_validator_rejects_cross_workbook_duplicate_reg_no(
@@ -704,15 +746,19 @@ def test_v2_marks_batch_validator_rejects_cross_workbook_duplicate_reg_no(
         ),
     )
 
-    assert result["valid_paths"] == ["first.xlsx"]
-    assert result["invalid_paths"] == ["second.xlsx"]
+    if not (result["valid_paths"] == ["first.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == ["second.xlsx"]):
+        raise AssertionError('assertion failed')
     rejection = next(
         item
         for item in cast(list[dict[str, Any]], result["rejections"])
         if item["path"] == "second.xlsx"
     )
-    assert rejection["reason_kind"] == "duplicate_reg_no"
-    assert rejection["issue"]["code"] == "MARKS_TEMPLATE_STUDENT_REG_DUPLICATE"
+    if not (rejection["reason_kind"] == "duplicate_reg_no"):
+        raise AssertionError('assertion failed')
+    if not (rejection["issue"]["code"] == "MARKS_TEMPLATE_STUDENT_REG_DUPLICATE"):
+        raise AssertionError('assertion failed')
 
 
 def test_non_empty_marks_entries_collects_multiple_row_failures() -> None:
@@ -802,13 +848,16 @@ def test_non_empty_marks_entries_collects_multiple_row_failures() -> None:
             header_row=1,
         )
 
-    assert excinfo.value.code == "MARKS_TEMPLATE_VALIDATION_FAILED"
+    if not (excinfo.value.code == "MARKS_TEMPLATE_VALIDATION_FAILED"):
+        raise AssertionError('assertion failed')
     issues = cast(list[dict[str, object]], excinfo.value.context.get("issues", []))
-    assert any(str(item.get("code", "")).strip() == "COA_ABSENCE_POLICY_VIOLATION" for item in issues)
-    assert any(
+    if not (any(str(item.get("code", "")).strip() == "COA_ABSENCE_POLICY_VIOLATION" for item in issues)):
+        raise AssertionError('assertion failed')
+    if not (any(
         str(item.get("code", "")).strip() == "INSTRUCTOR_VALIDATION_STEP2_TOTAL_FORMULA_MISMATCH"
         for item in issues
-    )
+    )):
+        raise AssertionError('assertion failed')
 
 
 def test_row_total_consistency_accepts_absence_aware_total_formula() -> None:

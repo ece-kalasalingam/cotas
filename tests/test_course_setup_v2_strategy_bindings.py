@@ -36,9 +36,12 @@ def test_co_attainment_generation_inputs_parses_word_report_settings(
         output_path=tmp_path / "co_attainment.xlsx",
         default_template_id="COURSE_SETUP_V2",
     )
-    assert result["generate_word_report"] is True
-    assert result["word_output_path"] == tmp_path / "co_report.docx"
-    assert result["co_description_path"] == tmp_path / "co_description.xlsx"
+    if result["generate_word_report"] is not True:
+        raise AssertionError('assertion failed')
+    if not (result["word_output_path"] == tmp_path / "co_report.docx"):
+        raise AssertionError('assertion failed')
+    if not (result["co_description_path"] == tmp_path / "co_description.xlsx"):
+        raise AssertionError('assertion failed')
 
 
 def test_co_attainment_generation_inputs_disables_word_report_for_false_string(
@@ -69,6 +72,9 @@ def test_co_attainment_generation_inputs_disables_word_report_for_false_string(
         output_path=tmp_path / "co_attainment.xlsx",
         default_template_id="COURSE_SETUP_V2",
     )
-    assert result["generate_word_report"] is False
-    assert result["word_output_path"] is None
-    assert result["co_description_path"] == tmp_path / "co_description.xlsx"
+    if result["generate_word_report"] is not False:
+        raise AssertionError('assertion failed')
+    if result["word_output_path"] is not None:
+        raise AssertionError('assertion failed')
+    if not (result["co_description_path"] == tmp_path / "co_description.xlsx"):
+        raise AssertionError('assertion failed')

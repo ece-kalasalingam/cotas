@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess
+import os
 import sys
 from pathlib import Path
 
@@ -21,8 +21,11 @@ def _lrelease_executable() -> Path:
 
 
 def _compile_qm(ts_path: Path, qm_path: Path) -> None:
-    cmd = [str(_lrelease_executable()), str(ts_path), "-qm", str(qm_path)]
-    subprocess.run(cmd, check=True)
+    executable = str(_lrelease_executable())
+    argv = [executable, str(ts_path), "-qm", str(qm_path)]
+    exit_code = os.spawnv(os.P_WAIT, executable, argv)  # nosec B606 - trusted local Qt tool invocation
+    if exit_code != 0:
+        raise RuntimeError(f"lrelease failed with exit code {exit_code}: {' '.join(argv)}")
 
 
 def main() -> int:

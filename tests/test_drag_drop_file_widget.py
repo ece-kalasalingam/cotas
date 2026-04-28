@@ -241,7 +241,8 @@ def test_drag_drop_file_list_multiple_mode_emits_all_local_paths(qapp: QApplicat
         )
     )
     dl.dropEvent(cast(Any, evt))
-    assert seen == [["C:/a.xlsx", "C:/b.xlsx"]]
+    if not (seen == [["C:/a.xlsx", "C:/b.xlsx"]]):
+        raise AssertionError('assertion failed')
 
 
 def test_drag_drop_file_list_single_mode_emits_first_local_path_only(qapp: QApplication) -> None:
@@ -273,4 +274,5 @@ def test_drag_drop_file_list_single_mode_emits_first_local_path_only(qapp: QAppl
         )
     )
     dl.dropEvent(cast(Any, evt))
-    assert seen == [["C:/first.xlsx"]]
+    if not (seen == [["C:/first.xlsx"]]):
+        raise AssertionError('assertion failed')

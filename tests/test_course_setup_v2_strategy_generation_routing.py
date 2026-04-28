@@ -111,14 +111,22 @@ def test_strategy_generate_workbook_routes_co_attainment_to_generator(
         },
     )
 
-    assert str(result) == str(output_path)
-    assert captured["template_id"] == "COURSE_SETUP_V2"
-    assert captured["source_paths"] == [tmp_path / "source.xlsx"]
-    assert captured["co_attainment_percent"] == 80.0
-    assert captured["co_attainment_level"] == 2
-    assert captured["generate_word_report"] is True
-    assert captured["word_output_path"] == tmp_path / "co_attainment_report.docx"
-    assert captured["co_description_path"] == tmp_path / "co_description.xlsx"
+    if not (str(result) == str(output_path)):
+        raise AssertionError('assertion failed')
+    if not (captured["template_id"] == "COURSE_SETUP_V2"):
+        raise AssertionError('assertion failed')
+    if not (captured["source_paths"] == [tmp_path / "source.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (captured["co_attainment_percent"] == 80.0):
+        raise AssertionError('assertion failed')
+    if not (captured["co_attainment_level"] == 2):
+        raise AssertionError('assertion failed')
+    if captured["generate_word_report"] is not True:
+        raise AssertionError('assertion failed')
+    if not (captured["word_output_path"] == tmp_path / "co_attainment_report.docx"):
+        raise AssertionError('assertion failed')
+    if not (captured["co_description_path"] == tmp_path / "co_description.xlsx"):
+        raise AssertionError('assertion failed')
 
 
 def test_strategy_generate_workbook_co_attainment_requires_source_paths(tmp_path: Path) -> None:
@@ -145,7 +153,8 @@ def test_strategy_generate_workbook_co_attainment_requires_source_paths(tmp_path
             context={},
         )
 
-    assert getattr(excinfo.value, "code", None) == "COA_SOURCE_WORKBOOK_REQUIRED"
+    if not (getattr(excinfo.value, "code", None) == "COA_SOURCE_WORKBOOK_REQUIRED"):
+        raise AssertionError('assertion failed')
 
 
 def test_strategy_extract_course_metadata_and_students_routes_to_v2_extractor(
@@ -207,6 +216,9 @@ def test_strategy_extract_course_metadata_and_students_routes_to_v2_extractor(
         template_id="COURSE_SETUP_V2",
     )
 
-    assert captured["path"] == workbook_path
-    assert students == {"r1"}
-    assert metadata == {"course_code": "CSE101"}
+    if not (captured["path"] == workbook_path):
+        raise AssertionError('assertion failed')
+    if not (students == {"r1"}):
+        raise AssertionError('assertion failed')
+    if not (metadata == {"course_code": "CSE101"}):
+        raise AssertionError('assertion failed')

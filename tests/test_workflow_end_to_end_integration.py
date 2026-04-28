@@ -108,7 +108,8 @@ def _fill_marks_workbook(marks_path: Path, mark_value: float = 1.0) -> None:
     wb = openpyxl.load_workbook(marks_path)
     try:
         manifest_text = wb["__SYSTEM_LAYOUT__"]["A2"].value
-        assert isinstance(manifest_text, str)
+        if not (isinstance(manifest_text, str)):
+            raise AssertionError('assertion failed')
         manifest = json.loads(manifest_text)
         for spec in manifest.get("sheets", []):
             kind = spec.get("kind")
@@ -212,8 +213,10 @@ def test_instructor_workflow_service_end_to_end_generates_signed_final_report(tm
         None.
     """
     final_report = _build_final_report(tmp_path, section="A")
-    assert final_report.exists()
-    assert extract_final_report_signature_from_path(final_report) is not None
+    if not (final_report.exists()):
+        raise AssertionError('assertion failed')
+    if not (extract_final_report_signature_from_path(final_report) is not None):
+        raise AssertionError('assertion failed')
 
 
 def _find_header_row(sheet, expected_headers: list[str]) -> int:  # noqa: ANN001
@@ -372,7 +375,8 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
     try:
         co_titles = [name for name in workbook.sheetnames if re.fullmatch(r"CO\d+", str(name))]
         total_outcomes = len(co_titles)
-        assert total_outcomes > 0
+        if not (total_outcomes > 0):
+            raise AssertionError('assertion failed')
 
         expected_sheet_order: list[str] = ["Pass_Percentage", "Summary", "Graph"]
         for co_index in range(1, total_outcomes + 1):
@@ -384,7 +388,8 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 ]
             )
         expected_sheet_order.extend(["__SYSTEM_HASH__", "__SYSTEM_LAYOUT__"])
-        assert list(workbook.sheetnames) == expected_sheet_order
+        if not (list(workbook.sheetnames) == expected_sheet_order):
+            raise AssertionError('assertion failed')
         for sheet_name in workbook.sheetnames:
             if sheet_name in {"__SYSTEM_HASH__", "__SYSTEM_LAYOUT__"}:
                 continue
@@ -393,7 +398,8 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 str(sheet.cell(row=row, column=1).value or "").strip()
                 for row in range(1, int(sheet.max_row or 0) + 1)
             ]
-            assert CO_ANALYSIS_SHEET_FOOTER_TEXT in values, f"Footer missing in sheet={sheet_name}"
+            if CO_ANALYSIS_SHEET_FOOTER_TEXT not in values:
+                raise AssertionError(f"Footer missing in sheet={sheet_name}")
 
         for co_index in range(1, total_outcomes + 1):
             direct_sheet = workbook[co_direct_sheet_name(co_index)]
@@ -462,14 +468,18 @@ def test_co_analysis_generation_emits_direct_indirect_and_co_triplets(tmp_path: 
                 score_col=_column_for_header(co_sheet, header_row=co_header, header_value="Indirect (20%)"),
             )
 
-            assert [row[:2] for row in direct_rows] == [row[:2] for row in co_direct_rows]
-            assert [row[:2] for row in indirect_rows] == [row[:2] for row in co_indirect_rows]
-            assert [_normalized_score(row[2]) for row in direct_rows] == [
+            if not ([row[:2] for row in direct_rows] == [row[:2] for row in co_direct_rows]):
+                raise AssertionError('assertion failed')
+            if not ([row[:2] for row in indirect_rows] == [row[:2] for row in co_indirect_rows]):
+                raise AssertionError('assertion failed')
+            if not ([_normalized_score(row[2]) for row in direct_rows] == [
                 _normalized_score(row[2]) for row in co_direct_rows
-            ]
-            assert [_normalized_score(row[2]) for row in indirect_rows] == [
+            ]):
+                raise AssertionError('assertion failed')
+            if not ([_normalized_score(row[2]) for row in indirect_rows] == [
                 _normalized_score(row[2]) for row in co_indirect_rows
-            ]
+            ]):
+                raise AssertionError('assertion failed')
     finally:
         source_workbook.close()
         workbook.close()

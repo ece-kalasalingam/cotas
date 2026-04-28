@@ -76,32 +76,51 @@ def test_generated_co_description_template_structure_and_integrity(tmp_path: Pat
 
     workbook = openpyxl.load_workbook(output)
     try:
-        assert workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]
+        if not (workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]):
+            raise AssertionError('assertion failed')
 
         course_sheet = workbook["Course_Metadata"]
-        assert course_sheet["A1"].value == "Field"
-        assert course_sheet["B1"].value == "Value"
-        assert course_sheet["A2"].value == "Course_Code"
-        assert course_sheet["B2"].value == "ECE000"
+        if not (course_sheet["A1"].value == "Field"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["B1"].value == "Value"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["A2"].value == "Course_Code"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["B2"].value == "ECE000"):
+            raise AssertionError('assertion failed')
 
         co_desc_sheet = workbook["CO_Description"]
-        assert co_desc_sheet["A1"].value == "CO#"
-        assert co_desc_sheet["C1"].value == "Domain_Level"
-        assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
-        assert co_desc_sheet["A2"].value == 1
-        assert bool(co_desc_sheet["B1"].alignment.wrap_text)
-        assert bool(co_desc_sheet["D1"].alignment.wrap_text)
-        assert bool(co_desc_sheet["B2"].alignment.wrap_text)
-        assert bool(co_desc_sheet["D2"].alignment.wrap_text)
+        if not (co_desc_sheet["A1"].value == "CO#"):
+            raise AssertionError('assertion failed')
+        if not (co_desc_sheet["C1"].value == "Domain_Level"):
+            raise AssertionError('assertion failed')
+        if not (co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"):
+            raise AssertionError('assertion failed')
+        if not (co_desc_sheet["A2"].value == 1):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["B1"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["D1"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["B2"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["D2"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
         co_validations = list(co_desc_sheet.data_validations.dataValidation)
-        assert co_validations
-        assert any("A2:A301" in str(validation.sqref) for validation in co_validations)
-        assert any("C2:C301" in str(validation.sqref) for validation in co_validations)
-        assert any("D2:D301" in str(validation.sqref) for validation in co_validations)
+        if not (co_validations):
+            raise AssertionError('assertion failed')
+        if not (any("A2:A301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
+        if not (any("C2:C301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
+        if not (any("D2:D301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
 
         hash_sheet = workbook["__SYSTEM_HASH__"]
-        assert hash_sheet.sheet_state == "hidden"
-        assert hash_sheet["A2"].value == ID_COURSE_SETUP
+        if not (hash_sheet.sheet_state == "hidden"):
+            raise AssertionError('assertion failed')
+        if not (hash_sheet["A2"].value == ID_COURSE_SETUP):
+            raise AssertionError('assertion failed')
     finally:
         workbook.close()
 
@@ -123,50 +142,76 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
 
     workbook = openpyxl.load_workbook(output)
     try:
-        assert workbook.sheetnames == [
+        if not (workbook.sheetnames == [
             "Course_Metadata",
             "Assessment_Config",
             "Question_Map",
             "CO_Description",
             "Students",
             "__SYSTEM_HASH__",
-        ]
+        ]):
+            raise AssertionError('assertion failed')
 
         course_sheet = workbook["Course_Metadata"]
-        assert course_sheet["A1"].value == "Field"
-        assert course_sheet["B1"].value == "Value"
-        assert course_sheet["A2"].value == "Course_Code"
-        assert course_sheet["B2"].value == "ECE000"
+        if not (course_sheet["A1"].value == "Field"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["B1"].value == "Value"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["A2"].value == "Course_Code"):
+            raise AssertionError('assertion failed')
+        if not (course_sheet["B2"].value == "ECE000"):
+            raise AssertionError('assertion failed')
 
         assessment_sheet = workbook["Assessment_Config"]
-        assert assessment_sheet["A1"].value == "Component"
-        assert assessment_sheet["E2"].value == "YES"
+        if not (assessment_sheet["A1"].value == "Component"):
+            raise AssertionError('assertion failed')
+        if not (assessment_sheet["E2"].value == "YES"):
+            raise AssertionError('assertion failed')
 
         validations = list(assessment_sheet.data_validations.dataValidation)
-        assert validations
-        assert "E2:E301" in str(validations[0].sqref)
+        if not (validations):
+            raise AssertionError('assertion failed')
+        if "E2:E301" not in str(validations[0].sqref):
+            raise AssertionError('assertion failed')
 
         co_desc_sheet = workbook["CO_Description"]
-        assert co_desc_sheet["A1"].value == "CO#"
-        assert co_desc_sheet["C1"].value == "Domain_Level"
-        assert co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"
-        assert bool(co_desc_sheet["B1"].alignment.wrap_text)
-        assert bool(co_desc_sheet["D1"].alignment.wrap_text)
-        assert bool(co_desc_sheet["B2"].alignment.wrap_text)
-        assert bool(co_desc_sheet["D2"].alignment.wrap_text)
+        if not (co_desc_sheet["A1"].value == "CO#"):
+            raise AssertionError('assertion failed')
+        if not (co_desc_sheet["C1"].value == "Domain_Level"):
+            raise AssertionError('assertion failed')
+        if not (co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["B1"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["D1"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["B2"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
+        if not (bool(co_desc_sheet["D2"].alignment.wrap_text)):
+            raise AssertionError('assertion failed')
         co_validations = list(co_desc_sheet.data_validations.dataValidation)
-        assert co_validations
-        assert any("A2:A301" in str(validation.sqref) for validation in co_validations)
-        assert any("C2:C301" in str(validation.sqref) for validation in co_validations)
-        assert any("D2:D301" in str(validation.sqref) for validation in co_validations)
+        if not (co_validations):
+            raise AssertionError('assertion failed')
+        if not (any("A2:A301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
+        if not (any("C2:C301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
+        if not (any("D2:D301" in str(validation.sqref) for validation in co_validations)):
+            raise AssertionError('assertion failed')
 
         hash_sheet = workbook["__SYSTEM_HASH__"]
-        assert hash_sheet.sheet_state == "hidden"
-        assert hash_sheet["A1"].value == "Template_ID"
-        assert hash_sheet["B1"].value == "Template_Hash"
-        assert hash_sheet["A2"].value == ID_COURSE_SETUP
-        assert isinstance(hash_sheet["B2"].value, str)
-        assert str(hash_sheet["B2"].value).strip() != ""
+        if not (hash_sheet.sheet_state == "hidden"):
+            raise AssertionError('assertion failed')
+        if not (hash_sheet["A1"].value == "Template_ID"):
+            raise AssertionError('assertion failed')
+        if not (hash_sheet["B1"].value == "Template_Hash"):
+            raise AssertionError('assertion failed')
+        if not (hash_sheet["A2"].value == ID_COURSE_SETUP):
+            raise AssertionError('assertion failed')
+        if not (isinstance(hash_sheet["B2"].value, str)):
+            raise AssertionError('assertion failed')
+        if not (str(hash_sheet["B2"].value).strip() != ""):
+            raise AssertionError('assertion failed')
     finally:
         workbook.close()
 
@@ -190,7 +235,9 @@ def test_generated_workbook_overwrites_existing_file_atomically(tmp_path: Path) 
 
     workbook = openpyxl.load_workbook(output)
     try:
-        assert workbook["Students"]["A2"].value == "R101"
-        assert workbook["Students"]["B2"].value == "STUD1"
+        if not (workbook["Students"]["A2"].value == "R101"):
+            raise AssertionError('assertion failed')
+        if not (workbook["Students"]["B2"].value == "STUD1"):
+            raise AssertionError('assertion failed')
     finally:
         workbook.close()

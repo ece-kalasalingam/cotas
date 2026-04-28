@@ -188,20 +188,27 @@ def test_v2_marks_batch_perf_baseline_vs_refactor(monkeypatch: pytest.MonkeyPatc
     _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
-    assert baseline_median > 0
-    assert baseline_p95 > 0
-    assert refactor_median > 0
-    assert refactor_p95 > 0
-    assert peak > 0
+    if not (baseline_median > 0):
+        raise AssertionError('assertion failed')
+    if not (baseline_p95 > 0):
+        raise AssertionError('assertion failed')
+    if not (refactor_median > 0):
+        raise AssertionError('assertion failed')
+    if not (refactor_p95 > 0):
+        raise AssertionError('assertion failed')
+    if not (peak > 0):
+        raise AssertionError('assertion failed')
     # The synthetic baseline is intentionally lightweight and can be sub-millisecond.
     # Use an execution-floor-aware guard to avoid false regressions on shared CI runners.
     median_limit = max(baseline_median * 1.5, 0.200)
     p95_limit = max(baseline_p95 * 1.5, 0.300)
-    assert refactor_median <= median_limit, (
+    if not (refactor_median <= median_limit):
+        raise AssertionError((
         f"Median regression too high: baseline={baseline_median:.6f}s, "
         f"refactor={refactor_median:.6f}s, limit={median_limit:.6f}s"
-    )
-    assert refactor_p95 <= p95_limit, (
+    ))
+    if not (refactor_p95 <= p95_limit):
+        raise AssertionError((
         f"P95 regression too high: baseline={baseline_p95:.6f}s, "
         f"refactor={refactor_p95:.6f}s, limit={p95_limit:.6f}s"
-    )
+    ))

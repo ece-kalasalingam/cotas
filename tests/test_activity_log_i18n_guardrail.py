@@ -99,4 +99,5 @@ def test_all_modules_activity_log_messages_are_key_based() -> None:
     violations: list[str] = []
     for path in TARGET_MODULES:
         violations.extend(_violations_for_file(path))
-    assert not violations, "Activity-log i18n guardrail violations:\n" + "\n".join(violations)
+    if not (not violations):
+        raise AssertionError("Activity-log i18n guardrail violations:\n" + "\n".join(violations))

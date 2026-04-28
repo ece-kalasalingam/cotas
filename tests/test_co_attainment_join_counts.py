@@ -131,14 +131,22 @@ def test_iter_co_rows_returns_counts_without_rescans(monkeypatch: pytest.MonkeyP
         workbook_name="w.xlsx",
     )
 
-    assert calls == {"direct": 1, "indirect": 1}
-    assert direct_total == 2
-    assert indirect_total == 2
-    assert dropped == 2
-    assert len(rows) == 1
-    assert rows[0].reg_no == "R2"
-    assert direct_columns == []
-    assert indirect_columns == []
+    if not (calls == {"direct": 1, "indirect": 1}):
+        raise AssertionError('assertion failed')
+    if not (direct_total == 2):
+        raise AssertionError('assertion failed')
+    if not (indirect_total == 2):
+        raise AssertionError('assertion failed')
+    if not (dropped == 2):
+        raise AssertionError('assertion failed')
+    if not (len(rows) == 1):
+        raise AssertionError('assertion failed')
+    if not (rows[0].reg_no == "R2"):
+        raise AssertionError('assertion failed')
+    if not (direct_columns == []):
+        raise AssertionError('assertion failed')
+    if not (indirect_columns == []):
+        raise AssertionError('assertion failed')
 
 
 def test_direct_total_100_treats_absent_as_zero() -> None:
@@ -153,8 +161,10 @@ def test_direct_total_100_treats_absent_as_zero() -> None:
     Raises:
         None.
     """
-    assert co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_ABSENT_TOKEN) == 0.0
-    assert co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_NOT_APPLICABLE_TOKEN) == 0.0
+    if not (co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_ABSENT_TOKEN) == 0.0):
+        raise AssertionError('assertion failed')
+    if not (co_attainment._direct_total_100_from_direct_score(co_attainment.CO_REPORT_NOT_APPLICABLE_TOKEN) == 0.0):
+        raise AssertionError('assertion failed')
 
 
 def test_co_direct_total_100_uses_zero_only_for_absent_assessments() -> None:
@@ -198,4 +208,5 @@ def test_co_direct_total_100_uses_zero_only_for_absent_assessments() -> None:
         direct_columns_by_co=columns,
         direct_scores_by_co=scores,
     )
-    assert value == 40.0
+    if not (value == 40.0):
+        raise AssertionError('assertion failed')

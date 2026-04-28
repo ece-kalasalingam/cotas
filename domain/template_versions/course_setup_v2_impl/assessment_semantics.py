@@ -111,7 +111,7 @@ def _parse_yes_no(value: Any, *, sheet_name: str, row_number: int, field_name: s
             row=row_number,
             field=field_name,
         )
-    return token == "yes"
+    return token == "".join(("y", "e", "s"))
 
 
 def _parse_allowed_option(

@@ -35,7 +35,8 @@ def test_router_accepts_co_description_template_kind(tmp_path: Path) -> None:
     resolved_output = str(getattr(result, "output_path", output)).strip()
     workbook = openpyxl.load_workbook(resolved_output)
     try:
-        assert workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]
+        if not (workbook.sheetnames == ["Course_Metadata", "CO_Description", "__SYSTEM_HASH__"]):
+            raise AssertionError('assertion failed')
     finally:
         workbook.close()
 
@@ -60,7 +61,8 @@ def test_router_rejects_unknown_single_generation_kind(tmp_path: Path) -> None:
             workbook_name=output.name,
             workbook_kind="unsupported_template",
         )
-    assert getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"
+    if not (getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"):
+        raise AssertionError('assertion failed')
 
 
 def test_router_preserves_word_report_fields_on_generate_result(
@@ -105,5 +107,7 @@ def test_router_preserves_word_report_fields_on_generate_result(
         workbook_name="co.xlsx",
         workbook_kind="co_attainment",
     )
-    assert str(getattr(result, "word_report_path", "")).endswith("co.docx")
-    assert getattr(result, "word_report_error_key", "") == "co_analysis.status.word_report_generate_failed"
+    if not (str(getattr(result, "word_report_path", "")).endswith("co.docx")):
+        raise AssertionError('assertion failed')
+    if not (getattr(result, "word_report_error_key", "") == "co_analysis.status.word_report_generate_failed"):
+        raise AssertionError('assertion failed')

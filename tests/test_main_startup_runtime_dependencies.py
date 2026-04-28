@@ -56,9 +56,12 @@ def test_validate_startup_runtime_dependencies_blocks_on_missing(
 
     result = main_mod._validate_startup_runtime_dependencies(None)
 
-    assert result == 1
-    assert captured["title"] == main_mod.APP_NAME
-    assert "openpyxl, python-docx" in captured["message"]
+    if not (result == 1):
+        raise AssertionError('assertion failed')
+    if not (captured["title"] == main_mod.APP_NAME):
+        raise AssertionError('assertion failed')
+    if "openpyxl, python-docx" not in captured["message"]:
+        raise AssertionError('assertion failed')
 
 
 def test_validate_startup_runtime_dependencies_passes_when_present(
@@ -77,4 +80,5 @@ def test_validate_startup_runtime_dependencies_passes_when_present(
     """
     main_mod = _reloaded_main()
     monkeypatch.setattr(main_mod, "missing_runtime_dependency_packages", lambda: ())
-    assert main_mod._validate_startup_runtime_dependencies(None) is None
+    if main_mod._validate_startup_runtime_dependencies(None) is not None:
+        raise AssertionError('assertion failed')

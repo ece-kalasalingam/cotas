@@ -18,8 +18,10 @@ def test_format_log_line_at_blank_returns_none() -> None:
     Raises:
         None.
     """
-    assert ui_logging.format_log_line_at("") is None
-    assert ui_logging.format_log_line_at("   ") is None
+    if ui_logging.format_log_line_at("") is not None:
+        raise AssertionError('assertion failed')
+    if ui_logging.format_log_line_at("   ") is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_format_log_line_at_preserves_existing_timestamp() -> None:
@@ -35,7 +37,8 @@ def test_format_log_line_at_preserves_existing_timestamp() -> None:
         None.
     """
     line = "[10:20:30] already stamped"
-    assert ui_logging.format_log_line_at(line) == line
+    if not (ui_logging.format_log_line_at(line) == line):
+        raise AssertionError('assertion failed')
 
 
 def test_format_log_line_at_adds_marker_from_supplied_timestamp() -> None:
@@ -51,7 +54,8 @@ def test_format_log_line_at_adds_marker_from_supplied_timestamp() -> None:
         None.
     """
     ts = datetime(2026, 3, 16, 22, 7, 37)
-    assert ui_logging.format_log_line_at("hello", timestamp=ts) == "[22:07:37] hello"
+    if not (ui_logging.format_log_line_at("hello", timestamp=ts) == "[22:07:37] hello"):
+        raise AssertionError('assertion failed')
 
 
 def test_build_and_parse_i18n_log_roundtrip() -> None:
@@ -72,7 +76,8 @@ def test_build_and_parse_i18n_log_roundtrip() -> None:
         fallback="added",
     )
     parsed = ui_logging.parse_i18n_log_message(msg)
-    assert parsed == ("co_analysis.status.added", {"count": 3}, "added")
+    if not (parsed == ("co_analysis.status.added", {"count": 3}, "added")):
+        raise AssertionError('assertion failed')
 
 
 def test_parse_i18n_log_message_rejects_invalid_payloads() -> None:
@@ -87,9 +92,12 @@ def test_parse_i18n_log_message_rejects_invalid_payloads() -> None:
     Raises:
         None.
     """
-    assert ui_logging.parse_i18n_log_message("plain text") is None
-    assert ui_logging.parse_i18n_log_message("__I18N_LOG__:{not-json") is None
-    assert ui_logging.parse_i18n_log_message("__I18N_LOG__:{}") is None
+    if ui_logging.parse_i18n_log_message("plain text") is not None:
+        raise AssertionError('assertion failed')
+    if ui_logging.parse_i18n_log_message("__I18N_LOG__:{not-json") is not None:
+        raise AssertionError('assertion failed')
+    if ui_logging.parse_i18n_log_message("__I18N_LOG__:{}") is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_resolves_prefix_payload(monkeypatch) -> None:
@@ -107,7 +115,8 @@ def test_resolve_i18n_log_message_resolves_prefix_payload(monkeypatch) -> None:
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: f"T({key},{kwargs.get('count')})")
     payload = ui_logging.build_i18n_log_message("co_analysis.summary", kwargs={"count": 2})
     msg = f"INFO: {payload}"
-    assert ui_logging.resolve_i18n_log_message(msg) == "INFO: T(co_analysis.summary,2)"
+    if not (ui_logging.resolve_i18n_log_message(msg) == "INFO: T(co_analysis.summary,2)"):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_falls_back_on_translation_failure(monkeypatch) -> None:
@@ -143,7 +152,8 @@ def test_resolve_i18n_log_message_falls_back_on_translation_failure(monkeypatch)
         kwargs={"count": 2},
         fallback="safe fallback",
     )
-    assert ui_logging.resolve_i18n_log_message(payload) == "safe fallback"
+    if not (ui_logging.resolve_i18n_log_message(payload) == "safe fallback"):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_falls_back_when_translation_returns_raw_key(monkeypatch) -> None:
@@ -164,7 +174,8 @@ def test_resolve_i18n_log_message_falls_back_when_translation_returns_raw_key(mo
         kwargs={},
         fallback="Validation Error",
     )
-    assert ui_logging.resolve_i18n_log_message(payload) == "Validation Error"
+    if not (ui_logging.resolve_i18n_log_message(payload) == "Validation Error"):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_kwargs_handles_nested_translation(monkeypatch) -> None:
@@ -188,7 +199,8 @@ def test_resolve_i18n_kwargs_handles_nested_translation(monkeypatch) -> None:
         }
     }
     resolved = ui_logging._resolve_i18n_kwargs(kwargs)
-    assert resolved["title"] == "<activity.log.ready:5>"
+    if not (resolved["title"] == "<activity.log.ready:5>"):
+        raise AssertionError('assertion failed')
 
 
 def test_ui_log_handler_prefers_user_message_and_falls_back_to_level_prefix() -> None:
@@ -215,6 +227,8 @@ def test_ui_log_handler_prefers_user_message_and_falls_back_to_level_prefix() ->
     logger.info("normal")
     logger.info("ignored", extra={"user_message": "custom user text"})
 
-    assert any(line.startswith("INFO: normal") for line in seen)
-    assert "custom user text" in seen
+    if not (any(line.startswith("INFO: normal") for line in seen)):
+        raise AssertionError('assertion failed')
+    if "custom user text" not in seen:
+        raise AssertionError('assertion failed')
 

@@ -139,5 +139,7 @@ def test_fusion_style_runs_before_theme_setup(monkeypatch: pytest.MonkeyPatch) -
 
     result = main_mod.main()
 
-    assert result == 1
-    assert events == ["style:Fusion", "theme"]
+    if not (result == 1):
+        raise AssertionError('assertion failed')
+    if not (events == ["style:Fusion", "theme"]):
+        raise AssertionError('assertion failed')

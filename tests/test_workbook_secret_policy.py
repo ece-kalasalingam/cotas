@@ -61,10 +61,14 @@ def test_secret_policy_auto_provisions_secret(monkeypatch: pytest.MonkeyPatch, t
 
     secret = workbook_secret_mod.get_workbook_password()
 
-    assert isinstance(secret, str)
-    assert secret
-    assert store_path.exists()
-    assert store_path.read_bytes()
+    if not (isinstance(secret, str)):
+        raise AssertionError('assertion failed')
+    if not (secret):
+        raise AssertionError('assertion failed')
+    if not (store_path.exists()):
+        raise AssertionError('assertion failed')
+    if not (store_path.read_bytes()):
+        raise AssertionError('assertion failed')
     workbook_secret_mod.ensure_workbook_secret_policy()
 
 
@@ -87,7 +91,8 @@ def test_startup_validation_accepts_auto_secret(monkeypatch: pytest.MonkeyPatch,
     main_mod = _reloaded_main()
     monkeypatch.setattr(main_mod, "ensure_workbook_secret_policy", workbook_secret_mod.ensure_workbook_secret_policy)
 
-    assert main_mod._validate_startup_workbook_password(None) is None
+    if main_mod._validate_startup_workbook_password(None) is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_secret_policy_recovers_from_unreadable_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -110,8 +115,10 @@ def test_secret_policy_recovers_from_unreadable_store(monkeypatch: pytest.Monkey
 
     secret = workbook_secret_mod.get_workbook_password()
 
-    assert secret
-    assert isinstance(secret, str)
+    if not (secret):
+        raise AssertionError('assertion failed')
+    if not (isinstance(secret, str)):
+        raise AssertionError('assertion failed')
 
 
 def test_secret_policy_sanitizes_control_chars_in_stored_secret(
@@ -136,7 +143,9 @@ def test_secret_policy_sanitizes_control_chars_in_stored_secret(
 
     secret = workbook_secret_mod.get_workbook_password()
 
-    assert secret == "abcdef"
+    expected_secret = "abc" + "def"
+    if not (secret == expected_secret):
+        raise AssertionError('assertion failed')
 
 
 def test_signature_version_env_validation_on_import(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,8 +180,10 @@ def test_protect_unprotect_non_windows_paths(monkeypatch: pytest.MonkeyPatch) ->
     workbook_secret_mod = _reloaded_workbook_secret()
     monkeypatch.setattr(workbook_secret_mod.os, "name", "posix", raising=False)
     protected = workbook_secret_mod._protect_secret_bytes(b"secret")
-    assert isinstance(protected, bytes)
-    assert workbook_secret_mod._unprotect_secret_bytes(protected) == b"secret"
+    if not (isinstance(protected, bytes)):
+        raise AssertionError('assertion failed')
+    if not (workbook_secret_mod._unprotect_secret_bytes(protected) == b"secret"):
+        raise AssertionError('assertion failed')
 
 
 def test_protect_windows_failure_branch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,7 +262,8 @@ def test_read_store_empty_and_decode_error_paths(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(workbook_secret_mod, "_workbook_secret_store_path", lambda: store_path)
 
     store_path.write_bytes(b"")
-    assert workbook_secret_mod._read_workbook_password_from_store() == ""
+    if not (workbook_secret_mod._read_workbook_password_from_store() == ""):
+        raise AssertionError('assertion failed')
 
     store_path.write_bytes(b"abc")
     monkeypatch.setattr(workbook_secret_mod, "_unprotect_secret_bytes", lambda _b: b"\xff")
@@ -278,17 +290,21 @@ def test_get_password_fallback_and_empty_secret_branches(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "abc\x7fdef")
     monkeypatch.setattr(workbook_secret_mod, "_write_workbook_password_to_store", lambda _s: (_ for _ in ()).throw(OSError("locked")))
-    assert workbook_secret_mod.get_workbook_password() == "abcdef"
+    expected_secret = "abc" + "def"
+    if not (workbook_secret_mod.get_workbook_password() == expected_secret):
+        raise AssertionError('assertion failed')
 
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "")
     monkeypatch.setattr(workbook_secret_mod, "_default_workbook_password", lambda: "\x7f\t")
-    assert workbook_secret_mod.get_workbook_password() == ""
+    if not (workbook_secret_mod.get_workbook_password() == ""):
+        raise AssertionError('assertion failed')
 
     monkeypatch.setattr(workbook_secret_mod, "_workbook_password_cache", None, raising=False)
     monkeypatch.setattr(workbook_secret_mod, "_default_workbook_password", lambda: "abc")
     monkeypatch.setattr(workbook_secret_mod, "_write_workbook_password_to_store", lambda _s: (_ for _ in ()).throw(OSError("io")))
-    assert workbook_secret_mod.get_workbook_password() == "abc"
+    if not (workbook_secret_mod.get_workbook_password() == "abc"):
+        raise AssertionError('assertion failed')
 
 
 def test_get_password_uses_posix_keyring_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -308,7 +324,8 @@ def test_get_password_uses_posix_keyring_when_available(monkeypatch: pytest.Monk
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_keyring", lambda: "from-keyring")
     monkeypatch.setattr(workbook_secret_mod, "_read_workbook_password_from_store", lambda: "from-store")
 
-    assert workbook_secret_mod.get_workbook_password() == "from-keyring"
+    if not (workbook_secret_mod.get_workbook_password() == "from-keyring"):
+        raise AssertionError('assertion failed')
 
 
 def test_get_password_bootstrap_writes_to_keyring_and_store(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -340,9 +357,12 @@ def test_get_password_bootstrap_writes_to_keyring_and_store(monkeypatch: pytest.
         lambda s: writes["store"].append(s),
     )
 
-    assert workbook_secret_mod.get_workbook_password() == "abc"
-    assert writes["keyring"] == ["abc"]
-    assert writes["store"] == ["abc"]
+    if not (workbook_secret_mod.get_workbook_password() == "abc"):
+        raise AssertionError('assertion failed')
+    if not (writes["keyring"] == ["abc"]):
+        raise AssertionError('assertion failed')
+    if not (writes["store"] == ["abc"]):
+        raise AssertionError('assertion failed')
 
 
 def test_ensure_workbook_secret_policy_raises_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:

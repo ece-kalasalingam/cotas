@@ -19,19 +19,25 @@ def test_marks_template_catalog_entries_resolve_to_translation_keys() -> None:
         "MARKS_TEMPLATE_COHORT_MISMATCH",
         context={"workbook": "a.xlsx", "fields": "Course_Code"},
     )
-    assert issue.translation_key == "validation.marks_template.cohort_mismatch"
-    assert issue.severity == "warning"
+    if not (issue.translation_key == "validation.marks_template.cohort_mismatch"):
+        raise AssertionError('assertion failed')
+    if not (issue.severity == "warning"):
+        raise AssertionError('assertion failed')
 
     issue = resolve_validation_issue(
         "MARKS_TEMPLATE_SECTION_DUPLICATE",
         context={"workbook": "b.xlsx", "section": "A"},
     )
-    assert issue.translation_key == "validation.marks_template.duplicate_section"
-    assert issue.severity == "warning"
+    if not (issue.translation_key == "validation.marks_template.duplicate_section"):
+        raise AssertionError('assertion failed')
+    if not (issue.severity == "warning"):
+        raise AssertionError('assertion failed')
 
     issue = resolve_validation_issue(
         "MARKS_TEMPLATE_STUDENT_REG_DUPLICATE",
         context={"workbook": "c.xlsx"},
     )
-    assert issue.translation_key == "validation.marks_template.duplicate_reg_no"
-    assert issue.severity == "warning"
+    if not (issue.translation_key == "validation.marks_template.duplicate_reg_no"):
+        raise AssertionError('assertion failed')
+    if not (issue.severity == "warning"):
+        raise AssertionError('assertion failed')

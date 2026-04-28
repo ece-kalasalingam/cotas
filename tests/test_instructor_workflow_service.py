@@ -63,8 +63,10 @@ def test_service_logs_cancellation(
     with pytest.raises(JobCancelledError):
         service.generate_marks_template(source, output, context=context, cancel_token=token)
 
-    assert any(record.getMessage() == "Instructor workflow step cancelled." for record in caplog.records)
-    assert called["count"] == 0
+    if not (any(record.getMessage() == "Instructor workflow step cancelled." for record in caplog.records)):
+        raise AssertionError('assertion failed')
+    if not (called["count"] == 0):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_timeout_seconds_invalid_env_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,7 +82,8 @@ def test_resolve_timeout_seconds_invalid_env_uses_default(monkeypatch: pytest.Mo
         None.
     """
     monkeypatch.setenv(service_mod.WORKFLOW_STEP_TIMEOUT_ENV_VAR, "not-an-int")
-    assert (
+    if not ((
         service_mod.InstructorWorkflowService._resolve_timeout_seconds()
         == service_mod.DEFAULT_WORKFLOW_STEP_TIMEOUT_SECONDS
-    )
+    )):
+        raise AssertionError('assertion failed')

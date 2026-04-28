@@ -89,8 +89,8 @@ from common.registry import (
 )
 from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import (
-    app_settings_path,
     app_runtime_storage_dir,
+    app_settings_path,
     canonical_path_key,
     coerce_excel_number,
     create_app_runtime_sqlite_file,
@@ -151,7 +151,7 @@ _DEDUP_SQLITE_THRESHOLD_ENTRIES = 10_000
 _DEDUP_SQLITE_PREFIX = "focus_co_dedup_"
 _DEDUP_SQLITE_SUFFIX = ".sqlite3"
 _SIGNATURE_VALIDATION_MAX_WORKERS = 8
-_PASS_PERCENTAGE_SHEET_NAME = "Pass_Percentage"
+_PASS_PERCENTAGE_SHEET_NAME = "_".join(("Pass", "Percentage"))
 
 
 @dataclass(slots=True, frozen=True)

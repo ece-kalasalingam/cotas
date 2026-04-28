@@ -28,8 +28,10 @@ def test_function_job_run_emits_finished_on_success() -> None:
 
     job.run()
 
-    assert got["result"] == 5
-    assert got["error"] is None
+    if not (got["result"] == 5):
+        raise AssertionError('assertion failed')
+    if got["error"] is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_function_job_run_emits_failed_on_exception() -> None:
@@ -65,8 +67,10 @@ def test_function_job_run_emits_failed_on_exception() -> None:
 
     job.run()
 
-    assert got["result"] is None
-    assert isinstance(got["error"], RuntimeError)
+    if got["result"] is not None:
+        raise AssertionError('assertion failed')
+    if not (isinstance(got["error"], RuntimeError)):
+        raise AssertionError('assertion failed')
 
 
 def test_run_in_background_wires_callbacks_and_starts_job() -> None:
@@ -120,9 +124,11 @@ def test_run_in_background_wires_callbacks_and_starts_job() -> None:
         thread_pool=cast(Any, pool),
     )
 
-    assert pool.started == [job]
+    if not (pool.started == [job]):
+        raise AssertionError('assertion failed')
 
     # Simulate thread execution completion
     job.run()
-    assert events == [("finished", "ok")]
+    if not (events == [("finished", "ok")]):
+        raise AssertionError('assertion failed')
 

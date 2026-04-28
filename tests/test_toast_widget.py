@@ -59,7 +59,8 @@ def test_resolve_parent_returns_none_when_no_qapp(monkeypatch: pytest.MonkeyPatc
             return None
 
     monkeypatch.setattr(toast, "QApplication", _NoApp)
-    assert toast._resolve_parent(None) is None
+    if toast._resolve_parent(None) is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_parent_returns_none_when_all_windows_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,7 +167,8 @@ def test_resolve_parent_returns_none_when_all_windows_hidden(monkeypatch: pytest
             return [_W(False, False), _W(True, True)]
 
     monkeypatch.setattr(toast, "QApplication", _App)
-    assert toast._resolve_parent(None) is None
+    if toast._resolve_parent(None) is not None:
+        raise AssertionError('assertion failed')
 
 
 def test_toast_widget_fit_width_toggles_word_wrap(monkeypatch: pytest.MonkeyPatch, qapp: QApplication) -> None:
@@ -186,11 +188,14 @@ def test_toast_widget_fit_width_toggles_word_wrap(monkeypatch: pytest.MonkeyPatc
     w = toast._ToastWidget(None, title="Title", message="a very very very long line", level="info")
     try:
         w.fit_width(80)
-        assert w._body_label is not None
-        assert w._body_label.wordWrap() is True
+        if not (w._body_label is not None):
+            raise AssertionError('assertion failed')
+        if w._body_label.wordWrap() is not True:
+            raise AssertionError('assertion failed')
 
         w.fit_width(1000)
-        assert w._body_label.wordWrap() is False
+        if w._body_label.wordWrap() is not False:
+            raise AssertionError('assertion failed')
     finally:
         w.close()
 
@@ -211,7 +216,8 @@ def test_toast_widget_non_windows_sets_shadow(monkeypatch: pytest.MonkeyPatch, q
     monkeypatch.setattr(toast, "_IS_WINDOWS", False)
     w = toast._ToastWidget(None, title="", message="hello", level="success")
     try:
-        assert w.graphicsEffect() is not None
+        if not (w.graphicsEffect() is not None):
+            raise AssertionError('assertion failed')
     finally:
         w.close()
 

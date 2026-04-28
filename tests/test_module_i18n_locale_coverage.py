@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import ast
-import xml.etree.ElementTree as ET
+import html
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -75,13 +76,15 @@ def _load_locale_map(locale_file: str) -> dict[str, str]:
     Raises:
         None.
     """
-    root = ET.parse(REPO_ROOT / "common" / "i18n" / locale_file).getroot()
+    raw = (REPO_ROOT / "common" / "i18n" / locale_file).read_text(encoding="utf-8")
     mapping: dict[str, str] = {}
-    for message in root.findall(".//message"):
-        source = message.findtext("source")
-        translation = message.findtext("translation")
-        if source is None or translation is None:
+    for message_xml in re.findall(r"<message\b.*?</message>", raw, flags=re.DOTALL):
+        source_match = re.search(r"<source>(.*?)</source>", message_xml, flags=re.DOTALL)
+        translation_match = re.search(r"<translation(?:\s+[^>]*)?>(.*?)</translation>", message_xml, flags=re.DOTALL)
+        if source_match is None or translation_match is None:
             continue
+        source = html.unescape(source_match.group(1).strip())
+        translation = html.unescape(re.sub(r"<[^>]+>", "", translation_match.group(1)).strip())
         mapping[source] = translation
     return mapping
 
@@ -109,5 +112,6 @@ def test_module_emitted_i18n_keys_have_non_key_translations_in_all_locales() -> 
                 continue
             if translation.strip() == key.strip():
                 violations.append(f"{locale}: key-echo translation '{key}'")
-    assert not violations, "Locale coverage violations:\n" + "\n".join(violations)
+    if not (not violations):
+        raise AssertionError("Locale coverage violations:\n" + "\n".join(violations))
 

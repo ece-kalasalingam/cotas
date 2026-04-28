@@ -175,15 +175,21 @@ def test_drop_widget_syncs_files_and_clear(monkeypatch: pytest.MonkeyPatch, qapp
     module, _seen_keys = _build_module_with_message_capture(monkeypatch)
     module.drop_widget.add_files(["C:/a.xlsx", "C:/b.xlsx"], emit_drop=True)
     module.generate_word_report_checkbox.setChecked(False)
-    assert module._files == [Path("C:/a.xlsx"), Path("C:/b.xlsx")]
-    assert module.clear_button.isEnabled() is True
-    assert module.calculate_button.isEnabled() is True
+    if not (module._files == [Path("C:/a.xlsx"), Path("C:/b.xlsx")]):
+        raise AssertionError('assertion failed')
+    if module.clear_button.isEnabled() is not True:
+        raise AssertionError('assertion failed')
+    if module.calculate_button.isEnabled() is not True:
+        raise AssertionError('assertion failed')
 
     module.drop_widget.clear_button.click()
     qapp.processEvents()
-    assert module._files == []
-    assert module.clear_button.isEnabled() is False
-    assert module.calculate_button.isEnabled() is False
+    if not (module._files == []):
+        raise AssertionError('assertion failed')
+    if module.clear_button.isEnabled() is not False:
+        raise AssertionError('assertion failed')
+    if module.calculate_button.isEnabled() is not False:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -221,7 +227,8 @@ def test_submit_triggers_async_save_workbook(monkeypatch: pytest.MonkeyPatch, qa
     module.drop_widget.add_files(["C:/a.xlsx"], emit_drop=True)
     module.generate_word_report_checkbox.setChecked(False)
     module._on_submit_requested()
-    assert called["count"] == 1
+    if not (called["count"] == 1):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -247,7 +254,8 @@ def test_submit_shows_threshold_violation_when_invalid(
     module.threshold_l2_input.setValue(60.0)
     module.threshold_l3_input.setValue(90.0)
     module._on_submit_requested()
-    assert "co_analysis.thresholds.invalid_rule" in seen_keys
+    if "co_analysis.thresholds.invalid_rule" not in seen_keys:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -265,7 +273,8 @@ def test_word_report_toggle_defaults_enabled(monkeypatch: pytest.MonkeyPatch, qa
         None.
     """
     module, _seen_keys = _build_module_with_message_capture(monkeypatch)
-    assert module.generate_word_report_checkbox.isChecked() is True
+    if module.generate_word_report_checkbox.isChecked() is not True:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -337,16 +346,25 @@ def test_prepare_co_analysis_passes_word_report_context_and_records_docx_output(
     qapp.processEvents()
 
     context = cast(dict[str, object], captured.get("context", {}))
-    assert context.get("generate_word_report") is True
-    assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
-    assert str(context.get("word_output_path", "")).endswith("CSE101_2025-26_CO_Analysis_Report.docx")
-    assert "co_analysis.status.output_generated_excel" in seen_keys
-    assert "co_analysis.status.output_generated_word" in seen_keys
-    assert "co_analysis.status.word_report_generated" in seen_keys
+    if context.get("generate_word_report") is not True:
+        raise AssertionError('assertion failed')
+    if not (str(context.get("co_description_path", "")).endswith("co_description.xlsx")):
+        raise AssertionError('assertion failed')
+    if not (str(context.get("word_output_path", "")).endswith("CSE101_2025-26_CO_Analysis_Report.docx")):
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.output_generated_excel" not in seen_keys:
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.output_generated_word" not in seen_keys:
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.word_report_generated" not in seen_keys:
+        raise AssertionError('assertion failed')
     output_items = module.get_shared_outputs_data().items
-    assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
-    assert any(item.label_key == "co_analysis.links.generated_word_output" for item in output_items)
-    assert any(path.suffix == ".docx" for path in module._downloaded_outputs)
+    if not (any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)):
+        raise AssertionError('assertion failed')
+    if not (any(item.label_key == "co_analysis.links.generated_word_output" for item in output_items)):
+        raise AssertionError('assertion failed')
+    if not (any(path.suffix == ".docx" for path in module._downloaded_outputs)):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -409,12 +427,17 @@ def test_prepare_co_analysis_word_report_failure_emits_warning_and_keeps_excel_s
     module._prepare_co_analysis_async()
     qapp.processEvents()
 
-    assert "co_analysis.status.output_generated_excel" in seen_keys
-    assert "co_analysis.status.calculate_completed" in seen_keys
-    assert "co_analysis.status.word_report_generate_failed" in seen_keys
+    if "co_analysis.status.output_generated_excel" not in seen_keys:
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.calculate_completed" not in seen_keys:
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.word_report_generate_failed" not in seen_keys:
+        raise AssertionError('assertion failed')
     output_items = module.get_shared_outputs_data().items
-    assert any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)
-    assert any(path.suffix == ".xlsx" for path in module._downloaded_outputs)
+    if not (any(item.label_key == "co_analysis.links.generated_excel_output" for item in output_items)):
+        raise AssertionError('assertion failed')
+    if not (any(path.suffix == ".xlsx" for path in module._downloaded_outputs)):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -480,8 +503,10 @@ def test_prepare_co_analysis_prompts_for_existing_word_output_path(
     qapp.processEvents()
 
     context = cast(dict[str, object], captured.get("context", {}))
-    assert str(context.get("co_description_path", "")).endswith("co_description.xlsx")
-    assert str(context.get("word_output_path", "")) == str(replacement_word)
+    if not (str(context.get("co_description_path", "")).endswith("co_description.xlsx")):
+        raise AssertionError('assertion failed')
+    if not (str(context.get("word_output_path", "")) == str(replacement_word)):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -500,7 +525,8 @@ def test_submit_blocked_when_word_report_enabled_without_co_description(
     module._on_submit_requested()
     qapp.processEvents()
 
-    assert called["started"] is False
+    if called["started"] is not False:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -526,7 +552,8 @@ def test_submit_blocked_when_multiple_co_description_files_uploaded(
     module._on_submit_requested()
     qapp.processEvents()
 
-    assert called["started"] is False
+    if called["started"] is not False:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -545,7 +572,8 @@ def test_submit_allows_marks_only_when_word_report_disabled(
     module._on_submit_requested()
     qapp.processEvents()
 
-    assert called["started"] is True
+    if called["started"] is not True:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -605,13 +633,16 @@ def test_prepare_co_analysis_with_word_toggle_off_emits_summary_toast(
     module._prepare_co_analysis_async()
     qapp.processEvents()
 
-    assert captured_feedback["success_count"] == 1
-    assert captured_feedback["failed_count"] == 0
-    assert cast(tuple[NotificationChannel, ...], captured_feedback["channels"]) == (
+    if not (captured_feedback["success_count"] == 1):
+        raise AssertionError('assertion failed')
+    if not (captured_feedback["failed_count"] == 0):
+        raise AssertionError('assertion failed')
+    if not (cast(tuple[NotificationChannel, ...], captured_feedback["channels"]) == (
         "status",
         "activity_log",
         "toast",
-    )
+    )):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -699,10 +730,14 @@ def test_download_co_description_template_link_triggers_generation(
     module._download_co_description_template_async()
     qapp.processEvents()
 
-    assert called["workbook_kind"] == "co_description_template"
-    assert called["template_id"] == co_analysis_ui.ID_COURSE_SETUP
-    assert output_path in module._downloaded_outputs
-    assert "co_analysis.status.co_description_template_generated" in seen_keys
+    if not (called["workbook_kind"] == "co_description_template"):
+        raise AssertionError('assertion failed')
+    if not (called["template_id"] == co_analysis_ui.ID_COURSE_SETUP):
+        raise AssertionError('assertion failed')
+    if output_path not in module._downloaded_outputs:
+        raise AssertionError('assertion failed')
+    if "co_analysis.status.co_description_template_generated" not in seen_keys:
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -768,9 +803,11 @@ def test_marks_upload_validation_emits_issue_and_summary_toast(
     module.drop_widget.add_files(["C:/good.xlsx", "C:/bad.xlsx"], emit_drop=True)
     qapp.processEvents()
 
-    assert any(
+    if not (any(
         "validation.batch.title_error" in str(entry.get("message", ""))
         for entry in getattr(module, "_user_log_entries", [])
-    )
-    assert seen_keys == []
+    )):
+        raise AssertionError('assertion failed')
+    if not (seen_keys == []):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)

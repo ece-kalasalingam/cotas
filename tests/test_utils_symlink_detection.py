@@ -39,4 +39,5 @@ def test_assert_not_symlink_path_raises_for_symlink_paths(monkeypatch: pytest.Mo
     with pytest.raises(ValidationError) as excinfo:
         utils.assert_not_symlink_path("C:/linked.xlsx")
 
-    assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"
+    if not (excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"):
+        raise AssertionError('assertion failed')

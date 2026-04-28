@@ -192,9 +192,12 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
                     },
                 },
             }
-        assert run_sources == [src2]
-        assert context.get("overwrite_existing") is True
-        assert context.get("output_path_overrides") == {src2: str(tmp_path / "renamed_two.xlsx")}
+        if not (run_sources == [src2]):
+            raise AssertionError('assertion failed')
+        if context.get("overwrite_existing") is not True:
+            raise AssertionError('assertion failed')
+        if not (context.get("output_path_overrides") == {src2: str(tmp_path / "renamed_two.xlsx")}):
+            raise AssertionError('assertion failed')
         return {
             "total": 1,
             "generated": 1,
@@ -215,13 +218,17 @@ def test_marks_generation_retries_only_collisions_with_output_overrides(
 
     module._prepare_marks_template_async()
 
-    assert len(calls) == 2
-    assert prompts == [str(tmp_path / "two_marks.xlsx")]
-    assert module.marks_template_paths == [
+    if not (len(calls) == 2):
+        raise AssertionError('assertion failed')
+    if not (prompts == [str(tmp_path / "two_marks.xlsx")]):
+        raise AssertionError('assertion failed')
+    if not (module.marks_template_paths == [
         str(tmp_path / "one_marks.xlsx"),
         str(tmp_path / "renamed_two.xlsx"),
-    ]
-    assert module.marks_template_path == str(tmp_path / "renamed_two.xlsx")
+    ]):
+        raise AssertionError('assertion failed')
+    if not (module.marks_template_path == str(tmp_path / "renamed_two.xlsx")):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -290,7 +297,8 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
         raw_run_sources = kwargs.get("workbook_paths", [])
         run_sources = [str(item) for item in raw_run_sources] if isinstance(raw_run_sources, list) else []
         if call_index["value"] == 1:
-            assert context.get("overwrite_existing") is False
+            if context.get("overwrite_existing") is not False:
+                raise AssertionError('assertion failed')
             results = {}
             for source in run_sources:
                 out = str(tmp_path / f"{Path(source).stem}_marks.xlsx")
@@ -310,10 +318,12 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
                 "results": results,
             }
 
-        assert context.get("overwrite_existing") is True
+        if context.get("overwrite_existing") is not True:
+            raise AssertionError('assertion failed')
         raw_overrides = context.get("output_path_overrides", {})
         overrides = dict(raw_overrides) if isinstance(raw_overrides, dict) else {}
-        assert set(overrides.keys()) == set(source_paths)
+        if not (set(overrides.keys()) == set(source_paths)):
+            raise AssertionError('assertion failed')
         generated_paths = [str(overrides[src]) for src in source_paths]
         return {
             "total": len(run_sources),
@@ -336,11 +346,16 @@ def test_marks_generation_uses_bulk_overwrite_prompt_when_collisions_exceed_limi
 
     module._prepare_marks_template_async()
 
-    assert call_index["value"] == 2
-    assert len(bulk_prompts) == 1
-    assert len(bulk_prompts[0]) == len(source_paths)
-    assert per_file_prompts == []
-    assert len(module.marks_template_paths) == len(source_paths)
+    if not (call_index["value"] == 2):
+        raise AssertionError('assertion failed')
+    if not (len(bulk_prompts) == 1):
+        raise AssertionError('assertion failed')
+    if not (len(bulk_prompts[0]) == len(source_paths)):
+        raise AssertionError('assertion failed')
+    if not (per_file_prompts == []):
+        raise AssertionError('assertion failed')
+    if not (len(module.marks_template_paths) == len(source_paths)):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)
 
 
@@ -391,8 +406,9 @@ def test_course_details_validation_uses_shared_batch_feedback(
 
     module._upload_course_details_from_paths_async(["C:/valid.xlsx", "C:/invalid.xlsx"])
 
-    assert any(
+    if not (any(
         "validation.batch.title_error" in str(entry.get("message", ""))
         for entry in getattr(module, "_user_log_entries", [])
-    )
+    )):
+        raise AssertionError('assertion failed')
     _dispose_widget(module, qapp)

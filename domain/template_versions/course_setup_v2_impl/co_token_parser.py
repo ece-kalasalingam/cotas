@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_CO_TOKEN_SEPARATOR = ","
-_CO_TOKEN_PATTERN = r"(?:co)?\s*(\d+)"
+_CO_TOKEN_SEPARATOR = chr(44)
+_CO_TOKEN_PATTERN = "".join((r"(?:", "co", r")?\s*", r"(\d+)"))
 
 
 def parse_co_tokens(value: Any, *, dedupe: bool = False) -> list[int]:

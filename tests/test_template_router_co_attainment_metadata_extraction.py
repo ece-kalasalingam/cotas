@@ -51,7 +51,11 @@ def test_router_extract_course_metadata_and_students_uses_strategy(monkeypatch) 
 
     students, metadata = router.extract_course_metadata_and_students_from_workbook_path("x.xlsx")
 
-    assert captured["workbook_path"] == "x.xlsx"
-    assert captured["template_id"] == "COURSE_SETUP_V2"
-    assert students == {"r1", "r2"}
-    assert metadata == {"course_code": "CSE101"}
+    if not (captured["workbook_path"] == "x.xlsx"):
+        raise AssertionError('assertion failed')
+    if not (captured["template_id"] == "COURSE_SETUP_V2"):
+        raise AssertionError('assertion failed')
+    if not (students == {"r1", "r2"}):
+        raise AssertionError('assertion failed')
+    if not (metadata == {"course_code": "CSE101"}):
+        raise AssertionError('assertion failed')

@@ -20,9 +20,12 @@ def test_validation_error_supports_code_and_context() -> None:
         None.
     """
     err = ValidationError("bad input", code="BAD_INPUT", context={"field": "course_code"})
-    assert str(err) == "bad input"
-    assert err.code == "BAD_INPUT"
-    assert err.context == {"field": "course_code"}
+    if not (str(err) == "bad input"):
+        raise AssertionError('assertion failed')
+    if not (err.code == "BAD_INPUT"):
+        raise AssertionError('assertion failed')
+    if not (err.context == {"field": "course_code"}):
+        raise AssertionError('assertion failed')
 
 
 def test_job_context_snapshots_language_and_operation() -> None:
@@ -38,10 +41,14 @@ def test_job_context_snapshots_language_and_operation() -> None:
         None.
     """
     ctx = JobContext.create(step_id="instructor.generate_report", payload={"path": "sample.xlsx"})
-    assert ctx.job_id
-    assert ctx.step_id == "instructor.generate_report"
-    assert ctx.payload["path"] == "sample.xlsx"
-    assert isinstance(ctx.language, str)
+    if not (ctx.job_id):
+        raise AssertionError('assertion failed')
+    if not (ctx.step_id == "instructor.generate_report"):
+        raise AssertionError('assertion failed')
+    if not (ctx.payload["path"] == "sample.xlsx"):
+        raise AssertionError('assertion failed')
+    if not (isinstance(ctx.language, str)):
+        raise AssertionError('assertion failed')
 
 
 def test_cancellation_token_raises_when_cancelled() -> None:

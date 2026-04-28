@@ -50,10 +50,11 @@ def test_extract_overwrite_conflicts_from_generation_result_filters_expected_ite
 
     conflicts = extract_overwrite_conflicts_from_generation_result(result)
 
-    assert [(item.source_path, item.output_path) for item in conflicts] == [
+    if not ([(item.source_path, item.output_path) for item in conflicts] == [
         ("C:/src/a.xlsx", "C:/out/a_marks.xlsx"),
         ("C:/src/d.xlsx", "C:/out/d_marks.xlsx"),
-    ]
+    ]):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_overwrite_conflicts_uses_bulk_confirmation_when_above_limit() -> None:
@@ -111,13 +112,16 @@ def test_resolve_overwrite_conflicts_uses_bulk_confirmation_when_above_limit() -
         ask_output_path=_ask_output_path,
     )
 
-    assert observed_paths == [["C:/out/a.xlsx", "C:/out/b.xlsx", "C:/out/c.xlsx"]]
-    assert resolved.retry_sources == ["C:/src/a.xlsx", "C:/src/b.xlsx", "C:/src/c.xlsx"]
-    assert resolved.output_path_overrides == {
+    if not (observed_paths == [["C:/out/a.xlsx", "C:/out/b.xlsx", "C:/out/c.xlsx"]]):
+        raise AssertionError('assertion failed')
+    if not (resolved.retry_sources == ["C:/src/a.xlsx", "C:/src/b.xlsx", "C:/src/c.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (resolved.output_path_overrides == {
         "C:/src/a.xlsx": "C:/out/a.xlsx",
         "C:/src/b.xlsx": "C:/out/b.xlsx",
         "C:/src/c.xlsx": "C:/out/c.xlsx",
-    }
+    }):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_overwrite_conflicts_uses_per_file_resolution_when_within_limit() -> None:
@@ -176,9 +180,12 @@ def test_resolve_overwrite_conflicts_uses_per_file_resolution_when_within_limit(
         ask_output_path=_ask_output_path,
     )
 
-    assert suggested_outputs == ["C:/out/a.xlsx", "C:/out/b.xlsx"]
-    assert resolved.retry_sources == ["C:/src/a.xlsx"]
-    assert resolved.output_path_overrides == {"C:/src/a.xlsx": "C:/out/custom_a.xlsx"}
+    if not (suggested_outputs == ["C:/out/a.xlsx", "C:/out/b.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (resolved.retry_sources == ["C:/src/a.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (resolved.output_path_overrides == {"C:/src/a.xlsx": "C:/out/custom_a.xlsx"}):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_overwrite_conflicts_deduplicates_sources_by_canonical_key() -> None:
@@ -234,8 +241,10 @@ def test_resolve_overwrite_conflicts_deduplicates_sources_by_canonical_key() -> 
         ask_output_path=_ask_output_path,
     )
 
-    assert resolved.retry_sources == ["C:/SRC/A.xlsx", "C:/src/b.xlsx"]
-    assert resolved.output_path_overrides == {
+    if not (resolved.retry_sources == ["C:/SRC/A.xlsx", "C:/src/b.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (resolved.output_path_overrides == {
         "C:/SRC/A.xlsx": "C:/out/a.xlsx",
         "C:/src/b.xlsx": "C:/out/b.xlsx",
-    }
+    }):
+        raise AssertionError('assertion failed')

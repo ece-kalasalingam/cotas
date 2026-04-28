@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 _PIP_AUDIT_IGNORED_VULNS: tuple[str, ...] = (
-    # No fix published as of 2026-04-27; tracked in upstream advisory.
+    # Upstream advisory without a published fixed pip release as of 2026-04-28.
     "GHSA-58qw-9mgm-455v",
 )
 

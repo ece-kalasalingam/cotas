@@ -66,13 +66,20 @@ def test_build_co_word_summary_rows_uses_existing_attainment_state() -> None:
         co_attainment_level=2,
         co_attainment_percent=60.0,
     )
-    assert rows[0]["co"] == "CSE101.1"
-    assert rows[0]["direct"] == "70%"
-    assert rows[0]["indirect"] == "70%"
-    assert rows[0]["overall"] == "100%"
-    assert rows[0]["result"] == "Attained"
-    assert rows[0]["shortfall"] == "0%"
-    assert rows[0]["severity"] == "On Target (Meets CO AT Target)"
+    if not (rows[0]["co"] == "CSE101.1"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["direct"] == "70%"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["indirect"] == "70%"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["overall"] == "100%"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["result"] == "Attained"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["shortfall"] == "0%"):
+        raise AssertionError('assertion failed')
+    if not (rows[0]["severity"] == "On Target (Meets CO AT Target)"):
+        raise AssertionError('assertion failed')
 
 
 def test_generate_co_attainment_word_report_writes_docx(tmp_path: Path) -> None:
@@ -110,26 +117,44 @@ def test_generate_co_attainment_word_report_writes_docx(tmp_path: Path) -> None:
             "Analyze communication systems",
         ],
     )
-    assert generated == output_path
-    assert output_path.exists()
+    if not (generated == output_path):
+        raise AssertionError('assertion failed')
+    if not (output_path.exists()):
+        raise AssertionError('assertion failed')
     with ZipFile(output_path) as archive:
         document_xml = archive.read("word/document.xml").decode("utf-8")
-    assert "KALASALINGAM ACADEMY OF RESEARCH AND EDUCATION" in document_xml
-    assert "Course Coordinator Report" in document_xml
-    assert "CSE101" in document_xml
-    assert "2025-26" in document_xml
-    assert "2 course outcomes (COs)" in document_xml or "2 COs" in document_xml
-    assert "CO-wise Attainment Summary" in document_xml
-    assert "Course Outcomes" in document_xml
-    assert "The students will be able to:" in document_xml
-    assert "CO1: Understand semiconductor devices." in document_xml
-    assert "CO2: Analyze communication systems." in document_xml
-    assert "Severity" not in document_xml
-    assert "Identification of Shortfall COs" not in document_xml
-    assert "Severity Classification" not in document_xml
-    assert "Severity is classified by CO attainment shortfall percentage only" not in document_xml
-    assert "Recommended Corrective Actions" not in document_xml
-    assert "Continuous Improvement Action Suggestions" in document_xml
+    if "KALASALINGAM ACADEMY OF RESEARCH AND EDUCATION" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "Course Coordinator Report" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "CSE101" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "2025-26" not in document_xml:
+        raise AssertionError('assertion failed')
+    if not ("2 course outcomes (COs)" in document_xml or "2 COs" in document_xml):
+        raise AssertionError('assertion failed')
+    if "CO-wise Attainment Summary" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "Course Outcomes" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "The students will be able to:" not in document_xml:
+        raise AssertionError('assertion failed')
+    if "CO1: Understand semiconductor devices." not in document_xml:
+        raise AssertionError('assertion failed')
+    if "CO2: Analyze communication systems." not in document_xml:
+        raise AssertionError('assertion failed')
+    if not ("Severity" not in document_xml):
+        raise AssertionError('assertion failed')
+    if not ("Identification of Shortfall COs" not in document_xml):
+        raise AssertionError('assertion failed')
+    if not ("Severity Classification" not in document_xml):
+        raise AssertionError('assertion failed')
+    if not ("Severity is classified by CO attainment shortfall percentage only" not in document_xml):
+        raise AssertionError('assertion failed')
+    if not ("Recommended Corrective Actions" not in document_xml):
+        raise AssertionError('assertion failed')
+    if "Continuous Improvement Action Suggestions" not in document_xml:
+        raise AssertionError('assertion failed')
 
 
 def test_generate_co_attainment_word_report_uses_runtime_formula_asset(
@@ -169,10 +194,12 @@ def test_generate_co_attainment_word_report_uses_runtime_formula_asset(
         ],
         co_sentences=["Understand semiconductor devices"],
     )
-    assert generated == output_path
+    if not (generated == output_path):
+        raise AssertionError('assertion failed')
     with ZipFile(output_path) as archive:
         media_files = [name for name in archive.namelist() if name.startswith("word/media/")]
-    assert media_files
+    if not (media_files):
+        raise AssertionError('assertion failed')
 
 
 def _generate_co_description_template(path: Path) -> Path:
@@ -213,7 +240,8 @@ def test_validated_co_description_sentences_reads_ordered_descriptions(tmp_path:
         total_outcomes=6,
         token=CancellationToken(),
     )
-    assert sentences == [f"CO{index} statement" for index in range(1, 7)]
+    if not (sentences == [f"CO{index} statement" for index in range(1, 7)]):
+        raise AssertionError('assertion failed')
 
 
 def test_validated_co_description_sentences_rejects_total_outcomes_mismatch(tmp_path: Path) -> None:
@@ -226,7 +254,8 @@ def test_validated_co_description_sentences_rejects_total_outcomes_mismatch(tmp_
             total_outcomes=5,
             token=CancellationToken(),
         )
-    assert getattr(excinfo.value, "code", "") in {
+    if getattr(excinfo.value, "code", "") not in {
         "CO_DESCRIPTION_MARKS_COHORT_MISMATCH",
         "CO_DESCRIPTION_CO_NUMBER_SET_MISMATCH",
-    }
+    }:
+        raise AssertionError('assertion failed')

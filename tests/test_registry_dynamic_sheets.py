@@ -31,9 +31,12 @@ def test_co_direct_dynamic_headers_for_v2() -> None:
         sheet_key=CO_REPORT_SHEET_KEY_CO_DIRECT,
         context=context,
     )
-    assert v2_headers[0:3] == ("#", "Student Name", "Reg. No.")
-    assert v2_headers[3:7] == ("CAT (30)", "CAT (25%)", "SEE (60)", "SEE (75%)")
-    assert v2_headers[-3:] == ("Total", "Total (100%)", "Total (80%)")
+    if not (v2_headers[0:3] == ("#", "Student Name", "Reg. No.")):
+        raise AssertionError('assertion failed')
+    if not (v2_headers[3:7] == ("CAT (30)", "CAT (25%)", "SEE (60)", "SEE (75%)")):
+        raise AssertionError('assertion failed')
+    if not (v2_headers[-3:] == ("Total", "Total (100%)", "Total (80%)")):
+        raise AssertionError('assertion failed')
 
 
 def test_co_indirect_dynamic_headers_for_v2() -> None:
@@ -57,8 +60,10 @@ def test_co_indirect_dynamic_headers_for_v2() -> None:
         sheet_key=CO_REPORT_SHEET_KEY_CO_INDIRECT,
         context=context,
     )
-    assert v2_headers[0:3] == ("#", "Student Name", "Reg. No.")
-    assert v2_headers[-2:] == ("Total (100%)", "Total (20%)")
+    if not (v2_headers[0:3] == ("#", "Student Name", "Reg. No.")):
+        raise AssertionError('assertion failed')
+    if not (v2_headers[-2:] == ("Total (100%)", "Total (20%)")):
+        raise AssertionError('assertion failed')
 
 
 def test_marks_dynamic_headers_for_v2() -> None:
@@ -89,8 +94,9 @@ def test_marks_dynamic_headers_for_v2() -> None:
         context={"total_outcomes": 4},
     )
 
-    assert direct_co_headers == ("#", "Reg. No.", "Student Name", "Q1", "Q2", "Q3", "Total")
-    assert direct_non_co_headers == (
+    if not (direct_co_headers == ("#", "Reg. No.", "Student Name", "Q1", "Q2", "Q3", "Total")):
+        raise AssertionError('assertion failed')
+    if not (direct_non_co_headers == (
         "#",
         "Reg. No.",
         "Student Name",
@@ -98,6 +104,8 @@ def test_marks_dynamic_headers_for_v2() -> None:
         "Marks for CO1",
         "Marks for CO3",
         "Marks for CO5",
-    )
-    assert indirect_headers == ("#", "Reg. No.", "Student Name", "CO1", "CO2", "CO3", "CO4")
+    )):
+        raise AssertionError('assertion failed')
+    if not (indirect_headers == ("#", "Reg. No.", "Student Name", "CO1", "CO2", "CO3", "CO4")):
+        raise AssertionError('assertion failed')
 

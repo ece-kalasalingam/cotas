@@ -18,10 +18,12 @@ def test_parse_i18n_log_message_non_dict_payload_and_non_string_fallback() -> No
     Raises:
         None.
     """
-    assert ui_logging.parse_i18n_log_message("__I18N_LOG__:[1,2,3]") is None
+    if ui_logging.parse_i18n_log_message("__I18N_LOG__:[1,2,3]") is not None:
+        raise AssertionError('assertion failed')
     msg = "__I18N_LOG__:{\"key\":\"k\",\"kwargs\":{},\"fallback\":123}"
     parsed = ui_logging.parse_i18n_log_message(msg)
-    assert parsed == ("k", {}, None)
+    if not (parsed == ("k", {}, None)):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_non_string_and_invalid_embedded_payload(monkeypatch) -> None:
@@ -37,9 +39,11 @@ def test_resolve_i18n_log_message_non_string_and_invalid_embedded_payload(monkey
         None.
     """
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: f"T:{key}")
-    assert ui_logging.resolve_i18n_log_message(cast(Any, 42)) == 42
+    if not (ui_logging.resolve_i18n_log_message(cast(Any, 42)) == 42):
+        raise AssertionError('assertion failed')
     bad = "INFO: __I18N_LOG__:{bad-json"
-    assert ui_logging.resolve_i18n_log_message(bad) == bad
+    if not (ui_logging.resolve_i18n_log_message(bad) == bad):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_embedded_payload_fallback_on_translation_error(monkeypatch) -> None:
@@ -56,7 +60,8 @@ def test_resolve_i18n_log_message_embedded_payload_fallback_on_translation_error
     """
     payload = '__I18N_LOG__:{"key":"k","kwargs":{},"fallback":"fb"}'
     monkeypatch.setattr(ui_logging, "t", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("x")))
-    assert ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"
+    if not (ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_log_message_embedded_payload_fallback_on_raw_key(monkeypatch) -> None:
@@ -73,7 +78,8 @@ def test_resolve_i18n_log_message_embedded_payload_fallback_on_raw_key(monkeypat
     """
     payload = '__I18N_LOG__:{"key":"k","kwargs":{},"fallback":"fb"}'
     monkeypatch.setattr(ui_logging, "t", lambda key, **kwargs: key)
-    assert ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"
+    if not (ui_logging.resolve_i18n_log_message(f"INFO: {payload}") == "INFO: fb"):
+        raise AssertionError('assertion failed')
 
 
 def test_resolve_i18n_kwargs_nested_translation_fallback_on_error(monkeypatch) -> None:
@@ -107,7 +113,8 @@ def test_resolve_i18n_kwargs_nested_translation_fallback_on_error(monkeypatch) -
     resolved = ui_logging._resolve_i18n_kwargs(
         {"title": {"__t_key__": "x", "kwargs": {"n": 1}, "fallback": "fb"}}
     )
-    assert resolved["title"] == "fb"
+    if not (resolved["title"] == "fb"):
+        raise AssertionError('assertion failed')
 
 
 def test_ui_log_handler_emit_handles_sink_exceptions() -> None:
@@ -147,4 +154,5 @@ def test_ui_log_handler_emit_handles_sink_exceptions() -> None:
     logger.addHandler(handler)
 
     logger.info("boom")
-    assert len(seen) == 1
+    if not (len(seen) == 1):
+        raise AssertionError('assertion failed')

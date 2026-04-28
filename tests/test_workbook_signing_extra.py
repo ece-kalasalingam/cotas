@@ -18,8 +18,10 @@ def test_verify_payload_signature_empty_and_version_mismatch(monkeypatch) -> Non
     monkeypatch.setattr(ws, "_accepted_secrets", lambda: ("secret",))
     monkeypatch.setattr(ws, "WORKBOOK_SIGNATURE_VERSION", "v1")
 
-    assert ws.verify_payload_signature("x", "") is False
-    assert ws.verify_payload_signature("x", "v2:abcd") is False
+    if ws.verify_payload_signature("x", "") is not False:
+        raise AssertionError('assertion failed')
+    if ws.verify_payload_signature("x", "v2:abcd") is not False:
+        raise AssertionError('assertion failed')
 
 
 def test_verify_payload_signature_hmac_branch_no_secret_match(monkeypatch) -> None:
@@ -38,5 +40,6 @@ def test_verify_payload_signature_hmac_branch_no_secret_match(monkeypatch) -> No
     monkeypatch.setattr(ws, "_accepted_secrets", lambda: ("a", "b"))
     monkeypatch.setattr(ws, "WORKBOOK_SIGNATURE_VERSION", "v1")
 
-    assert ws.verify_payload_signature("payload", "v1:not-a-valid-digest") is False
+    if ws.verify_payload_signature("payload", "v1:not-a-valid-digest") is not False:
+        raise AssertionError('assertion failed')
 

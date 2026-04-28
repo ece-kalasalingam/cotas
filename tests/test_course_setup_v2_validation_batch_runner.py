@@ -101,7 +101,7 @@ def test_runner_handles_duplicate_paths_and_shape() -> None:
         ),
     )
 
-    assert sorted(result.keys()) == [
+    if not (sorted(result.keys()) == [
         "duplicate_paths",
         "duplicate_sections",
         "invalid_paths",
@@ -109,12 +109,17 @@ def test_runner_handles_duplicate_paths_and_shape() -> None:
         "rejections",
         "template_ids",
         "valid_paths",
-    ]
-    assert result["valid_paths"] == ["a.xlsx", "b.xlsx"]
-    assert result["duplicate_paths"] == ["a.xlsx"]
+    ]):
+        raise AssertionError('assertion failed')
+    if not (result["valid_paths"] == ["a.xlsx", "b.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_paths"] == ["a.xlsx"]):
+        raise AssertionError('assertion failed')
     duplicate_rejection = cast(list[dict[str, Any]], result["rejections"])[0]
-    assert duplicate_rejection["reason_kind"] == "duplicate_path"
-    assert duplicate_rejection["issue"]["code"] == "DUP"
+    if not (duplicate_rejection["reason_kind"] == "duplicate_path"):
+        raise AssertionError('assertion failed')
+    if not (duplicate_rejection["issue"]["code"] == "DUP"):
+        raise AssertionError('assertion failed')
 
 
 def test_runner_propagates_cancellation() -> None:
@@ -184,11 +189,17 @@ def test_runner_maps_validation_and_unexpected_rejections() -> None:
         ),
     )
 
-    assert result["valid_paths"] == ["ok.xlsx"]
-    assert result["invalid_paths"] == ["bad.xlsx", "boom.xlsx"]
-    assert result["mismatched_paths"] == ["bad.xlsx"]
+    if not (result["valid_paths"] == ["ok.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == ["bad.xlsx", "boom.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["mismatched_paths"] == ["bad.xlsx"]):
+        raise AssertionError('assertion failed')
     reasons = [item["reason_kind"] for item in cast(list[dict[str, Any]], result["rejections"])]
-    assert reasons == ["template_mismatch", "invalid"]
+    if not (reasons == ["template_mismatch", "invalid"]):
+        raise AssertionError('assertion failed')
     rejections = cast(list[dict[str, Any]], result["rejections"])
-    assert rejections[0]["issue"]["code"] == "BAD_CODE"
-    assert rejections[1]["issue"]["code"] == "UNEXP"
+    if not (rejections[0]["issue"]["code"] == "BAD_CODE"):
+        raise AssertionError('assertion failed')
+    if not (rejections[1]["issue"]["code"] == "UNEXP"):
+        raise AssertionError('assertion failed')

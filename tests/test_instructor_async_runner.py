@@ -108,13 +108,19 @@ def test_async_operation_runner_success_finalizes_even_if_success_handler_raises
             cast(Callable[[], int], callbacks["work"])()
         )
     except RuntimeError as exc:
-        assert str(exc) == "boom"
+        if not (str(exc) == "boom"):
+            raise AssertionError('assertion failed')
 
-    assert target._cancel_token is None
-    assert target._active_jobs == []
-    assert target.busy_calls[0] == (True, "j3")
-    assert target.busy_calls[-1] == (False, None)
-    assert target.refresh_calls == 1
+    if target._cancel_token is not None:
+        raise AssertionError('assertion failed')
+    if not (target._active_jobs == []):
+        raise AssertionError('assertion failed')
+    if not (target.busy_calls[0] == (True, "j3")):
+        raise AssertionError('assertion failed')
+    if not (target.busy_calls[-1] == (False, None)):
+        raise AssertionError('assertion failed')
+    if not (target.refresh_calls == 1):
+        raise AssertionError('assertion failed')
 
 
 def test_async_operation_runner_failure_does_not_refresh_while_closing() -> None:
@@ -168,7 +174,11 @@ def test_async_operation_runner_failure_does_not_refresh_while_closing() -> None
     err = RuntimeError("fail")
     cast(Callable[[Exception], None], callbacks["on_failed"])(err)
 
-    assert failures == [err]
-    assert target._cancel_token is None
-    assert target._active_jobs == []
-    assert target.refresh_calls == 0
+    if not (failures == [err]):
+        raise AssertionError('assertion failed')
+    if target._cancel_token is not None:
+        raise AssertionError('assertion failed')
+    if not (target._active_jobs == []):
+        raise AssertionError('assertion failed')
+    if not (target.refresh_calls == 0):
+        raise AssertionError('assertion failed')

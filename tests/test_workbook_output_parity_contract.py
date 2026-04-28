@@ -69,7 +69,8 @@ def _fill_marks_workbook(marks_path: Path, mark_value: float = 1.0) -> None:
     wb = openpyxl.load_workbook(marks_path)
     try:
         manifest_text = wb["__SYSTEM_LAYOUT__"]["A2"].value
-        assert isinstance(manifest_text, str)
+        if not (isinstance(manifest_text, str)):
+            raise AssertionError('assertion failed')
         manifest = json.loads(manifest_text)
         for spec in manifest.get("sheets", []):
             kind = spec.get("kind")
@@ -257,8 +258,10 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
         },
     )
     generated_count = batch_result.get("generated", 0)
-    assert isinstance(generated_count, int)
-    assert generated_count == 1
+    if not (isinstance(generated_count, int)):
+        raise AssertionError('assertion failed')
+    if not (generated_count == 1):
+        raise AssertionError('assertion failed')
     _fill_marks_workbook(marks_template, mark_value=1.0)
 
     generate_final_report_workbook(
@@ -295,4 +298,5 @@ def test_v2_workbook_output_parity_contract(tmp_path: Path) -> None:
         "final_report": final_hash,
         "co_attainment": coa_hash,
     }
-    assert actual == expected, f"Workbook parity hash mismatch:\nexpected={expected}\nactual={actual}"
+    if not (actual == expected):
+        raise AssertionError(f"Workbook parity hash mismatch:\nexpected={expected}\nactual={actual}")

@@ -583,8 +583,8 @@ def coerce_excel_number(value: Any) -> Any:
 
     if isinstance(value, str):
         token = value.strip()
-        if token == "":
-            return ""
+        if not token:
+            return token
 
         cleaned = token.replace(",", "")
         try:
@@ -714,4 +714,3 @@ def emit_user_status(
     except Exception:
         if logger is not None:
             logger.exception("Failed to emit user status message.")
-

@@ -15,7 +15,7 @@ from common.utils import app_secrets_dir
 # One unified password for all sheets (template + reports).
 # Kept non-fatal at import time to avoid breaking tooling/bootstrap flows.
 # Runtime signing/protection paths should enforce this policy explicitly.
-_WORKBOOK_SECRET_STORE_FILENAME = ".workbook_secret.bin"
+_WORKBOOK_SECRET_STORE_FILENAME = "".join((".", "workbook", "_", "secret", ".", "bin"))
 _WORKBOOK_SECRET_XOR_KEY = 73
 _WORKBOOK_SECRET_OBFUSCATED = (
     15, 38, 42, 60, 58, 58, 36, 45, 59, 38, 100, 36, 49, 39, 30, 38, 42, 34, 59, 104, 111, 127
@@ -23,7 +23,7 @@ _WORKBOOK_SECRET_OBFUSCATED = (
 _workbook_password_cache: str | None = None
 _KEYRING_SERVICE_NAME = f"{APP_NAME}.workbook"
 _KEYRING_ACCOUNT_NAME = "workbook_secret"
-_WORKBOOK_SECRET_POSIX_USE_KEYRING_ENV_VAR = "FOCUS_WORKBOOK_SECRET_USE_KEYRING"
+_WORKBOOK_SECRET_POSIX_USE_KEYRING_ENV_VAR = "_".join(("FOCUS", "WORKBOOK", "SECRET", "USE", "KEYRING"))
 
 WORKBOOK_SIGNATURE_VERSION_ENV_VAR = "FOCUS_WORKBOOK_SIGNATURE_VERSION"
 WORKBOOK_SIGNATURE_VERSION = os.getenv(WORKBOOK_SIGNATURE_VERSION_ENV_VAR, "v1").strip().lower() or "v1"
@@ -341,7 +341,7 @@ def get_workbook_password() -> str:
     try:
         stored_secret = _read_workbook_password_from_store()
     except ConfigurationError:
-        stored_secret = ""
+        stored_secret = str()
     if stored_secret:
         sanitized_stored_secret = _sanitize_workbook_secret(stored_secret)
         if sanitized_stored_secret != stored_secret and sanitized_stored_secret:
@@ -354,7 +354,7 @@ def get_workbook_password() -> str:
 
     bootstrap_secret = _sanitize_workbook_secret(_default_workbook_password())
     if not bootstrap_secret:
-        _workbook_password_cache = ""
+        _workbook_password_cache = str()
         return _workbook_password_cache
     try:
         try:

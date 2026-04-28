@@ -88,16 +88,22 @@ def test_course_batch_validator_accepts_mixed_cohorts_and_sections(
         ),
     )
 
-    assert result["valid_paths"] == ["a.xlsx", "b.xlsx", "dup_section.xlsx", "cohort_bad.xlsx"]
-    assert result["duplicate_paths"] == ["a.xlsx"]
-    assert result["duplicate_sections"] == []
-    assert result["mismatched_paths"] == []
-    assert result["invalid_paths"] == []
+    if not (result["valid_paths"] == ["a.xlsx", "b.xlsx", "dup_section.xlsx", "cohort_bad.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_paths"] == ["a.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["duplicate_sections"] == []):
+        raise AssertionError('assertion failed')
+    if not (result["mismatched_paths"] == []):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == []):
+        raise AssertionError('assertion failed')
     reason_by_path = {
         item["path"]: item["reason_kind"]
         for item in cast(list[dict[str, Any]], result["rejections"])
     }
-    assert reason_by_path["a.xlsx"] == "duplicate_path"
+    if not (reason_by_path["a.xlsx"] == "duplicate_path"):
+        raise AssertionError('assertion failed')
 
 
 def test_course_batch_validator_maps_validation_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -136,15 +142,19 @@ def test_course_batch_validator_maps_validation_failure(monkeypatch: pytest.Monk
         validator.validate_course_details_workbooks(["ok.xlsx", "bad.xlsx"]),
     )
 
-    assert result["valid_paths"] == ["ok.xlsx"]
-    assert result["invalid_paths"] == ["bad.xlsx"]
+    if not (result["valid_paths"] == ["ok.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["invalid_paths"] == ["bad.xlsx"]):
+        raise AssertionError('assertion failed')
     rejection = next(
         item
         for item in cast(list[dict[str, Any]], result["rejections"])
         if item["path"] == "bad.xlsx"
     )
-    assert rejection["reason_kind"] == "invalid"
-    assert rejection["issue"]["code"] == "SHEET_DATA_REQUIRED"
+    if not (rejection["reason_kind"] == "invalid"):
+        raise AssertionError('assertion failed')
+    if not (rejection["issue"]["code"] == "SHEET_DATA_REQUIRED"):
+        raise AssertionError('assertion failed')
 
 
 @pytest.mark.parametrize(
@@ -217,8 +227,10 @@ def test_course_workbook_impl_raises_open_failed_for_corrupt_workbook(
     with pytest.raises(ValidationError) as excinfo:
         validator._validate_course_details_workbook_impl(workbook_path=workbook_path)
 
-    assert excinfo.value.code == "WORKBOOK_OPEN_FAILED"
-    assert str(excinfo.value.context.get("workbook", "")) == str(workbook_path)
+    if not (excinfo.value.code == "WORKBOOK_OPEN_FAILED"):
+        raise AssertionError('assertion failed')
+    if not (str(excinfo.value.context.get("workbook", "")) == str(workbook_path)):
+        raise AssertionError('assertion failed')
 
 
 def test_course_workbook_impl_rejects_symlink_path(
@@ -248,7 +260,8 @@ def test_course_workbook_impl_rejects_symlink_path(
     with pytest.raises(ValidationError) as excinfo:
         validator._validate_course_details_workbook_impl(workbook_path=workbook_path)
 
-    assert excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"
+    if not (excinfo.value.code == "WORKBOOK_SYMLINK_NOT_ALLOWED"):
+        raise AssertionError('assertion failed')
 
 
 def test_course_details_validation_accepts_missing_co_description(tmp_path) -> None:
@@ -288,4 +301,5 @@ def test_course_details_validation_accepts_missing_co_description(tmp_path) -> N
             cancel_token=CancellationToken(),
         ),
     )
-    assert result["valid_paths"] == [str(workbook_path)]
+    if not (result["valid_paths"] == [str(workbook_path)]):
+        raise AssertionError('assertion failed')

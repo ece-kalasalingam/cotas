@@ -39,7 +39,8 @@ def test_strategy_validate_workbooks_routes_course_details(monkeypatch: pytest.M
         workbook_paths=["course.xlsx"],
     )
 
-    assert result["valid_paths"] == ["course.xlsx"]
+    if not (result["valid_paths"] == ["course.xlsx"]):
+        raise AssertionError('assertion failed')
 
 
 def test_strategy_validate_workbooks_routes_marks_template(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,8 +76,10 @@ def test_strategy_validate_workbooks_routes_marks_template(monkeypatch: pytest.M
         workbook_paths=["marks.xlsx"],
     )
 
-    assert result["valid_paths"] == ["marks.xlsx"]
-    assert result["template_id"] == "COURSE_SETUP_V2"
+    if not (result["valid_paths"] == ["marks.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["template_id"] == "COURSE_SETUP_V2"):
+        raise AssertionError('assertion failed')
 
 
 def test_strategy_validate_workbooks_routes_co_description(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,8 +110,10 @@ def test_strategy_validate_workbooks_routes_co_description(monkeypatch: pytest.M
         workbook_paths=["co_description.xlsx"],
     )
 
-    assert result["valid_paths"] == ["co_description.xlsx"]
-    assert result["template_id"] == "COURSE_SETUP_V2"
+    if not (result["valid_paths"] == ["co_description.xlsx"]):
+        raise AssertionError('assertion failed')
+    if not (result["template_id"] == "COURSE_SETUP_V2"):
+        raise AssertionError('assertion failed')
 
 
 def test_strategy_validate_workbooks_rejects_unknown_kind() -> None:
@@ -130,4 +135,5 @@ def test_strategy_validate_workbooks_rejects_unknown_kind() -> None:
             workbook_kind="bad_kind",
             workbook_paths=["x.xlsx"],
         )
-    assert getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"
+    if not (getattr(excinfo.value, "code", None) == "WORKBOOK_KIND_UNSUPPORTED"):
+        raise AssertionError('assertion failed')

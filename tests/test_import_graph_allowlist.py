@@ -99,7 +99,8 @@ def test_common_layer_imports_no_higher_layers() -> None:
         None.
     """
     violations = _violations_for_layer("common", {"domain", "services", "modules"})
-    assert not violations, f"common layer import violations: {violations}"
+    if not (not violations):
+        raise AssertionError(f"common layer import violations: {violations}")
 
 
 def test_domain_layer_imports_no_ui_or_service_layers() -> None:
@@ -115,7 +116,8 @@ def test_domain_layer_imports_no_ui_or_service_layers() -> None:
         None.
     """
     violations = _violations_for_layer("domain", {"services", "modules"})
-    assert not violations, f"domain layer import violations: {violations}"
+    if not (not violations):
+        raise AssertionError(f"domain layer import violations: {violations}")
 
 
 def test_services_layer_imports_no_ui_layer() -> None:
@@ -131,4 +133,5 @@ def test_services_layer_imports_no_ui_layer() -> None:
         None.
     """
     violations = _violations_for_layer("services", {"modules"})
-    assert not violations, f"services layer import violations: {violations}"
+    if not (not violations):
+        raise AssertionError(f"services layer import violations: {violations}")

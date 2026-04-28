@@ -43,7 +43,8 @@ def test_services_layer_does_not_import_ui_modules() -> None:
     """
     service_file = REPO_ROOT / "services" / "instructor_workflow_service.py"
     imports = _imports_for(service_file)
-    assert not any(name == "modules" or name.startswith("modules.") for name in imports)
+    if not (not any(name == "modules" or name.startswith("modules.") for name in imports)):
+        raise AssertionError('assertion failed')
 
 
 def test_template_version_module_does_not_import_engine_module() -> None:
@@ -60,7 +61,8 @@ def test_template_version_module_does_not_import_engine_module() -> None:
     """
     version_file = REPO_ROOT / "domain" / "template_versions" / "course_setup_v2.py"
     imports = _imports_for(version_file)
-    assert "modules.instructor.instructor_template_engine" not in imports
+    if not ("modules.instructor.instructor_template_engine" not in imports):
+        raise AssertionError('assertion failed')
 
 
 def test_domain_instructor_engine_does_not_import_ui_modules() -> None:
@@ -75,9 +77,12 @@ def test_domain_instructor_engine_does_not_import_ui_modules() -> None:
     Raises:
         None.
     """
-    assert not (REPO_ROOT / "domain" / "instructor_engine.py").exists()
-    assert not (REPO_ROOT / "domain" / "instructor_template_engine.py").exists()
-    assert not (REPO_ROOT / "domain" / "instructor_report_engine.py").exists()
+    if not (not (REPO_ROOT / "domain" / "instructor_engine.py").exists()):
+        raise AssertionError('assertion failed')
+    if not (not (REPO_ROOT / "domain" / "instructor_template_engine.py").exists()):
+        raise AssertionError('assertion failed')
+    if not (not (REPO_ROOT / "domain" / "instructor_report_engine.py").exists()):
+        raise AssertionError('assertion failed')
 
 
 def test_template_engine_stays_within_size_budget() -> None:
@@ -94,7 +99,8 @@ def test_template_engine_stays_within_size_budget() -> None:
     """
     router_file = REPO_ROOT / "domain" / "template_strategy_router.py"
     line_count = len(router_file.read_text(encoding="utf-8").splitlines())
-    assert line_count <= _MAX_TEMPLATE_ENGINE_LINES
+    if not (line_count <= _MAX_TEMPLATE_ENGINE_LINES):
+        raise AssertionError('assertion failed')
 
 
 def test_sheetops_module_does_not_import_ui_or_service_layers() -> None:
@@ -113,8 +119,10 @@ def test_sheetops_module_does_not_import_ui_or_service_layers() -> None:
         REPO_ROOT / "domain" / "template_versions" / "course_setup_v2_impl" / "instructor_engine_sheetops.py"
     )
     imports = _imports_for(sheetops_file)
-    assert not any(name == "modules" or name.startswith("modules.") for name in imports)
-    assert not any(name == "services" or name.startswith("services.") for name in imports)
+    if not (not any(name == "modules" or name.startswith("modules.") for name in imports)):
+        raise AssertionError('assertion failed')
+    if not (not any(name == "services" or name.startswith("services.") for name in imports)):
+        raise AssertionError('assertion failed')
 
 
 def test_service_layer_does_not_define_atomic_copy_helper() -> None:
@@ -131,7 +139,8 @@ def test_service_layer_does_not_define_atomic_copy_helper() -> None:
     """
     service_file = REPO_ROOT / "services" / "instructor_workflow_service.py"
     content = service_file.read_text(encoding="utf-8")
-    assert "def _atomic_copy_file(" not in content
+    if not ("def _atomic_copy_file(" not in content):
+        raise AssertionError('assertion failed')
 
 
 def test_service_layer_does_not_import_removed_instructor_wrappers() -> None:
@@ -148,9 +157,12 @@ def test_service_layer_does_not_import_removed_instructor_wrappers() -> None:
     """
     service_file = REPO_ROOT / "services" / "instructor_workflow_service.py"
     imports = _imports_for(service_file)
-    assert "domain.instructor_engine" not in imports
-    assert "domain.instructor_template_engine" not in imports
-    assert "domain.instructor_report_engine" not in imports
+    if not ("domain.instructor_engine" not in imports):
+        raise AssertionError('assertion failed')
+    if not ("domain.instructor_template_engine" not in imports):
+        raise AssertionError('assertion failed')
+    if not ("domain.instructor_report_engine" not in imports):
+        raise AssertionError('assertion failed')
 
 
 def test_utils_does_not_own_workbook_integrity_rules() -> None:
@@ -167,11 +179,16 @@ def test_utils_does_not_own_workbook_integrity_rules() -> None:
     """
     utils_file = REPO_ROOT / "common" / "utils.py"
     content = utils_file.read_text(encoding="utf-8")
-    assert "def read_valid_template_id_from_system_hash_sheet(" not in content
-    assert "def read_template_id_from_system_hash_sheet_if_valid(" not in content
-    assert "def add_system_hash_sheet(" not in content
-    assert "def add_system_layout_sheet(" not in content
-    assert "def copy_system_hash_sheet(" not in content
+    if not ("def read_valid_template_id_from_system_hash_sheet(" not in content):
+        raise AssertionError('assertion failed')
+    if not ("def read_template_id_from_system_hash_sheet_if_valid(" not in content):
+        raise AssertionError('assertion failed')
+    if not ("def add_system_hash_sheet(" not in content):
+        raise AssertionError('assertion failed')
+    if not ("def add_system_layout_sheet(" not in content):
+        raise AssertionError('assertion failed')
+    if not ("def copy_system_hash_sheet(" not in content):
+        raise AssertionError('assertion failed')
 
 
 def test_template_strategy_router_uses_shared_workbook_integrity_package() -> None:
@@ -188,7 +205,8 @@ def test_template_strategy_router_uses_shared_workbook_integrity_package() -> No
     """
     router_file = REPO_ROOT / "domain" / "template_strategy_router.py"
     content = router_file.read_text(encoding="utf-8")
-    assert "from common.workbook_integrity import (" in content
+    if "from common.workbook_integrity import (" not in content:
+        raise AssertionError('assertion failed')
 
 
 def test_instructor_module_uses_shared_workbook_output_resolution_helper() -> None:
@@ -205,6 +223,9 @@ def test_instructor_module_uses_shared_workbook_output_resolution_helper() -> No
     """
     module_file = REPO_ROOT / "modules" / "instructor_module.py"
     content = module_file.read_text(encoding="utf-8")
-    assert "from common.workbook_output_resolution import (" in content
-    assert "extract_overwrite_conflicts_from_generation_result" in content
-    assert "resolve_overwrite_conflicts" in content
+    if "from common.workbook_output_resolution import (" not in content:
+        raise AssertionError('assertion failed')
+    if "extract_overwrite_conflicts_from_generation_result" not in content:
+        raise AssertionError('assertion failed')
+    if "resolve_overwrite_conflicts" not in content:
+        raise AssertionError('assertion failed')

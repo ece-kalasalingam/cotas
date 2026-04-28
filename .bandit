@@ -1,3 +1,1 @@
 [bandit]
-exclude_dirs = tests,scripts,.pytest_tmp_env,.pytest_cache,.pip_audit_cache,build,dist
-skips = B101,B105,B110,B314,B404,B405,B603
