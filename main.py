@@ -536,11 +536,11 @@ def _show_update_available_dialog(*, latest_version: str, release_url: str) -> N
         QDesktopServices.openUrl(QUrl(release_url))
 
 
-def _check_for_updates_and_notify() -> None:
-    """Check latest release and notify when an update is available."""
+def _check_for_updates_and_notify() -> bool:
+    """Check latest release and return True when startup must be blocked."""
     latest_release = _fetch_latest_release()
     if latest_release is None:
-        return
+        return False
 
     latest_version, release_url = latest_release
     if _compare_versions(SYSTEM_VERSION, latest_version) < 0:
@@ -548,6 +548,8 @@ def _check_for_updates_and_notify() -> None:
             latest_version=latest_version,
             release_url=release_url,
         )
+        return True
+    return False
 
 
 def _validate_startup_workbook_password(app: QApplication) -> int | None:
@@ -640,7 +642,15 @@ def main() -> int:
     startup_validation_error = _validate_startup_workbook_password(app)
     if startup_validation_error is not None:
         return startup_validation_error
-    _check_for_updates_and_notify()
+    if _check_for_updates_and_notify():
+        _logger.info(
+            "Startup blocked due to mandatory update.",
+            extra={
+                "error_code": "STARTUP_BLOCKED_OUTDATED_VERSION",
+                "current_version": SYSTEM_VERSION,
+            },
+        )
+        return 0
 
     single_instance_lock = _acquire_exe_single_instance_lock()
     if getattr(sys, "frozen", False) and single_instance_lock is None:
