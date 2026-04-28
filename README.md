@@ -71,3 +71,6 @@ conda run -n obe python -m pip_audit --cache-dir .pip_audit_cache --ignore-vuln 
 - Runtime signing/protection paths enforce workbook secret policy.
 - Legacy signature compatibility paths were removed; current version expects active versioned signatures.
 - Module loading is plugin-catalog driven (no hardcoded module imports in `MainWindow`).
+
+## License
+MIT. See `LICENSE`.
