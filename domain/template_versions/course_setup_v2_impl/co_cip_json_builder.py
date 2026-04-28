@@ -51,17 +51,24 @@ def _parse_pct(value: object) -> float | None:
         return None
 
 
-def _dist(attended: int, level_counts: dict[int, int]) -> list[int]:
-    """Return [below_L1%, at_L1%, at_L2%, at_L3%] as integer percentages."""
-    def _pct(count: int) -> int:
-        return round(count / attended * 100) if attended > 0 else 0
+def _dist(attended: int, level_counts: dict[int, int], att_pct: float) -> list[float]:
+    """Return [L1, L2, L3, L4] as 2-decimal percentages.
 
-    return [
-        _pct(level_counts.get(0, 0)),
-        _pct(level_counts.get(1, 0)),
-        _pct(level_counts.get(2, 0)),
-        _pct(level_counts.get(3, 0)),
-    ]
+    Rule used:
+    - L4: level-3 count percentage
+    - L3: att_pct - L4
+    - L2: level-1 count percentage
+    - L1: 100.00 - (L2 + L3 + L4)
+    """
+
+    def _pct(count: int) -> float:
+        return round((count / attended) * 100.0, 2) if attended > 0 else 0.0
+
+    l4 = _pct(int(level_counts.get(3, 0)))
+    l3 = round(att_pct - l4, 2)
+    l2 = _pct(int(level_counts.get(1, 0)))
+    l1 = round(100.0 - (l2 + l3 + l4), 2)
+    return [l1, l2, l3, l4]
 
 
 def build_cip_payload(
@@ -104,6 +111,7 @@ def build_cip_payload(
         result_raw = str(row.get("result", "")).strip()
         da_val = _parse_pct(row.get("direct")) or 0.0
         ia_val = _parse_pct(row.get("indirect")) or 0.0
+        att_pct = _parse_pct(row.get("overall")) or 0.0
         cos.append(
             {
                 "id": str(row.get("co", f"CO{co_index}")).strip(),
@@ -113,10 +121,10 @@ def build_cip_payload(
                 "da": da_val,
                 "ia": ia_val,
                 "avg": round(DIRECT_RATIO * da_val + INDIRECT_RATIO * ia_val, 2),
-                "att_pct": _parse_pct(row.get("overall")) or 0.0,
+                "att_pct": att_pct,
                 "st": "A" if result_raw == "Attained" else "NA",
                 "sf": _parse_pct(row.get("shortfall")) or 0.0,
-                "dist": _dist(attended, level_counts),
+                "dist": _dist(attended, level_counts, att_pct),
             }
         )
 

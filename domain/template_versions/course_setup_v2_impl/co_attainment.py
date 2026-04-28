@@ -89,6 +89,7 @@ from common.registry import (
 )
 from common.runtime_dependency_guard import import_runtime_dependency
 from common.utils import (
+    app_settings_path,
     app_runtime_storage_dir,
     canonical_path_key,
     coerce_excel_number,
@@ -3718,9 +3719,9 @@ def _generate_co_attainment_workbook_course_setup_v2(
                 co_description_records=co_desc_records,
             )
             resolved_word_output = word_output_path or output_path.with_name(f"{output_path.stem}_Report.docx")
-            cip_json_path = resolved_word_output.with_name(
-                resolved_word_output.stem + "_CIP_Payload.json"
-            )
+            settings_dir = app_settings_path(APP_NAME).parent
+            cip_json_path = settings_dir / (resolved_word_output.stem + "_CIP_Payload.json")
+            cip_json_path.parent.mkdir(parents=True, exist_ok=True)
             cip_json_path.write_text(
                 json.dumps(generated_cip_payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
