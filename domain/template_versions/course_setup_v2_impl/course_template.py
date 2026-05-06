@@ -84,13 +84,11 @@ def generate_course_details_template(
         body_format = format_bundle["body"]
 
         for sheet_schema in blueprint.sheets:
+            if sheet_schema.key == COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION:
+                continue
             wrap_columns: tuple[int, ...] = ()
             wrapped_body_format = None
             wrapped_column_format = None
-            if sheet_schema.key == COURSE_SETUP_SHEET_KEY_CO_DESCRIPTION:
-                wrap_columns = (1, 3)
-                wrapped_body_format = format_bundle.get("body_wrap", body_format)
-                wrapped_column_format = format_bundle.get("column_wrap", wrapped_body_format)
             _shareops.write_schema_sheet(
                 workbook=workbook,
                 sheet_schema=sheet_schema,

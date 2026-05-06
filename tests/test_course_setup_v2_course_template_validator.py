@@ -264,8 +264,8 @@ def test_course_workbook_impl_rejects_symlink_path(
         raise AssertionError('assertion failed')
 
 
-def test_course_details_validation_accepts_missing_co_description(tmp_path) -> None:
-    """Course-details validation accepts workbooks without CO_Description.
+def test_course_details_validation_accepts_generated_workbook_without_co_description(tmp_path) -> None:
+    """Course-details validation accepts generated workbook without CO_Description.
 
     Args:
         tmp_path: Parameter value.
@@ -284,13 +284,6 @@ def test_course_details_validation_accepts_missing_co_description(tmp_path) -> N
         workbook_kind="course_details_template",
         cancel_token=CancellationToken(),
     )
-
-    wb = openpyxl.load_workbook(workbook_path)
-    try:
-        wb.remove(wb["CO_Description"])
-        wb.save(workbook_path)
-    finally:
-        wb.close()
 
     result = cast(
         dict[str, Any],
