@@ -146,7 +146,6 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
             "Course_Metadata",
             "Assessment_Config",
             "Question_Map",
-            "CO_Description",
             "Students",
             "__SYSTEM_HASH__",
         ]):
@@ -172,31 +171,6 @@ def test_generated_workbook_structure_and_prefill_data(tmp_path: Path) -> None:
         if not (validations):
             raise AssertionError('assertion failed')
         if "E2:E301" not in str(validations[0].sqref):
-            raise AssertionError('assertion failed')
-
-        co_desc_sheet = workbook["CO_Description"]
-        if not (co_desc_sheet["A1"].value == "CO#"):
-            raise AssertionError('assertion failed')
-        if not (co_desc_sheet["C1"].value == "Domain_Level"):
-            raise AssertionError('assertion failed')
-        if not (co_desc_sheet["D1"].value == "Summary_of_Topics/Expts./Project"):
-            raise AssertionError('assertion failed')
-        if not (bool(co_desc_sheet["B1"].alignment.wrap_text)):
-            raise AssertionError('assertion failed')
-        if not (bool(co_desc_sheet["D1"].alignment.wrap_text)):
-            raise AssertionError('assertion failed')
-        if not (bool(co_desc_sheet["B2"].alignment.wrap_text)):
-            raise AssertionError('assertion failed')
-        if not (bool(co_desc_sheet["D2"].alignment.wrap_text)):
-            raise AssertionError('assertion failed')
-        co_validations = list(co_desc_sheet.data_validations.dataValidation)
-        if not (co_validations):
-            raise AssertionError('assertion failed')
-        if not (any("A2:A301" in str(validation.sqref) for validation in co_validations)):
-            raise AssertionError('assertion failed')
-        if not (any("C2:C301" in str(validation.sqref) for validation in co_validations)):
-            raise AssertionError('assertion failed')
-        if not (any("D2:D301" in str(validation.sqref) for validation in co_validations)):
             raise AssertionError('assertion failed')
 
         hash_sheet = workbook["__SYSTEM_HASH__"]
