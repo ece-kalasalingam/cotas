@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-05-06
+
 ### Added
 - Added test coverage to lock style/theme initialization order when both `Fusion` style and `qdarktheme` are used together.
 - Added shared output-link helpers for Instructor to align with Coordinator behavior and reduce duplication.
