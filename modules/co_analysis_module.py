@@ -77,6 +77,7 @@ from domain.template_strategy_router import (
     extract_course_metadata_and_students_from_workbook_path,
     generate_workbook,
     resolve_template_id_from_workbook_path,
+    select_preferred_validation_rejection,
     validate_workbooks,
 )
 from services.gemini_cip_client import CipWorkerError, call_cip_worker
@@ -1008,7 +1009,19 @@ class COAnalysisModule(QWidget):
         Raises:
             None.
         """
-        return consume_marks_anomaly_warnings(template_id)
+        warnings = consume_marks_anomaly_warnings(template_id)
+        filtered: list[str] = []
+        for warning in warnings:
+            text = str(warning).strip()
+            if not text:
+                continue
+            lowered = text.lower()
+            if lowered.startswith("high absence ratio in "):
+                continue
+            if lowered.startswith("near-constant marks in "):
+                continue
+            filtered.append(text)
+        return filtered
 
     @staticmethod
     def _resolve_template_id(workbook_path: str | Path) -> str:
@@ -1131,18 +1144,6 @@ class COAnalysisModule(QWidget):
                     return False
                 return any(canonical_path_key(str(path)) == key for path in valid_paths_raw)
 
-            def _rejection_for_path(*, result: dict[str, object], key: str) -> dict[str, object] | None:
-                rejections_raw = result.get("rejections", [])
-                if not isinstance(rejections_raw, list):
-                    return None
-                for item in rejections_raw:
-                    if not isinstance(item, dict):
-                        continue
-                    item_path = str(item.get("path", "")).strip()
-                    if item_path and canonical_path_key(item_path) == key:
-                        return item
-                return None
-
             for path in candidate_paths:
                 key = canonical_path_key(path)
                 template_id = self._resolve_template_id(path)
@@ -1168,9 +1169,13 @@ class COAnalysisModule(QWidget):
                     accepted_marks_paths.append(path)
                     accepted_paths.append(path)
                     continue
-                rejection = (
-                    _rejection_for_path(result=marks_result, key=key)
-                    or _rejection_for_path(result=co_description_result, key=key)
+                rejection = select_preferred_validation_rejection(
+                    template_id=template_id,
+                    workbook_path=path,
+                    primary_kind="marks_template",
+                    secondary_kind="co_description",
+                    primary_result=marks_result,
+                    secondary_result=co_description_result,
                 )
                 if isinstance(rejection, dict):
                     rejected_items.append(rejection)
