@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from domain import template_strategy_router as router
+from domain import validation_rejection_selection as selection
 
 
 class _DummyWorkbook:
@@ -30,10 +33,10 @@ def _patch_structure_probe(
     metadata_sheet: str = "Course_Metadata",
     co_description_sheet: str = "CO_Description",
 ) -> None:
-    monkeypatch.setattr(router, "assert_not_symlink_path", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(router, "import_runtime_dependency", lambda _name: _DummyOpenpyxl(sheetnames))
+    monkeypatch.setattr(selection, "assert_not_symlink_path", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(selection, "import_runtime_dependency", lambda _name: _DummyOpenpyxl(sheetnames))
     monkeypatch.setattr(
-        router,
+        selection,
         "get_sheet_name_by_key",
         lambda _template_id, sheet_key: (
             metadata_sheet
@@ -49,7 +52,8 @@ def test_classify_workbook_structure_marks_template(monkeypatch: pytest.MonkeyPa
         template_id="COURSE_SETUP_V2",
         workbook_path="marks.xlsx",
     )
-    assert kind == "marks_template"
+    if not (kind == "marks_template"):
+        raise AssertionError("assertion failed")
 
 
 def test_classify_workbook_structure_co_description(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,7 +62,8 @@ def test_classify_workbook_structure_co_description(monkeypatch: pytest.MonkeyPa
         template_id="COURSE_SETUP_V2",
         workbook_path="co_description.xlsx",
     )
-    assert kind == "co_description"
+    if not (kind == "co_description"):
+        raise AssertionError("assertion failed")
 
 
 def test_classify_workbook_structure_ambiguous(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,7 +75,8 @@ def test_classify_workbook_structure_ambiguous(monkeypatch: pytest.MonkeyPatch) 
         template_id="COURSE_SETUP_V2",
         workbook_path="mixed.xlsx",
     )
-    assert kind == "ambiguous"
+    if not (kind == "ambiguous"):
+        raise AssertionError("assertion failed")
 
 
 def test_classify_workbook_structure_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,7 +85,8 @@ def test_classify_workbook_structure_unknown(monkeypatch: pytest.MonkeyPatch) ->
         template_id="COURSE_SETUP_V2",
         workbook_path="unknown.xlsx",
     )
-    assert kind == "unknown"
+    if not (kind == "unknown"):
+        raise AssertionError("assertion failed")
 
 
 def test_select_preferred_validation_rejection_prefers_secondary_for_co_description(
@@ -108,8 +115,11 @@ def test_select_preferred_validation_rejection_prefers_secondary_for_co_descript
         primary_result=marks_result,
         secondary_result=co_desc_result,
     )
-    assert selected is not None
-    assert selected["issue"]["code"] == "CO_DESCRIPTION_SUMMARY_REQUIRED"
+    if selected is None:
+        raise AssertionError("assertion failed")
+    selected_issue = cast(dict[str, Any], selected.get("issue", {}))
+    if not (selected_issue.get("code") == "CO_DESCRIPTION_SUMMARY_REQUIRED"):
+        raise AssertionError("assertion failed")
 
 
 def test_select_preferred_validation_rejection_unknown_uses_fallback_policy(
@@ -138,6 +148,8 @@ def test_select_preferred_validation_rejection_unknown_uses_fallback_policy(
         primary_result=marks_result,
         secondary_result=co_desc_result,
     )
-    assert selected is not None
-    assert selected["issue"]["code"] == "CO_DESCRIPTION_SUMMARY_REQUIRED"
-
+    if selected is None:
+        raise AssertionError("assertion failed")
+    selected_issue = cast(dict[str, Any], selected.get("issue", {}))
+    if not (selected_issue.get("code") == "CO_DESCRIPTION_SUMMARY_REQUIRED"):
+        raise AssertionError("assertion failed")
