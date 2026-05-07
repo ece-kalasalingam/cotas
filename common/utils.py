@@ -9,6 +9,7 @@ import shutil
 import sys
 import tempfile
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Iterable, Literal
@@ -476,9 +477,14 @@ def sanitize_filename_token(value: object) -> str:
     return token
 
 
+@lru_cache(maxsize=16_384)
+def _canonical_path_key_cached(path_text: str) -> str:
+    return str(Path(path_text).resolve()).casefold()
+
+
 def canonical_path_key(path: str | Path) -> str:
     """Return a stable, case-insensitive key for filesystem identity checks."""
-    return str(Path(path).resolve()).casefold()
+    return _canonical_path_key_cached(str(path))
 
 
 def path_uses_symlink(path: str | Path) -> bool:

@@ -29,6 +29,10 @@ from common.workbook_integrity import (
 from common.workbook_integrity import (
     verify_payload_signature,
 )
+from domain.validation_rejection_selection import (
+    classify_workbook_structure_for_validation,
+    select_preferred_validation_rejection,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -827,4 +831,6 @@ __all__ = [
     "read_valid_template_id_from_system_hash_sheet",
     "extract_course_metadata_and_students_from_workbook_path",
     "consume_marks_anomaly_warnings",
+    "classify_workbook_structure_for_validation",
+    "select_preferred_validation_rejection",
 ]
